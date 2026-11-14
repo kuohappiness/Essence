@@ -1,0 +1,206 @@
+<title>全詩順序卡</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 全詩順序卡（D-187）的示意頁：配色與元件照 similar-chars-card.html 與外掛的複習畫面（src/ui/tokens.css、PickCard.css）。
+   D-204 定案的樣子：題目一句一列、字鍵整句兩個一排、放在格子裡的字鍵變淡且點了交換、對答案後只有打勾有顏色、每句底下緊接解釋。 */
+:root{
+  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;
+  --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;
+  --ui:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei","Noto Sans TC",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.65;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.wrap{max-width:1000px;margin:0 auto;display:grid;gap:18px}
+h1{font-size:24px;line-height:1.3;margin:0}
+.lead{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.layout{display:grid;gap:26px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:820px){.layout{grid-template-columns:minmax(0,375px) minmax(0,1fr)}.demo{position:sticky;top:16px}}
+.demo{display:grid;gap:10px;min-width:0;max-width:375px}
+.ctrl{display:flex;flex-wrap:wrap;gap:6px}
+.ctrl button{appearance:none;border:1px solid var(--line);background:var(--page);border-radius:999px;padding:3px 12px;font-size:14px;cursor:pointer}
+.ctrl button[aria-pressed="true"]{border-color:var(--key);color:var(--key)}
+.ctrl-label{font-size:13px;color:var(--muted);width:100%}
+
+.phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;height:700px}
+.scroll{flex:1;overflow-y:auto;padding:14px 8px 8px}
+.title{margin:0 8px 10px;font-size:15px;color:var(--muted)}
+.rows{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.rows .gap{height:8px}
+.row{display:grid;grid-template-columns:14px minmax(0,1fr);align-items:baseline;align-content:center;column-gap:6px;min-height:46px;padding:3px 8px;border-radius:10px;font-size:20px;line-height:1.55;cursor:pointer}
+.row.on{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.row.lock{cursor:default}
+.mark{font-size:14px;font-weight:700;text-align:center;color:var(--miss)}
+.mark.right{color:var(--good)}.mark.near{color:var(--near)}
+.txt{min-width:0}
+.slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 2px;line-height:1.3;color:var(--ink);text-align:center;vertical-align:baseline;cursor:pointer;font-size:inherit}
+.slot.filled{border-bottom-color:transparent}
+.row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
+.slot.skipped{color:var(--muted)}
+.ex{grid-column:2;font-size:15px;line-height:1.5;color:var(--muted)}
+.slot s{color:var(--miss)}
+.why{display:grid;gap:6px;margin:12px 8px 6px;font-size:15px;line-height:1.5}
+.why p{margin:0}
+.why .mood{color:var(--muted)}
+
+.tray{background:var(--page);padding:10px 12px 12px;display:grid;gap:10px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.keys{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.key{appearance:none;height:48px;border:1px solid var(--line);border-radius:12px;background:none;font-size:18px;line-height:1.2;cursor:pointer;padding:0 4px;white-space:nowrap;overflow:hidden}
+.key.used{opacity:.32}
+.key:disabled{opacity:.15;cursor:default}
+.acts{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.act{appearance:none;height:48px;border:1px solid var(--line);border-radius:12px;background:none;cursor:pointer}
+.act.skip{color:var(--muted)}
+.act.check{opacity:.4}.act.check.ready{opacity:1}.act.check.again{opacity:1;color:var(--muted)}
+.rates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+.notes{display:grid;gap:14px;max-width:62ch}
+.notes h2{font-size:17px;margin:8px 0 0}
+.notes p,.notes li{margin:0}
+.notes ul{margin:0;padding-left:1.2em;display:grid;gap:4px}
+.q{border-left:3px solid var(--key);padding-left:10px}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>全詩順序卡</h1>
+    <p class="lead">D-204 定案的樣子，可以真的點：選一首詩，點字鍵排順序，按「對答案」看結果；排錯的會要你再選一次。</p>
+  </header>
+  <div class="layout">
+    <div class="demo">
+      <div class="ctrl" id="poems"><span class="ctrl-label">哪一首</span></div>
+      <div class="phone">
+        <div class="scroll" id="scroll"></div>
+        <div class="tray" id="tray"></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h2>D-204 定的</h2>
+      <ul>
+        <li><b>題目一句一列</b>：句子後面接原本的標點，聯和聯之間多一點空隙；詩名在最上面淡色小字。</li>
+        <li><b>字鍵整句、兩個一排</b>，高 48；律詩八句也是兩個一排。</li>
+        <li><b>放在格子裡的字鍵變淡，還能點</b>：點了就把那一句搬到現在這一格，兩格交換；這格原本空著，原來那格就空出來。</li>
+        <li><b>對答案後只有打勾有顏色</b>（綠第一次對、橙再選才對、紅沒排對），句子是一般文字的顏色；每句底下緊接它的解釋，全詩意境放最後。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const POEMS = {
+  '鳥鳴澗': { lines: ['人閒桂花落','夜靜春山空','月出驚山鳥','時鳴春澗中'], why: ['人心清閒，桂花悄悄飄落；','夜晚寂靜，春山顯得空曠。','月亮升起，驚動了山裡的鳥；','牠們不時在春天的山澗中鳴叫。','全詩由靜寫到動。'] },
+  '出塞': { lines: ['秦時明月漢時關','萬里長征人未還','但使龍城飛將在','不教胡馬度陰山'], why: ['還是秦漢時的那輪明月、那座關塞；','出征萬里的人到現在還沒回來。','只要像飛將軍那樣的名將還在；','就不會讓敵人的戰馬越過陰山。'] },
+  '登高': { lines: ['風急天高猿嘯哀','渚清沙白鳥飛迴','無邊落木蕭蕭下','不盡長江滾滾來','萬里悲秋常作客','百年多病獨登臺','艱難苦恨繁霜鬢','潦倒新停濁酒杯'], why: ['風很急、天很高，猿猴叫得淒涼；','水中小洲清澈、沙灘雪白，鳥在上面盤旋。','無邊無際的落葉蕭蕭飄下，','望不到頭的長江滾滾流來。','離家萬里，在悲涼的秋天常常作客他鄉；','一生多病，獨自登上高臺。','艱難困苦使兩鬢添滿白髮，','潦倒的我最近又戒了酒。'] },
+};
+const PUNCT = i => i % 2 === 0 ? '，' : '。';
+let poem = '鳥鳴澗', st;
+
+function seededShuffle(list, seed) {
+  let s = seed; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const a = list.map((t, i) => ({ t, i }));
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function reset() {
+  const p = POEMS[poem];
+  st = { stage: 'answer', cursor: 0, cells: p.lines.map(answer => ({ answer, filled: null, skipped: false, first: null, status: 'open' })), keys: seededShuffle(p.lines, poem.length * 7 + 3) };
+  render();
+}
+const empty = c => c.filled === null && !c.skipped;
+function nextEmpty(from) { const n = st.cells.length; for (let k = 1; k <= n; k++) { const i = (from + k) % n; if (empty(st.cells[i])) return i; } return null; }
+function nextRetry() { const i = st.cells.findIndex(c => c.status === 'retry'); if (i >= 0) st.cursor = i; else { st.cursor = null; st.stage = 'result'; } }
+function holder(keyIndex) { return st.cells.findIndex(c => c.key === keyIndex); }
+function key(k) {
+  if (st.stage === 'result' || st.cursor === null) return;
+  const cell = st.cells[st.cursor], text = st.keys[k].t;
+  if (st.stage === 'answer') {
+    const from = holder(k);
+    if (from === st.cursor) return;
+    if (from >= 0) { const o = st.cells[from]; o.filled = cell.filled; o.key = cell.key; o.skipped = false; if (o.filled === null) o.key = undefined; }
+    cell.filled = text; cell.key = k; cell.skipped = false;
+    st.cursor = nextEmpty(st.cursor);
+  } else {
+    if (text === cell.first) return;
+    cell.filled = text; cell.status = text === cell.answer ? 'near' : 'miss';
+    nextRetry();
+  }
+  render();
+}
+function skip() {
+  if (st.stage === 'result' || st.cursor === null) return;
+  const cell = st.cells[st.cursor];
+  if (st.stage === 'answer') { cell.filled = null; cell.key = undefined; cell.skipped = true; st.cursor = nextEmpty(st.cursor); }
+  else { cell.status = 'miss'; nextRetry(); }
+  render();
+}
+function check() {
+  if (st.stage !== 'answer') return;
+  const open = st.cells.findIndex(empty);
+  if (open >= 0) { st.cursor = open; render(); return; }
+  for (const c of st.cells) { c.first = c.filled; c.status = c.skipped ? 'miss' : c.filled === c.answer ? 'right' : 'retry'; }
+  st.stage = 'retry'; nextRetry(); render();
+}
+function row(i) {
+  const c = st.cells[i];
+  if (st.stage === 'result' || (st.stage === 'retry' && c.status !== 'retry')) return;
+  st.cursor = i; render();
+}
+
+const MARK = { right: '✓', near: '✓', miss: '✕', retry: '✕' };
+function slotHtml(c, i, width) {
+  let text = '', cls = 'slot';
+  if (st.stage === 'result') { text = c.answer; cls += ' filled'; }
+  else if (c.status === 'retry') { text = `<s>${c.first}</s>`; cls += ' filled'; }
+  else if (c.status === 'miss') { text = '？'; cls += ' filled skipped'; }
+  else if (c.status === 'near') { text = c.filled; cls += ' filled'; }
+  else if (c.skipped) { text = '？'; cls += ' filled skipped'; }
+  else if (c.filled) { text = c.filled; cls += ' filled'; }
+  return `<button class="${cls}" style="min-width:${width}em" data-row="${i}">${text || '&#12288;'}</button>`;
+}
+function render() {
+  const p = POEMS[poem], width = Math.max(...p.lines.map(l => [...l].length));
+  const whyLines = p.why.length >= p.lines.length ? p.why : null;
+  let rows = '';
+  st.cells.forEach((c, i) => {
+    if (i > 0 && i % 2 === 0) rows += '<li class="gap"></li>';
+    const locked = !(st.stage === 'answer' || (st.stage === 'retry' && c.status === 'retry'));
+    const ex = st.stage === 'result' && whyLines ? `<span class="ex">${whyLines[i]}</span>` : '';
+    rows += `<li class="row${i === st.cursor ? ' on' : ''}${locked ? ' lock' : ''}" data-row="${i}"><span class="mark ${c.status}">${MARK[c.status] && st.stage !== 'answer' ? MARK[c.status] : ''}</span><span class="txt">${slotHtml(c, i, width)}${PUNCT(i)}</span>${ex}</li>`;
+  });
+  let why = '';
+  if (st.stage === 'result') {
+    const rest = whyLines ? p.why.slice(p.lines.length) : p.why;
+    why = rest.length ? `<div class="why">${rest.map(w => `<p class="${whyLines ? 'mood' : ''}">${w}</p>`).join('')}</div>` : '';
+  }
+  document.getElementById('scroll').innerHTML = `<p class="title">${poem}</p><ul class="rows">${rows}</ul>${why}`;
+  const tray = document.getElementById('tray');
+  if (st.stage === 'result') {
+    const all = st.cells.every(c => c.status === 'right');
+    tray.innerHTML = all ? '<div class="rates"><button class="act">記住了</button><button class="act">太簡單</button></div>' : '<button class="act" style="width:100%">下一張</button>';
+    tray.querySelectorAll('button').forEach(b => b.onclick = reset);
+  } else {
+    const spent = st.stage === 'retry' && st.cursor !== null ? st.cells[st.cursor].first : null;
+    tray.innerHTML = `<div class="keys">${st.keys.map((k, i) => `<button class="key${holder(i) >= 0 && st.stage === 'answer' ? ' used' : ''}" data-key="${i}" ${k.t === spent ? 'disabled' : ''}>${k.t}</button>`).join('')}</div>
+      <div class="acts"><button class="act skip">沒印象</button><button class="act check${st.stage === 'retry' ? ' again' : st.cells.some(empty) ? '' : ' ready'}">${st.stage === 'retry' ? '再選一次' : '對答案'}</button></div>`;
+    tray.querySelectorAll('.key').forEach(b => b.onclick = () => key(+b.dataset.key));
+    tray.querySelector('.skip').onclick = skip;
+    tray.querySelector('.check').onclick = check;
+  }
+  document.querySelectorAll('[data-row]').forEach(el => el.onclick = e => { e.stopPropagation(); row(+el.dataset.row); });
+}
+for (const name of Object.keys(POEMS)) {
+  const b = document.createElement('button'); b.textContent = name; b.onclick = () => { poem = name; sync(); reset(); };
+  document.getElementById('poems').append(b);
+}
+function sync() {
+  document.querySelectorAll('#poems button').forEach(b => b.setAttribute('aria-pressed', String(b.textContent === poem)));
+}
+sync(); reset();
+</script>
