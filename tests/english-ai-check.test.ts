@@ -32,3 +32,9 @@ void test('句子開頭那格大寫是提醒；I、全大寫、句子中間的�
   assert.deepEqual(capital('我沒有生氣。==I== ==am== ==not== angry.'), []);
   assert.deepEqual(capital('==TV== ==is== ==fun==.'), []);
 });
+
+void test('候選卡片裡的英文目標也照英文的規則擋（L2 R2），行號是原文的行', () => {
+  const body = '- go 過去式\n    - Yesterday I ＿＿ to school.（去） :: went\n\n> [!note]- 候選卡片\n> - 被動語態 文法\n>     - 理由：課本補充\n>     - The window ==was broken== yesterday.\n> - 間接問句 排序\n>     - 理由：課本補充\n>     - I know ==where== he lives.\n';
+  const found = check(body, { subject: '英文' }).issues.filter(each => each.level === '錯誤' && each.code.startsWith('english-')).map(each => [each.line, each.code]);
+  assert.deepEqual(found, [[7, 'english-typed-invalid'], [8, 'english-order-invalid']]);
+});
