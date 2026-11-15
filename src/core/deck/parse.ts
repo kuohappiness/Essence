@@ -129,17 +129,23 @@ function textSpan(node: Item, from: number, to: number): Span | null {
   return { line: start.line, from: start.column + from - base, to: start.column + to - base };
 }
 
-/** 讀卡組。給 `{ layout: true }` 時另外回傳每個目標的出處原文位置（tasks/edit-markup.md §3-1），讀法完全一樣。 */
-export function parseDeck(text: string, options: { layout: true }): Deck & { layout: Map<number, TargetLayout> };
+/**
+ * 讀卡組。給 `{ layout: true }` 時另外回傳每個目標的出處原文位置（tasks/edit-markup.md §3-1），讀法完全一樣。
+ * `subject` 是屬性沒寫科目時用的科目（AI 草稿還沒有屬性時，tasks/english-typed-order.md §1-1）；屬性寫了照屬性。
+ */
+export function parseDeck(text: string, options: { layout: true; subject?: string | null }): Deck & { layout: Map<number, TargetLayout> };
+export function parseDeck(text: string, options: { subject?: string | null }): Deck;
 // 沒給選項的寫在最後：ReturnType<typeof parseDeck> 取最後一個。
 export function parseDeck(text: string): Deck;
-export function parseDeck(text: string, options?: { layout?: boolean }): Deck & { layout?: Map<number, TargetLayout> } {
+export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null }): Deck & { layout?: Map<number, TargetLayout> } {
   const lines = linesOf(text);
   const { props, start, problems } = readProperties(lines);
   const targets: Target[] = [];
   const layouts = options?.layout ? new Map<number, TargetLayout>() : null;
   const result = (): Deck & { layout?: Map<number, TargetLayout> } => layouts ? { props, targets, problems, layout: layouts } : { props, targets, problems };
   if (props.isTranscript) return result();
+  // 文法、變化與句子排序只在英文的卡組（§1-1）：結尾的詞別科也會用。
+  const english = (props.subject ?? options?.subject ?? null)?.trim() === '英文';
   const seenIds = new Set<string>();
   for (const root of listTree(lines, start)) {
     const head = stripId(root.text);
@@ -173,7 +179,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
     // 文法與變化（tasks/english-typed-order.md §1）：從名稱認，題目讀之前就要知道要不要打字。
-    const typing = readTyping(target);
+    const typing = english ? readTyping(target) : null;
     if (typing) target.typing = typing;
     if (target.direction === 'en-zh' && target.pairKey !== null) target.pairWord = pairWordOf(target.pairKey);
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
@@ -314,22 +320,16 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
         if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
         let typed: readonly string[] | null = null;
-        if (target.direction === 'zh-en') {
-          const read = typedAnswer(answer);
+        // 文法與變化照中翻英（§1-3）：只在英文的卡組，讀不成打字是錯誤。
+        if (target.direction === 'zh-en' || target.typing) {
+          const read = typedAnswer(answer, target.typing ? '文法與變化' : '中翻英');
           typed = read.typed;
           if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
-        } else if (target.typing) {
-          // 文法與變化讀不成打字時這一題照翻面，只提示（§1-3）：結尾的詞別科也可能用。
-          const read = typedAnswer(answer);
-          const invalid = read.problem?.code === 'typed-answer-invalid';
-          typed = invalid ? null : read.typed;
-          if (invalid) addProblem(node, 'typed-answer-invalid', '文法與變化的答案只能是單行英文，好幾個答案用 | 分開；這一題照翻面出');
-          else if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
-      else if (target.typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字');
+      else if (target.typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字；要打字改成問答題');
       return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
     }
     // 全詩順序卡的解釋（D-204 第 5、7 點、L2 R7）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
@@ -350,9 +350,9 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     }
     const pick = readPick(target);
     if (pick.group) target.group = pick.group;
-    const order = readOrder(target, notes ?? []);
+    const order = readOrder(target, notes ?? [], english);
     if (order) target.order = order;
-    const sentence = order ? null : readSentence(target);
+    const sentence = english && !order ? readSentence(target) : null;
     if (sentence) target.sentence = sentence;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });

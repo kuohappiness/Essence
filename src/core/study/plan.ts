@@ -165,18 +165,22 @@ export function planToday(input: TodayInput): Today {
 
   // 變化目標（D-193 第 5 點、tasks/english-typed-order.md §3）：還沒開始時，同一篇配對得上、今天是候選的英翻中有一個記得了才出；
   // 一個候選都沒有就照常出。名稱有括號的只配同一個意思，沒有括號的配這個字任一個意思。
+  // 紀錄讀不懂停掉的英翻中（§3-3）也算配對，記得與否不知道，等它恢復；暫停、篩掉、重複 ID 的不算。
   for (const entry of decks) {
     if (entry.deck.props.isTranscript || entry.deck.props.status !== 'active') continue;
-    const words = entry.deck.targets.flatMap(target => {
-      const c = target.pairWord && target.id !== null ? candidates.get(target.id) : undefined;
-      return c && c.target === target && target.pairWord ? [{ c, word: target.pairWord }] : [];
+    const words = entry.deck.targets.flatMap((target): { c: Candidate | null; word: NonNullable<Target['pairWord']> }[] => {
+      if (!target.pairWord || target.id === null) return [];
+      const c = candidates.get(target.id);
+      if (c && c.target === target) return [{ c, word: target.pairWord }];
+      const held = !duplicated.has(target.id) && target.ok && !target.fields.paused && stopped(target.id);
+      return held ? [{ c: null, word: target.pairWord }] : [];
     });
     for (const target of entry.deck.targets) {
       const pair = target.typing?.pair;
       const c = pair && target.id !== null ? candidates.get(target.id) : undefined;
       if (!pair || !c || c.target !== target || c.memory) continue;
       const mates = words.filter(({ word }) => (pair.exact ? word.exact : word.base) === pair.key);
-      if (mates.length && !mates.some(({ c: en }) => remembered(en))) dropped.add(c.id);
+      if (mates.length && !mates.some(({ c: en }) => en !== null && remembered(en))) dropped.add(c.id);
     }
   }
 

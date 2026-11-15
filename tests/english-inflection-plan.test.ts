@@ -74,3 +74,17 @@ void test('配對不分大小寫、全半形括號一樣', () => {
 void test('英翻中記住了但今天到期：還不算記得，變化不出（同中翻英，remembered）', () => {
   assert.deepEqual(share([deckOf(GO)], [line('goenzh', 'good', '2026-11-12T19:00:00.000+08:00')]), ['goenzh']);
 });
+
+void test('英翻中的紀錄讀不懂、暫時停掉：記不記得不知道，變化等它恢復', () => {
+  const unreadable = JSON.stringify({ t: '2026-11-14T19:00:00.000+08:00', lt: 'goenzh', r: 'easy', v: '12345678', need: ['不認得的功能'] });
+  assert.deepEqual(share([deckOf(GO)], [unreadable]), []);
+});
+
+void test('開始條件在一天開始時決定：今天之後才答錯不影響', () => {
+  assert.deepEqual(share([deckOf(GO)], [REMEMBERED, line('goenzh', 'miss', '2026-11-15T20:00:00.000+08:00')]), ['gopast']);
+});
+
+void test('配對只認英文的卡組：別科的名稱結尾不擋', () => {
+  const math: DeckEntry = { path: 'Essence Cards/數學/L1.md', deck: parseDeck('---\n科目: 數學\n---\n- go 英翻中 ^goenzh\n    - go :: 去\n- go 過去式 ^gopast\n    - ＿＿ :: went\n') };
+  assert.deepEqual(share([math]).sort(), ['goenzh', 'gopast']);
+});

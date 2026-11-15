@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { parseDeck } from '../deck/index.ts';
+import { blanksIn, parseDeck } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -190,18 +190,31 @@ function checkPick(text: string, deck: Deck, issue: Report): void {
 }
 
 /**
- * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做。
- * 結尾是排序、空格裡有英文卻不是句子排序（也不是全詩）的，同樣算錯誤。
+ * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：只在英文的草稿。解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做：
+ * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿、好幾個答案字數相同；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
+ * 句子排序開頭那格大寫是提醒（§4-6：詞塊照句子中間的寫法，小寫；I、全大寫不算）。
  */
 function checkEnglish(deck: Deck, issue: Report): void {
   for (const p of deck.problems) {
     const typing = deck.targets.find(t => t.line === p.targetLine)?.typing;
-    if (typing && (p.code === 'typed-answer-invalid' || p.code === 'cloze-not-typed')) issue(p.line + 1, '錯誤', 'english-typed-invalid', p.message.replace(/；這一題照翻面出$/, '').replace(/照一般翻面，不要求打字$/, '要寫成問答題：句子挖一個 ＿＿ :: 答案'));
+    if (!typing) continue;
+    if (p.code === 'cloze-not-typed') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化要寫成問答題：句子挖一個 ＿＿ :: 答案');
+    else if (p.code === 'typed-answer-words') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化的好幾個答案字數要相同，題目的 ＿＿ 才對得上');
   }
   for (const t of deck.targets) {
-    if (t.sentence || t.order || !/[\s）)]排序$/.test(t.name)) continue;
-    const english = t.prompts.some(p => p.kind === 'cloze' && p.blanks.some(b => /\p{Script=Latin}/u.test(p.text.slice(b.start, b.end))));
-    if (english) issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點");
+    if (t.typing) {
+      for (const p of t.prompts) {
+        if (p.kind === 'qa' && p.typed && blanksIn(p.question) !== 1) issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化的題目恰好挖一個 ＿＿，答案填進去要是完整的句子');
+      }
+    }
+    if (t.sentence) {
+      t.sentence.prompts.forEach((cells, i) => {
+        const word = cells.words[0];
+        if (cells.starts[0] && /^\p{Lu}/u.test(word) && !/^I\b/.test(word) && word !== word.toUpperCase()) issue(t.prompts[i].line + 1, '提醒', 'english-order-capital', `句子開頭那格寫小寫（${word} → ${word[0].toLowerCase() + word.slice(1)}），複習時程式會換成大寫，大寫會洩漏誰在第一個`);
+      });
+    } else if (!t.order && !t.group && /[\s）)]排序$/.test(t.name) && !/(^|\s)全詩\s*排序$/.test(t.name)) {
+      issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點");
+    }
   }
 }
 
@@ -241,7 +254,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     captions: [...transcript.matchAll(/^\*(.+)\*\s+\^[A-Za-z0-9-]+\s*$/gm)].map(m => m[1].trim()),
   } : null;
   const targets: CheckedTarget[] = [], candidates: CheckedTarget[] = [], existing: CheckedTarget[] = [], notes: string[] = [], headings: string[] = [];
-  const deck = parseDeck(text);
+  const deck = parseDeck(text, { subject });
   // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這兩個詞的、認不得的也一樣，它們另外有比較卡的診斷。
   const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name)).map(t => t.line + 1));
 
@@ -393,7 +406,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   /** 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行（行號已換回 text 的行）。本文的直接看 deck.problems。 */
   const boxProblems: { line: number; code: string; message: string }[] = [];
   const parseBox = (inner: readonly Line[]): void => {
-    for (const p of parseDeck(inner.map(l => l.raw).join('\n')).problems) if (p.level === 'error') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
+    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject }).problems) if (p.level === 'error') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
   };
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
@@ -422,7 +435,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         parseBox(inner);
         // 候選是之後會搬出去出題的完整目標，比較卡的錯誤分類和本文相同（R2-6）；行號換回 text 的行。
         const boxText = inner.map(l => l.raw).join('\n');
-        checkPick(boxText, parseDeck(boxText), (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); });
+        checkPick(boxText, parseDeck(boxText, { subject }), (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); });
         if (head?.[2] !== '-') issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
         for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
         if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);
@@ -463,7 +476,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const understanding = targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${String(understanding)}/${String(n)}，少於三分之一（自然預設規則 1）`);
   checkPick(text, deck, issue);
-  checkEnglish(deck, issue);
+  if (subject === '英文') checkEnglish(deck, issue);
   // 正式解析器判成 error 的目標（ok: false）複習時不會出：一律算錯誤，不靠這裡各讀各的（L2-3，例如中翻英的答案不是單行英文）。同一行這裡已經報過的不重複。
   const reported = new Set(issues.filter(each => each.level === '錯誤').map(each => each.line));
   for (const p of [...deck.problems.filter(each => each.level === 'error').map(each => ({ line: each.line + 1, code: each.code, message: each.message })), ...boxProblems]) {

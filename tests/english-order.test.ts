@@ -7,10 +7,11 @@ import { check, pick, setup, stage, tap, texts, view } from './helpers/pick-sess
 
 // 英文的句子排序卡（D-193 第 8 點、tasks/english-typed-order.md §4）。預期值照任務說明的邊界例子手寫。
 
-const sentenceOf = (body: string) => parseDeck(`- 間接問句 排序\n${body}`).targets[0];
+const english = (body: string) => parseDeck(`---\n科目: 英文\n---\n${body}`);
+const sentenceOf = (body: string, name = '間接問句 排序') => english(`- ${name}\n${body}`).targets[0];
 const cellsOf = (question: string) => sentenceOf(`    - ${question}\n`).sentence?.prompts[0];
 
-void test('句子排序：每一題各自的詞塊；結尾的標點從鍵拿掉、接在後面', () => {
+void test('句子排序：每一題各自的詞塊；句末的標點從最後一格拿掉、接在後面', () => {
   const target = sentenceOf('    - 你知道公車站在哪裡嗎？Do you know ==where== ==the bus stop== ==is==?\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives.==\n');
   assert.equal(target.order, undefined, '不是全詩');
   assert.equal(target.sentence?.title, '間接問句');
@@ -20,27 +21,32 @@ void test('句子排序：每一題各自的詞塊；結尾的標點從鍵拿掉
   ]);
 });
 
-void test('句首的詞塊改小寫：中文後面、句尾標點後面、冒號後面、整句開頭；I、全大寫不改', () => {
-  assert.deepEqual(cellsOf('他住在哪裡？==Where== ==does== ==he== ==live==?')?.words, ['where', 'does', 'he', 'live']);
-  assert.deepEqual(cellsOf('他住在哪裡？==Where== ==does== ==he== ==live==?')?.starts, [true, false, false, false]);
-  assert.deepEqual(cellsOf('==Where== ==does== ==he== ==live==?')?.words, ['where', 'does', 'he', 'live']);
-  assert.deepEqual(cellsOf('It rains. ==Where== ==do== ==you== ==go==?')?.words, ['where', 'do', 'you', 'go']);
-  assert.deepEqual(cellsOf('B: ==Where== ==is== ==it==?')?.words, ['where', 'is', 'it']);
-  assert.deepEqual(cellsOf('我沒有生氣。==I== ==am== ==not== angry.')?.words, ['I', 'am', 'not']);
-  assert.deepEqual(cellsOf("我很好。==I'm== ==fine== today.")?.words, ["I'm", 'fine']);
-  assert.deepEqual(cellsOf('==TV== ==is== ==fun==.')?.words, ['TV', 'is', 'fun']);
-  assert.deepEqual(cellsOf('「==Where== ==is== ==it==?」')?.words, ['where', 'is', 'it']);
+void test('標點只拿句末的：後面還有字、只剩結束的引號、縮寫、中間的格', () => {
+  assert.deepEqual(cellsOf('==I== ==live in== ==the U.S.==')?.words, ['I', 'live in', 'the U.S.'], '縮寫不拿');
+  assert.deepEqual(cellsOf('「==where== ==is== ==it?==」')?.tails, [' ', ' ', '?」']);
+  assert.deepEqual(cellsOf('==where== ==is== ==it?== I asked.')?.words, ['where', 'is', 'it?'], '後面還有字的不是句末');
+  assert.deepEqual(cellsOf('==Yes,== ==I== ==do==.')?.words, ['Yes,', 'I', 'do'], '中間格的逗號不拿');
 });
 
-void test('不是句子排序：只有一格、問答題、拿掉標點後是空的、空格裡沒有英文的好幾題', () => {
+void test('句首那格：照原樣當鍵、不改小寫；只有第一格、前面沒有字或是中文與全形標點才標', () => {
+  assert.deepEqual(cellsOf('他住在哪裡？==where== ==does== ==he== ==live==?')?.starts, [true, false, false, false]);
+  assert.deepEqual(cellsOf('==where== ==does== ==he== ==live==?')?.starts, [true, false, false, false]);
+  assert.deepEqual(cellsOf('「==where== ==is== ==it==?」')?.starts, [true, false, false]);
+  assert.deepEqual(cellsOf('It rains. ==where== ==do== ==you== ==go==?')?.starts, [false, false, false, false], '英文句子中間不猜');
+  assert.deepEqual(cellsOf('他住在哪裡？==Where== ==does== ==he== ==live==?')?.words, ['Where', 'does', 'he', 'live'], '作者寫大寫照原樣（AI 草稿另外提醒）');
+  assert.deepEqual(cellsOf('我沒有生氣。==I== ==am== ==not== angry.')?.words, ['I', 'am', 'not']);
+});
+
+void test('不是句子排序：只有一格、問答題、拿掉標點後是空的、別科、沒寫科目、全詩', () => {
   assert.equal(sentenceOf('    - I know ==where== he lives.\n').sentence, undefined);
   assert.equal(sentenceOf('    - 請問他住哪裡？ :: Where does he live?\n').sentence, undefined);
   assert.equal(sentenceOf('    - I know ==where== ==?==\n').sentence, undefined);
-  const poem = parseDeck('- 鳥鳴澗 排序\n    - ==人閒桂花落==，==夜靜春山空==。\n    - ==月出驚山鳥==，==時鳴春澗中==。\n').targets[0];
-  assert.deepEqual([poem.sentence, poem.order], [undefined, undefined]);
-  const single = parseDeck('- 鳥鳴澗 排序\n    - ==人閒桂花落==，==夜靜春山空==。\n').targets[0];
-  assert.equal(single.sentence, undefined);
-  assert.equal(single.order?.title, '鳥鳴澗', '只有一題、空格是中文的是全詩');
+  assert.equal(parseDeck('- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0].sentence, undefined);
+  assert.equal(parseDeck('---\n科目: 國文\n---\n- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0].order?.title, '間接問句', '別科照全詩順序卡，和以前一樣');
+  const poem = sentenceOf('    - ==Twinkle, twinkle==, ==little star==.\n', 'Twinkle 全詩 排序');
+  assert.deepEqual([poem.sentence, poem.order?.title], [undefined, 'Twinkle'], '英文卡組裡寫了全詩是全詩順序卡');
+  const chinese = sentenceOf('    - ==人閒桂花落==，==夜靜春山空==。\n', '鳥鳴澗 排序');
+  assert.deepEqual([chinese.sentence?.title, chinese.order], ['鳥鳴澗', undefined], '英文卡組裡沒寫全詩的就是句子排序，空格是中文也一樣');
 });
 
 const P = 'Essence Cards/英文/L3 文法.md';

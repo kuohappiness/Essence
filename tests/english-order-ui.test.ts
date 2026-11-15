@@ -22,14 +22,14 @@ const DECK = `---
 科目: 英文
 ---
 - 間接問句 排序 ^order1
-    - 他住在哪裡？==Where== ==does== ==he== ==live==?
+    - 他住在哪裡？==where== ==does== ==he== ==live==?
         - 詳解：問句的詞序
     - 記憶錨點：疑問詞放最前面
 `;
 const keyTexts = (ui: ReviewUi): string[] => ui.find('ec-pick-key').map(key => ui.text(key));
 const slotTexts = (ui: ReviewUi): string[] => ui.find('ec-pick-slot').map(slot => ui.text(slot));
 
-void test('整題一列、每個 ＿＿ 一格；字鍵是小寫的詞塊；放進句首那一格的字第一個字母大寫', async t => {
+void test('整題一列、每個 ＿＿ 一格；字鍵照原樣（作者寫小寫）；放進句首那一格的字第一個字母大寫', async t => {
   const h = await setup(t, { [P]: DECK });
   const s = await h.open({ subject: '英文' });
   const ui = await show(t, s);
