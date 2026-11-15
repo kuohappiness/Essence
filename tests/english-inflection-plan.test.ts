@@ -10,9 +10,9 @@ const NOW = '2026-11-15T19:00:00.000+08:00';
 const PATH = 'Essence Cards/英文/L3 單字.md';
 const deckOf = (body: string, path = PATH): DeckEntry => ({ path, deck: parseDeck(`---\n科目: 英文\n---\n${body}`) });
 const line = (lt: string, r: string, t: string): string => JSON.stringify({ t, lt, r, v: '12345678' });
-function share(decks: readonly DeckEntry[], lines: readonly string[] = []): string[] {
+function share(decks: readonly DeckEntry[], lines: readonly string[] = [], filter: readonly string[] = []): string[] {
   const history = mergeHistory([{ path: 'Essence Cards/紀錄/2026-11 PC-test.jsonl', text: lines.join('\n') }]);
-  const today = planToday({ decks, history, settings: { capMinutes: 60, retention: 0.9, filter: [] }, exam: null, now: Date.parse(NOW), offset: 480 });
+  const today = planToday({ decks, history, settings: { capMinutes: 60, retention: 0.9, filter }, exam: null, now: Date.parse(NOW), offset: 480 });
   return [...today.share, ...today.more].map(item => item.lt);
 }
 
@@ -87,4 +87,14 @@ void test('開始條件在一天開始時決定：今天之後才答錯不影響
 void test('配對只認英文的卡組：別科的名稱結尾不擋', () => {
   const math: DeckEntry = { path: 'Essence Cards/數學/L1.md', deck: parseDeck('---\n科目: 數學\n---\n- go 英翻中 ^goenzh\n    - go :: 去\n- go 過去式 ^gopast\n    - ＿＿ :: went\n') };
   assert.deepEqual(share([math]).sort(), ['goenzh', 'gopast']);
+});
+
+void test('濾網 × 讀不懂的紀錄（L2 R3）：英翻中被濾網篩掉就不等，只有讀不懂才等', () => {
+  const high = GO.replace('    - go :: 去', '    - 重要性：高\n    - go :: 去');
+  const unreadable = JSON.stringify({ t: '2026-11-14T19:00:00.000+08:00', lt: 'goenzh', r: 'easy', v: '12345678', need: ['不認得的功能'] });
+  const filter = ['重要性：高'];
+  assert.deepEqual(share([deckOf(high)], [], filter), ['gopast'], '篩掉、紀錄讀得懂');
+  assert.deepEqual(share([deckOf(high)], [unreadable], filter), ['gopast'], '篩掉、紀錄讀不懂');
+  assert.deepEqual(share([deckOf(high)], [unreadable]), [], '沒篩、紀錄讀不懂');
+  assert.deepEqual(share([deckOf(high)]), ['goenzh'], '沒篩、紀錄讀得懂');
 });
