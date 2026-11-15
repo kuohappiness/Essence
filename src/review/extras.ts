@@ -15,17 +15,23 @@ export function extraLabel(text: string): { label: string | null; body: string }
   return { label: match[1], body };
 }
 
+/** 全詩意境那一行的開頭（L2 R2）：不算進句子的解釋，一律放最後。 */
+const WHOLE = /^全詩[：:]/;
+
 /**
- * 全詩順序卡的解釋（D-204 第 5 點）：記憶錨點底下一個子項目一行，照詩的順序；寫在冒號後面的一行也算一行。沒有記憶錨點是空的。
- * 子項目裡更深的縮排接在那一行裡。
+ * 全詩順序卡對答案後的解釋（D-204 第 5 點）：記憶錨點底下一個子項目一行，照詩的順序；寫在冒號後面的一行也算一行。子項目裡更深的縮排接在那一行裡。
+ * 開頭是「全詩：」的是全詩意境，放最後（rest）。其他的行數夠時每句底下緊接一行（under），多的放最後；
+ * 不夠時有一句沒寫、對不起來，全部放在詩句之後。沒有記憶錨點是空的。
  */
-export function orderNotes(shared: readonly string[]): string[] {
+export function orderNotes(shared: readonly string[], count: number): { under: string[]; rest: string[] } {
   for (const extra of shared) {
     const { label, body } = extraLabel(extra);
     if (label !== '記憶錨點') continue;
-    return body.split(/\n(?=[-*+]\s)/).map(item => item.replace(/^[-*+]\s+/, '').trim()).filter(Boolean);
+    const items = body.split(/\n(?=[-*+]\s)/).map(item => item.replace(/^[-*+]\s+/, '').trim()).filter(Boolean);
+    const lines = items.filter(item => !WHOLE.test(item)), whole = items.filter(item => WHOLE.test(item));
+    return lines.length >= count ? { under: lines.slice(0, count), rest: [...lines.slice(count), ...whole] } : { under: [], rest: [...lines, ...whole] };
   }
-  return [];
+  return { under: [], rest: [] };
 }
 
 /**

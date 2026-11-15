@@ -91,3 +91,13 @@ void test('解釋比句子少：對不起來，放在詩句之後每行一列；
   const none = await answered(t, poem([]).replace(/    - 記憶錨點：\n/, ''));
   assert.deepEqual([none.find('ec-order-note'), none.find('ec-order-rest')], [[], []]);
 });
+
+void test('全詩意境寫成「全詩：」：不算進句子的解釋，一律放最後；少一句時其他解釋照樣放在詩句之後（L2 R2）', async t => {
+  const whole = '全詩：由靜寫到動。';
+  const full = await answered(t, poem([...NOTES, whole]));
+  assert.deepEqual(full.find('ec-pick-row').map(row => within(row, 'ec-order-note').flatMap(markdown)), NOTES.map(note => [note]));
+  assert.deepEqual(full.find('ec-order-rest').flatMap(markdown), [whole]);
+  const missing = await answered(t, poem([NOTES[0], NOTES[2], NOTES[3], whole]));
+  assert.deepEqual(missing.find('ec-order-note'), [], '少一句語譯、加上意境剛好四行，也不貼到句子底下');
+  assert.deepEqual(missing.find('ec-order-rest').flatMap(markdown), [NOTES[0], NOTES[2], NOTES[3], whole]);
+});

@@ -45,19 +45,11 @@ function compareOrder(rows: readonly Row[], tested: readonly (string | null | un
   return [...new Set([...first, ...rows])];
 }
 
-/**
- * 全詩順序卡對答案後的解釋（D-204 第 5 點）：行數夠時每句底下緊接一行（under），多的放最後；不夠時對不起來，全部放在詩句之後（rest）。
- */
-function orderNotesOf(view: CardView, count: number): { under: readonly string[]; rest: readonly string[] } {
-  const notes = orderNotes(view.card.target.shared);
-  return notes.length >= count ? { under: notes.slice(0, count), rest: notes.slice(count) } : { under: [], rest: notes };
-}
-
 function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
   const { card } = view;
   const { pick, group } = partsOf(view);
   const { order } = group;
-  const notes = order && pick.stage === 'result' ? orderNotesOf(view, card.blanks.length) : null;
+  const notes = order && pick.stage === 'result' ? orderNotes(card.target.shared, card.blanks.length) : null;
   // 全詩順序卡的空格先撐到最長那一句的寬度，填進去時句子不跳（D-204 第 1 點）。
   const width = order ? Math.max(...group.members.map(line => [...line].length)) : 0;
   const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>
