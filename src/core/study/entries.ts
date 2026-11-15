@@ -6,12 +6,13 @@ export function encodeEntry(t: string, entry: NewEntry): string {
   if ('set' in entry) {
     return JSON.stringify({ t, set: entry.set, ...('deck' in entry ? { deck: entry.deck } : 'lt' in entry ? { lt: entry.lt } : {}), val: entry.val });
   }
-  // 欄位順序 t, lt, r, v, typed, pick, retry, also, with, src（syntax.md §5、tasks/question-type-seam.md §4）。
+  // 欄位順序 t, lt, r, v, typed, cell, pick, retry, also, with, src（syntax.md §5、tasks/question-type-seam.md §4、D-204）。
   return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}),
     ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}),
+    ...('cell' in entry && entry.cell !== undefined ? { cell: entry.cell } : {}),
     ...('pick' in entry && entry.pick !== undefined ? { pick: entry.pick } : {}),
     ...('retry' in entry && entry.retry ? { retry: entry.retry } : {}),
-    ...('also' in entry && entry.also?.length ? { also: entry.also.map(({ v, r, pick, retry }) => ({ v, r, pick, ...(retry ? { retry } : {}) })) } : {}),
+    ...('also' in entry && entry.also?.length ? { also: entry.also.map(({ v, r, cell, pick, retry }) => ({ v, r, ...(cell === undefined ? {} : { cell }), pick, ...(retry ? { retry } : {}) })) } : {}),
     ...('with' in entry && entry.with ? { with: entry.with } : {}),
     ...(entry.src ? { src: entry.src } : {}) });
 }

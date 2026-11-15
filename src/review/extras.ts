@@ -16,6 +16,19 @@ export function extraLabel(text: string): { label: string | null; body: string }
 }
 
 /**
+ * 全詩順序卡的解釋（D-204 第 5 點）：記憶錨點底下一個子項目一行，照詩的順序；寫在冒號後面的一行也算一行。沒有記憶錨點是空的。
+ * 子項目裡更深的縮排接在那一行裡。
+ */
+export function orderNotes(shared: readonly string[]): string[] {
+  for (const extra of shared) {
+    const { label, body } = extraLabel(extra);
+    if (label !== '記憶錨點') continue;
+    return body.split(/\n(?=[-*+]\s)/).map(item => item.replace(/^[-*+]\s+/, '').trim()).filter(Boolean);
+  }
+  return [];
+}
+
+/**
  * 比較卡對照裡的記憶錨點（tasks/question-type-seam.md §7）：最後一個全形冒號前面是字形的說明，後面是常用詞；沒有冒號就沒有常用詞。
  * 「記憶錨點：」已經拿掉了（Card.group.rows）。
  */

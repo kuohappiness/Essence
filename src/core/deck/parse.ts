@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { readPick, typedAnswer } from './question-types.ts';
+import { readOrder, readPick, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -332,6 +332,8 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     }
     const pick = readPick(target);
     if (pick.group) target.group = pick.group;
+    const order = readOrder(target);
+    if (order) target.order = order;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;

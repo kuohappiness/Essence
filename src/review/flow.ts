@@ -16,6 +16,8 @@ export interface ReviewLine {
   v: string;
   typed?: 'right' | 'wrong' | 'skip';
   retry?: 'right' | 'wrong' | 'skip' | 'not-needed';
+  /** 全詩順序卡：這一行最上層是第幾格，從 1 算（D-204）。 */
+  cell?: number;
   /** 比較卡（tasks/question-type-seam.md §4）：對答案時那一格的字、同一個目標的其他格。with 由 Session 寫入時加。 */
   pick?: string | null;
   also?: readonly PickCell[];

@@ -118,7 +118,7 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
     lt: item.lt, deck: item.deck, target: slot.target, prompt,
     isNew: slot.memory === null && !any.has(item.lt),
     early: !ready && !fresh,
-  }) };
+  }, shownWith(slot.seen, valid.get(item.lt) ?? []).get(prompt.fingerprint)?.count) };
 }
 
 /** 今天的份裡屬於這個範圍的；再複習一些不算。 */

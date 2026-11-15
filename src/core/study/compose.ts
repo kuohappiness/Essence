@@ -1,4 +1,4 @@
-import type { PickGroup, Prompt, Target } from '../deck/index.ts';
+import type { PickGroup, PoemOrder, Prompt, Target } from '../deck/index.ts';
 import type { Blank, Card, CardGroup, Shown } from './types.ts';
 
 // 題型接點的第二個（D-181）：這張卡是哪一種題型、有哪幾格。其他三個在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
@@ -11,9 +11,13 @@ export function questionType(card: Card): QuestionType {
   return card.group ? 'pick' : card.typed ? 'typed' : 'flip';
 }
 
-/** 翻面與打字的一張卡：一格，就是自己那一題（nextCard、全部卡的一輪、預覽共用）。 */
-export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>): Card {
+/**
+ * 沒有組的目標的一張卡（nextCard、全部卡的一輪、預覽共用）：翻面與打字是一格，就是自己那一題；全詩順序卡是那一題的每一格。
+ * times 是這一題出過幾次，全詩順序卡用它換字鍵的順序，每次不同、重來不變。
+ */
+export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>, times = 0): Card {
   const { lt, deck, target, prompt, isNew, early } = fields;
+  if (target.order && prompt.kind === 'cloze') return orderCardOf(fields, target.order, times);
   return { lt, deck, target, prompt, isNew, typed: prompt.kind === 'qa' && prompt.typed !== null, early, blanks: [{ lt, target, prompt }] };
 }
 
@@ -111,6 +115,17 @@ export function pickCardOf(fields: { deck: string; isNew: boolean; early: boolea
     cells.push(cellOf(group, extra.mate, extra.prompt));
   }
   return assembled(fields, chosen, cells, deckTargets);
+}
+
+/**
+ * 全詩順序卡（D-187、D-204）：一個目標，每一格是一句，照詩的順序；字鍵是打亂的每一句，相同的句子各一個鍵，順序一定和詩不同（兩句時就是對調）。
+ */
+function orderCardOf(fields: Omit<Card, 'typed' | 'blanks'>, order: PoemOrder, times: number): Card {
+  const { lt, target, prompt } = fields;
+  const blanks = order.lines.map((answer, cell): Blank => ({ lt, target, prompt, answer, cell }));
+  const keys = shuffled(order.lines, seeded(prompt.fingerprint + ' ' + String(times)));
+  if (keys.every((key, i) => key === order.lines[i])) keys.push(keys.shift() as string);
+  return { ...fields, typed: false, blanks, group: { title: order.title, members: order.lines, keys, rows: [], order: { head: order.head, tails: order.tails } } };
 }
 
 /**
