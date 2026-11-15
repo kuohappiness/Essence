@@ -71,14 +71,22 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
   const links = sources.map(item => ({ ...item, label: sourceLabel(item), target: resolveSource(app, card.deck, deckMaterials, item.link, (term, code) => units(card.deck, term, code)) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
+  // 接句卡（D-185、tasks/couplet-cards.md §3）：詩名在最上面；每一句一段不換行的字，放不下才換行；記憶錨點的子項目一行一列。
+  const couplet = card.target.couplet;
+  const firstAnchor = couplet && couplet.notes.length > 0 ? extras.findIndex(extra => extraLabel(extra).label === ANCHOR_LABEL) : -1;
+  const lastLine = (couplet?.lines.length ?? 0) - 1;
   return <article className={'ec-card' + (view.english ? ' is-english' : '') + (parts.copying ? ' is-copying' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
-    <div className={'ec-q' + (parts.lines > 0 ? ' has-blank' : '') + (sticky ? ' is-sticky' : '')} ref={qRef}>
+    {couplet?.title && <p className="ec-couplet-title">{couplet.title}</p>}
+    <div className={'ec-q' + (parts.lines > 0 || couplet ? ' has-blank' : '') + (sticky ? ' is-sticky' : '')} ref={qRef}>
       {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
       {/* 喇叭接在最後一個字後面（D-145，iPhone 回饋），不放在第一行右邊 */}
-      <Markdown app={app} text={question} sourcePath={card.deck} mode={parts.mode} revealed={parts.revealedQuestion}
-        lines={parts.lines} words={parts.words} onSlot={parts.lines > 0 ? onSlot : undefined}
-        english={view.english} tail={<Speaker texts={speak(parts.spoken)} say={say} />} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
+      {couplet
+        ? <div className="ec-couplet">{couplet.lines.map((line, index) => <Markdown key={index} className="ec-couplet-line" app={app} text={line} sourcePath={card.deck} mode="cloze" revealed={parts.revealedQuestion}
+          tail={index === lastLine ? <Speaker texts={speak(parts.spoken)} say={say} /> : undefined} onReady={index === lastLine ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />)}</div>
+        : <Markdown app={app} text={question} sourcePath={card.deck} mode={parts.mode} revealed={parts.revealedQuestion}
+          lines={parts.lines} words={parts.words} onSlot={parts.lines > 0 ? onSlot : undefined}
+          english={view.english} tail={<Speaker texts={speak(parts.spoken)} say={say} />} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />}
     </div>
     {parts.middle}
     {revealed && <div className="ec-answer">
@@ -93,9 +101,13 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
         const broken = label === ANCHOR_LABEL ? anchorBreak(body) : null;
         // 英文句子和中文翻譯各一行（D-174），喇叭留在英文那一行。
         const { line, translation } = splitTranslation(body);
-        const rows = broken
-          ? <>{row(broken.head, null)}{row(broken.rest, body)}</>
-          : <>{row(line, line)}{translation && row(translation, null, 'zh-Hant')}</>;
+        const rows = couplet && index === firstAnchor
+          ? <>{couplet.notes.map((note, at) => <div key={at} className="ec-ex-row ec-couplet-note">
+            <Markdown app={app} text={note} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />
+          </div>)}</>
+          : broken
+            ? <>{row(broken.head, null)}{row(broken.rest, body)}</>
+            : <>{row(line, line)}{translation && row(translation, null, 'zh-Hant')}</>;
         // 燈泡只在第一行，其他行和內容對齊（D-184 第 2 點）；螢幕閱讀器念「記憶提示」。
         if (label === ANCHOR_LABEL) return <div key={index} className="ec-ex-item is-anchor">
           <span className="ec-bulb" role="img" aria-label="記憶提示"><Icon type="bulb" /></span>
