@@ -195,7 +195,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     lt: item.id, deck: item.path, target: item.target, prompt,
     isNew: slot.memory === null && !any.has(item.id),
     early: !ready.length && !fresh.length,
-  }) };
+  }, shownWith(seen, valid.get(item.id) ?? []).get(prompt.fingerprint)?.count) };
 }
 
 /** 卡組裡這些目標現在的記憶顏色（D-062）：灰未複習、橙到期或剛答錯、綠還沒到期、藍間隔超過 21 天。 */

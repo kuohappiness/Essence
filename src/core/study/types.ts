@@ -44,7 +44,7 @@ export type NewEntry =
   // typed：打字卡第 1 步的結果；retry：第 2 步（原形提示）的結果，第 1 步 wrong／skip 時一定寫，跳過第 2 步寫 not-needed
   // （D-121、D-115、syntax.md §5）。評分只看第 1 步；retry 只是證據，parseLine 不讀它。
   // pick、also、with：比較卡（tasks/question-type-seam.md §4）。pick 是對答案時那一格的字，第一次按「沒印象」是 null；also 是同一個目標的其他格。
-  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; pick?: string | null; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; also?: readonly PickCell[]; with?: string; src?: 'check' }
+  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; cell?: number; pick?: string | null; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; also?: readonly PickCell[]; with?: string; src?: 'check' }
   | { lt: string; r: 'miss'; src: 'mistake' }
   | { undo: string }
   | { set: 'cap'; val: number }
@@ -59,7 +59,7 @@ export type NewEntry =
   | { set: 'exam'; val: ExamLog };
 
 /** 比較卡同一個目標的另一格：意思和那一行最上層的同名欄位相同。 */
-export interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip' }
+export interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip'; cell?: number }
 
 export interface ExamLog {
   id: string;
@@ -219,6 +219,8 @@ export interface Blank {
   prompt: Prompt;
   /** 比較卡才有：這一格對的字鍵，照 CardGroup.members 的寫法。 */
   answer?: string;
+  /** 全詩順序卡才有：這一題的第幾格，從 0 算（同一題好幾格，紀錄要分得出是哪一格）。 */
+  cell?: number;
 }
 
 /** 比較卡的組（tasks/question-type-seam.md §5、§7）：標題、括號的順序、打散的字鍵、每個字一行的對照。對照裡的 lt 是這篇卡組裡這個字的目標，不一定在這次的範圍裡。 */
@@ -227,6 +229,8 @@ export interface CardGroup {
   members: readonly string[];
   keys: readonly string[];
   rows: readonly { member: string; lt: string | null; anchor: string | null }[];
+  /** 全詩順序卡才有（D-187、D-204）：第一格前面的字、每一格後面接的字。這時 title 是詩名、members 是每一格的句子、rows 是空的。 */
+  order?: { head: string; tails: readonly string[] };
 }
 
 export interface Card {

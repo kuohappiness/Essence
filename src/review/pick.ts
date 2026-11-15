@@ -21,6 +21,11 @@ export interface PickView {
   cells: readonly PickCellView[];
   /** 再選時不能按的字：剛才選的。 */
   spent: string | null;
+  /**
+   * 每個字鍵（照 CardGroup.keys）變不變淡：只有全詩順序卡（D-204 第 3 點）。作答時是現在放在某一格的句子；再選時是已經排對的句子。
+   * 淡掉的鍵照樣能點；相同的句子有幾格放著，就有幾個鍵變淡。
+   */
+  used: readonly boolean[];
   /** 每一格都填了（「對答案」不再變淡）。 */
   filled: boolean;
   /** 結果階段才有：每個字這張卡的結果；這次沒出句子的字沒有。 */
@@ -43,6 +48,10 @@ interface Cell {
   status: 'open' | 'right' | 'retry' | 'near' | 'miss';
   /** 第一次選錯時，再選的結果。 */
   retry?: 'right' | 'wrong' | 'skip';
+  /** 全詩順序卡：這一題的第幾格，從 0 算。 */
+  cell?: number;
+  /** 全詩順序卡：這格放的是第幾個字鍵；沒放是 null。相同的句子靠它分（L2 R1）。 */
+  held: number | null;
 }
 
 const RANK: Record<Rating, number> = { miss: 0, near: 1, good: 2, easy: 3 };
@@ -54,7 +63,10 @@ const changeable = (allRight: boolean): readonly Rating[] => allRight ? ALL_RIGH
 
 /** 一張比較卡從作答開始。revealed：預覽時自動展開答案（D-161）：直接到結果階段，空格是答案，沒有對錯記號與結果。 */
 export function createPick(card: Card, options: { now: () => number; revealed?: boolean }): Flow {
-  const cells: Cell[] = card.blanks.map(blank => ({ lt: blank.lt, v: blank.prompt.fingerprint, answer: blank.answer ?? '', filled: null, skipped: false, first: null, status: 'open' }));
+  const cells: Cell[] = card.blanks.map(blank => ({ lt: blank.lt, v: blank.prompt.fingerprint, answer: blank.answer ?? '', filled: null, skipped: false, first: null, status: 'open', held: null, ...(blank.cell === undefined ? {} : { cell: blank.cell }) }));
+  const keys = card.group?.keys ?? [];
+  /** 全詩順序卡（D-187、D-204）：字鍵是句子，放過的會變淡，點了是交換。 */
+  const order = card.group?.order !== undefined;
   const shown = options.revealed === true;
   let stage: PickView['stage'] = shown ? 'result' : 'answer';
   let cursor: number | null = shown ? null : 0;
@@ -78,15 +90,20 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     flow.revealedAt = options.now();
   }
 
-  function key(value: string): boolean {
+  function key(value: string, given?: number): boolean {
     if (stage === 'result') return false;
     const at = options.now();
-    const repeated = value === lastKey.key && at - lastKey.at < SAME_KEY;
-    lastKey = { key: value, at };
+    const index = order ? keyIndex(value, given) : null;
+    // 全詩順序卡的相同句子是不同的鍵，照位置算連點；其他照字。
+    const id = index === null ? value : String(index);
+    const repeated = id === lastKey.key && at - lastKey.at < SAME_KEY;
+    lastKey = { key: id, at };
     if (repeated || cursor === null) return false;
     const cell = cells[cursor];
     if (stage === 'answer') {
+      if (index !== null) swapFrom(cell, index);
       cell.filled = value;
+      cell.held = index;
       cell.skipped = false;
       lastFill = at;
       cursor = nextEmpty(cursor);
@@ -94,10 +111,50 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     }
     if (value === cell.first) return false;
     cell.filled = value;
+    cell.held = index === null ? null : retryIndex(cell, value, index);
     cell.retry = value === cell.answer ? 'right' : 'wrong';
     cell.status = value === cell.answer ? 'near' : 'miss';
     nextRetry();
     return true;
+  }
+
+  /**
+   * 點的是第幾個字鍵：畫面給位置（at）就用它；沒給時（測試、鍵盤）先找這一句還沒放的鍵，都放了取第一個。
+   */
+  function keyIndex(value: string, given?: number): number {
+    if (given !== undefined && keys.at(given) === value) return given;
+    const held = new Set(cells.map(cell => cell.held));
+    const same = keys.flatMap((key, i) => key === value ? [i] : []);
+    return same.find(i => !held.has(i)) ?? same[0] ?? -1;
+  }
+
+  /**
+   * 再選時這一格記成哪個鍵（L2 R5）：點的鍵被已經排對的格佔著，就換用這一句沒被排對的格佔著的鍵，兩個同句的鍵才都淡；排對的格不動。
+   */
+  function retryIndex(cell: Cell, value: string, index: number): number {
+    const locked = new Set(cells.flatMap(each => each !== cell && each.held !== null && (each.status === 'right' || each.status === 'near') ? [each.held] : []));
+    if (!locked.has(index)) return index;
+    const free = keys.findIndex((key, i) => key === value && !locked.has(i));
+    return free === -1 ? index : free;
+  }
+
+  /**
+   * 全詩順序卡點一句（D-204 第 3 點）：這個鍵放在別格，就從那一格拿過來，那一格換成這一格原本的句子（這一格空著或沒印象，那一格就空出來）。
+   * 鍵照位置認，相同的句子也分得出是哪一格（L2 R1）。
+   */
+  function swapFrom(cell: Cell, index: number): void {
+    const other = cells.find(each => each !== cell && each.held === index);
+    if (!other) return;
+    other.filled = cell.filled;
+    other.held = cell.held;
+    other.skipped = false;
+  }
+
+  /** 字鍵變不變淡：作答時是放在某一格的鍵；再選時是已經排對的格放的鍵。 */
+  function usedOf(): boolean[] {
+    if (!order || stage === 'result') return keys.map(() => false);
+    const held = new Set(cells.flatMap(cell => cell.held !== null && (stage === 'answer' || cell.status === 'right' || cell.status === 'near') ? [cell.held] : []));
+    return keys.map((_, i) => held.has(i));
   }
 
   function skip(): boolean {
@@ -105,6 +162,7 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     const cell = cells[cursor];
     if (stage === 'answer') {
       cell.filled = null;
+      cell.held = null;
       cell.skipped = true;
       lastFill = options.now();
       cursor = nextEmpty(cursor);
@@ -167,7 +225,7 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
   function pickView(): PickView {
     return {
       stage, cursor, cells: cells.map(cellView),
-      spent: stage === 'retry' && cursor !== null ? cells[cursor].first : null,
+      spent: stage === 'retry' && cursor !== null ? cells[cursor].first : null, used: usedOf(),
       filled: !cells.some(empty), results: resultsOf(),
       committable: stage === 'result' && !allRight(),
     };
@@ -183,8 +241,10 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     }
     return [...byTarget].map(([lt, list]) => {
       const worst = list.reduce((best, cell) => RANK[ratingOf(cell, rating)] < RANK[ratingOf(best, rating)] ? cell : best);
-      const also = list.filter(cell => cell !== worst).map(cell => ({ v: cell.v, r: ratingOf(cell, rating), pick: cell.first, ...(cell.retry ? { retry: cell.retry } : {}) }));
-      return { lt, r: ratingOf(worst, rating), v: worst.v, pick: worst.first, ...(worst.retry ? { retry: worst.retry } : {}), ...(also.length ? { also } : {}) };
+      // 全詩順序卡的格序寫成第幾格（從 1 算），和卡組的「第 1 句」一樣讀。
+      const at = (cell: Cell): { cell?: number } => cell.cell === undefined ? {} : { cell: cell.cell + 1 };
+      const also = list.filter(cell => cell !== worst).map(cell => ({ v: cell.v, r: ratingOf(cell, rating), ...at(cell), pick: cell.first, ...(cell.retry ? { retry: cell.retry } : {}) }));
+      return { lt, r: ratingOf(worst, rating), v: worst.v, ...at(worst), pick: worst.first, ...(worst.retry ? { retry: worst.retry } : {}), ...(also.length ? { also } : {}) };
     });
   }
 
@@ -194,7 +254,7 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     view: () => ({ revealed: stage === 'result', allowed: allRight() ? ALL_RIGHT : NONE, speakable: false, typed: null, pick: pickView() }),
     act(action) {
       switch (action.kind) {
-        case 'key': return key(action.key);
+        case 'key': return key(action.key, action.at);
         case 'skip': return skip();
         case 'row': return row(action.index);
         case 'check': return check();

@@ -1,4 +1,4 @@
-import { anchorParts, questionOf, RATING_LABELS } from '../review/index.ts';
+import { anchorParts, orderNotes, questionOf, RATING_LABELS } from '../review/index.ts';
 import type { CardView, PickView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
 import { Rates, type BodyProps, type BottomProps, type Screen } from './screen.tsx';
@@ -48,23 +48,35 @@ function compareOrder(rows: readonly Row[], tested: readonly (string | null | un
 function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
   const { card } = view;
   const { pick, group } = partsOf(view);
-  return <article className="ec-card ec-pick" lang="zh-Hant">
+  const { order } = group;
+  const notes = order && pick.stage === 'result' ? orderNotes(card.target.order?.notes ?? [], card.blanks.length) : null;
+  // 全詩順序卡的空格先撐到最長那一句的寬度，填進去時句子不跳（D-204 第 1 點）。
+  const width = order ? Math.max(...group.members.map(line => [...line].length)) : 0;
+  const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>
+    <Markdown app={app} text={text} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />
+  </div>;
+  return <article className={'ec-card ec-pick' + (order ? ' is-order' : '')} lang="zh-Hant">
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span>{view.crumb}</span></div>
-    <p className="ec-pick-title">{group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>
-    <ul className="ec-pick-rows">{card.blanks.map((blank, index) => {
+    <p className="ec-pick-title">{order ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>
+    <ul className="ec-pick-rows" style={order ? { '--ec-order-width': `${String(width)}em` } as React.CSSProperties : undefined}>{card.blanks.map((blank, index) => {
       const cell = pick.cells[index];
       const movable = pick.stage === 'answer' || (pick.stage === 'retry' && cell.state === 'retry');
-      return <li key={blank.prompt.fingerprint + String(index)} className={'ec-pick-row' + (index === pick.cursor ? ' is-on' : '') + (movable ? '' : ' is-locked')} onClick={() => { act({ kind: 'row', index }); }}>
+      // 全詩順序卡一句一列：空格後面接原本的標點，第二聯起多一點空隙（D-204 第 1 點）。
+      const text = order ? (index === 0 ? order.head : '') + '＿＿' + order.tails[index] : questionOf(blank.prompt);
+      const pair = order && index > 0 && index % 2 === 0;
+      return <li key={blank.prompt.fingerprint + String(index)} className={'ec-pick-row' + (pair ? ' is-pair' : '') + (index === pick.cursor ? ' is-on' : '') + (movable ? '' : ' is-locked')} onClick={() => { act({ kind: 'row', index }); }}>
         <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
         <div className="ec-pick-text">
-          <Markdown app={app} text={questionOf(blank.prompt)} sourcePath={card.deck} mode="pick"
+          <Markdown app={app} text={text} sourcePath={card.deck} mode="pick"
             slotNode={<button type="button" className="ec-pick-slot" data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}>{cell.state === 'retry' ? <s>{cell.text}</s> : cell.text || '　'}</button>}
             onReady={index === 0 ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />
         </div>
+        {notes?.under[index] !== undefined && note(notes.under[index], 0, 'ec-order-note')}
       </li>;
     })}</ul>
+    {notes && notes.rest.length > 0 && <div className="ec-order-rest">{notes.rest.map((text, i) => note(text, i, 'ec-order-line'))}</div>}
     {/* 對照（D-203）：上下排、不標結果；這次考到的照句子的順序排前面 */}
-    {pick.stage === 'result' && <div className="ec-pick-compare ec-answer">{compareOrder(group.rows, card.blanks.map(blank => blank.answer)).map(row => {
+    {pick.stage === 'result' && !order && <div className="ec-pick-compare ec-answer">{compareOrder(group.rows, card.blanks.map(blank => blank.answer)).map(row => {
       const parts = row.anchor === null ? null : anchorParts(row.anchor);
       return <div key={row.member} className="ec-cmp">
         <span className="ec-cmp-ch">{row.member}</span>
@@ -94,12 +106,14 @@ function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Elemen
   const cursor = pick.cursor;
   // 用滑鼠或手指點完，焦點回到畫面：Space、Enter 才是「對答案」，不是再按一次這個字鍵。Tab 過來用鍵盤按的（detail 是 0）留在原處。
   const after = (event: React.MouseEvent): void => { if (event.detail > 0) focusApp(); };
-  const words = group.keys.some(key => [...key].length > 1);
+  // 全詩順序卡的字鍵是整句，兩個一排（D-204 第 2 點）；相同的句子各一個鍵，用位置當 key。
+  const lines = group.order !== undefined;
+  const words = !lines && group.keys.some(key => [...key].length > 1);
   return <div className="ec-pick-tray">
-    <div className={'ec-pick-keys' + (words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(keyColumns(group.keys.length, words)) } as React.CSSProperties}>
-      {group.keys.map(key => <button key={key} type="button" className="ec-pick-key" disabled={animating || key === pick.spent} onClick={event => {
+    <div className={'ec-pick-keys' + (lines ? ' is-lines' : words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(lines ? 2 : keyColumns(group.keys.length, words)) } as React.CSSProperties}>
+      {group.keys.map((key, index) => <button key={lines ? index : key} type="button" className={'ec-pick-key' + (pick.used[index] ? ' is-used' : '')} disabled={animating || key === pick.spent} onClick={event => {
         const target = cursor;
-        act({ kind: 'key', key });
+        act({ kind: 'key', key, at: index });
         if (target !== null) fly(event.currentTarget, target);
         after(event);
       }}>{key}</button>)}

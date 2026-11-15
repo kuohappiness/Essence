@@ -16,6 +16,8 @@ export interface ReviewLine {
   v: string;
   typed?: 'right' | 'wrong' | 'skip';
   retry?: 'right' | 'wrong' | 'skip' | 'not-needed';
+  /** 全詩順序卡：這一行最上層是第幾格，從 1 算（D-204）。 */
+  cell?: number;
   /** 比較卡（tasks/question-type-seam.md §4）：對答案時那一格的字、同一個目標的其他格。with 由 Session 寫入時加。 */
   pick?: string | null;
   also?: readonly PickCell[];
@@ -36,8 +38,8 @@ interface FlowView {
 
 export type FlowAction =
   | { kind: 'reveal' } | { kind: 'input'; text: string } | { kind: 'submit' } | { kind: 'skip' }
-  // 比較卡：點字鍵、點那一句、對答案（§6）。
-  | { kind: 'key'; key: string } | { kind: 'row'; index: number } | { kind: 'check' };
+  // 比較卡：點字鍵、點那一句、對答案（§6）。at 是第幾個字鍵（CardGroup.keys）：全詩順序卡的相同句子靠它分（L2 R1）。
+  | { kind: 'key'; key: string; at?: number } | { kind: 'row'; index: number } | { kind: 'check' };
 
 /** 回看要的（D-084）。 */
 export interface LookBack {

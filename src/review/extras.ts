@@ -15,6 +15,19 @@ export function extraLabel(text: string): { label: string | null; body: string }
   return { label: match[1], body };
 }
 
+/** 全詩意境那一行的開頭（L2 R2）：不算進句子的解釋，一律放最後。 */
+const WHOLE = /^全詩[：:]/;
+
+/**
+ * 全詩順序卡對答案後的解釋放哪裡（D-204 第 5、7 點）：notes 是卡組解析器分好的記憶錨點子項目（PoemOrder.notes，L2 R7），這裡不再切字串。
+ * 開頭是「全詩：」的是全詩意境，放最後（rest）。其他的行數夠時每句底下緊接一行（under），多的放最後；
+ * 不夠時有一句沒寫、對不起來，全部放在詩句之後。
+ */
+export function orderNotes(notes: readonly string[], count: number): { under: string[]; rest: string[] } {
+  const lines = notes.filter(item => !WHOLE.test(item)), whole = notes.filter(item => WHOLE.test(item));
+  return lines.length >= count ? { under: lines.slice(0, count), rest: [...lines.slice(count), ...whole] } : { under: [], rest: [...lines, ...whole] };
+}
+
 /**
  * 比較卡對照裡的記憶錨點（tasks/question-type-seam.md §7）：最後一個全形冒號前面是字形的說明，後面是常用詞；沒有冒號就沒有常用詞。
  * 「記憶錨點：」已經拿掉了（Card.group.rows）。

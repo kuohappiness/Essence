@@ -13,6 +13,6 @@ export { folderIssues, folderLabel, guardedMoves, misplacedFolders, presentFolde
 export type { FolderIssue } from './folders.ts';
 export { chapterAlias, codeKey, headingKey, readSourceParts, readTerm, sourceLabel, sourceLinks, splitSource, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceProblem, SourceScope } from './sources.ts';
-export type { Deck, DeckProps, PickGroup, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
+export type { Deck, DeckProps, PickGroup, PoemOrder, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
 export { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuestion, verifySourceEdit } from './source-edit.ts';
 export type { FieldFix, FieldFixAction, SourceEditAction, SourceEditInput, SourceEditPlan, SourceEditResult, TextChange } from './source-edit.ts';

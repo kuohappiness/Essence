@@ -1,5 +1,5 @@
 import { maskInline } from './markdown.ts';
-import type { PickGroup, ProblemCode, Prompt, Target } from './types.ts';
+import type { PickGroup, PoemOrder, ProblemCode, Prompt, Target } from './types.ts';
 
 // 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
@@ -143,4 +143,23 @@ export function readPick(target: Target): PickReading {
   const outside = prompts.filter(prompt => isSentence(prompt) && !members.includes(answerOf(prompt)));
   if (outside.length) return notRecognized(outside.map(prompt => prompt.line), '答案不在組裡，所以這個目標不是比較卡');
   return notRecognized([target.line], '題目沒有剛好一個空格（＿＿），所以這個目標不是比較卡');
+}
+
+// ── 全詩順序卡（D-187 第 3、10 點、D-204）：點選填空的一種，用填空寫，從名稱最後的「排序」認；和比較卡不互搶（比較卡的題目都是問答）。 ──
+
+/**
+ * 這個目標是不是全詩順序卡：名稱最後一段是「排序」（前面要有空白或右括號），只有一題，是兩格以上的填空。
+ * 不是時照原題型（填空翻面），不另外提示：英文的排序（D-193）寫成問答題，還沒接上。
+ */
+export function readOrder(target: Target, notes: readonly string[]): PoemOrder | null {
+  const { name, prompts } = target;
+  if (target.implicit || target.direction !== null || target.group || endingOf(name) !== '排序') return null;
+  const prompt = prompts.length === 1 ? prompts[0] : null;
+  if (prompt?.kind !== 'cloze' || prompt.blanks.length < 2) return null;
+  const { text, blanks } = prompt;
+  const lines = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).trim());
+  if (lines.some(line => !line)) return null;
+  const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
+  const title = name.replace(/\s*排序$/, '').replace(/(^|\s)全詩$/, '').trim();
+  return { title, head: text.slice(0, blanks[0].start), lines, tails, notes };
 }
