@@ -101,3 +101,15 @@ void test('全詩意境寫成「全詩：」：不算進句子的解釋，一律
   assert.deepEqual(missing.find('ec-order-note'), [], '少一句語譯、加上意境剛好四行，也不貼到句子底下');
   assert.deepEqual(missing.find('ec-order-rest').flatMap(markdown), [NOTES[0], NOTES[2], NOTES[3], whole]);
 });
+
+void test('記憶錨點寫成編號清單或混用：每個項目照樣一行，「全詩：」照樣放最後（L2 R6）', async t => {
+  const whole = '全詩：由靜寫到動。';
+  let n = 0;
+  const numbered = poem([...NOTES, whole]).replace(/^( {8})- /gm, (_, pad: string) => `${pad}${String(++n)}. `);
+  const listed = await answered(t, numbered);
+  assert.deepEqual(listed.find('ec-pick-row').map(row => within(row, 'ec-order-note').flatMap(markdown)), NOTES.map(note => [note]));
+  assert.deepEqual(listed.find('ec-order-rest').flatMap(markdown), [whole]);
+  const mixed = await answered(t, poem(NOTES) + `        1) ${whole}\n`);
+  assert.deepEqual(mixed.find('ec-pick-row').map(row => within(row, 'ec-order-note').flatMap(markdown)), NOTES.map(note => [note]));
+  assert.deepEqual(mixed.find('ec-order-rest').flatMap(markdown), [whole]);
+});

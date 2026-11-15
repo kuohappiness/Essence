@@ -27,7 +27,8 @@ export function orderNotes(shared: readonly string[], count: number): { under: s
   for (const extra of shared) {
     const { label, body } = extraLabel(extra);
     if (label !== '記憶錨點') continue;
-    const items = body.split(/\n(?=[-*+]\s)/).map(item => item.replace(/^[-*+]\s+/, '').trim()).filter(Boolean);
+    // 子項目照卡組認得的清單符號分：-、*、+ 與編號（1.、1)），可以混用（L2 R6）。
+    const items = body.split(/\n(?=(?:[-*+]|\d{1,9}[.)])\s)/).map(item => item.replace(/^(?:[-*+]|\d{1,9}[.)])\s+/, '').trim()).filter(Boolean);
     const lines = items.filter(item => !WHOLE.test(item)), whole = items.filter(item => WHOLE.test(item));
     return lines.length >= count ? { under: lines.slice(0, count), rest: [...lines.slice(count), ...whole] } : { under: [], rest: [...lines, ...whole] };
   }
