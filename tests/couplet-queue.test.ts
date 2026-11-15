@@ -115,3 +115,18 @@ void test('同名的兩首各缺一邊時不會配到另一首（L2 R1）', () =
   const text = `---\n科目: 國語\n---\n### 絕句\n${couplets('絕句', 'b3pma', NIAO).split(/(?=- 絕句)/)[0]}### 絕句\n${lines[1]}${lines[2]}`;
   assert.deepEqual(run(text, practice(text)), ['b3pma1', 'b3pmb2', 'b3pmb3']);
 });
+
+// L2 第一輪 R3：對方不在今天的範圍（還沒到期），但今天在全部卡答過，每日的份照樣隔開；只剩它時直接出。
+void test('每日的份：對方今天在全部卡答過、自己在今天的份時照樣隔開（L2 R3）', () => {
+  const pair = couplets('鳥鳴澗', 'b3pma', NIAO).split(/(?=- 鳥鳴澗)/).slice(0, 2).join('');
+  const deck = entry(`---\n科目: 國語\n---\n### 鳥鳴澗\n${pair}### 其他\n- 一般 填空 ^b3pmc1\n    - ==清風==徐來\n`);
+  const yesterday = encodeEntry('2026-11-14T19:00:00.000+08:00', { lt: 'b3pma1', r: 'easy', v: printOf(deck, 'b3pma1') });
+  const plan = planToday(input(deck, [yesterday], START));
+  assert.deepEqual(plan.share.map(item => item.lt), ['b3pma2', 'b3pmc1'], '第 1 句還沒到期，不在今天的份');
+  const practiced = encodeEntry(new Date(START + 10_000).toISOString(), { lt: 'b3pma1', r: 'good', v: printOf(deck, 'b3pma1') });
+  const first = nextCard(plan, input(deck, [yesterday, practiced], START + 20_000), { subject: '國語' });
+  assert.equal(first.kind === 'card' && first.card.lt, 'b3pmc1', '先用別張穿插');
+  const plain = encodeEntry(new Date(START + 30_000).toISOString(), { lt: 'b3pmc1', r: 'good', v: printOf(deck, 'b3pmc1') });
+  const second = nextCard(plan, input(deck, [yesterday, practiced, plain], START + 40_000), { subject: '國語' });
+  assert.equal(second.kind === 'card' && second.card.lt, 'b3pma2', '只剩它時直接出');
+});

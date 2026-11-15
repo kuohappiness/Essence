@@ -20,16 +20,16 @@ const PAIR_SPACING = 10;
 interface Item { id: string; path: string; entry: DeckEntry; target: Target }
 /** 配對與初學順序只看這幾項：全部卡的 Item 與每日的份都有。 */
 interface Placed { id: string; path: string; target: Target }
-type Partner<T extends Placed> = (item: T) => T | undefined;
+type Partner<T extends Placed> = (item: Placed) => T | undefined;
 
 /**
  * 給一張卡，找它的對方（D-189 第 1 點）。english：英文的兩個方向，同一篇、pairKey 相同、方向相反，各方向取前面的；
  * 每日的份照 D-069，不傳。接句卡（D-185 第 8 點）：同一篇、同一個詩名小標題（照標題所在的行，同名的兩首分得開，L2 R1），第 2k−1 句和第 2k 句；
- * 缺一邊、編號重複或沒有詩名時不配對。
+ * 缺一邊、編號重複或沒有詩名時不配對。items 是找對方的範圍，可以比要選的卡多（每日的份從整篇找，L2 R3）。
  */
 export function partners<T extends Placed>(items: readonly T[], english: boolean): Partner<T> {
-  const keyOf = (item: T, side: string | number): string => JSON.stringify([item.path, item.target.pairKey, side]);
-  const coupletKey = (item: T, index: number): string => JSON.stringify([item.path, item.target.sectionLine, index]);
+  const keyOf = (item: Placed, side: string | number): string => JSON.stringify([item.path, item.target.pairKey, side]);
+  const coupletKey = (item: Placed, index: number): string => JSON.stringify([item.path, item.target.sectionLine, index]);
   const sides = new Map<string, T>();
   const lines = new Map<string, T | null>();
   for (const item of items) {
@@ -118,7 +118,7 @@ export function chooseSpaced<T>(ready: readonly T[], fresh: readonly T[], apart:
 }
 
 /** 對方最後一次作答之後答過幾個不同的其他目標；沒有對方、對方還沒答過是 null（chooseSpaced 的 apart）。 */
-export function apartOf<T extends Placed>(partner: Partner<T>, after: ReadonlyMap<string, number>): (item: T) => number | null {
+export function apartOf<T extends Placed>(partner: Partner<Placed>, after: ReadonlyMap<string, number>): (item: T) => number | null {
   return item => {
     const other = partner(item);
     const gap = other && after.get(other.id);

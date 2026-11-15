@@ -112,7 +112,9 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
     if (at <= input.now) ready.push({ each, at });
     else if (!waiting || at < waiting.at) waiting = { item: each.item, at };
   }
-  const apart = apartOf(partners(placed, false), answeredAfter(input.history.reviews, dayStart(today.day, today.offset)));
+  // 對方從整篇找：不在這個範圍（還沒到期）但今天在全部卡答過的，也要隔開（L2 R3）。
+  const pool = input.decks.flatMap(entry => entry.deck.targets.flatMap(target => target.id === null ? [] : [{ id: target.id, path: entry.path, target }]));
+  const apart = apartOf(partners(pool, false), answeredAfter(input.history.reviews, dayStart(today.day, today.offset)));
   const early = !ready.length && !fresh.length;
   const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(({ each }) => each), holdOrders(fresh, each => slotOf(today, each.id).memory === null), apart)?.item ?? waiting?.item;
   if (!item) return { kind: 'done' };
