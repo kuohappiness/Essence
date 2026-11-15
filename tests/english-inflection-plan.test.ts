@@ -98,3 +98,10 @@ void test('濾網 × 讀不懂的紀錄（L2 R3）：英翻中被濾網篩掉就
   assert.deepEqual(share([deckOf(high)], [unreadable]), [], '沒篩、紀錄讀不懂');
   assert.deepEqual(share([deckOf(high)]), ['goenzh'], '沒篩、紀錄讀得懂');
 });
+
+void test('英翻中的名稱整段粗體、空白與括號寫法不同，配對照樣成立（L2 R7）', () => {
+  for (const name of ['light（輕的）', '**light**（輕的）', '**light（輕的）**', '**Light　(輕的)**']) {
+    const deck = deckOf(`- ${name} 英翻中 ^ltenzh\n    - light :: 輕的\n- light 比較級 ^ltcmp1\n    - This bag is ＿＿.（輕的） :: lighter\n- light（輕的） 比較級 ^ltcmp2\n    - That box is ＿＿.（輕的） :: lighter\n`);
+    assert.deepEqual(share([deck]), ['ltenzh'], name);
+  }
+});

@@ -111,3 +111,16 @@ void test('詞塊裡的粗體、斜體記號拿掉（L2 R6）：鍵是看得到�
   assert.deepEqual(cells?.starts, [true, false, false]);
   assert.deepEqual(cellsOf('I saw ==**the**== ==man== and ==the== ==dog==.')?.words, ['the', 'man', 'the', 'dog']);
 });
+
+void test('詞塊只收純文字（L2 第二輪）：成對的格式拿掉；未成對的底線、連結、程式碼、字元參照，這一題不是句子排序', () => {
+  assert.deepEqual(cellsOf('他去哪裡？==_where_== ==__did__== ==he== go?')?.words, ['where', 'did', 'he']);
+  for (const question of ['Compare ==A_B== and ==AB==.', 'Compare ==R&amp;D== and ==R&D==.', 'Please ==[turn](turn.md)== ==it== off.', 'Type ==`ls`== ==now==.', 'Say ==a\\*== ==b==.']) {
+    assert.equal(cellsOf(question), undefined, question);
+  }
+});
+
+void test('句首照看得到的字判斷（L2 第二輪）：中文是連結的顯示文字時，第一格也是英文句子的開頭', () => {
+  assert.deepEqual(cellsOf('[我累了。](notes.md)==i== ==am== ==tired==.')?.starts, [true, false, false]);
+  assert.deepEqual(cellsOf('[[我的筆記|我累了。]]==i== ==am== ==tired==.')?.starts, [true, false, false]);
+  assert.deepEqual(cellsOf('[Tired](notes.md) ==i== ==am== ==tired==.')?.starts, [false, false, false]);
+});

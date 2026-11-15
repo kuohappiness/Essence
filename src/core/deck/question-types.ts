@@ -169,8 +169,10 @@ export function readOrder(target: Target, notes: readonly string[], english = fa
 
 const INFLECTIONS: ReadonlySet<string> = new Set(['過去式', '過去分詞', '複數', '比較級', '最高級']);
 
-/** 去掉成對的 `**`（名稱的粗體，§1-1：只為了認結尾，名稱本身不改）。 */
-const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1');
+/**
+ * 去掉成對的 `**` 與 `==`（名稱的粗體、螢光筆，§1-1：只為了認結尾與拆字義，名稱本身不改）。變化與英翻中都先做這一步再拆括號（L2 R7）。
+ */
+const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
 
 /** 最後一組成對的括號（全半形都算，左右可以不同）與它前面的字；沒有是 null。 */
 function lastBracket(text: string): { before: string; inner: string } | null {
@@ -213,7 +215,7 @@ export function readTyping(target: Pick<Target, 'name' | 'implicit' | 'direction
 
 /** 英翻中的 pairKey 配對用的寫法（§3-1）：exact 含意思，base 只有字；拆不開時兩個都是整段。 */
 export function pairWordOf(pairKey: string): { exact: string; base: string } {
-  const split = splitMeaning(pairKey);
+  const split = splitMeaning(unbold(pairKey));
   if (!split) return { exact: pickKey(pairKey), base: pickKey(pairKey) };
   return { exact: wordKey(split.word, split.meaning), base: wordKey(split.word, null) };
 }
@@ -241,8 +243,10 @@ const OPENS = /(?:^|[\p{Script=Han}\u3000-\u303f\uff00-\uffef])$/u;
 function sentenceCells(prompt: Prompt): SentenceCells | null {
   if (prompt.kind !== 'cloze' || prompt.blanks.length < 2) return null;
   const { text, blanks } = prompt;
-  // 詞塊是看得到的字（L2 R6）：粗體、斜體的記號拿掉，鍵、句首大寫與比對都照看得到的字；題目的指紋照原文。
-  const words = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).replace(/\*\*|\*|__|_/g, '').trim());
+  // 詞塊是純文字（L2 R6 與第二輪）：成對的粗體、斜體拿掉，鍵、句首大寫與比對都照看得到的字；題目的指紋照原文。
+  const read = blanks.map(blank => plainBlock(text.slice(blank.start + 2, blank.end - 2)));
+  if (read.some(word => word === null)) return null;
+  const words = read as string[];
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const last = words.length - 1;
   const mark = FINAL.exec(words[last])?.[0] ?? '';
@@ -254,9 +258,27 @@ function sentenceCells(prompt: Prompt): SentenceCells | null {
   }
   // 只有標點的格不是詞塊（`==?==`）：照原題型。
   if (words.some(word => !/[\p{L}\p{N}]/u.test(word))) return null;
-  const head = text.slice(0, blanks[0].start).replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
+  const head = visibleText(text.slice(0, blanks[0].start)).replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
   const starts = words.map((_, i) => i === 0 && OPENS.test(head));
   return { head: text.slice(0, blanks[0].start), words, tails, starts };
+}
+
+/**
+ * 一格的詞塊（§4-3）：成對的 `**`、`*`、`__`、`_` 拿掉後剩下純文字；還有 Markdown 的記號（未成對的 `*`、`_`，連結、程式碼、公式、
+ * 跳脫、字元參照）就是 null，這一題不是句子排序（L2 第二輪：不默默改字，`A_B` 和 `AB` 不會變成同一個鍵）。
+ */
+function plainBlock(raw: string): string | null {
+  const text = raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/\*(.+?)\*/g, '$1')
+    .replace(/(?<![\p{L}\p{N}])_(.+?)_(?![\p{L}\p{N}])/gu, '$1').trim();
+  return /[*_[\]<>`$\\|~]|&#?\w+;/.test(text) ? null : text;
+}
+
+/** 題目文字看得到的樣子（判斷句首用，L2 第二輪）：連結換成顯示的字，格式記號拿掉。 */
+function visibleText(text: string): string {
+  return text
+    .replace(/!?\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|==|__|`/g, '');
 }
 
 /**

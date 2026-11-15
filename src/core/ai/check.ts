@@ -213,7 +213,7 @@ function checkEnglish(deck: Deck, issue: Report): void {
         if (cells.starts[0] && /^\p{Lu}/u.test(word) && !/^I\b/.test(word) && word !== word.toUpperCase()) issue(t.prompts[i].line + 1, '提醒', 'english-order-capital', `句子開頭那格寫小寫（${word} → ${word[0].toLowerCase() + word.slice(1)}），複習時程式會換成大寫，大寫會洩漏誰在第一個`);
       });
     } else if (!t.order && !t.group && /[\s）)]排序$/.test(t.name) && !/(^|\s)全詩\s*排序$/.test(t.name)) {
-      issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點");
+      issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點，詞塊只寫純文字（不放連結、程式碼、底線）");
     }
   }
 }

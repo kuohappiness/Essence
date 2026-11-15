@@ -108,3 +108,8 @@ void test('別科、沒寫科目的英翻中不記配對用的寫法（L2 其餘
   assert.equal(parseDeck('- go 英翻中\n    - go :: 去\n').targets[0].pairWord, undefined);
   assert.equal(parseDeck('---\n科目: 國文\n---\n- go 英翻中\n    - go :: 去\n').targets[0].pairWord, undefined);
 });
+
+void test('英翻中名稱的粗體先拿掉再拆字義（L2 R7）', () => {
+  assert.deepEqual(one('**light（輕的）** 英翻中', 'light :: 輕的').targets[0].pairWord, { exact: 'light(輕的)', base: 'light' });
+  assert.deepEqual(one('**Light　(輕的)** 英翻中', 'light :: 輕的').targets[0].pairWord, { exact: 'light(輕的)', base: 'light' });
+});
