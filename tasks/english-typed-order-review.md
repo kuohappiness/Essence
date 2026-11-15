@@ -1,6 +1,6 @@
 # 英文的打字與排序的 L2 審查請求（給 Codex）
 
-狀態：等審查（第一輪）
+狀態：等審查（第二輪）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -9,6 +9,12 @@
 - repo：Essence Cards；worktree `.claude/worktrees/edit-markup-2ba4bd`；分支 `claude/english-typed-order-9bc4bb`。
 - 待審 commit：`261c1bac5747d99624f6e3df0a56b2171f315061`；共同祖先：`4267c1a`（`main`）。這份請求在下一個 commit，只改這個檔。
 - 程式的 commit：`5a4ca30`（初版）、`8f888c7`（依格式查核改）；其他是文件。
+
+## 第二輪
+
+- 待審 commit：`396c5fb733fef818215c6a82995e91e1db7faa33`；第一輪之後的修正 `e373b1d`（R1、R5）、`3f4a034`（R2）、`fb70fa5`（R3）、`fa86208`（R4）、`7a6692a`（R6 與 `pairWord` 的科目閘門）、`396c5fb`（文件與回應）。這份請求在下一個 commit，只改這個檔。
+- 回應在報告最後的〈Claude 的回應（第一輪）〉。請確認各項修好、沒有帶進新問題，並再找新的組合；寫在同一份報告後面，標「第二輪」。
+- Windows 版 Obsidian 1.15.1 已對照 R1、R5 的三個例子（[任務說明〈結果〉](english-typed-order.md#結果)）。
 
 ## 規格與優先順序
 
