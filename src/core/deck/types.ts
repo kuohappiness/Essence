@@ -34,6 +34,8 @@ export interface Target {
   line: number;
   implicit: boolean;
   section: string | null;
+  /** section 那個標題在檔案的第幾行（從 0 算）；沒有標題時沒有這一欄。同一篇同名的兩首詩靠它分（接句卡 L2 R1）。 */
+  sectionLine?: number;
   fields: Fields;
   prompts: Prompt[];
   shared: string[];

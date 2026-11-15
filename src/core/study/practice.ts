@@ -24,11 +24,12 @@ type Partner<T extends Placed> = (item: T) => T | undefined;
 
 /**
  * 給一張卡，找它的對方（D-189 第 1 點）。english：英文的兩個方向，同一篇、pairKey 相同、方向相反，各方向取前面的；
- * 每日的份照 D-069，不傳。接句卡（D-185 第 8 點）：同一篇、同一個詩名小標題，第 2k−1 句和第 2k 句；缺一邊、編號重複或沒有詩名時不配對。
+ * 每日的份照 D-069，不傳。接句卡（D-185 第 8 點）：同一篇、同一個詩名小標題（照標題所在的行，同名的兩首分得開，L2 R1），第 2k−1 句和第 2k 句；
+ * 缺一邊、編號重複或沒有詩名時不配對。
  */
 export function partners<T extends Placed>(items: readonly T[], english: boolean): Partner<T> {
   const keyOf = (item: T, side: string | number): string => JSON.stringify([item.path, item.target.pairKey, side]);
-  const coupletKey = (item: T, index: number): string => JSON.stringify([item.path, item.target.couplet?.title, index]);
+  const coupletKey = (item: T, index: number): string => JSON.stringify([item.path, item.target.sectionLine, index]);
   const sides = new Map<string, T>();
   const lines = new Map<string, T | null>();
   for (const item of items) {
@@ -52,13 +53,13 @@ export function partners<T extends Placed>(items: readonly T[], english: boolean
 }
 
 /**
- * 全詩順序卡的初學順序（D-189 第 1 點、tasks/couplet-cards.md §5）：新的排序卡，在 fresh 裡同一篇同一個小標題還有新的接句卡時先拿掉，
+ * 全詩順序卡的初學順序（D-189 第 1 點、tasks/couplet-cards.md §5）：新的排序卡，在 fresh 裡同一篇同一個小標題（照標題所在的行）還有新的接句卡時先拿掉，
  * 不拿來填間隔；那些接句卡都出過之後才回來。排序卡學過了照自己的到期時間。
  */
 export function holdOrders<T extends Placed>(fresh: readonly T[], isNew: (item: T) => boolean): T[] {
-  const poemOf = (item: T): string => JSON.stringify([item.path, item.target.section]);
-  const learning = new Set(fresh.filter(item => item.target.couplet && item.target.section !== null && isNew(item)).map(poemOf));
-  return fresh.filter(item => !(item.target.order && item.target.section !== null && isNew(item) && learning.has(poemOf(item))));
+  const poemOf = (item: T): string => JSON.stringify([item.path, item.target.sectionLine]);
+  const learning = new Set(fresh.filter(item => item.target.couplet && item.target.sectionLine !== undefined && isNew(item)).map(poemOf));
+  return fresh.filter(item => !(item.target.order && item.target.sectionLine !== undefined && isNew(item) && learning.has(poemOf(item))));
 }
 
 /** 目標集合在卡組裡的樣子，照輸入的順序；不在卡組裡的（改掉了、刪掉了）不算。 */

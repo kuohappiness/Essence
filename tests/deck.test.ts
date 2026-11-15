@@ -47,7 +47,8 @@ void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題
   assert.equal(parsed.targets.length, expected.length);
   parsed.targets.forEach((target, index) => {
     const [id, name, section, sources, type, importance, mistakes, prompts] = expected[index];
-    assert.deepEqual({ ...target, prompts: undefined, line: undefined }, { id, name, section, fields: { ...emptyFields, sources, type, importance, mistakes }, implicit: false, direction: null, pairKey: null, shared: [], ok: true, prompts: undefined, line: undefined });
+    assert.deepEqual({ ...target, prompts: undefined, line: undefined, sectionLine: undefined }, { id, name, section, fields: { ...emptyFields, sources, type, importance, mistakes }, implicit: false, direction: null, pairKey: null, shared: [], ok: true, prompts: undefined, line: undefined, sectionLine: undefined });
+    assert.equal(examples[0].split('\n')[target.sectionLine ?? -1].replace(/^#+\s*/, ''), section, 'sectionLine 是那個小標題所在的行');
     assert.equal(examples[0].split('\n')[target.line].trim(), '- ' + String(name) + ' ^' + String(id));
     if (index === 3) {
       const p = cloze(target.prompts[0]);

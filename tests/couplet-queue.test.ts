@@ -100,3 +100,18 @@ void test('排序卡已經學過時照自己的到期時間，不等新的接句
   const found = nextCard(planToday(data), data, { targets: ids(ONE), since: START - 1000 });
   assert.equal(found.kind === 'card' && found.card.lt, 'b3pma9');
 });
+
+// L2 第一輪 R1：同一篇兩個同名小標題是兩首詩（杜甫有好幾首〈絕句〉），配對與排序卡的等待各算各的。
+const SAME = `---\n科目: 國語\n---\n### 絕句\n${couplets('絕句', 'b3pma', NIAO)}${order('b3pma', NIAO)}### 絕句\n${couplets('絕句', 'b3pmb', CHUN)}${order('b3pmb', CHUN)}`;
+
+void test('同名的兩首詩各自配對，排序卡只等自己那一首（L2 R1）', () => {
+  const expected = ['b3pma1', 'b3pma3', 'b3pmb1', 'b3pmb3', 'b3pma2', 'b3pma4', 'b3pma9', 'b3pmb2', 'b3pmb4', 'b3pmb9'];
+  assert.deepEqual(run(SAME, practice(SAME)), expected, '全部卡');
+  assert.deepEqual(run(SAME, () => ({ subject: '國語' })), expected, '每日的份');
+});
+
+void test('同名的兩首各缺一邊時不會配到另一首（L2 R1）', () => {
+  const lines = couplets('絕句', 'b3pmb', CHUN).split(/(?=- 絕句)/);
+  const text = `---\n科目: 國語\n---\n### 絕句\n${couplets('絕句', 'b3pma', NIAO).split(/(?=- 絕句)/)[0]}### 絕句\n${lines[1]}${lines[2]}`;
+  assert.deepEqual(run(text, practice(text)), ['b3pma1', 'b3pmb2', 'b3pmb3']);
+});

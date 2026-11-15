@@ -169,7 +169,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     // 方向前面的空白半形全形都算，pairKey 不留尾端空白（tasks/question-type-seam.md §3 第 2 點）。
     const directionMatch = /[ 　]+(英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
-    const target: Target = { id, name, line: root.line, implicit, section: root.section,
+    const target: Target = { id, name, line: root.line, implicit, section: root.section, ...(root.sectionLine === null ? {} : { sectionLine: root.sectionLine }),
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
