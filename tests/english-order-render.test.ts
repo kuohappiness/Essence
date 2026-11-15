@@ -43,3 +43,16 @@ void test('只有部分記號渲染出來（在程式碼裡）：找不到的格
   assert.equal(result.slots, 3);
   assert.match(result.text, /^I know \[0\] .* \[2\]\.\[1\]$/u);
 });
+
+void test('題目裡會解成私用區字的字元參照先拿掉；畫面上同一個記號出現兩次時那一格算少了（L2 第二輪）', async () => {
+  const { stripSlotMarks } = await import('../src/ui/rendered.ts');
+  assert.equal(stripSlotMarks('圖例：&#57344;、&#xE001;、&#xe002;、&#65;。'), '圖例：、、、&#65;。');
+  const duplicated = place(`<p>圖例：${m(0)}。Tell me ${m(0)} ${m(1)} ${m(2)}.</p>`, 3);
+  assert.equal(duplicated.missing, true);
+  assert.equal(duplicated.text.includes(m(0)), false, '重複的記號從畫面拿掉');
+  assert.match(duplicated.text, /\[1\] \[2\]\.\[0\]$/u);
+});
+
+void test('中文是連結的顯示文字、英文全挖空：在第一格前面換行（L2 第二輪）', () => {
+  assert.deepEqual(place(`<p><a href="notes.md">我累了。</a>${m(0)} ${m(1)} ${m(2)}.</p>`, 3, true), { text: '我累了。/[0] [1] [2].', breaks: 1, missing: false, slots: 3 });
+});

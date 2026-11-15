@@ -22,6 +22,19 @@ function textNodes(root: Node): Text[] {
   return out;
 }
 
+/** root 底下所有的文字節點，含受保護的內容裡的（拿掉重複的記號用）。 */
+function allText(root: Node): Text[] {
+  const out: Text[] = [];
+  const walk = (node: Node): void => {
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child instanceof Text) out.push(child);
+      else walk(child);
+    }
+  };
+  walk(root);
+  return out;
+}
+
 /** node 在 root 裡的受保護內容裡面（嵌入筆記自己的螢光筆不是本題的填空，Codex 再查 R2）。 */
 function guarded(node: Node, root: Node): boolean {
   for (let el = node.parentElement; el && el !== root; el = el.parentElement) if (el.matches(PROTECTED)) return true;
@@ -70,14 +83,23 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
  */
 export const slotMark = (index: number): string => String.fromCharCode(0xe000 + index);
 const PRIVATE_USE = new RegExp('[' + String.fromCharCode(0xe000) + '-' + String.fromCharCode(0xf8ff) + ']', 'g');
-export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE, '');
+/** 題目文字裡的私用區字與會解成私用區字的字元參照（`&#57344;`、`&#xE000;`，L2 第二輪）都拿掉。 */
+export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE, '').replace(/&#(?:[xX]([0-9a-fA-F]+)|(\d+));/g, (reference, hex?: string, decimal?: string) => {
+  const code = hex ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
+  return code >= 0xe000 && code <= 0xf8ff ? '' : reference;
+});
 
 /**
- * 照記號的順序各放一格；找不到（記號在程式碼、公式等受保護的內容裡）的是 null。
+ * 照記號的順序各放一格；找不到（記號在程式碼、公式等受保護的內容裡）或畫面上不只一個（別的寫法也渲染出同一個字）的是 null，
+ * 那個記號從畫面上拿掉，不猜哪一個才是格（L2 第二輪）。
  * 第一格前面的英文換行：breakFirst（第一格就是英文句子的開頭，L2 R5）或旁邊有英文時做一次。
  */
 function insertMarkedSlots(container: HTMLElement, markers: readonly string[], breakFirst: boolean): (HTMLElement | null)[] {
   const found = markers.map(marker => {
+    if ((container.textContent ?? '').split(marker).length !== 2) {
+      for (const node of allText(container)) if (node.textContent?.includes(marker)) node.textContent = node.textContent.replaceAll(marker, '');
+      return null;
+    }
     for (const node of textNodes(container)) {
       const text = node.textContent ?? '';
       const at = text.indexOf(marker);
