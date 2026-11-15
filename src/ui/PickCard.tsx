@@ -121,7 +121,7 @@ function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Elemen
     <div className={'ec-pick-keys' + (lines ? ' is-lines' : words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(lines ? 2 : keyColumns(group.keys.length, words)) } as React.CSSProperties}>
       {group.keys.map((key, index) => <button key={lines ? index : key} type="button" className={'ec-pick-key' + (pick.used[index] ? ' is-used' : '')} disabled={animating || key === pick.spent} onClick={event => {
         const target = cursor;
-        act({ kind: 'key', key });
+        act({ kind: 'key', key, at: index });
         if (target !== null) fly(event.currentTarget, target);
         after(event);
       }}>{key}</button>)}

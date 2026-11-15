@@ -128,3 +128,35 @@ void test('兩句文字相同：兩個字鍵，各放一格才都淡；填哪一
   check(h, s);
   assert.deepEqual(pick(s).cells.map(cell => cell.state), ['right', 'right', 'right', 'right']);
 });
+
+void test('兩句文字相同：字鍵照位置算，點淡掉的那個是搬它所在的那格；兩個不同的鍵 0.3 秒內連點都算（L2 R1）', async t => {
+  const text = POEM.replace('==夜靜春山空==', '==人閒桂花落==');
+  const { h, s } = await open(t, text);
+  const keys = view(s).card.group?.keys ?? [];
+  const [a, b] = keys.flatMap((key, i) => key === LINES[0] ? [i] : []);
+  const at = (index: number): void => { h.clock.now += 400; s.act({ kind: 'key', key: keys[index], at: index }); };
+  const faded = (): number[] => pick(s).used.flatMap((on, i) => on ? [i] : []);
+  at(a);
+  assert.deepEqual([texts(s), faded()], [[LINES[0], '', '', ''], [a]]);
+  at(a);
+  assert.deepEqual([texts(s), faded(), pick(s).cursor], [['', LINES[0], '', ''], [a], 2], '點淡掉的鍵：從它所在的那格搬過來，另一個同句的鍵不變淡');
+  s.act({ kind: 'row', index: 0 });
+  at(b);
+  assert.deepEqual([texts(s), faded().sort()], [[LINES[0], LINES[0], '', ''], [a, b].sort()]);
+  at(keys.indexOf(LINES[2]));
+  at(keys.indexOf(LINES[3]));
+  s.act({ kind: 'row', index: 3 });
+  at(b);
+  assert.deepEqual(texts(s), [LINES[3], LINES[0], LINES[2], LINES[0]], '和放著 b 的第 1 格交換');
+  const fresh = await open(t, text);
+  const keys2 = view(fresh.s).card.group?.keys ?? [];
+  const [c, d] = keys2.flatMap((key, i) => key === LINES[0] ? [i] : []);
+  fresh.h.clock.now += 400;
+  fresh.s.act({ kind: 'key', key: LINES[0], at: c });
+  fresh.h.clock.now += 100;
+  fresh.s.act({ kind: 'key', key: LINES[0], at: d });
+  assert.deepEqual(texts(fresh.s), [LINES[0], LINES[0], '', ''], '兩個不同的鍵不算連點');
+  fresh.h.clock.now += 100;
+  fresh.s.act({ kind: 'key', key: LINES[0], at: d });
+  assert.deepEqual(texts(fresh.s), [LINES[0], LINES[0], '', ''], '同一個鍵 0.3 秒內連點不算');
+});
