@@ -1,6 +1,6 @@
 # 全詩順序卡的 L2 審查（給 Codex）
 
-狀態：再審通過（第四輪，`893dae8`；[報告](<../Claude Codex Discussion/2026-11-15-poem-order-review.md>)）
+狀態：已合併（`4ef9db3`）；再審通過（第四輪，`893dae8`；[報告](<../Claude Codex Discussion/2026-11-15-poem-order-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**，沒參與實作。
 
