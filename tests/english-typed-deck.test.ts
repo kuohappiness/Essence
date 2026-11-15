@@ -103,3 +103,8 @@ void test('第 2 步的提示：變化是原形；文法是文法點，題目開
   assert.equal(typedHint(target('light（輕的） 中翻英', 'Q :: light'), 'Q'), 'light');
   assert.equal(typedHint(target('寨 字形', 'Q :: A'), 'Q'), null);
 });
+
+void test('別科、沒寫科目的英翻中不記配對用的寫法（L2 其餘核對：解析結果和以前相同）', () => {
+  assert.equal(parseDeck('- go 英翻中\n    - go :: 去\n').targets[0].pairWord, undefined);
+  assert.equal(parseDeck('---\n科目: 國文\n---\n- go 英翻中\n    - go :: 去\n').targets[0].pairWord, undefined);
+});

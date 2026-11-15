@@ -104,3 +104,10 @@ void test('排錯：照比較卡再選，取最差的一格', async t => {
   assert.equal(stage(s), 'result');
   assert.deepEqual(pick(s).cells.map(cell => cell.state), ['right', 'near', 'right', 'near']);
 });
+
+void test('詞塊裡的粗體、斜體記號拿掉（L2 R6）：鍵是看得到的字，和沒有格式的同一個字相同', () => {
+  const cells = cellsOf('他去哪裡？==**where**== ==did== ==*he*== go?');
+  assert.deepEqual(cells?.words, ['where', 'did', 'he']);
+  assert.deepEqual(cells?.starts, [true, false, false]);
+  assert.deepEqual(cellsOf('I saw ==**the**== ==man== and ==the== ==dog==.')?.words, ['the', 'man', 'the', 'dog']);
+});

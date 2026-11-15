@@ -241,7 +241,8 @@ const OPENS = /(?:^|[\p{Script=Han}\u3000-\u303f\uff00-\uffef])$/u;
 function sentenceCells(prompt: Prompt): SentenceCells | null {
   if (prompt.kind !== 'cloze' || prompt.blanks.length < 2) return null;
   const { text, blanks } = prompt;
-  const words = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).trim());
+  // 詞塊是看得到的字（L2 R6）：粗體、斜體的記號拿掉，鍵、句首大寫與比對都照看得到的字；題目的指紋照原文。
+  const words = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).replace(/\*\*|\*|__|_/g, '').trim());
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const last = words.length - 1;
   const mark = FINAL.exec(words[last])?.[0] ?? '';

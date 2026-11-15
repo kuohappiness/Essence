@@ -181,7 +181,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     // 文法與變化（tasks/english-typed-order.md §1）：從名稱認，題目讀之前就要知道要不要打字。
     const typing = english ? readTyping(target) : null;
     if (typing) target.typing = typing;
-    if (target.direction === 'en-zh' && target.pairKey !== null) target.pairWord = pairWordOf(target.pairKey);
+    if (english && target.direction === 'en-zh' && target.pairKey !== null) target.pairWord = pairWordOf(target.pairKey);
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
       problems.push({ line: node.line, targetLine: root.line, level, code, message, ...(columns ? { columns } : {}) });
       if (level === 'error') target.ok = false;
