@@ -1,6 +1,6 @@
 # 英文的打字與排序（D-193 第 13 點，給 Claude，本機執行）
 
-狀態：L2 第二輪的發現已修（報告與回應在 `Claude Codex Discussion/2026-11-15-english-typed-order-review.md`），等第三輪
+狀態：L2 三輪結束（報告與回應在 `Claude Codex Discussion/2026-11-15-english-typed-order-review.md`；第三輪的三項記成 backlog〈已知的限制〉），等合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。改出題語法的認法、打字的判定、排程（新卡的開始條件）與複習紀錄的意思（`retry`、排序卡的 `cell`、`pick`），屬於 [quality.md](../docs/agents/quality.md#高風險範圍要做-l2) 的高風險範圍：開工前格式查核，合併前做 L2。
 
