@@ -34,8 +34,11 @@ export interface Target {
   line: number;
   implicit: boolean;
   section: string | null;
-  /** section 那個標題在檔案的第幾行（從 0 算）；沒有標題時沒有這一欄。同一篇同名的兩首詩靠它分（接句卡 L2 R1）。 */
-  sectionLine?: number;
+  /**
+   * section 是這篇的第幾個小標題（從 0 算）；沒有標題時沒有這一欄。同一篇同名的兩首詩靠它分（接句卡 L2 R1）。
+   * 不用行號：加出處這類插行的改動會讓後面的標題位移，寫回前的核對會當成內容變了（L2 R5）。
+   */
+  sectionIndex?: number;
   fields: Fields;
   prompts: Prompt[];
   shared: string[];

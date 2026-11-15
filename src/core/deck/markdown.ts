@@ -10,8 +10,8 @@ export interface Item {
   starts: { line: number; column: number }[];
   children: Item[];
   section: string | null;
-  /** section 那個標題在第幾行（從 0 算）；同名的兩個標題靠它分（接句卡 L2 R1）。沒有標題是 null。 */
-  sectionLine: number | null;
+  /** section 是第幾個分組的標題（從 0 算）；同名的兩個標題靠它分（接句卡 L2 R1、R5）。沒有標題是 null。 */
+  sectionIndex: number | null;
 }
 export function linesOf(text: string): Line[] {
   const lines: Line[] = [];
@@ -103,7 +103,7 @@ export function questionSyntax(text: string): { colon: number; blanks: { start: 
 }
 export function listTree(lines: Line[], start: number): Item[] {
   const roots: Item[] = [], stack: Item[] = [];
-  let section: string | null = null, sectionLine: number | null = null;
+  let section: string | null = null, sectionIndex: number | null = null;
   let fence: { char: string; count: number; contentColumn: number } | null = null;
   // 上一行是哪個項目的段落文字；下一行沒有空行又縮排不夠時，照 CommonMark 接在這段後面（Obsidian 相同，W5 對照）。
   let paragraph: Item | null = null;
@@ -146,7 +146,7 @@ export function listTree(lines: Line[], start: number): Item[] {
     const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(trimmed);
     // 只有不在任何項目內容裡的標題才分組；在項目內容裡的是那一項的文字。
     if (heading && indent < 4 && (!stack.length || indent < stack[0].contentColumn)) {
-      section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); sectionLine = i; stack.length = 0; paragraph = null; inside = false; continue;
+      section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); sectionIndex = (sectionIndex ?? -1) + 1; stack.length = 0; paragraph = null; inside = false; continue;
     }
     const thematic = /^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(trimmed);
     // 標題與分隔線（相對所屬項目縮排不到 4 欄）是自己的區塊：打斷段落，`- - -` 也不是清單項目（CommonMark 4.1）。
@@ -167,7 +167,7 @@ export function listTree(lines: Line[], start: number): Item[] {
         continue;
       }
       const item: Item = { line: i, end: i + 1, indent, contentColumn: indent + match[2].length + gap,
-        text: body.trimEnd(), starts: [{ line: i, column: raw.length - body.length }], children: [], section, sectionLine };
+        text: body.trimEnd(), starts: [{ line: i, column: raw.length - body.length }], children: [], section, sectionIndex };
       (stack.at(-1)?.children ?? roots).push(item);
       stack.push(item);
       paragraph = body.trim() ? item : null; inside = false;
