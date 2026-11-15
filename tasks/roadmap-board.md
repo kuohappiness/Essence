@@ -1,6 +1,6 @@
 # 開發進度白板（給 Claude，本機執行）
 
-狀態：進行中
+狀態：已合併（[PR #13](https://github.com/kuohappiness/Essence-Cards/pull/13) 合併進 `main`，2026-11-16）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。只讀 roadmap、輸出一頁網頁，不碰使用者資料與外掛程式，不在 [quality.md](../docs/agents/quality.md#高風險範圍要做-l2) 的高風險範圍，做 L1。
 
