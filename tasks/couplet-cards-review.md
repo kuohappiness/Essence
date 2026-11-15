@@ -1,6 +1,6 @@
 # 接句卡的 L2 審查（給 Codex）
 
-狀態：第三輪已修，等第四輪（[報告](<../Claude Codex Discussion/2026-11-15-couplet-cards-review.md>)）
+狀態：已結：第三輪修完後收尾，使用者 2026-11-16 決定不跑第四輪（[報告](<../Claude Codex Discussion/2026-11-15-couplet-cards-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**，沒參與實作。
 
