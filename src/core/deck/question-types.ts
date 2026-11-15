@@ -151,7 +151,7 @@ export function readPick(target: Target): PickReading {
  * 這個目標是不是全詩順序卡：名稱最後一段是「排序」（前面要有空白或右括號），只有一題，是兩格以上的填空。
  * 不是時照原題型（填空翻面），不另外提示：英文的排序（D-193）寫成問答題，還沒接上。
  */
-export function readOrder(target: Target): PoemOrder | null {
+export function readOrder(target: Target, notes: readonly string[]): PoemOrder | null {
   const { name, prompts } = target;
   if (target.implicit || target.direction !== null || target.group || endingOf(name) !== '排序') return null;
   const prompt = prompts.length === 1 ? prompts[0] : null;
@@ -161,5 +161,5 @@ export function readOrder(target: Target): PoemOrder | null {
   if (lines.some(line => !line)) return null;
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const title = name.replace(/\s*排序$/, '').replace(/(^|\s)全詩$/, '').trim();
-  return { title, head: text.slice(0, blanks[0].start), lines, tails };
+  return { title, head: text.slice(0, blanks[0].start), lines, tails, notes };
 }

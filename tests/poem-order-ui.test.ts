@@ -113,3 +113,12 @@ void test('記憶錨點寫成編號清單或混用：每個項目照樣一行，
   assert.deepEqual(mixed.find('ec-pick-row').map(row => within(row, 'ec-order-note').flatMap(markdown)), NOTES.map(note => [note]));
   assert.deepEqual(mixed.find('ec-order-rest').flatMap(markdown), [whole]);
 });
+
+void test('解釋照卡組解析器分好的項目：縮排多一格的同層「全詩：」放最後；項目裡的續行不另算一行（L2 R7）', async t => {
+  const indented = await answered(t, poem(NOTES) + '         1) 全詩：由靜轉動。\n');
+  assert.deepEqual(indented.find('ec-pick-row').map(row => within(row, 'ec-order-note').flatMap(markdown)), NOTES.map(note => [note]));
+  assert.deepEqual(indented.find('ec-order-rest').flatMap(markdown), ['全詩：由靜轉動。']);
+  const continued = await answered(t, poem([NOTES[0], NOTES[2], NOTES[3], '全詩：由靜轉動。']).replace(`${NOTES[0]}\n`, `${NOTES[0]}\n          1.\u3000旁註：補充首句。\n`));
+  assert.deepEqual(continued.find('ec-order-note'), [], '旁註不算一句的解釋，三句湊不滿四句');
+  assert.equal(continued.find('ec-order-rest').flatMap(markdown).length, 4);
+});

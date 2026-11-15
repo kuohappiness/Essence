@@ -50,8 +50,9 @@ export interface Target {
 /**
  * 全詩順序卡：詩名（名稱拿掉最後的「排序」「全詩」）、每一格的文字（照填空的順序，相同的兩句兩格都留）、
  * 第一格前面的字、每一格後面接到下一格之前的字（多半是標點）。
+ * notes 是記憶錨點的子項目，一項一行，照解析器分好的結構（L2 R7）；項目裡的續行與更深的子項目接在那一行裡。
  */
-export interface PoemOrder { title: string; head: string; lines: readonly string[]; tails: readonly string[] }
+export interface PoemOrder { title: string; head: string; lines: readonly string[]; tails: readonly string[]; notes: readonly string[] }
 /**
  * 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。
  * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。

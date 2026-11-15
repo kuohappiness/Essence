@@ -10,6 +10,8 @@ import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCo
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
 export const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
+/** 背面補充「記憶錨點：」（和 review/extras.ts 的 extraLabel 一樣只認全形冒號）；1 是寫在同一行的內容。 */
+const ANCHOR_LABEL = /^記憶錨點：([\s\S]*)$/;
 /** 同一行接別的欄位的分隔：`｜`，或半形的 `|` 後面接欄位名稱加冒號（D-170 第 12 點）；給 tracedSplit 用，連結裡的不算。 */
 export const FIELD_SEPARATOR = /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/;
 const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', statusRead: 'missing', categories: [], isTranscript: false, need: null, issues: [] });
@@ -318,12 +320,16 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
       return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
     }
+    // 全詩順序卡的解釋（D-204 第 5、7 點、L2 R7）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
+    let notes: string[] | null = null;
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
       if (fieldStart.test(child.text)) continue;
       const syntax = questionSyntax(stripId(child.text).text);
       if (syntax.colon >= 0 || syntax.blanks.length) target.prompts.push(prompt(child));
       else target.shared.push(markdown(child));
+      const anchor: RegExpExecArray | null = notes === null ? ANCHOR_LABEL.exec(child.text) : null;
+      if (anchor) notes = [anchor[1].trim(), ...child.children.map(each => markdown(each).trim())].filter(Boolean);
     }
     if (!target.prompts.length) {
       // 一般筆記不是目標，不回報它的欄位提示。
@@ -332,7 +338,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     }
     const pick = readPick(target);
     if (pick.group) target.group = pick.group;
-    const order = readOrder(target);
+    const order = readOrder(target, notes ?? []);
     if (order) target.order = order;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
