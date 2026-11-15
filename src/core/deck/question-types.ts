@@ -167,10 +167,16 @@ export function readOrder(target: Target, notes: readonly string[]): PoemOrder |
 // ── 接句卡（D-185 第 6～8 點、tasks/couplet-cards.md §1、§2）：翻面卡的一種，用填空寫，從名稱最後的「接句」認。 ──
 
 /** 句尾的標點，後面緊接的右引號、右括號算同一句。 */
-const SENTENCE_END = /^[，。；！？：,;!?]+[」』）)"”’]*/;
+const SENTENCE_END = /^[，。；！？：,;!?]+[」』）)】〕》〉"”’]*/;
+/** 填空以外的行內 Markdown（粗體、連結、程式碼、公式、HTML、註解、跳脫、字元參照）：切開會把結構拆成兩半（L2 R4）。 */
+const INLINE_MARKUP = /[*_~`[\]<>$%\\&^|]/;
 
-/** 題目照句尾標點切成每一句，連同自己的標點；==…== 裡面的標點不切，句子之間的空白拿掉。 */
+/**
+ * 題目照句尾標點切成每一句，連同自己的標點；==…== 裡面的標點不切，句子之間的空白拿掉。
+ * 有填空以外的行內 Markdown 時不切，整句交給渲染器（照一般的方式換行）。
+ */
 function coupletLines(text: string): string[] {
+  if (INLINE_MARKUP.test(text.replace(/==/g, ''))) return [text.trim()];
   const lines: string[] = [];
   let start = 0, inside = false;
   for (let i = 0; i < text.length; i++) {
