@@ -99,4 +99,6 @@ D-193 第 5 點、english.md §3〈開始〉。只改今天的份（`planToday`�
 
 ## 結果
 
-延後的測試：（實作後填）
+- 實作：分支 `claude/english-typed-order-9bc4bb`（`5a4ca30` 初版、`8f888c7` 依格式查核改）。`npm run check` 通過（2684 個測試）。
+- Windows 版 Obsidian 1.15.1（獨立的使用者資料夾與暫存 vault、CDP）：句子排序一題三格照順序各放一格、句末的 `.` 接在最後一格後面、中文之後英文換行；依序點鍵、對答案後三格各自著色、左邊打勾。happy-dom 的替身測試以外，`rendered.ts` 的多格插入在真的渲染器上成立。
+- 延後的測試：iPhone 的排版、朗讀與手感記進 backlog〈下一次 iPhone 實機測試〉（D-065）；其餘都有自動測試。
