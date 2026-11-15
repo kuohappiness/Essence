@@ -1,5 +1,5 @@
 import { maskInline } from './markdown.ts';
-import type { PickGroup, PoemOrder, ProblemCode, Prompt, Target } from './types.ts';
+import type { Couplet, PickGroup, PoemOrder, ProblemCode, Prompt, Target } from './types.ts';
 
 // 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
@@ -162,4 +162,38 @@ export function readOrder(target: Target, notes: readonly string[]): PoemOrder |
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const title = name.replace(/\s*排序$/, '').replace(/(^|\s)全詩$/, '').trim();
   return { title, head: text.slice(0, blanks[0].start), lines, tails, notes };
+}
+
+// ── 接句卡（D-185 第 6～8 點、tasks/couplet-cards.md §1、§2）：翻面卡的一種，用填空寫，從名稱最後的「接句」認。 ──
+
+/** 句尾的標點，後面緊接的右引號、右括號算同一句。 */
+const SENTENCE_END = /^[，。；！？：,;!?]+[」』）)"”’]*/;
+
+/** 題目照句尾標點切成每一句，連同自己的標點；==…== 裡面的標點不切，句子之間的空白拿掉。 */
+function coupletLines(text: string): string[] {
+  const lines: string[] = [];
+  let start = 0, inside = false;
+  for (let i = 0; i < text.length; i++) {
+    if (text.startsWith('==', i)) { inside = !inside; i++; continue; }
+    const end = inside ? null : SENTENCE_END.exec(text.slice(i));
+    if (!end) continue;
+    lines.push(text.slice(start, i + end[0].length).trim());
+    start = i + end[0].length;
+    i = start - 1;
+  }
+  lines.push(text.slice(start).trim());
+  return lines.filter(Boolean);
+}
+
+/**
+ * 這個目標是不是接句卡：名稱最後一段是「接句」（前面要有空白或右括號），只有一題，是剛好一格的填空，不是比較組、全詩順序卡也沒有方向。
+ * 詩名是目標所在的小標題；第幾句從「第 N 句 接句」讀。不是時照原題型（填空翻面），不另外提示。
+ */
+export function readCouplet(target: Target, notes: readonly string[]): Couplet | null {
+  const { name, prompts } = target;
+  if (target.implicit || target.direction !== null || target.group || target.order || endingOf(name) !== '接句') return null;
+  const prompt = prompts.length === 1 ? prompts[0] : null;
+  if (prompt?.kind !== 'cloze' || prompt.blanks.length !== 1) return null;
+  const index = /第\s*(\d+)\s*句\s+接句$/.exec(name);
+  return { title: target.section, index: index ? Number(index[1]) : null, lines: coupletLines(prompt.text), notes };
 }

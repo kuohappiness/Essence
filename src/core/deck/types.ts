@@ -46,6 +46,8 @@ export interface Target {
   group?: PickGroup;
   /** 只有全詩順序卡才有（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。 */
   order?: PoemOrder;
+  /** 只有接句卡才有（D-185 第 8 點）：名稱最後是「接句」、題目是一題剛好一格的填空。 */
+  couplet?: Couplet;
 }
 /**
  * 全詩順序卡：詩名（名稱拿掉最後的「排序」「全詩」）、每一格的文字（照填空的順序，相同的兩句兩格都留）、
@@ -53,6 +55,11 @@ export interface Target {
  * notes 是記憶錨點的子項目，一項一行，照解析器分好的結構（L2 R7）；項目裡的續行與更深的子項目接在那一行裡。
  */
 export interface PoemOrder { title: string; head: string; lines: readonly string[]; tails: readonly string[]; notes: readonly string[] }
+/**
+ * 接句卡（tasks/couplet-cards.md §1、§2）：詩名（目標所在的小標題，沒有是 null）、第幾句（名稱的「第 N 句 接句」，讀不到是 null）、
+ * 題目照句尾標點切成的每一句（原文，連同自己的標點與 ==…==）、記憶錨點的子項目（和 PoemOrder.notes 同一份）。
+ */
+export interface Couplet { title: string | null; index: number | null; lines: readonly string[]; notes: readonly string[] }
 /**
  * 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。
  * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。
