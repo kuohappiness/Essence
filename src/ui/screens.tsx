@@ -73,7 +73,14 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 接句卡（D-185、tasks/couplet-cards.md §3）：詩名在最上面；每一句一段不換行的字，放不下才換行；記憶錨點的子項目一行一列。
   const couplet = card.target.couplet;
-  const firstAnchor = couplet && couplet.notes.length > 0 ? extras.findIndex(extra => extraLabel(extra).label === ANCHOR_LABEL) : -1;
+  // 題目底下與目標底下各自第一個記憶錨點，換成解析器分好的子項目（L2 R2）。
+  const notesAt = new Map<number, readonly string[]>();
+  if (couplet) {
+    const isAnchor = (extra: string): boolean => extraLabel(extra).label === ANCHOR_LABEL;
+    const own = prompt.extras.findIndex(isAnchor), shared = card.target.shared.findIndex(isAnchor);
+    if (own >= 0 && couplet.promptNotes.length) notesAt.set(own, couplet.promptNotes);
+    if (shared >= 0 && couplet.notes.length) notesAt.set(prompt.extras.length + shared, couplet.notes);
+  }
   const lastLine = (couplet?.lines.length ?? 0) - 1;
   return <article className={'ec-card' + (view.english ? ' is-english' : '') + (parts.copying ? ' is-copying' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
@@ -101,8 +108,9 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
         const broken = label === ANCHOR_LABEL ? anchorBreak(body) : null;
         // 英文句子和中文翻譯各一行（D-174），喇叭留在英文那一行。
         const { line, translation } = splitTranslation(body);
-        const rows = couplet && index === firstAnchor
-          ? <>{couplet.notes.map((note, at) => <div key={at} className="ec-ex-row ec-couplet-note">
+        const lines = notesAt.get(index);
+        const rows = lines
+          ? <>{lines.map((note, at) => <div key={at} className="ec-ex-row ec-couplet-note">
             <Markdown app={app} text={note} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />
           </div>)}</>
           : broken

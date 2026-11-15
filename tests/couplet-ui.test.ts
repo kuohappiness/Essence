@@ -64,6 +64,29 @@ void test('翻面：兩句照樣是同一個題目的大小，填回去；記憶
   assert.equal(other.length, 1, '其他背面補充照舊');
 });
 
+// L2 第一輪 R2：題目底下（§2-7）與目標底下各寫一個記憶錨點時，兩份都在、各自一行一列。
+const anchorRows = (ui: ReviewUi): string[][] => ui.find('is-anchor').map(anchor => all(anchor)
+  .filter(each => typeof each.props.className === 'string' && each.props.className.split(' ').includes('ec-couplet-note'))
+  .map(row => String(markdowns(row)[0]?.props.text)));
+const LAYERED = (shared: boolean): string => `---
+科目: 國語
+---
+### 鳥鳴澗
+- 鳥鳴澗 第 2 句 接句 ^b3pmab
+    - 人閒桂花落，==夜靜春山空==。
+        - 記憶錨點：
+            - 題甲
+            - 題乙
+${shared ? '    - 記憶錨點：\n        - 共甲\n        - 共乙\n' : ''}`;
+
+void test('題目底下與目標底下的記憶錨點各自一行一列，兩份都在（L2 R2）', async t => {
+  const both = await show(t, preview(LAYERED(true), true));
+  assert.deepEqual(anchorRows(both), [['題甲', '題乙'], ['共甲', '共乙']]);
+  assert.ok(!both.find('is-anchor').some(anchor => markdowns(anchor).some(each => String(each.props.text).includes('- '))), '沒有清單符號');
+  const own = await show(t, preview(LAYERED(false), true));
+  assert.deepEqual(anchorRows(own), [['題甲', '題乙']]);
+});
+
 void test('沒有小標題時不畫詩名；不是接句卡的填空照舊', async t => {
   const bare = await show(t, preview(POEM.replace('### 鳥鳴澗\n', ''), false));
   assert.deepEqual(bare.find('ec-couplet-title'), []);

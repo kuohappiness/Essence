@@ -59,9 +59,10 @@ export interface Target {
 export interface PoemOrder { title: string; head: string; lines: readonly string[]; tails: readonly string[]; notes: readonly string[] }
 /**
  * 接句卡（tasks/couplet-cards.md §1、§2）：詩名（目標所在的小標題，沒有是 null）、第幾句（名稱的「第 N 句 接句」，讀不到是 null）、
- * 題目照句尾標點切成的每一句（原文，連同自己的標點與 ==…==）、記憶錨點的子項目（和 PoemOrder.notes 同一份）。
+ * 題目照句尾標點切成的每一句（原文，連同自己的標點與 ==…==）、目標底下第一個記憶錨點的子項目（和 PoemOrder.notes 同一份）、
+ * 題目底下第一個記憶錨點的子項目（§2-7，L2 R2）；沒有是空的。
  */
-export interface Couplet { title: string | null; index: number | null; lines: readonly string[]; notes: readonly string[] }
+export interface Couplet { title: string | null; index: number | null; lines: readonly string[]; notes: readonly string[]; promptNotes: readonly string[] }
 /**
  * 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。
  * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。

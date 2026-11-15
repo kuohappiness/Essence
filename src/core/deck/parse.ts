@@ -318,9 +318,21 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
-      return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const own = anchorNotes(children);
+      if (own) promptNotes.set(cloze, own);
+      return cloze;
     }
     // 全詩順序卡與接句卡的解釋（D-204 第 5、7 點、L2 R7、D-185 第 4 點）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
+    // 接句卡的題目底下也可以有自己的記憶錨點（§2-7，接句卡 L2 R2），同樣分好，放 promptNotes。
+    const anchorNotes = (items: readonly Item[]): string[] | null => {
+      for (const child of items) {
+        const anchor = ANCHOR_LABEL.exec(child.text);
+        if (anchor) return [anchor[1].trim(), ...child.children.map(each => markdown(each).trim())].filter(Boolean);
+      }
+      return null;
+    };
+    const promptNotes = new Map<Prompt, string[]>();
     let notes: string[] | null = null;
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
@@ -340,7 +352,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     if (pick.group) target.group = pick.group;
     const order = readOrder(target, notes ?? []);
     if (order) target.order = order;
-    const couplet = readCouplet(target, notes ?? []);
+    const couplet = readCouplet(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? []);
     if (couplet) target.couplet = couplet;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });

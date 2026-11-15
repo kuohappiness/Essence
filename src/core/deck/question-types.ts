@@ -195,11 +195,11 @@ function coupletLines(text: string): string[] {
  * 這個目標是不是接句卡：名稱最後一段是「接句」（前面要有空白或右括號），只有一題，是剛好一格的填空，不是比較組、全詩順序卡也沒有方向。
  * 詩名是目標所在的小標題；第幾句從「第 N 句 接句」讀。不是時照原題型（填空翻面），不另外提示。
  */
-export function readCouplet(target: Target, notes: readonly string[]): Couplet | null {
+export function readCouplet(target: Target, notes: readonly string[], promptNotes: readonly string[]): Couplet | null {
   const { name, prompts } = target;
   if (target.implicit || target.direction !== null || target.group || target.order || endingOf(name) !== '接句') return null;
   const prompt = prompts.length === 1 ? prompts[0] : null;
   if (prompt?.kind !== 'cloze' || prompt.blanks.length !== 1) return null;
   const index = /第\s*(\d+)\s*句\s+接句$/.exec(name);
-  return { title: target.section, index: index ? Number(index[1]) : null, lines: coupletLines(prompt.text), notes };
+  return { title: target.section, index: index ? Number(index[1]) : null, lines: coupletLines(prompt.text), notes, promptNotes };
 }
