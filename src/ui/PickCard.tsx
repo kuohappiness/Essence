@@ -2,6 +2,7 @@ import { anchorParts, extraLabel, orderNotes, questionOf, RATING_LABELS } from '
 import type { CardView, PickView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
+import { slotMark, stripSlotMarks } from './rendered.ts';
 import { Rates, type BodyProps, type BottomProps, type Screen } from './screen.tsx';
 
 // 點選填空的畫面（tasks/question-type-seam.md §7、D-182、D-179）：沒有 hook，狀態都在 review/pick.ts。樣式在 PickCard.css。
@@ -64,7 +65,8 @@ function SentenceBody({ view, app, act, onPainted, onFail }: BodyProps): React.J
   const { pick, group } = partsOf(view);
   const order = group.order;
   const starts = order?.starts ?? [];
-  const text = (order?.head ?? '') + card.blanks.map((_, i) => '＿＿' + (order?.tails[i] ?? '')).join('');
+  // 每一格用自己的記號（L2 R1）：題目本來的 ＿＿、相鄰的兩格都不會搞混。
+  const text = stripSlotMarks(order?.head ?? '') + card.blanks.map((_, i) => slotMark(i) + stripSlotMarks(order?.tails[i] ?? '')).join('');
   const slots = card.blanks.map((_, index) => {
     const cell = pick.cells[index];
     const shown = starts[index] && cell.text && cell.state !== 'skipped' && cell.state !== 'miss' ? capital(cell.text) : cell.text;
@@ -79,7 +81,7 @@ function SentenceBody({ view, app, act, onPainted, onFail }: BodyProps): React.J
     <ul className="ec-pick-rows"><li className={'ec-pick-row' + (pick.stage === 'result' ? ' is-locked' : '')}>
       <span className="ec-pick-mark" data-state={mark}>{MARKS[mark] ?? ''}</span>
       <div className="ec-pick-text">
-        <Markdown app={app} text={text} sourcePath={card.deck} mode="pick" english slotNodes={slots} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
+        <Markdown app={app} text={text} sourcePath={card.deck} mode="pick" english slotNodes={slots} breakFirst={starts[0]} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
       </div>
     </li></ul>
     {extras.length > 0 && <div className="ec-ex ec-answer">{extras.map((extra, index) => {

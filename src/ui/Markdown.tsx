@@ -1,7 +1,7 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { postProcess } from './rendered.ts';
+import { postProcess, slotMark } from './rendered.ts';
 
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
@@ -29,8 +29,10 @@ export interface MarkdownProps {
   onSlot?: (slot: HTMLElement | null) => void;
   /** 比較卡的空格裡的東西（和 tail 一樣用 createPortal）。 */
   slotNode?: React.ReactNode;
-  /** 英文的句子排序：一句好幾格，第 i 個 ＿＿ 放第 i 個（第一個優先於 slotNode）。 */
+  /** 英文的句子排序：一句好幾格，text 裡第 i 格寫 slotMark(i)，放第 i 個（優先於 slotNode）。 */
   slotNodes?: readonly React.ReactNode[];
+  /** 句子排序的第一格就是英文句子的開頭：前面是中文時在第一格前換行（L2 R5）。 */
+  breakFirst?: boolean;
   /** 接在最後一個字後面的東西（喇叭，D-145）：和最後一個字包在一起，換行時不會單獨掉到下一行。 */
   tail?: React.ReactNode;
   /** 英文卡的題目：冠詞和後面的字連在一起換行（glueArticles）。 */
@@ -59,7 +61,8 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
   const [moreEls, setMoreEls] = useState<HTMLElement[]>([]);
   const { app, text, sourcePath, mode = 'plain', lines = 0 } = props;
-  const slotCount = props.slotNodes?.length ?? 1;
+  const slotCount = props.slotNodes?.length ?? 0;
+  const breakFirst = !!props.breakFirst;
   useEffect(() => {
     const element = host.current;
     if (!element) return;
@@ -73,11 +76,12 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       try {
         await MarkdownRenderer.render(app, text, container, sourcePath, component);
         if (!active) return;
-        const { slot, slots, tail, slotMissing } = postProcess(container, { mode, lines, english: !!latest.current.english, slots: slotCount });
+        const markers = slotCount ? Array.from({ length: slotCount }, (_, i) => slotMark(i)) : undefined;
+        const { slot, slots, tail, slotMissing } = postProcess(container, { mode, lines, english: !!latest.current.english, markers, breakFirst });
         applyState(container, latest.current);
         if (mode === 'pick') { setSlotEl(slot); setMoreEls(slots.slice(1)); }
         // 比較句解析判定有一個空格，畫面卻找不到（渲染器的特例）：空格放在句尾，這張照常能答，記一行（D-155，§3）。
-        if (slotMissing) latest.current.onFail?.(Error('比較句的畫面找不到空格：' + text), sourcePath);
+        if (slotMissing) latest.current.onFail?.(Error((markers ? '排序句的畫面少了格：' : '比較句的畫面找不到空格：') + text), sourcePath);
         // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
         setTailEl(tail);
         if (mode === 'typed') latest.current.onSlot?.(slot);
@@ -102,7 +106,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       setSlotEl(null);
       setMoreEls([]);
     };
-  }, [app, text, sourcePath, mode, lines, slotCount]);
+  }, [app, text, sourcePath, mode, lines, slotCount, breakFirst]);
   // 翻面：不重新渲染，只切換空格與線上的字。
   useLayoutEffect(() => {
     const container = host.current?.querySelector<HTMLElement>('.ec-markdown');
