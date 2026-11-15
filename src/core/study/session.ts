@@ -112,8 +112,10 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
     if (at <= input.now) ready.push({ each, at });
     else if (!waiting || at < waiting.at) waiting = { item: each.item, at };
   }
-  // 對方從整篇找：不在這個範圍（還沒到期）但今天在全部卡答過的，也要隔開（L2 R3）。
-  const pool = input.decks.flatMap(entry => entry.deck.targets.flatMap(target => target.id === null ? [] : [{ id: target.id, path: entry.path, target }]));
+  // 對方從整篇找，但只找今天會出的（today.slots）與今天答過的：不在這個範圍（還沒到期）但今天在全部卡答過的也要隔開（L2 R3）；
+  // 暫停、停用、今天沒答過的同編號舊卡不當對方，不會把有效的一對算成編號重複（L2 R7）。今天答過才暫停的照樣算。
+  const pool = input.decks.flatMap(entry => entry.deck.targets.flatMap(target =>
+    target.id !== null && (today.slots.has(target.id) || valid.has(target.id)) ? [{ id: target.id, path: entry.path, target }] : []));
   const apart = apartOf(partners(pool, false), answeredAfter(input.history.reviews, dayStart(today.day, today.offset)));
   const early = !ready.length && !fresh.length;
   const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(({ each }) => each), holdOrders(fresh, each => slotOf(today, each.id).memory === null), apart)?.item ?? waiting?.item;

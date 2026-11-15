@@ -130,3 +130,21 @@ void test('每日的份：對方今天在全部卡答過、自己在今天的份
   const second = nextCard(plan, input(deck, [yesterday, practiced, plain], START + 40_000), { subject: '國語' });
   assert.equal(second.kind === 'card' && second.card.lt, 'b3pma2', '只剩它時直接出');
 });
+
+// L2 第二輪 R7：暫停、今天沒答過的同編號舊卡不當對方，也不取消有效的配對；今天答過才暫停的照樣算。
+void test('每日的份：暫停的同編號舊卡不取消配對；對方今天答過之後才暫停，照樣隔開（L2 R7）', () => {
+  const pair = couplets('鳥鳴澗', 'b3pma', NIAO).split(/(?=- 鳥鳴澗)/).slice(0, 2).join('');
+  const old = '- 鳥鳴澗 第 1 句 接句 ^b3pmz1\n    - 狀態：暫停\n    - ==人閒桂花落==，夜靜春山空。\n';
+  const tail = '### 其他\n- 一般 填空 ^b3pmc1\n    - ==清風==徐來\n';
+  const firstOf = (text: string): string => {
+    const deck = entry(text);
+    const yesterday = encodeEntry('2026-11-14T19:00:00.000+08:00', { lt: 'b3pma1', r: 'easy', v: printOf(deck, 'b3pma1') });
+    const plan = planToday(input(deck, [yesterday], START));
+    const practiced = encodeEntry(new Date(START + 10_000).toISOString(), { lt: 'b3pma1', r: 'good', v: printOf(deck, 'b3pma1') });
+    const found = nextCard(plan, input(deck, [yesterday, practiced], START + 20_000), { subject: '國語' });
+    return found.kind === 'card' ? found.card.lt : found.kind;
+  };
+  assert.equal(firstOf(`---\n科目: 國語\n---\n### 鳥鳴澗\n${pair}${old}${tail}`), 'b3pmc1', '暫停的舊卡');
+  const paused = pair.replace('^b3pma1\n', '^b3pma1\n    - 狀態：暫停\n');
+  assert.equal(firstOf(`---\n科目: 國語\n---\n### 鳥鳴澗\n${paused}${tail}`), 'b3pmc1', '答過之後才暫停');
+});
