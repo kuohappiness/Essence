@@ -73,3 +73,18 @@ void test('朗讀的句子（L2 R4）：題目開頭的英文標籤、結尾的�
   assert.deepEqual(await read('I ＿＿ the keys (but not the phone) yesterday. (lose) :: lost', 'lost'), ['lost', 'I lost the keys (but not the phone) yesterday.']);
   assert.deepEqual(await read('**（Passive）** The window ＿＿ yesterday.（break） :: was broken', 'was broken'), ['was broken', 'The window was broken yesterday.']);
 });
+
+void test('朗讀的句子和第 2 步認標籤的寫法相同（L2 第二輪）：螢光筆的標籤、提示也拿掉；括號裡有 ＿＿ 的是句子本身', async t => {
+  const read = async (prompt: string, answer: string): Promise<readonly string[] | null> => {
+    const h = await setup(t, { [P]: deck(`- 被動語態 文法 ^grammr\n    - ${prompt}\n`) });
+    const s = await h.open({ subject: '英文' });
+    type(s, 'xyz');
+    type(s, answer);
+    return view(s).autoRead;
+  };
+  assert.deepEqual(await read('==(Passive Voice)== I ＿＿ every day. (clean) :: am cleaned', 'am cleaned'), ['am cleaned', 'I am cleaned every day.']);
+  assert.deepEqual(await read('I ＿＿ every day. ==(clean)== :: am cleaned', 'am cleaned'), ['am cleaned', 'I am cleaned every day.']);
+  const inner = await read('(On days when it ＿＿) I stay inside. :: rains', 'rains');
+  assert.equal(inner?.length, 2);
+  assert.match(inner?.[1] ?? '', /^On days when it rains\)? I stay inside\.$/u);
+});

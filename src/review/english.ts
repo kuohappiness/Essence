@@ -70,17 +70,22 @@ export function openingSpeech(card: Card): readonly string[] | null {
   const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
   return parts.length ? parts : null;
 }
-/** 題目開頭的文法標籤（`（現在完成式）`、`(Passive Voice)`，粗體也算）與結尾給的原形或意思（`(know)`、`（去）`）。 */
-const LABEL = /^\s*(?:\*\*)?[（(][^（）()]*[）)](?:\*\*)?\s*/u;
-const HINT = /\s*(?:\*\*)?[（(][^（）()]*[）)](?:\*\*)?\s*$/u;
+/** 題目開頭的一組括號（文法標籤：`（現在完成式）`、`(Passive Voice)`）與結尾的一組括號（給的原形或意思：`(know)`、`（去）`）。 */
+const LABEL = /^\s*[（(]([^（）()]*)[）)]\s*/u;
+const HINT = /\s*[（(]([^（）()]*)[）)]\s*$/u;
+/** 括號裡有作答格的是句子本身（`(On days when it ＿＿) I stay inside.`），不拿掉。 */
+const dropUnlessBlank = (match: string, inner: string): string => BLANK.test(inner) ? match : '';
 
 /**
- * 打字卡把 ＿＿ 換成答案的例句（自動朗讀與題目那一行的喇叭共用）。文法與變化（tasks/english-typed-order.md §6-3、L2 R4）先拿掉題目開頭的
- * 文法標籤與結尾給的提示，句子中間的括號照念；中翻英照舊。題目沒有 ＿＿ 時是 null。
+ * 打字卡把 ＿＿ 換成答案的例句（自動朗讀與題目那一行的喇叭共用）。文法與變化（tasks/english-typed-order.md §6-3、L2 R4）先拿掉粗體與螢光筆
+ * （和第 2 步認標籤的 mentions 相同），再拿掉題目開頭與結尾的一組括號，括號裡有 ＿＿ 的不拿；句子中間的括號照念。中翻英照舊。
+ * 題目沒有 ＿＿ 時是 null，兩個入口都只念答案。
  */
 export function typedSentence(card: Card, answer: string): string | null {
   const question = questionOf(card.prompt);
-  return fillBlank(card.target.typing ? question.replace(LABEL, '').replace(HINT, '') : question, answer);
+  if (!card.target.typing) return fillBlank(question, answer);
+  const bare = question.replace(/\*\*|==/g, '').replace(LABEL, dropUnlessBlank).replace(HINT, dropUnlessBlank);
+  return fillBlank(bare, answer);
 }
 
 /** 答案出現時念的：英文的打字卡先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
