@@ -75,7 +75,7 @@ flowchart LR
 | 模組 | 責任 | 狀態 |
 |---|---|---|
 | Essence Cards（本 repo） | 製卡、複習、檢核、排程、選用的 AI 輔助 | ✅ |
-| Essence Capture（另一個 repo，[骨架](https://github.com/kuohappiness/Essence-Capture) 2026-10-20 建立；程式延到 Cards 的複習閉環完成後，[D-111](decisions.md#d-111-v1-的開發順序capture-延後)） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；v1 先做 PDF 與圖片的忠實轉錄，成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
+| Essence Capture（另一個 repo，[骨架](https://github.com/kuohappiness/Essence-Capture) 2026-10-20 建立；程式延到 Cards 的複習閉環完成後，[D-111](decisions.md#d-111-v1-的開發順序capture-延後)） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；PDF 與圖片的忠實轉錄移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上後成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
 | 題庫（Cards 內的獨立模組，第二階段討論） | 計算與應用題、選擇題、考古題模擬考；題目寫在題庫筆記，和閃卡共用今日佇列、排程與複習紀錄（[D-090](decisions.md#d-090-題庫併入-cards變式題以題型排程)） | ✅ 方向；細節見[第二階段規畫](plans/practice.md) |
 | Essence Mindboard（未來，尚未建立；另一個 repo，開始寫程式時才建，[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
 
@@ -93,7 +93,7 @@ flowchart LR
 
 v1 的材料來源 ✅（[D-032](decisions.md#d-032-v1-的材料來源)）：
 
-- 卡組從 Obsidian 筆記製作：Capture 轉錄的教材庫，或手寫、其他工具產生的筆記。PDF 與圖片先由 Capture 忠實轉錄（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)），Cards 不再直接讀 PDF；錯題照片仍由 Cards 分析（D-061）。
+- 卡組從 Obsidian 筆記製作：手寫、其他工具產生的筆記，或第二階段 Capture 轉錄的教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。v1 的課本與講義由家長在自己的 AI 對話附上（照片或 PDF），Cards 不讀 PDF（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；錯題照片仍由 Cards 分析（D-061）。
 - Cards 不依賴 Capture：筆記帶有交接資訊就使用，沒有也能運作。
 
 和心智圖外掛對接的做法 💡（助理提案；[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)）。使用者 2026-10-11 決定：細節列入未來的專門討論（[Essence Mindboard](plans/mindboard.md)）；用區塊 ID 連結學習目標的方式已同意，並寫進使用說明書（D-048 補充）：
@@ -295,7 +295,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 - ✅ 模型的選擇原則（[D-055](decisions.md#d-055-ai-模型的選擇原則)）：免費或開源優先，其次是 CP 值高、成本低的模型；不限定任何一家；可以接受免費方案把資料拿去訓練。
 - API 直連的做法（[D-059](decisions.md#d-059-ai-的接法一種介面模型不包進外掛)）：
   - ✅ **API 選項只做一種介面**：OpenAI 相容的 Chat Completions。家長從預設選單選一個、貼上金鑰，網址與模型由外掛填好，也可以自訂（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）；API 推薦的服務與模型見 [AI 模型推薦](ai-models.md)。Gemini、OpenRouter（含免費的開源模型）、DeepSeek、Groq、Mistral，以及電腦本機跑的 Ollama、LM Studio 都支援這種介面。此 API 選項不為個別廠商寫轉接器；訂閱與 CLI 接法的條件另照 D-126。
-  - ✅ **教材怎麼送給 AI**（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）：PDF 與圖片由 Capture 轉成頁面圖片送去轉錄，圖表截成圖片放進轉錄稿；Cards 製卡時送出轉錄稿與裡面的圖片。所以兩個外掛都需要能看圖的模型。Obsidian 內建的 PDF 元件能不能讓外掛轉圖片，寫程式前確認。
+  - ✅ **教材怎麼送給 AI**（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）：PDF 與圖片由 Capture 轉成頁面圖片送去轉錄，圖表截成圖片放進轉錄稿；Cards 製卡時送出轉錄稿與裡面的圖片。所以兩個外掛都需要能看圖的模型。Obsidian 內建的 PDF 元件能不能讓外掛轉圖片，寫程式前確認。2026-11-16 起 Capture 移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上 API 時教材怎麼送，到那時候再定。
   - **用量估計**：一次製卡約 1.5～2 萬 token 輸入、3 千 token 輸出；一學期約 60 次，約 100 萬 token 輸入。便宜的模型一學期不到 1 美元，免費額度也夠用（OpenRouter 免費模型每天約 50 次）。價格與額度常變，寫程式前查官方頁面。
   - ✅ **真正的成本是審核時間**：模型差一點，家長要多刪改，學生要多複習不好的卡。預設模型依卡片品質挑，比較 2～3 個候選模型（由 API 規劃在 `experiments/` 實測；NotebookLM 對照實驗暫緩）。開源模型要特別檢查是否用台灣用語。
   - **複製貼上模式仍是最省錢的路**：各家網頁版的免費方案，常常比免費 API 用得到更強的模型。
@@ -340,7 +340,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 
 | 環節 | 步驟 | 誰做 | 依據 |
 |---|---|---|---|
-| 教材 | PDF、圖片轉錄成教材庫 | AI（Capture） | [D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)，開發順序延後（D-111） |
+| 教材 | PDF、圖片轉錄成教材庫 | AI（Capture） | [D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)，移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)） |
 | 教材 | 轉錄稿和原頁比對 | AI 比對並標出沒把握的地方；不要求家長查證 | D-076、D-114 |
 | 教材 | 推薦的 AI 服務與模型 | 開發者實測後推薦 → 家長從預設選單選 | D-072、D-085 |
 | 規則 | ① 通用、② 知識類型、③ 科目預設 | 開發者 | [D-020](decisions.md#d-020-製卡規則分層) |

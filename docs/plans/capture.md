@@ -1,6 +1,6 @@
 # Essence Capture｜待做與待決
 
-狀態：Capture 還沒開工，照 [D-111](../decisions.md#d-111-v1-的開發順序capture-延後) 在 Cards 的複習閉環完成後才開始；這裡收 Capture 的 v1 工作、第二階段候選與待決問題（2026-10-31 從 backlog 與各份規畫整理過來）
+狀態：Capture 還沒開工，2026-11-16 移到第二階段（[D-206](../decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)），v1 的教材由家長在自己的 AI 對話附課本；下面「v1 要做的」改成第二階段開工時要做的；這裡收 Capture 的 v1 工作、第二階段候選與待決問題（2026-10-31 從 backlog 與各份規畫整理過來）
 
 [backlog 入口](../backlog.md#essence-capture-與-essence-mindboard)｜[文件存放規則](README.md)
 
@@ -24,7 +24,7 @@ Capture 的定位與 repo 為什麼獨立見 [D-076](../decisions.md#d-076-captu
 
 ### 影片、網頁來源與整理成好讀的筆記
 
-影片、網頁等來源，以及整理成好讀的筆記，列第二階段（D-076：「影片、網頁、整理成好讀的筆記，之後再做」）；PDF 與圖片轉錄仍是 v1 範圍，依 [D-076](../decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)、[D-111](../decisions.md#d-111-v1-的開發順序capture-延後) 在 Cards 複習閉環完成後開工。
+影片、網頁等來源，以及整理成好讀的筆記，列第二階段（D-076：「影片、網頁、整理成好讀的筆記，之後再做」）；PDF 與圖片轉錄也移到第二階段（[D-206](../decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）。
 
 「開始做 Essence Capture 前先找現成專案」2026-10-28 改列 v1（[D-130](../decisions.md#d-130-任務分成-v1-與第二階段) 補充），見上方〈v1 要做的〉。
 
