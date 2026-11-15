@@ -1,6 +1,6 @@
 # 英文的打字與排序（D-193 第 13 點，給 Claude，本機執行）
 
-狀態：L2 三輪結束（報告與回應在 `Claude Codex Discussion/2026-11-15-english-typed-order-review.md`；第三輪的三項記成 backlog〈已知的限制〉），等合併
+狀態：已合併進 `main`（2026-11-16，PR #14）；L2 三輪結束（報告與回應在 `Claude Codex Discussion/2026-11-15-english-typed-order-review.md`；第三輪的三項記成 backlog〈已知的限制〉）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。改出題語法的認法、打字的判定、排程（新卡的開始條件）與複習紀錄的意思（`retry`、排序卡的 `cell`、`pick`），屬於 [quality.md](../docs/agents/quality.md#高風險範圍要做-l2) 的高風險範圍：開工前格式查核，合併前做 L2。
 
@@ -103,4 +103,4 @@ D-193 第 5 點、english.md §3〈開始〉。只改今天的份（`planToday`�
 - 實作：分支 `claude/english-typed-order-9bc4bb`（`5a4ca30` 初版、`8f888c7` 依格式查核改）。`npm run check` 通過（2684 個測試）。
 - Windows 版 Obsidian 1.15.1（獨立的使用者資料夾與暫存 vault、CDP）：句子排序一題三格照順序各放一格、句末的 `.` 接在最後一格後面、中文之後英文換行；依序點鍵、對答案後三格各自著色、左邊打勾。happy-dom 的替身測試以外，`rendered.ts` 的多格插入在真的渲染器上成立。
 - L2 第一輪修正後，同一個環境再驗三個邊界：`挖空：==turn====it== off.` 兩格相鄰各一格、照順序；`用「＿＿」表示挖空。I know ==where== ==he== ==lives==.` 題目本來的 `＿＿` 留著，三格在後面；`我累了。==i== ==am== ==tired==.` 中文後面換行。畫面上沒有留下記號字。
-- 延後的測試：iPhone 的排版、朗讀與手感記進 backlog〈下一次 iPhone 實機測試〉（D-065）；其餘都有自動測試。
+- 延後的測試：無（iPhone 的排版、朗讀與手感記進 backlog〈下一次 iPhone 實機測試〉，D-065；其餘都有自動測試）
