@@ -77,6 +77,7 @@
 | 刪除沒有收成一個「只刪自己建的」入口：只刪這次自己建的東西錯過好幾次（更新防線、考試範圍的 L2），會刪檔或資料夾的呼叫分散在 20 多個檔（多數是開發命令），每一處自己判斷是不是自己建的 | 下一次新增會刪 vault 裡的檔或資料夾的產品程式（例如目錄的管理模式、引言框的「加入」與搬移），或 L2 再報出一次刪到不是自己建的東西 | 產品程式（`src/`，開發命令另外看）的刪除走同一個 helper：只刪這次工作記下自己建的路徑，刪之前核對內容仍是自己寫的那份；有自動檢查擋住 helper 以外直接呼叫刪除（例如 ESLint）；跨模組，L2 | [第二次里程碑檢查](<../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R8 |
 | pre-commit 的 `npm run check` 讀工作樹、不是暫存區：多個 session 共用同一個資料夾時，別人還沒提交的檔可能讓這次 commit 通過，推上去 CI 才紅（文件檢查、金鑰與本機路徑掃描已經讀暫存區） | CI 出現一次本機 pre-commit 通過、Linux 卻因為少了檔失敗；或下次改 `.githooks/pre-commit` 時 | 程式檢查在只有暫存內容的副本裡跑，量多花的時間；或確認不再共用資料夾（現在多半各開 worktree），照實記錄後刪掉這一列 | [第二次里程碑檢查](<../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R8 |
 | 只改規則檔時不跑規則的測試：`src/core/ai/rules.ts` 嵌進 `main.js` 的規則檔，只有 `english.md` 在測試裡寫出路徑（`tests/ai-rules.test.ts`）；pre-commit 只改文件時照路徑找測試，改其他規則檔（例如拿掉標記）不跑，到 CI 才紅 | 下一次改 `docs/card-rules/` 裡被嵌進的規則檔，或 CI 因為規則檔紅一次 | 改 `rules.ts` 列的任何一份規則檔，pre-commit 都會跑 `tests/ai-rules.test.ts`；用一份拿掉標記的規則檔確認會擋 | [第二次里程碑檢查](<../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R8 |
+| 補測：中文朗讀在 Windows 的多音字（[D-175](decisions.md#d-175-國小國語的學習地圖字是根生字拆成字形字義讀音) 第 8 點；使用者 2026-11-16 定先測 iPhone）：iPhone 以外沒聽過，Windows 的三個台灣語音（Hanhan、Yating、Zhiwei）念多音字的錯誤率未知；學生在電腦複習時，讀音卡可能聽到錯的讀音 | 學生開始在電腦上複習國語；或中文朗讀合併後的下一個里程碑檢查 | 在 Windows 的測試 vault 開試作外掛 `essence-tts-probe` 0.0.4 以上的「中文朗讀試聽」，60 個字聽完，念錯的比例和 iPhone 一起寫進 [experiments/README.md](../experiments/README.md) 的 T6；錯得多就照 iPhone 談定的做法處理（例如電腦預設不念中文） | 中文朗讀的試聽（2026-11-16） |
 
 ### 已知的限制
 
