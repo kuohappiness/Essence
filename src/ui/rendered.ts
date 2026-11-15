@@ -34,7 +34,7 @@ const blockOf = (node: Node, container: HTMLElement): Element => node.parentElem
  * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、空格連著後面的標點、
  * 喇叭那一格。回傳放線的那一格（找不到 ＿＿ 或不是打字卡時是 null）與喇叭那一格。
  */
-export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement; slotMissing: boolean } {
+export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean; slots?: number }): { slot: HTMLElement | null; slots: HTMLElement[]; tail: HTMLElement; slotMissing: boolean } {
   const blanks: HTMLElement[] = [];
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
@@ -55,9 +55,17 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   // 比較卡一定要有空格（§3）：找不到時放在句尾。
   const slot = typedSlot ?? pickSlot ?? (slotMissing ? endSlot(container) : null);
   if (slot) blanks.push(slot);
+  // 英文的句子排序（tasks/english-typed-order.md §6-1）：一句好幾格，後面的 ＿＿ 也各放一格；英文換行只在第一格前面做一次。
+  const more: HTMLElement[] = [];
+  for (let i = 1; options.mode === 'pick' && pickSlot && i < (options.slots ?? 1); i++) {
+    const next = insertPickSlot(container, false);
+    if (!next) break;
+    more.push(next);
+  }
+  blanks.push(...more);
   if (options.english) glueText(container);
   blanks.forEach(gluePunctuation);
-  return { slot, tail: attachTail(container), slotMissing };
+  return { slot, slots: slot ? [slot, ...more] : [], tail: attachTail(container), slotMissing };
 }
 
 /** 在 element 前面放一個空的 .ec-glue（裡面不換行），由呼叫的地方把內容照順序放進去。 */
@@ -102,7 +110,7 @@ const emptySlot = (): HTMLElement => {
  * 比較卡（tasks/question-type-seam.md §7）：第一處 ＿＿ 換成一格空的 .ec-slot，按鈕由 Markdown 的 slotNode 放進去。不用打字卡的線：
  * 線那一格（closeLastLine）把後面的標點包進去，和按鈕疊在同一格會蓋住；標點交給 gluePunctuation。
  */
-function insertPickSlot(container: HTMLElement): HTMLElement | null {
+function insertPickSlot(container: HTMLElement, breakEnglish = true): HTMLElement | null {
   for (const node of textNodes(container)) {
     const text = node.textContent ?? '';
     const match = BLANK.exec(text);
@@ -113,7 +121,7 @@ function insertPickSlot(container: HTMLElement): HTMLElement | null {
     node.parentNode?.insertBefore(slot, after);
     const inBlock = textNodes(blockOf(node, container));
     const at = inBlock.indexOf(after);
-    if (englishBeside(joined(inBlock.slice(0, at)), joined(inBlock.slice(at)))) breakBeforeEnglish(container, node);
+    if (breakEnglish && englishBeside(joined(inBlock.slice(0, at)), joined(inBlock.slice(at)))) breakBeforeEnglish(container, node);
     return slot;
   }
   return null;

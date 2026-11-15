@@ -1,5 +1,6 @@
-import { anchorParts, orderNotes, questionOf, RATING_LABELS } from '../review/index.ts';
+import { anchorParts, extraLabel, orderNotes, questionOf, RATING_LABELS } from '../review/index.ts';
 import type { CardView, PickView } from '../review/index.ts';
+import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
 import { Rates, type BodyProps, type BottomProps, type Screen } from './screen.tsx';
 
@@ -45,7 +46,60 @@ function compareOrder(rows: readonly Row[], tested: readonly (string | null | un
   return [...new Set([...first, ...rows])];
 }
 
-function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
+/** 整句最差的那一格的狀態（句子排序的打勾，§6-1）：有錯就打叉，再選才對是橙色，都對才是綠色；還沒對答案時沒有。 */
+function worstState(cells: PickView['cells']): PickView['cells'][number]['state'] {
+  for (const state of ['miss', 'retry', 'near'] as const) if (cells.some(cell => cell.state === state)) return state;
+  return cells.every(cell => cell.state === 'right') ? 'right' : 'open';
+}
+
+/** 句首那一格放進去的字第一個字母大寫（tasks/english-typed-order.md §4-6）。 */
+const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * 英文的句子排序卡（tasks/english-typed-order.md §6）：整題一列、每個 ＿＿ 一格，空格的樣式照比較卡；左邊一個打勾照最差的一格。
+ * 對答案後題目底下的補充與共用補充接在句子下面。
+ */
+function SentenceBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
+  const { card } = view;
+  const { pick, group } = partsOf(view);
+  const order = group.order;
+  const starts = order?.starts ?? [];
+  const text = (order?.head ?? '') + card.blanks.map((_, i) => '＿＿' + (order?.tails[i] ?? '')).join('');
+  const slots = card.blanks.map((_, index) => {
+    const cell = pick.cells[index];
+    const shown = starts[index] && cell.text && cell.state !== 'skipped' && cell.state !== 'miss' ? capital(cell.text) : cell.text;
+    return <button key={index} type="button" className={'ec-pick-slot' + (index === pick.cursor ? ' is-on' : '')} data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}
+      onClick={event => { event.stopPropagation(); act({ kind: 'row', index }); }}>{cell.state === 'retry' ? <s>{shown}</s> : shown || '　'}</button>;
+  });
+  const mark = worstState(pick.cells);
+  const extras = pick.stage === 'result' ? [...card.prompt.extras, ...card.target.shared] : [];
+  return <article className="ec-card ec-pick is-sentence is-english" lang="en">
+    <div className="ec-meta" lang="zh-Hant">{card.isNew && <span className="ec-new">新</span>}<span>{view.crumb}</span></div>
+    <p className="ec-pick-title" lang="zh-Hant">{group.title}</p>
+    <ul className="ec-pick-rows"><li className={'ec-pick-row' + (pick.stage === 'result' ? ' is-locked' : '')}>
+      <span className="ec-pick-mark" data-state={mark}>{MARKS[mark] ?? ''}</span>
+      <div className="ec-pick-text">
+        <Markdown app={app} text={text} sourcePath={card.deck} mode="pick" english slotNodes={slots} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
+      </div>
+    </li></ul>
+    {extras.length > 0 && <div className="ec-ex ec-answer">{extras.map((extra, index) => {
+      const { label, body } = extraLabel(extra);
+      const content = <Markdown app={app} text={body} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />;
+      if (label === '記憶錨點') return <div key={index} className="ec-ex-item is-anchor">
+        <span className="ec-bulb" role="img" aria-label="記憶提示"><Icon type="bulb" /></span>
+        <div className="ec-ex-body"><div className="ec-ex-row">{content}</div></div>
+      </div>;
+      return <div key={index} className="ec-ex-item">
+        {label && <div className="ec-ex-label" lang="zh-Hant">{label}：</div>}
+        <div className="ec-ex-row">{content}</div>
+      </div>;
+    })}</div>}
+  </article>;
+}
+
+function PickBody(props: BodyProps): React.JSX.Element {
+  if (props.view.card.group?.order?.starts) return <SentenceBody {...props} />;
+  const { view, app, act, onPainted, onFail } = props;
   const { card } = view;
   const { pick, group } = partsOf(view);
   const { order } = group;
@@ -107,11 +161,11 @@ function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Elemen
   // 用滑鼠或手指點完，焦點回到畫面：Space、Enter 才是「對答案」，不是再按一次這個字鍵。Tab 過來用鍵盤按的（detail 是 0）留在原處。
   const after = (event: React.MouseEvent): void => { if (event.detail > 0) focusApp(); };
   // 全詩順序卡的字鍵是整句，兩個一排（D-204 第 2 點）；相同的句子各一個鍵，用位置當 key。
-  const lines = group.order !== undefined;
+  const lines = group.order !== undefined && !group.order.starts;
   const words = !lines && group.keys.some(key => [...key].length > 1);
   return <div className="ec-pick-tray">
     <div className={'ec-pick-keys' + (lines ? ' is-lines' : words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(lines ? 2 : keyColumns(group.keys.length, words)) } as React.CSSProperties}>
-      {group.keys.map((key, index) => <button key={lines ? index : key} type="button" className={'ec-pick-key' + (pick.used[index] ? ' is-used' : '')} disabled={animating || key === pick.spent} onClick={event => {
+      {group.keys.map((key, index) => <button key={group.order ? index : key} type="button" className={'ec-pick-key' + (pick.used[index] ? ' is-used' : '')} disabled={animating || key === pick.spent} onClick={event => {
         const target = cursor;
         act({ kind: 'key', key, at: index });
         if (target !== null) fly(event.currentTarget, target);

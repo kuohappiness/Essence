@@ -46,7 +46,24 @@ export interface Target {
   group?: PickGroup;
   /** 只有全詩順序卡才有（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。 */
   order?: PoemOrder;
+  /** 只有英文的句子排序卡才有（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。 */
+  sentence?: SentenceOrder;
+  /** 只有名稱結尾是「文法」或變化種類的目標才有（D-193 第 5、6 點）：問答題打字。 */
+  typing?: Typing;
+  /** 只有英翻中才有：pairKey 正規化後的寫法，變化目標找配對用（D-193 第 5 點）；base 是去掉最後一組括號的。 */
+  pairWord?: { exact: string; base: string };
 }
+/**
+ * 文法或變化目標（D-193、tasks/english-typed-order.md §1）：hint 是第 2 步的提示（文法點或原形），沒有是 null。
+ * pair 只有變化才有：配對英翻中的鍵；exact 是名稱有括號，只配同一個意思。
+ */
+export interface Typing { kind: 'grammar' | 'inflection'; hint: string | null; pair: { key: string; exact: boolean } | null }
+/**
+ * 英文的句子排序卡（tasks/english-typed-order.md §4）：prompts 和目標的 prompts 一一對應。
+ * 每一題：第一格前面的字、每一格的詞塊（拿掉結尾的標點、句首改小寫，比對與字鍵都用它）、每一格後面接的字（含拿掉的標點）、哪幾格在句首。
+ */
+export interface SentenceOrder { title: string; prompts: readonly SentenceCells[] }
+export interface SentenceCells { head: string; words: readonly string[]; tails: readonly string[]; starts: readonly boolean[] }
 /**
  * 全詩順序卡：詩名（名稱拿掉最後的「排序」「全詩」）、每一格的文字（照填空的順序，相同的兩句兩格都留）、
  * 第一格前面的字、每一格後面接到下一格之前的字（多半是標點）。

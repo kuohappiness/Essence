@@ -1,4 +1,4 @@
-import type { PickGroup, PoemOrder, Prompt, Target } from '../deck/index.ts';
+import type { PickGroup, PoemOrder, Prompt, SentenceOrder, Target } from '../deck/index.ts';
 import type { Blank, Card, CardGroup, Shown } from './types.ts';
 
 // 題型接點的第二個（D-181）：這張卡是哪一種題型、有哪幾格。其他三個在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
@@ -18,6 +18,7 @@ export function questionType(card: Card): QuestionType {
 export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>, times = 0): Card {
   const { lt, deck, target, prompt, isNew, early } = fields;
   if (target.order && prompt.kind === 'cloze') return orderCardOf(fields, target.order, times);
+  if (target.sentence && prompt.kind === 'cloze') return sentenceCardOf(fields, target.sentence, times);
   return { lt, deck, target, prompt, isNew, typed: prompt.kind === 'qa' && prompt.typed !== null, early, blanks: [{ lt, target, prompt }] };
 }
 
@@ -127,6 +128,22 @@ function orderCardOf(fields: Omit<Card, 'typed' | 'blanks'>, order: PoemOrder, t
   let keys: string[] = [];
   for (let at = 0; at <= times; at++) keys = orderKeys(order.lines, prompt.fingerprint + ' ' + String(at), keys);
   return { ...fields, typed: false, blanks, group: { title: order.title, members: order.lines, keys, rows: [], order: { head: order.head, tails: order.tails } } };
+}
+
+/**
+ * 英文的句子排序卡（tasks/english-typed-order.md §4）：一個目標，這一題的每一格是一格；字鍵是打亂的詞塊，打亂的方法和全詩相同。
+ * 一格對不對比文字（pick.ts），所以文字相同的詞塊互換不算錯。
+ */
+function sentenceCardOf(fields: Omit<Card, 'typed' | 'blanks'>, sentence: SentenceOrder, times: number): Card {
+  const { lt, target, prompt } = fields;
+  // 同一題照物件找，找不到（另一次解析的同一題）照指紋。
+  const index = target.prompts.indexOf(prompt);
+  const cells = sentence.prompts.at(index >= 0 ? index : target.prompts.findIndex(each => each.fingerprint === prompt.fingerprint));
+  if (!cells) throw TypeError('排序卡找不到這一題：' + target.name);
+  const blanks = cells.words.map((answer, cell): Blank => ({ lt, target, prompt, answer, cell }));
+  let keys: string[] = [];
+  for (let at = 0; at <= times; at++) keys = orderKeys(cells.words, prompt.fingerprint + ' ' + String(at), keys);
+  return { ...fields, typed: false, blanks, group: { title: sentence.title, members: cells.words, keys, rows: [], order: { head: cells.head, tails: cells.tails, starts: cells.starts } } };
 }
 
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, i) => item === b[i]);

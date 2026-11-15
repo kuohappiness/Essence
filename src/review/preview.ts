@@ -2,6 +2,7 @@ import type { Deck, Target } from '../core/deck/index.ts';
 import { cardOf, pickPreviewCards } from '../core/study/index.ts';
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
+import { isEnglish } from './english.ts';
 import { createPreviewFlow } from './flow.ts';
 import type { CardView, Session, View } from './session.ts';
 
@@ -66,7 +67,7 @@ export function createPreview(options: PreviewOptions): Session | null {
     }
     const { revealed, allowed, speakable, typed, pick } = flow.view();
     const view: CardView = {
-      kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: card.target.direction !== null,
+      kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: isEnglish(card),
       speakable, autoRead: flow.autoRead, viewing: null, shown: index, nextLabel: '下一張',
     };
     return { kind: 'card', top, card: view };

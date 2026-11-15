@@ -229,8 +229,11 @@ export interface CardGroup {
   members: readonly string[];
   keys: readonly string[];
   rows: readonly { member: string; lt: string | null; anchor: string | null }[];
-  /** 全詩順序卡才有（D-187、D-204）：第一格前面的字、每一格後面接的字。這時 title 是詩名、members 是每一格的句子、rows 是空的。 */
-  order?: { head: string; tails: readonly string[] };
+  /**
+   * 排序卡才有（D-187、D-204）：第一格前面的字、每一格後面接的字。這時 title 是詩名、members 是每一格的句子、rows 是空的。
+   * 英文的句子排序（tasks/english-typed-order.md §4）多一個 starts：哪幾格在句首，放進去的字第一個字母顯示成大寫；這時 members 是詞塊。
+   */
+  order?: { head: string; tails: readonly string[]; starts?: readonly boolean[] };
 }
 
 export interface Card {

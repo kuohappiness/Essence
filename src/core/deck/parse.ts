@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { readOrder, readPick, typedAnswer } from './question-types.ts';
+import { pairWordOf, readOrder, readPick, readSentence, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -172,6 +172,10 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     const target: Target = { id, name, line: root.line, implicit, section: root.section,
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
+    // 文法與變化（tasks/english-typed-order.md §1）：從名稱認，題目讀之前就要知道要不要打字。
+    const typing = readTyping(target);
+    if (typing) target.typing = typing;
+    if (target.direction === 'en-zh' && target.pairKey !== null) target.pairWord = pairWordOf(target.pairKey);
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
       problems.push({ line: node.line, targetLine: root.line, level, code, message, ...(columns ? { columns } : {}) });
       if (level === 'error') target.ok = false;
@@ -314,10 +318,18 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
           const read = typedAnswer(answer);
           typed = read.typed;
           if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
+        } else if (target.typing) {
+          // 文法與變化讀不成打字時這一題照翻面，只提示（§1-3）：結尾的詞別科也可能用。
+          const read = typedAnswer(answer);
+          const invalid = read.problem?.code === 'typed-answer-invalid';
+          typed = invalid ? null : read.typed;
+          if (invalid) addProblem(node, 'typed-answer-invalid', '文法與變化的答案只能是單行英文，好幾個答案用 | 分開；這一題照翻面出');
+          else if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
+      else if (target.typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字');
       return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
     }
     // 全詩順序卡的解釋（D-204 第 5、7 點、L2 R7）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
@@ -340,6 +352,8 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     if (pick.group) target.group = pick.group;
     const order = readOrder(target, notes ?? []);
     if (order) target.order = order;
+    const sentence = order ? null : readSentence(target);
+    if (sentence) target.sentence = sentence;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;

@@ -189,6 +189,22 @@ function checkPick(text: string, deck: Deck, issue: Report): void {
   }
 }
 
+/**
+ * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做。
+ * 結尾是排序、空格裡有英文卻不是句子排序（也不是全詩）的，同樣算錯誤。
+ */
+function checkEnglish(deck: Deck, issue: Report): void {
+  for (const p of deck.problems) {
+    const typing = deck.targets.find(t => t.line === p.targetLine)?.typing;
+    if (typing && (p.code === 'typed-answer-invalid' || p.code === 'cloze-not-typed')) issue(p.line + 1, '錯誤', 'english-typed-invalid', p.message.replace(/；這一題照翻面出$/, '').replace(/照一般翻面，不要求打字$/, '要寫成問答題：句子挖一個 ＿＿ :: 答案'));
+  }
+  for (const t of deck.targets) {
+    if (t.sentence || t.order || !/[\s）)]排序$/.test(t.name)) continue;
+    const english = t.prompts.some(p => p.kind === 'cloze' && p.blanks.some(b => /\p{Script=Latin}/u.test(p.text.slice(b.start, b.end))));
+    if (english) issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點");
+  }
+}
+
 interface Question { line: number; raw: string; kind: 'qa' | 'cloze'; front: string; back: string; multi?: boolean; supplements: TreeNode[] }
 type Where = 'body' | 'candidate' | 'existing';
 /** 檢查時認出的一個學習目標（本文、候選卡片、加進已有的學習目標）。 */
@@ -447,6 +463,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const understanding = targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${String(understanding)}/${String(n)}，少於三分之一（自然預設規則 1）`);
   checkPick(text, deck, issue);
+  checkEnglish(deck, issue);
   // 正式解析器判成 error 的目標（ok: false）複習時不會出：一律算錯誤，不靠這裡各讀各的（L2-3，例如中翻英的答案不是單行英文）。同一行這裡已經報過的不重複。
   const reported = new Set(issues.filter(each => each.level === '錯誤').map(each => each.line));
   for (const p of [...deck.problems.filter(each => each.level === 'error').map(each => ({ line: each.line + 1, code: each.code, message: each.message })), ...boxProblems]) {

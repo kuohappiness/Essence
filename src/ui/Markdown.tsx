@@ -29,6 +29,8 @@ export interface MarkdownProps {
   onSlot?: (slot: HTMLElement | null) => void;
   /** 比較卡的空格裡的東西（和 tail 一樣用 createPortal）。 */
   slotNode?: React.ReactNode;
+  /** 英文的句子排序：一句好幾格，第 i 個 ＿＿ 放第 i 個（第一個優先於 slotNode）。 */
+  slotNodes?: readonly React.ReactNode[];
   /** 接在最後一個字後面的東西（喇叭，D-145）：和最後一個字包在一起，換行時不會單獨掉到下一行。 */
   tail?: React.ReactNode;
   /** 英文卡的題目：冠詞和後面的字連在一起換行（glueArticles）。 */
@@ -55,7 +57,9 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   latest.current = props;
   const [tailEl, setTailEl] = useState<HTMLElement | null>(null);
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
+  const [moreEls, setMoreEls] = useState<HTMLElement[]>([]);
   const { app, text, sourcePath, mode = 'plain', lines = 0 } = props;
+  const slotCount = props.slotNodes?.length ?? 1;
   useEffect(() => {
     const element = host.current;
     if (!element) return;
@@ -69,9 +73,9 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       try {
         await MarkdownRenderer.render(app, text, container, sourcePath, component);
         if (!active) return;
-        const { slot, tail, slotMissing } = postProcess(container, { mode, lines, english: !!latest.current.english });
+        const { slot, slots, tail, slotMissing } = postProcess(container, { mode, lines, english: !!latest.current.english, slots: slotCount });
         applyState(container, latest.current);
-        if (mode === 'pick') setSlotEl(slot);
+        if (mode === 'pick') { setSlotEl(slot); setMoreEls(slots.slice(1)); }
         // 比較句解析判定有一個空格，畫面卻找不到（渲染器的特例）：空格放在句尾，這張照常能答，記一行（D-155，§3）。
         if (slotMissing) latest.current.onFail?.(Error('比較句的畫面找不到空格：' + text), sourcePath);
         // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
@@ -96,8 +100,9 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       container.remove();
       setTailEl(null);
       setSlotEl(null);
+      setMoreEls([]);
     };
-  }, [app, text, sourcePath, mode, lines]);
+  }, [app, text, sourcePath, mode, lines, slotCount]);
   // 翻面：不重新渲染，只切換空格與線上的字。
   useLayoutEffect(() => {
     const container = host.current?.querySelector<HTMLElement>('.ec-markdown');
@@ -106,6 +111,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   return <>
     <div className={'ec-markdown-host' + (props.className ? ' ' + props.className : '')} ref={host} />
     {tailEl && props.tail ? createPortal(props.tail, tailEl) : null}
-    {slotEl && props.slotNode ? createPortal(props.slotNode, slotEl) : null}
+    {slotEl && (props.slotNodes?.[0] ?? props.slotNode) ? createPortal(props.slotNodes?.[0] ?? props.slotNode, slotEl) : null}
+    {moreEls.map((el, i) => props.slotNodes?.[i + 1] ? createPortal(props.slotNodes[i + 1], el, String(i + 1)) : null)}
   </>;
 }

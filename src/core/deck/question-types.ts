@@ -1,5 +1,5 @@
 import { maskInline } from './markdown.ts';
-import type { PickGroup, PoemOrder, ProblemCode, Prompt, Target } from './types.ts';
+import type { PickGroup, PoemOrder, ProblemCode, Prompt, SentenceCells, SentenceOrder, Target, Typing } from './types.ts';
 
 // 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
@@ -25,6 +25,9 @@ export function typedAnswer(answer: string): TypedAnswer {
 }
 
 // ── 點選填空（D-182、tasks/question-type-seam.md §3）：程式認括號，不認結尾的詞；結尾只決定提示。 ──
+
+/** 拉丁字母：空格裡有它的排序卡是英文的句子（tasks/english-typed-order.md §4-1）。 */
+const LATIN = /\p{Script=Latin}/u;
 
 /** 只折全半形（U+FF01～FF5E），不做整串 NFKC：`①` 和 `1` 不同。 */
 const foldWidth = (text: string): string => text.replace(/[！-～]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xFEE0));
@@ -149,7 +152,7 @@ export function readPick(target: Target): PickReading {
 
 /**
  * 這個目標是不是全詩順序卡：名稱最後一段是「排序」（前面要有空白或右括號），只有一題，是兩格以上的填空。
- * 不是時照原題型（填空翻面），不另外提示：英文的排序（D-193）寫成問答題，還沒接上。
+ * 不是時照原題型（填空翻面），不另外提示；空格裡有英文的是句子排序（readSentence）。
  */
 export function readOrder(target: Target, notes: readonly string[]): PoemOrder | null {
   const { name, prompts } = target;
@@ -158,8 +161,102 @@ export function readOrder(target: Target, notes: readonly string[]): PoemOrder |
   if (prompt?.kind !== 'cloze' || prompt.blanks.length < 2) return null;
   const { text, blanks } = prompt;
   const lines = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).trim());
-  if (lines.some(line => !line)) return null;
+  // 空格裡有英文的是句子排序（tasks/english-typed-order.md §4-1）。
+  if (lines.some(line => !line) || lines.some(line => LATIN.test(line))) return null;
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const title = name.replace(/\s*排序$/, '').replace(/(^|\s)全詩$/, '').trim();
   return { title, head: text.slice(0, blanks[0].start), lines, tails, notes };
+}
+
+// ── 英文的文法與變化（D-193 第 5、6 點、tasks/english-typed-order.md §1）：從名稱的結尾認，問答題打字。 ──
+
+const INFLECTIONS: ReadonlySet<string> = new Set(['過去式', '過去分詞', '複數', '比較級', '最高級']);
+
+/** 去掉成對的 `**`（名稱的粗體）。 */
+const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1');
+/** 配對用的鍵：pickKey 之後再去掉最後一組括號（全半形已經折成半形）。 */
+const withoutMeaning = (key: string): string => key.replace(/\s*\([^()]*\)\s*$/, '').trim();
+
+/**
+ * 名稱結尾是「文法」或變化種類的目標（§1-1）：最上層直接寫題目、有方向、名稱讀得出點選填空的組都不是。
+ * 文法的提示是第一個左括號前面那段（§1-4）；變化的提示是原形（去掉最後一組全形括號，同 baseForm），配對鍵照 §1-5。
+ */
+export function readTyping(target: Pick<Target, 'name' | 'implicit' | 'direction'>): Typing | null {
+  const { name } = target;
+  if (target.implicit || target.direction !== null || name.includes('==') || readGroup(name)) return null;
+  const ending = endingOf(name);
+  if (ending === null || (ending !== '文法' && !INFLECTIONS.has(ending))) return null;
+  const word = name.slice(0, name.length - ending.length).trim();
+  if (!word) return null;
+  if (ending === '文法') {
+    const point = unbold(word).split(/[（(]/)[0].trim();
+    return { kind: 'grammar', hint: point || null, pair: null };
+  }
+  const base = unbold(word).replace(/\s*（[^（）]*）\s*$/, '').trim();
+  const key = pickKey(word);
+  const exact = withoutMeaning(key) !== key;
+  return { kind: 'inflection', hint: base || null, pair: { key, exact } };
+}
+
+/** 英翻中的 pairKey 配對用的寫法（§3-1）。 */
+export function pairWordOf(pairKey: string): { exact: string; base: string } {
+  const exact = pickKey(pairKey);
+  return { exact, base: withoutMeaning(exact) };
+}
+
+/** 題目有沒有給文法點（§2-2）：去掉 `**`、`==`、`*`，全半形折成一樣、不分大小寫，含有這串字。 */
+export function mentions(question: string, point: string): boolean {
+  const plain = (text: string): string => foldWidth(text.replace(/\*\*|==|\*/g, '')).replace(/\s+/g, ' ').toLowerCase();
+  return plain(question).includes(plain(point).trim());
+}
+
+// ── 英文的句子排序（D-193 第 8 點、§4）：和全詩順序卡同一個結尾，空格裡有英文的是句子。 ──
+
+/** 拿掉的結尾標點（§4-5）。 */
+const TRAILING = /[.,?!;:。，？！；：]+$/u;
+/** 前面是這些（去掉空白與開引號、開括號後的最後一個字）就算句首（§4-6）。 */
+const SENTENCE_END = /[.?!:。？！：\p{Script=Han}\u3000-\u303f\uff00-\uffef]$/u;
+
+/** 句首的詞塊改小寫（§4-6）：第一個詞第一個字母大寫、後面不是全部大寫、不是 I 或 I' 開頭的。 */
+function lowerFirst(word: string): string {
+  const first = /^\S+/.exec(word)?.[0] ?? '';
+  if (/^I(?:$|['’])/.test(first) || !/^\p{Lu}/u.test(first)) return word;
+  const rest = first.slice(1).replace(/[^\p{L}]/gu, '');
+  if (rest && rest === rest.toUpperCase()) return word;
+  return word.charAt(0).toLowerCase() + word.slice(1);
+}
+
+/** 一題的格（§4-5、§4-6）；有一格拿掉標點後是空的，或空格裡沒有英文時是 null。 */
+function sentenceCells(prompt: Prompt): SentenceCells | null {
+  if (prompt.kind !== 'cloze' || prompt.blanks.length < 2) return null;
+  const { text, blanks } = prompt;
+  const raw = blanks.map(blank => text.slice(blank.start + 2, blank.end - 2).trim());
+  if (!raw.some(word => LATIN.test(word))) return null;
+  const head = text.slice(0, blanks[0].start);
+  const between = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
+  const words: string[] = [], tails: string[] = [], starts: boolean[] = [];
+  for (const [i, word] of raw.entries()) {
+    const punctuation = TRAILING.exec(word)?.[0] ?? '';
+    const bare = word.slice(0, word.length - punctuation.length).trim();
+    if (!bare) return null;
+    // 前面的整段（含前面的格），去掉填空的記號再看最後一個字。
+    const before = text.slice(0, blanks[i].start).replace(/==/g, '').replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
+    const start = before === '' || SENTENCE_END.test(before);
+    words.push(start ? lowerFirst(bare) : bare);
+    tails.push(punctuation + between[i]);
+    starts.push(start);
+  }
+  return { head, words, tails, starts };
+}
+
+/**
+ * 英文的句子排序卡（§4-1）：名稱最後一段是「排序」、沒有方向也沒有組，每一題都是兩格以上的填空、空格裡有英文。
+ * 不是時照原題型（填空翻面），不提示，和全詩順序卡相同。
+ */
+export function readSentence(target: Target): SentenceOrder | null {
+  const { name, prompts } = target;
+  if (target.implicit || target.direction !== null || target.group || endingOf(name) !== '排序' || !prompts.length) return null;
+  const cells = prompts.map(sentenceCells);
+  if (cells.some(each => each === null)) return null;
+  return { title: name.replace(/\s*排序$/, '').trim(), prompts: cells as SentenceCells[] };
 }

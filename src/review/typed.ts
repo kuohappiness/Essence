@@ -1,7 +1,7 @@
-import { baseForm } from '../core/deck/index.ts';
+import { typedHint } from '../core/deck/index.ts';
 import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Rating } from '../core/study/index.ts';
-import { answerSpeech, canSpeak, openingSpeech } from './english.ts';
+import { answerSpeech, canSpeak, openingSpeech, questionOf } from './english.ts';
 import type { Flow, PreviewFlow, ReviewLine } from './flow.ts';
 import { chosen, RATINGS } from './ratings.ts';
 import { closest, copying, spelling, type Spelling } from './spelling.ts';
@@ -42,10 +42,13 @@ export interface TypedView {
 }
 
 const answersOf = (card: Card): readonly string[] => card.prompt.kind === 'qa' && card.prompt.typed ? card.prompt.typed : [];
-/** 打字卡的答案與原形：原形是 null、或和某一個答案比對起來一樣（checkTyped 的規則，D-158）時跳過第 2 步（D-121）。 */
+/**
+ * 第 2 步的提示：中翻英與變化是原形，文法是文法點（tasks/english-typed-order.md §2）。沒有提示、題目已經給了文法點，
+ * 或提示和某一個答案比對起來一樣（checkTyped 的規則，D-158）時跳過第 2 步（D-121）。
+ */
 function hintOf(card: Card): string | null {
   const answers = card.prompt.kind === 'qa' ? card.prompt.typed ?? [] : [];
-  const base = baseForm(card.target);
+  const base = typedHint(card.target, questionOf(card.prompt));
   if (base === null || answers.some(answer => typedKey(answer) === typedKey(base))) return null;
   return base;
 }

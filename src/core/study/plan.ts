@@ -163,6 +163,23 @@ export function planToday(input: TodayInput): Today {
     }
   }
 
+  // 變化目標（D-193 第 5 點、tasks/english-typed-order.md §3）：還沒開始時，同一篇配對得上、今天是候選的英翻中有一個記得了才出；
+  // 一個候選都沒有就照常出。名稱有括號的只配同一個意思，沒有括號的配這個字任一個意思。
+  for (const entry of decks) {
+    if (entry.deck.props.isTranscript || entry.deck.props.status !== 'active') continue;
+    const words = entry.deck.targets.flatMap(target => {
+      const c = target.pairWord && target.id !== null ? candidates.get(target.id) : undefined;
+      return c && c.target === target && target.pairWord ? [{ c, word: target.pairWord }] : [];
+    });
+    for (const target of entry.deck.targets) {
+      const pair = target.typing?.pair;
+      const c = pair && target.id !== null ? candidates.get(target.id) : undefined;
+      if (!pair || !c || c.target !== target || c.memory) continue;
+      const mates = words.filter(({ word }) => (pair.exact ? word.exact : word.base) === pair.key);
+      if (mates.length && !mates.some(({ c: en }) => remembered(en))) dropped.add(c.id);
+    }
+  }
+
   const sorted = [...candidates.values()].filter(c => shows(c) && !dropped.has(c.id));
   sorted.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || compareInLane(a, b) || compareText(a.id, b.id));
   const ordered = newGroupsTogether(sorted);

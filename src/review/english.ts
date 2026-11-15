@@ -59,19 +59,27 @@ export function fillBlank(question: string, answer: string): string | null {
 
 /** 題目的文字。 */
 export const questionOf = (prompt: Prompt): string => prompt.kind === 'qa' ? prompt.question : prompt.text;
+/** 英文的打字卡：中翻英、文法、變化（tasks/english-typed-order.md §6-3）：答案出現時念、之後才有喇叭。 */
+const typedEnglish = (card: Card): boolean => card.target.direction === 'zh-en' || card.target.typing !== undefined;
+/** 有喇叭的英文卡：英翻中與英文的打字卡。 */
+export const speaksEnglish = (card: Card): boolean => card.target.direction !== null || card.target.typing !== undefined;
+/** 英文的卡（冠詞連著換行、中文句子後面英文換行）：會念的，再加上英文的句子排序。 */
+export const isEnglish = (card: Card): boolean => speaksEnglish(card) || card.target.sentence !== undefined;
 /** 題目一出現就念的：英翻中的題目念英文（D-116）；其他不念。 */
 export function openingSpeech(card: Card): readonly string[] | null {
   const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
   return parts.length ? parts : null;
 }
-/** 答案出現時念的：中翻英先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
+/** 答案出現時念的：英文的打字卡先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
 export function answerSpeech(card: Card, answer: string): readonly string[] | null {
-  if (card.target.direction !== 'zh-en') return null;
-  const sentence = fillBlank(questionOf(card.prompt), answer);
+  if (!typedEnglish(card)) return null;
+  const filled = fillBlank(questionOf(card.prompt), answer);
+  // 文法與變化的括號是給的原形（`(know)`），句子裡沒有這段，不念（tasks/english-typed-order.md §6-3）。
+  const sentence = filled !== null && card.target.typing ? filled.replace(/\s*\([^()]*\)/g, '').trim() : filled;
   return sentence ? [answer, sentence] : [answer];
 }
-/** 喇叭現在可以出現：英翻中隨時；中翻英答案出現之後（D-082）。 */
-export const canSpeak = (card: Card, revealed: boolean): boolean => card.target.direction !== null && (card.target.direction === 'en-zh' || revealed);
+/** 喇叭現在可以出現：英翻中隨時；英文的打字卡答案出現之後（D-082）。 */
+export const canSpeak = (card: Card, revealed: boolean): boolean => speaksEnglish(card) && (card.target.direction === 'en-zh' || revealed);
 
 /** 中文字與全形標點。 */
 const CJK =/[\p{Script=Han}　-〿＀-￯]/u;
