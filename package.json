@@ -27,7 +27,8 @@
     "prepare": "git config core.hooksPath .githooks",
     "bench": "node tools/bench-study.ts",
     "export-compare": "node tools/export-compare.ts",
-    "progress-board": "node tools/progress-board.ts"
+    "progress-board": "node tools/progress-board.ts",
+    "roadmap-board": "node tools/roadmap-board.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

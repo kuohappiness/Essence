@@ -2,6 +2,8 @@
 
 更新：2026-11-14
 
+手機看進度：[進度白板](https://kuohappiness.github.io/Essence-Cards/roadmap.html)，由這份的「現在在哪裡」與「已完成」自動產生，合併進 `main` 後一兩分鐘更新（`tools/roadmap-board.ts`）。
+
 ## 現在在哪裡
 
 v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開工的 v1 工作看 [backlog 的 v1 任務](backlog.md#v1-需要做的任務)，要找決定看[決策索引](decisions.md#索引)（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
