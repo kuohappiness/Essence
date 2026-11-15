@@ -160,3 +160,18 @@ void test('兩句文字相同：字鍵照位置算，點淡掉的那個是搬它
   fresh.s.act({ kind: 'key', key: LINES[0], at: d });
   assert.deepEqual(texts(fresh.s), [LINES[0], LINES[0], '', ''], '同一個鍵 0.3 秒內連點不算');
 });
+
+void test('再選時點淡掉的同句鍵：已排對的格保留它的鍵，這一格換用另一個同句的鍵，兩個都淡（L2 R5）', async t => {
+  const text = POEM.replace('==夜靜春山空==', '==人閒桂花落==');
+  const { h, s } = await open(t, text);
+  const keys = view(s).card.group?.keys ?? [];
+  const [a, b] = keys.flatMap((key, i) => key === LINES[0] ? [i] : []);
+  const at = (index: number): void => { h.clock.now += 400; s.act({ kind: 'key', key: keys[index], at: index }); };
+  const faded = (): number[] => pick(s).used.flatMap((on, i) => on ? [i] : []);
+  for (const index of [a, keys.indexOf(LINES[2]), b, keys.indexOf(LINES[3])]) at(index);
+  check(h, s);
+  assert.deepEqual([stage(s), pick(s).cursor], ['retry', 1]);
+  at(a);
+  assert.deepEqual([pick(s).cells.map(cell => cell.state), pick(s).cursor], [['right', 'near', 'retry', 'right'], 2]);
+  assert.deepEqual(faded().sort(), [a, b, keys.indexOf(LINES[3])].sort(), '兩個同句的鍵都淡');
+});

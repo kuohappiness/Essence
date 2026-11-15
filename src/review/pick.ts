@@ -111,7 +111,7 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     }
     if (value === cell.first) return false;
     cell.filled = value;
-    cell.held = index;
+    cell.held = index === null ? null : retryIndex(cell, value, index);
     cell.retry = value === cell.answer ? 'right' : 'wrong';
     cell.status = value === cell.answer ? 'near' : 'miss';
     nextRetry();
@@ -126,6 +126,16 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     const held = new Set(cells.map(cell => cell.held));
     const same = keys.flatMap((key, i) => key === value ? [i] : []);
     return same.find(i => !held.has(i)) ?? same[0] ?? -1;
+  }
+
+  /**
+   * 再選時這一格記成哪個鍵（L2 R5）：點的鍵被已經排對的格佔著，就換用這一句沒被排對的格佔著的鍵，兩個同句的鍵才都淡；排對的格不動。
+   */
+  function retryIndex(cell: Cell, value: string, index: number): number {
+    const locked = new Set(cells.flatMap(each => each !== cell && each.held !== null && (each.status === 'right' || each.status === 'near') ? [each.held] : []));
+    if (!locked.has(index)) return index;
+    const free = keys.findIndex((key, i) => key === value && !locked.has(i));
+    return free === -1 ? index : free;
   }
 
   /**
