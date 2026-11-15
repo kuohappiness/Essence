@@ -123,9 +123,31 @@ export function pickCardOf(fields: { deck: string; isNew: boolean; early: boolea
 function orderCardOf(fields: Omit<Card, 'typed' | 'blanks'>, order: PoemOrder, times: number): Card {
   const { lt, target, prompt } = fields;
   const blanks = order.lines.map((answer, cell): Blank => ({ lt, target, prompt, answer, cell }));
-  const keys = shuffled(order.lines, seeded(prompt.fingerprint + ' ' + String(times)));
-  if (keys.every((key, i) => key === order.lines[i])) keys.push(keys.shift() as string);
+  // 每一次都和上一次不同（L2 R4）：從第 0 次一路算到這一次，幾句的詩算幾百次也很快。
+  let keys: string[] = [];
+  for (let at = 0; at <= times; at++) keys = orderKeys(order.lines, prompt.fingerprint + ' ' + String(at), keys);
   return { ...fields, typed: false, blanks, group: { title: order.title, members: order.lines, keys, rows: [], order: { head: order.head, tails: order.tails } } };
+}
+
+const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, i) => item === b[i]);
+
+/**
+ * 全詩順序卡一次的字鍵：打亂；照詩的順序就把第一個移到最後。和上一次（before）一樣時，換掉兩句的位置，取第一個不照詩的順序的。
+ * 兩句的詩、句子都相同時沒有別的排法，照舊。
+ */
+function orderKeys(lines: readonly string[], seed: string, before: readonly string[]): string[] {
+  const keys = shuffled(lines, seeded(seed));
+  if (sameOrder(keys, lines)) keys.push(keys.shift() as string);
+  if (!sameOrder(keys, before)) return keys;
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      if (keys[i] === keys[j]) continue;
+      const swapped = [...keys];
+      [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+      if (!sameOrder(swapped, lines)) return swapped;
+    }
+  }
+  return keys;
 }
 
 /**
