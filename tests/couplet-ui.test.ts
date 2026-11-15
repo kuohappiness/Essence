@@ -87,6 +87,11 @@ void test('題目底下與目標底下的記憶錨點各自一行一列，兩份
   assert.deepEqual(anchorRows(own), [['題甲', '題乙']]);
 });
 
+void test('有格式沒拆句時，整句照一般的方式換行，不套不換行的樣式（L2 R6）', async t => {
+  const ui = await show(t, preview(POEM.replace('人閒桂花落，==夜靜春山空==。', '**人閒桂花落，==夜靜春山空==。**'), false));
+  assert.deepEqual(markdowns(ui.find('ec-couplet')[0]).map(each => each.props.className), ['ec-couplet-line is-whole']);
+});
+
 void test('沒有小標題時不畫詩名；不是接句卡的填空照舊', async t => {
   const bare = await show(t, preview(POEM.replace('### 鳥鳴澗\n', ''), false));
   assert.deepEqual(bare.find('ec-couplet-title'), []);

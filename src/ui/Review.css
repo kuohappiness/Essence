@@ -63,6 +63,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-couplet-title + .ec-q:not(.is-sticky) { margin-top: 0; }
 .ec-couplet { display: flex; flex-wrap: wrap; }
 .ec-couplet-line { white-space: nowrap; }
+/* 沒拆句（有粗體、連結這類格式，或只有一句）：照一般的方式換行，不會被裁掉（L2 R6） */
+.ec-couplet-line.is-whole { flex: 1 1 100%; min-width: 0; white-space: normal; }
 .ec-q .ec-couplet-line .ec-markdown p { margin: 0; }
 .ec-couplet .ec-blank, .ec-couplet .ec-blank.ec-filled { min-width: 0; margin: 0; border-color: var(--ec-ink); }
 .ec-couplet .ec-blank-answer { max-width: none; overflow: visible; font-weight: inherit; }

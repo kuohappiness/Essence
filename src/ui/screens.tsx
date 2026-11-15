@@ -89,7 +89,7 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
       {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
       {/* 喇叭接在最後一個字後面（D-145，iPhone 回饋），不放在第一行右邊 */}
       {couplet
-        ? <div className="ec-couplet">{couplet.lines.map((line, index) => <Markdown key={index} className="ec-couplet-line" app={app} text={line} sourcePath={card.deck} mode="cloze" revealed={parts.revealedQuestion}
+        ? <div className="ec-couplet">{couplet.lines.map((line, index) => <Markdown key={index} className={'ec-couplet-line' + (couplet.lines.length === 1 ? ' is-whole' : '')} app={app} text={line} sourcePath={card.deck} mode="cloze" revealed={parts.revealedQuestion}
           tail={index === lastLine ? <Speaker texts={speak(parts.spoken)} say={say} /> : undefined} onReady={index === lastLine ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />)}</div>
         : <Markdown app={app} text={question} sourcePath={card.deck} mode={parts.mode} revealed={parts.revealedQuestion}
           lines={parts.lines} words={parts.words} onSlot={parts.lines > 0 ? onSlot : undefined}
