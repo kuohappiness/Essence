@@ -18,25 +18,53 @@ const WELL_KNOWN_DAYS = 21;
 const PAIR_SPACING = 10;
 
 interface Item { id: string; path: string; entry: DeckEntry; target: Target }
-type Partner = (item: Item) => Item | undefined;
+/** 配對與初學順序只看這幾項：全部卡的 Item 與每日的份都有。 */
+interface Placed { id: string; path: string; target: Target }
+type Partner<T extends Placed> = (item: Placed) => T | undefined;
+
+/** 接句卡配對用的位置：同一篇、同一個詩名小標題（照第幾個標題）、第幾句；沒有詩名或編號時 null。index 給了就換成那一句。 */
+export function coupletKey(item: Placed, index?: number): string | null {
+  const { couplet, sectionIndex } = item.target;
+  if (!couplet || couplet.title === null || couplet.index === null) return null;
+  return JSON.stringify([item.path, sectionIndex, index ?? couplet.index]);
+}
 
 /**
- * 給一張卡，找這一輪裡它的對方。現在只認英文的兩個方向：同一篇、pairKey 相同、方向相反，各方向取前面的。
- * 之後接句（D-185 第 8 點）在這裡加一個認法，選卡不用改。
+ * 給一張卡，找它的對方（D-189 第 1 點）。english：英文的兩個方向，同一篇、pairKey 相同、方向相反，各方向取前面的；
+ * 每日的份照 D-069，不傳。接句卡（D-185 第 8 點）：同一篇、同一個詩名小標題（照第幾個標題，同名的兩首分得開，L2 R1），第 2k−1 句和第 2k 句；
+ * 缺一邊、編號重複或沒有詩名時不配對。items 是找對方的範圍，可以比要選的卡多（每日的份從整篇找，L2 R3）。
  */
-function partners(items: readonly Item[]): Partner {
-  const keyOf = (item: Item, direction: string): string => JSON.stringify([item.path, item.target.pairKey, direction]);
-  const sides = new Map<string, Item>();
+export function partners<T extends Placed>(items: readonly T[], english: boolean): Partner<T> {
+  const keyOf = (item: Placed, side: string | number): string => JSON.stringify([item.path, item.target.pairKey, side]);
+  const sides = new Map<string, T>();
+  const lines = new Map<string, T | null>();
   for (const item of items) {
     const { pairKey, direction } = item.target;
-    if (pairKey === null || direction === null) continue;
+    const line = coupletKey(item);
+    if (line !== null) lines.set(line, lines.has(line) ? null : item);
+    if (!english || pairKey === null || direction === null) continue;
     const key = keyOf(item, direction);
     if (!sides.has(key)) sides.set(key, item);
   }
   return item => {
-    const { direction } = item.target;
-    return direction === null ? undefined : sides.get(keyOf(item, direction === 'en-zh' ? 'zh-en' : 'en-zh'));
+    const { direction, couplet } = item.target;
+    if (couplet) {
+      const line = coupletKey(item);
+      if (line === null || couplet.index === null || !lines.get(line)) return undefined;
+      return lines.get(coupletKey(item, couplet.index % 2 ? couplet.index + 1 : couplet.index - 1) ?? '') ?? undefined;
+    }
+    return !english || direction === null ? undefined : sides.get(keyOf(item, direction === 'en-zh' ? 'zh-en' : 'en-zh'));
   };
+}
+
+/**
+ * 全詩順序卡的初學順序（D-189 第 1 點、tasks/couplet-cards.md §5）：新的排序卡，在 fresh 裡同一篇同一個小標題（照第幾個標題）還有新的接句卡時先拿掉，
+ * 不拿來填間隔；那些接句卡都出過之後才回來。排序卡學過了照自己的到期時間。
+ */
+export function holdOrders<T extends Placed>(fresh: readonly T[], isNew: (item: T) => boolean): T[] {
+  const poemOf = (item: T): string => JSON.stringify([item.path, item.target.sectionIndex]);
+  const learning = new Set(fresh.filter(item => item.target.couplet && item.target.sectionIndex !== undefined && isNew(item)).map(poemOf));
+  return fresh.filter(item => !(item.target.order && item.target.sectionIndex !== undefined && isNew(item) && learning.has(poemOf(item))));
 }
 
 /** 目標集合在卡組裡的樣子，照輸入的順序；不在卡組裡的（改掉了、刪掉了）不算。 */
@@ -65,8 +93,8 @@ function roundAnswers(reviews: readonly ReviewEntry[], since: number): { valid: 
   return { valid, any };
 }
 
-/** 這一輪每個目標最後一次作答之後，又答過幾個不同的目標；算的作答和 roundAnswers 的 valid 相同。 */
-function answeredAfter(reviews: readonly ReviewEntry[], since: number): Map<string, number> {
+/** since 之後每個目標最後一次作答之後，又答過幾個不同的目標；不算錯題補強（和 roundAnswers 的 valid 相同）。 */
+export function answeredAfter(reviews: readonly ReviewEntry[], since: number): Map<string, number> {
   const after = new Map<string, number>();
   const first = firstAtOrAfter(reviews, since);
   for (let i = reviews.length - 1; i >= first; i--) {
@@ -82,16 +110,28 @@ function answeredAfter(reviews: readonly ReviewEntry[], since: number): Map<stri
  * 照筆記順序一夠隔就出的話，最後幾個字沒有別張可以隔開（tasks/quiz-practice.md §2 的 40 個字）。
  * 都不夠隔時，在本來會選的那一群裡挑隔最多的，一樣多照原順序；只剩同一對也直接出，不讓學生等。
  */
-function chooseSpaced(ready: readonly Item[], fresh: readonly Item[], apart: (item: Item) => number | null): Item | undefined {
-  const enough = (item: Item): boolean => (apart(item) ?? PAIR_SPACING) >= PAIR_SPACING;
+export function chooseSpaced<T>(ready: readonly T[], fresh: readonly T[], apart: (item: T) => number | null): T | undefined {
+  const enough = (item: T): boolean => (apart(item) ?? PAIR_SPACING) >= PAIR_SPACING;
   const found = ready.find(enough) ?? fresh.find(item => apart(item) === null) ?? fresh.find(enough);
   if (found) return found;
-  let farthest: Item | undefined, most = -1;
+  let farthest: T | undefined, most = -1;
   for (const item of ready.length ? ready : fresh) {
     const gap = apart(item) ?? 0;
     if (gap > most) { farthest = item; most = gap; }
   }
   return farthest;
+}
+
+/** 對方最後一次作答之後答過幾個不同的其他目標；沒有對方、對方還沒答過是 null（chooseSpaced 的 apart）。 */
+export function apartOf<T extends Placed>(partner: Partner<Placed>, after: ReadonlyMap<string, number>): (item: T) => number | null {
+  return item => {
+    const other = partner(item);
+    const gap = other && after.get(other.id);
+    if (gap === undefined) return null;
+    // 自己不算「其他」：對方之後又答過這一張時少算一個。
+    const own = after.get(item.id);
+    return own !== undefined && own < gap ? gap - 1 : gap;
+  };
 }
 
 /** 一輪的總數與完成數；答錯再出不增加總數，答對才算完成。 */
@@ -106,7 +146,7 @@ export function practiceProgress(input: TodayInput, ids: readonly string[], sinc
  * 今天答過、還沒到期的（現在最容易忘的先；D-097 的補充，中途關掉再開時不會先把剛答過的再答一遍）；
  * 雙向配對的兩個方向都出，英翻中排在中翻英前面。記憶看 since 之前的紀錄，所以這一輪答過之後順序不會變。
  */
-function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number, partner: Partner): Item[] {
+function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number, partner: Partner<Item>): Item[] {
   const day = dayOf(since, input.offset);
   const start = dayStart(day, input.offset), end = dayStart(day + 1, input.offset);
   const dueOf = (item: Item, memory: Memory): number => dueAt(memory, retentionOf(input, item.entry, item.target));
@@ -147,7 +187,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const { valid, any } = roundAnswers(reviews, since);
   // 再出的時間看到現在為止全部的作答（含這一輪），和今天的份相同。
   const latest = replay(reviews.filter(entry => wanted.has(entry.lt)));
-  const partner = partners(items);
+  const partner = partners(items, true);
   const ready: { item: Item; at: number }[] = [];
   let waiting: { item: Item; at: number } | null = null;
   const fresh: Item[] = [];
@@ -160,16 +200,8 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     if (at <= input.now) ready.push({ item, at });
     else if (!waiting || at < waiting.at) waiting = { item, at };
   }
-  const after = answeredAfter(reviews, since);
-  const apart = (item: Item): number | null => {
-    const other = partner(item);
-    const gap = other && after.get(other.id);
-    if (gap === undefined) return null;
-    // 自己不算「其他」：對方之後又答過這一張時少算一個。
-    const own = after.get(item.id);
-    return own !== undefined && own < gap ? gap - 1 : gap;
-  };
-  const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(each => each.item), fresh, apart) ?? waiting?.item;
+  const apart = apartOf(partner, answeredAfter(reviews, since));
+  const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(each => each.item), holdOrders(fresh, each => !memories.has(each.id)), apart) ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const priorOf = (id: string): ReviewEntry[] => before.filter(entry => entry.lt === id && entry.src !== 'mistake');
   if (item.target.group) {

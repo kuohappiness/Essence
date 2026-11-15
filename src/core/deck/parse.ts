@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { readOrder, readPick, typedAnswer } from './question-types.ts';
+import { readCouplet, readOrder, readPick, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -169,7 +169,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     // 方向前面的空白半形全形都算，pairKey 不留尾端空白（tasks/question-type-seam.md §3 第 2 點）。
     const directionMatch = /[ 　]+(英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
-    const target: Target = { id, name, line: root.line, implicit, section: root.section,
+    const target: Target = { id, name, line: root.line, implicit, section: root.section, ...(root.sectionIndex === null ? {} : { sectionIndex: root.sectionIndex }),
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
@@ -318,9 +318,21 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
-      return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const own = anchorNotes(children);
+      if (own) promptNotes.set(cloze, own);
+      return cloze;
     }
-    // 全詩順序卡的解釋（D-204 第 5、7 點、L2 R7）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
+    // 全詩順序卡與接句卡的解釋（D-204 第 5、7 點、L2 R7、D-185 第 4 點）：第一個記憶錨點寫在同一行的內容與底下的子項目，一項一行，照這裡分好的結構，複習端不再切字串。
+    // 接句卡的題目底下也可以有自己的記憶錨點（§2-7，接句卡 L2 R2），同樣分好，放 promptNotes。
+    const anchorNotes = (items: readonly Item[]): string[] | null => {
+      for (const child of items) {
+        const anchor = ANCHOR_LABEL.exec(child.text);
+        if (anchor) return [anchor[1].trim(), ...child.children.map(each => markdown(each).trim())].filter(Boolean);
+      }
+      return null;
+    };
+    const promptNotes = new Map<Prompt, string[]>();
     let notes: string[] | null = null;
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
@@ -340,6 +352,8 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     if (pick.group) target.group = pick.group;
     const order = readOrder(target, notes ?? []);
     if (order) target.order = order;
+    const couplet = readCouplet(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? []);
+    if (couplet) target.couplet = couplet;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;

@@ -59,6 +59,16 @@ void test('§4-3 第 6 點：改動只有一個範圍，CRLF 照舊', () => {
   assert.equal(result.changes.length, 1);
 });
 
+void test('§4-3 第 6 點：後面還有別的小標題時，加出處、改成分行都通過核對（接句卡 L2 R5）', () => {
+  const rest = '### 第二節\n- 目標二\n    - Q2 :: A2\n';
+  const added = editSource({ text: HEAD + '- 目標\n    - Q :: A\n' + rest, target: TARGET, action: { kind: 'add', text: 'p.46', own: true }, version: VERSION });
+  assert.ok(added.ok, '新增出處');
+  assert.equal(added.text, HEAD + '- 目標\n    - 出處：p.46\n    - Q :: A\n' + rest);
+  const split = editSource({ text: HEAD + '- 目標\n    - Q :: A\n    - 出處：p.44、p.45\n' + rest, target: TARGET, action: { kind: 'add', text: 'p.46', own: true }, version: VERSION });
+  assert.ok(split.ok, '加第三段、改成分行');
+  assert.equal(split.text, HEAD + '- 目標\n    - Q :: A\n    - 出處：\n        - p.44\n        - p.45\n        - p.46\n' + rest);
+});
+
 // ── 核對器的反例（回報 R1、R7）：各做一個會被擋下的改法 ──
 
 const BASE = HEAD + '- 目標\n    - Q :: A\n    - 補充說明\n    - 錯題補強：單位、換算\n    - 出處：老師說過 p.44、p.45 知識快遞\n- 目標二\n    - Q2 :: A2\n    - 出處：p.30\n';
