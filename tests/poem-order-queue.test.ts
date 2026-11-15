@@ -36,7 +36,7 @@ function next(lines: readonly string[], now: string, pick: Pick = { subject: '�
 }
 const good = (time: string, lt: string): string => encodeEntry(time, { lt, r: 'good', v: print(lt) });
 
-void test('第一次學這首：照筆記順序先出四張接句，排序卡排在最後（D-189 第 1 點）', () => {
+void test('第一次學這首：四張接句隔開成第 1、3、2、4 句，排序卡排在最後（D-189 第 1 點）', () => {
   const data = input([], '2026-11-15T19:00:00.000+08:00');
   assert.deepEqual(planToday(data).share.map(item => item.lt), ['b3pmaa', 'b3pmab', 'b3pmac', 'b3pmad', 'b3pmae']);
   const lines: string[] = [];
@@ -46,7 +46,7 @@ void test('第一次學這首：照筆記順序先出四張接句，排序卡排
     order.push(card.lt);
     lines.push(good(`2026-11-15T19:0${String(i)}:40.000+08:00`, card.lt));
   }
-  assert.deepEqual(order, ['b3pmaa', 'b3pmab', 'b3pmac', 'b3pmad', 'b3pmae']);
+  assert.deepEqual(order, ['b3pmaa', 'b3pmac', 'b3pmab', 'b3pmad', 'b3pmae']);
 });
 
 void test('字鍵的順序每次出不同，同一次重來不變', () => {

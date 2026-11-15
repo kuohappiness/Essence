@@ -4,7 +4,7 @@ import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { shownWith } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
-import { practiceNext, practiceProgress } from './practice.ts';
+import { answeredAfter, apartOf, chooseSpaced, coupletKey, holdOrders, partners, practiceNext, practiceProgress } from './practice.ts';
 import type { PickMate } from './compose.ts';
 import type { Card, Next, Pick, Progress, QueueItem, ReviewEntry, ScopeCount, Slot, SubjectRow, Today, TodayInput } from './types.ts';
 
@@ -98,26 +98,41 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if ('more' in pick) scope = today.more.filter(item => { const pair = slotOf(today, item.lt).pair; return pair === null || !valid.has(pair); });
   else scope = shareOf(today, pick);
 
-  let ready: { item: QueueItem; at: number } | null = null;
+  // 接句一聯兩張隔開、全詩順序卡等同一首的新接句卡（D-189 第 1 點、tasks/couplet-cards.md §4、§5）：和全部卡同一套選法，作答從今天開始算；
+  // 只認接句，英文照 D-069。
+  const placed = scope.map(item => ({ id: item.lt, path: item.deck, target: slotOf(today, item.lt).target, item }));
+  const ready: { each: typeof placed[number]; at: number }[] = [];
   let waiting: { item: QueueItem; at: number } | null = null;
-  let fresh: QueueItem | null = null;
-  for (const item of scope) {
-    const entries = valid.get(item.lt);
-    if (!entries) { fresh ??= item; continue; }
+  const fresh: typeof placed = [];
+  for (const each of placed) {
+    const entries = valid.get(each.id);
+    if (!entries) { fresh.push(each); continue; }
     if (!wrong(entries.at(-1))) continue;
-    const at = againAt(slotOf(today, item.lt), entries);
-    if (at <= input.now) { if (!ready || at < ready.at) ready = { item, at }; }
-    else if (!waiting || at < waiting.at) waiting = { item, at };
+    const at = againAt(slotOf(today, each.id), entries);
+    if (at <= input.now) ready.push({ each, at });
+    else if (!waiting || at < waiting.at) waiting = { item: each.item, at };
   }
-  const item = ready?.item ?? fresh ?? waiting?.item;
+  // 對方先從這個範圍找，再加今天答過的：不在這個範圍（還沒到期、在另一個佇列）但今天答過的也要隔開（L2 R3）；
+  // 範圍外今天沒答過的同編號卡（暫停、停用、分到另一個佇列）不當對方（L2 R7、R8）。範圍外今天答過的，和範圍裡的卡同一個位置時讓給範圍裡的，
+  // 不把這個範圍裡完整的一對算成編號重複（L2 R8）；今天答過才暫停的照樣算。
+  const inScope = new Set(placed.map(each => each.id));
+  const taken = new Set(placed.map(each => coupletKey(each)));
+  const pool = [...placed, ...input.decks.flatMap(entry => entry.deck.targets.flatMap(target => {
+    if (target.id === null || inScope.has(target.id) || !valid.has(target.id)) return [];
+    const each = { id: target.id, path: entry.path, target }, key = coupletKey(each);
+    return key !== null && taken.has(key) ? [] : [each];
+  }))];
+  const apart = apartOf(partners(pool, false), answeredAfter(input.history.reviews, dayStart(today.day, today.offset)));
+  const early = !ready.length && !fresh.length;
+  const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(({ each }) => each), holdOrders(fresh, each => slotOf(today, each.id).memory === null), apart)?.item ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const slot = slotOf(today, item.lt);
-  if (slot.target.group) return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, !ready && !fresh) };
+  if (slot.target.group) return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);
   return { kind: 'card', card: cardOf({
     lt: item.lt, deck: item.deck, target: slot.target, prompt,
     isNew: slot.memory === null && !any.has(item.lt),
-    early: !ready && !fresh,
+    early,
   }, shownWith(slot.seen, valid.get(item.lt) ?? []).get(prompt.fingerprint)?.count) };
 }
 
