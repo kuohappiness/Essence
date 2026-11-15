@@ -22,6 +22,19 @@ function textNodes(root: Node): Text[] {
   return out;
 }
 
+/** root 底下所有的文字節點，含受保護的內容裡的（拿掉重複的記號用）。 */
+function allText(root: Node): Text[] {
+  const out: Text[] = [];
+  const walk = (node: Node): void => {
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child instanceof Text) out.push(child);
+      else walk(child);
+    }
+  };
+  walk(root);
+  return out;
+}
+
 /** node 在 root 裡的受保護內容裡面（嵌入筆記自己的螢光筆不是本題的填空，Codex 再查 R2）。 */
 function guarded(node: Node, root: Node): boolean {
   for (let el = node.parentElement; el && el !== root; el = el.parentElement) if (el.matches(PROTECTED)) return true;
@@ -34,7 +47,7 @@ const blockOf = (node: Node, container: HTMLElement): Element => node.parentElem
  * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、空格連著後面的標點、
  * 喇叭那一格。回傳放線的那一格（找不到 ＿＿ 或不是打字卡時是 null）與喇叭那一格。
  */
-export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement; slotMissing: boolean } {
+export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean; markers?: readonly string[]; breakFirst?: boolean }): { slot: HTMLElement | null; slots: HTMLElement[]; tail: HTMLElement; slotMissing: boolean } {
   const blanks: HTMLElement[] = [];
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
@@ -50,14 +63,62 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
     }
   }
   const typedSlot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
-  const pickSlot = options.mode === 'pick' ? insertPickSlot(container) : null;
-  const slotMissing = options.mode === 'pick' && !pickSlot;
+  // 英文的句子排序（tasks/english-typed-order.md §6-1、L2 R1）：每一格照自己的記號放，不找 ＿＿；找不到的格放在句尾。
+  const marked = options.mode === 'pick' && options.markers ? insertMarkedSlots(container, options.markers, !!options.breakFirst) : null;
+  const pickSlot = options.mode === 'pick' && !marked ? insertPickSlot(container) : null;
+  const slotMissing = marked ? marked.some(each => !each) : options.mode === 'pick' && !pickSlot;
+  const slots = marked ? marked.map(each => each ?? endSlot(container)) : [];
   // 比較卡一定要有空格（§3）：找不到時放在句尾。
-  const slot = typedSlot ?? pickSlot ?? (slotMissing ? endSlot(container) : null);
-  if (slot) blanks.push(slot);
+  const slot = marked ? slots.at(0) ?? null : typedSlot ?? pickSlot ?? (slotMissing ? endSlot(container) : null);
+  if (marked) blanks.push(...slots);
+  else if (slot) { blanks.push(slot); slots.push(slot); }
   if (options.english) glueText(container);
   blanks.forEach(gluePunctuation);
-  return { slot, tail: attachTail(container), slotMissing };
+  return { slot, slots, tail: attachTail(container), slotMissing };
+}
+
+/**
+ * 句子排序第 i 格在 Markdown 裡的記號：私用區的一個字（U+E000 起），渲染器原樣留著；題目本來的 ＿＿、相鄰的兩格都不會搞混（L2 R1）。
+ * 題目文字裡的私用區字先拿掉（stripSlotMarks），不會撞到。
+ */
+export const slotMark = (index: number): string => String.fromCharCode(0xe000 + index);
+const PRIVATE_USE = new RegExp('[' + String.fromCharCode(0xe000) + '-' + String.fromCharCode(0xf8ff) + ']', 'g');
+/** 題目文字裡的私用區字與會解成私用區字的字元參照（`&#57344;`、`&#xE000;`，L2 第二輪）都拿掉。 */
+export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE, '').replace(/&#(?:[xX]([0-9a-fA-F]+)|(\d+));/g, (reference, hex?: string, decimal?: string) => {
+  const code = hex ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
+  return code >= 0xe000 && code <= 0xf8ff ? '' : reference;
+});
+
+/**
+ * 照記號的順序各放一格；找不到（記號在程式碼、公式等受保護的內容裡）或畫面上不只一個（別的寫法也渲染出同一個字）的是 null，
+ * 那個記號從畫面上拿掉，不猜哪一個才是格（L2 第二輪）。
+ * 第一格前面的英文換行：breakFirst（第一格就是英文句子的開頭，L2 R5）或旁邊有英文時做一次。
+ */
+function insertMarkedSlots(container: HTMLElement, markers: readonly string[], breakFirst: boolean): (HTMLElement | null)[] {
+  const found = markers.map(marker => {
+    if ((container.textContent ?? '').split(marker).length !== 2) {
+      for (const node of allText(container)) if (node.textContent?.includes(marker)) node.textContent = node.textContent.replaceAll(marker, '');
+      return null;
+    }
+    for (const node of textNodes(container)) {
+      const text = node.textContent ?? '';
+      const at = text.indexOf(marker);
+      if (at < 0) continue;
+      const slot = emptySlot();
+      const after = node.splitText(at);
+      after.textContent = text.slice(at + marker.length);
+      node.parentNode?.insertBefore(slot, after);
+      return { slot, node, after };
+    }
+    return null;
+  });
+  const first = found.at(0);
+  if (first) {
+    const inBlock = textNodes(blockOf(first.node, container));
+    const at = inBlock.indexOf(first.after);
+    if (breakFirst || englishBeside(joined(inBlock.slice(0, at)), joined(inBlock.slice(at)))) breakBeforeEnglish(container, first.node);
+  }
+  return found.map(each => each?.slot ?? null);
 }
 
 /** 在 element 前面放一個空的 .ec-glue（裡面不換行），由呼叫的地方把內容照順序放進去。 */

@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parseDeck } from '../src/core/deck/index.ts';
+import { mergeHistory, planToday } from '../src/core/study/index.ts';
+import type { DeckEntry } from '../src/core/study/index.ts';
+
+// 變化目標的開始條件（D-193 第 5 點、tasks/english-typed-order.md §3）：同一篇配對得上的英翻中記得了才出。預期值照任務說明的邊界例子手寫。
+
+const NOW = '2026-11-15T19:00:00.000+08:00';
+const PATH = 'Essence Cards/英文/L3 單字.md';
+const deckOf = (body: string, path = PATH): DeckEntry => ({ path, deck: parseDeck(`---\n科目: 英文\n---\n${body}`) });
+const line = (lt: string, r: string, t: string): string => JSON.stringify({ t, lt, r, v: '12345678' });
+function share(decks: readonly DeckEntry[], lines: readonly string[] = [], filter: readonly string[] = []): string[] {
+  const history = mergeHistory([{ path: 'Essence Cards/紀錄/2026-11 PC-test.jsonl', text: lines.join('\n') }]);
+  const today = planToday({ decks, history, settings: { capMinutes: 60, retention: 0.9, filter }, exam: null, now: Date.parse(NOW), offset: 480 });
+  return [...today.share, ...today.more].map(item => item.lt);
+}
+
+const GO = `- go 英翻中 ^goenzh
+    - go :: 去
+- go 過去式 ^gopast
+    - Yesterday I ＿＿ to school.（去） :: went
+`;
+/** 昨天按太簡單：明天以後才到期（FSRS 第一次太簡單的間隔超過一天）。 */
+const REMEMBERED = line('goenzh', 'easy', '2026-11-14T19:00:00.000+08:00');
+
+void test('英翻中還沒紀錄：變化今天不出', () => {
+  assert.deepEqual(share([deckOf(GO)]), ['goenzh']);
+});
+
+void test('英翻中記住了、今天沒到期：變化照常出', () => {
+  assert.deepEqual(share([deckOf(GO)], [REMEMBERED]), ['gopast']);
+});
+
+void test('英翻中最後一次答錯：變化不出', () => {
+  assert.deepEqual(share([deckOf(GO)], [line('goenzh', 'miss', '2026-11-15T08:00:00.000+08:00')]), ['goenzh']);
+});
+
+void test('英翻中暫停：沒有候選的英翻中，變化照常出', () => {
+  const paused = GO.replace('    - go :: 去', '    - 狀態：暫停\n    - go :: 去');
+  assert.deepEqual(share([deckOf(paused)]), ['gopast']);
+});
+
+void test('英翻中在另一篇：這一篇沒有配對，變化照常出', () => {
+  const other = deckOf('- go 英翻中 ^goenzh\n    - go :: 去\n', 'Essence Cards/英文/L1 單字.md');
+  const here = deckOf('- go 過去式 ^gopast\n    - Yesterday I ＿＿ to school.（去） :: went\n');
+  assert.deepEqual(share([other, here]).sort(), ['goenzh', 'gopast']);
+});
+
+void test('變化有紀錄之後不再看英翻中', () => {
+  assert.deepEqual(share([deckOf(GO)], [line('gopast', 'miss', '2026-11-14T19:00:00.000+08:00')]).sort(), ['goenzh', 'gopast']);
+});
+
+const MEANINGS = `- go（走） 英翻中 ^gowalk
+    - go :: 走
+- go 過去式 ^gopast
+    - Yesterday I ＿＿ to school.（去） :: went
+- go（走） 過去式 ^gowpst
+    - He ＿＿ home.（走） :: went
+- go（去） 過去式 ^gogpst
+    - She ＿＿ there.（去） :: went
+`;
+
+void test('沒有括號的變化配這個字任一個意思；有括號的只配同一個意思，找不到配對照常出', () => {
+  assert.deepEqual(share([deckOf(MEANINGS)]), ['gowalk', 'gogpst']);
+  assert.deepEqual(share([deckOf(MEANINGS)], [line('gowalk', 'easy', '2026-11-14T19:00:00.000+08:00')]), ['gopast', 'gowpst', 'gogpst']);
+});
+
+void test('配對不分大小寫、全半形括號一樣', () => {
+  const deck = deckOf('- Light(輕的) 英翻中 ^ltenzh\n    - light :: 輕的\n- light（輕的） 比較級 ^ltcomp\n    - This bag is ＿＿ than that one.（輕的） :: lighter\n');
+  assert.deepEqual(share([deck]), ['ltenzh']);
+});
+
+void test('英翻中記住了但今天到期：還不算記得，變化不出（同中翻英，remembered）', () => {
+  assert.deepEqual(share([deckOf(GO)], [line('goenzh', 'good', '2026-11-12T19:00:00.000+08:00')]), ['goenzh']);
+});
+
+void test('英翻中的紀錄讀不懂、暫時停掉：記不記得不知道，變化等它恢復', () => {
+  const unreadable = JSON.stringify({ t: '2026-11-14T19:00:00.000+08:00', lt: 'goenzh', r: 'easy', v: '12345678', need: ['不認得的功能'] });
+  assert.deepEqual(share([deckOf(GO)], [unreadable]), []);
+});
+
+void test('開始條件在一天開始時決定：今天之後才答錯不影響', () => {
+  assert.deepEqual(share([deckOf(GO)], [REMEMBERED, line('goenzh', 'miss', '2026-11-15T20:00:00.000+08:00')]), ['gopast']);
+});
+
+void test('配對只認英文的卡組：別科的名稱結尾不擋', () => {
+  const math: DeckEntry = { path: 'Essence Cards/數學/L1.md', deck: parseDeck('---\n科目: 數學\n---\n- go 英翻中 ^goenzh\n    - go :: 去\n- go 過去式 ^gopast\n    - ＿＿ :: went\n') };
+  assert.deepEqual(share([math]).sort(), ['goenzh', 'gopast']);
+});
+
+void test('濾網 × 讀不懂的紀錄（L2 R3）：英翻中被濾網篩掉就不等，只有讀不懂才等', () => {
+  const high = GO.replace('    - go :: 去', '    - 重要性：高\n    - go :: 去');
+  const unreadable = JSON.stringify({ t: '2026-11-14T19:00:00.000+08:00', lt: 'goenzh', r: 'easy', v: '12345678', need: ['不認得的功能'] });
+  const filter = ['重要性：高'];
+  assert.deepEqual(share([deckOf(high)], [], filter), ['gopast'], '篩掉、紀錄讀得懂');
+  assert.deepEqual(share([deckOf(high)], [unreadable], filter), ['gopast'], '篩掉、紀錄讀不懂');
+  assert.deepEqual(share([deckOf(high)], [unreadable]), [], '沒篩、紀錄讀不懂');
+  assert.deepEqual(share([deckOf(high)]), ['goenzh'], '沒篩、紀錄讀得懂');
+});
+
+void test('英翻中的名稱整段粗體、空白與括號寫法不同，配對照樣成立（L2 R7）', () => {
+  for (const name of ['light（輕的）', '**light**（輕的）', '**light（輕的）**', '**Light　(輕的)**']) {
+    const deck = deckOf(`- ${name} 英翻中 ^ltenzh\n    - light :: 輕的\n- light 比較級 ^ltcmp1\n    - This bag is ＿＿.（輕的） :: lighter\n- light（輕的） 比較級 ^ltcmp2\n    - That box is ＿＿.（輕的） :: lighter\n`);
+    assert.deepEqual(share([deck]), ['ltenzh'], name);
+  }
+});

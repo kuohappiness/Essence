@@ -92,6 +92,8 @@ export function planToday(input: TodayInput): Today {
   const duplicated = new Set(findDuplicateIds(decks).map(each => each.id));
   const subjectOf = new Map<string, string | null>();
   const chosen: { entry: DeckEntry; target: Target; id: string }[] = [];
+  // 會排程、只是紀錄讀不懂停掉的目標（變化的開始條件要等它們，tasks/english-typed-order.md §3-3、L2 R3）。
+  const heldOnly = new Set<Target>();
   // 讀不懂的紀錄行停掉的目標（syntax.md §5-2）：只是不排程，科目與配對照算。
   const held = new Set(input.history.held);
   const stopped = (id: string): boolean => input.history.incomplete || held.has(id);
@@ -103,7 +105,9 @@ export function planToday(input: TodayInput): Today {
       const id = target.id;
       if (id === null || duplicated.has(id)) continue;
       subjectOf.set(id, props.subject);
-      if (active && target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance) && !stopped(id)) chosen.push({ entry, target, id });
+      const eligible = active && target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance);
+      if (eligible && !stopped(id)) chosen.push({ entry, target, id });
+      else if (eligible) heldOnly.add(target);
     }
   }
 
@@ -160,6 +164,26 @@ export function planToday(input: TodayInput): Today {
       if (!z.memory && !remembered(e)) { dropped.add(z.id); continue; }
       // 兩個方向今天都要出時，只留比較快忘的；相同時留英翻中。
       if (shows(e) && shows(z)) dropped.add(z.recall < e.recall ? e.id : z.id);
+    }
+  }
+
+  // 變化目標（D-193 第 5 點、tasks/english-typed-order.md §3）：還沒開始時，同一篇配對得上、今天是候選的英翻中有一個記得了才出；
+  // 一個候選都沒有就照常出。名稱有括號的只配同一個意思，沒有括號的配這個字任一個意思。
+  // 紀錄讀不懂停掉的英翻中（§3-3）也算配對，記得與否不知道，等它恢復；暫停、被濾網篩掉、重複 ID 的不算（和候選同一組條件）。
+  for (const entry of decks) {
+    if (entry.deck.props.isTranscript || entry.deck.props.status !== 'active') continue;
+    const words = entry.deck.targets.flatMap((target): { c: Candidate | null; word: NonNullable<Target['pairWord']> }[] => {
+      if (!target.pairWord || target.id === null) return [];
+      const c = candidates.get(target.id);
+      if (c && c.target === target) return [{ c, word: target.pairWord }];
+      return heldOnly.has(target) ? [{ c: null, word: target.pairWord }] : [];
+    });
+    for (const target of entry.deck.targets) {
+      const pair = target.typing?.pair;
+      const c = pair && target.id !== null ? candidates.get(target.id) : undefined;
+      if (!pair || !c || c.target !== target || c.memory) continue;
+      const mates = words.filter(({ word }) => (pair.exact ? word.exact : word.base) === pair.key);
+      if (mates.length && !mates.some(({ c: en }) => en !== null && remembered(en))) dropped.add(c.id);
     }
   }
 

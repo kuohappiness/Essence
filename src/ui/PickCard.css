@@ -67,3 +67,6 @@
   .ec-pick-row, .ec-app .ec-pick-key { transition: none; }
   .ec-app .ec-pick-key:not(:disabled):active { transform: none; }
 }
+/* 英文的句子排序（tasks/english-typed-order.md §6-1）：整題一列好幾格，待答的那一格照比較卡的紫色粗線 */
+.ec-app .ec-pick.is-sentence .ec-pick-slot.is-on { border-bottom-color: var(--ec-key); box-shadow: 0 1px 0 var(--ec-key); }
+.ec-pick.is-sentence .ec-ex { margin: 12px 8px 10px 28px; }

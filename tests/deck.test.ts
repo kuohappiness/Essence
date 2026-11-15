@@ -74,7 +74,9 @@ void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點'
   assert.equal(parsed.targets.length, 3);
   parsed.targets.forEach((t, i) => {
     const [id, name, direction, pairKey, question, answer, extras, shared, typed] = rows[i];
-    assert.deepEqual({ ...t, line: undefined, prompts: undefined }, { id, name, direction, pairKey, section: null, fields: emptyFields, shared, implicit: false, ok: true, line: undefined, prompts: undefined });
+    // 英翻中多記配對用的寫法（tasks/english-typed-order.md §3）：這裡的名稱沒有括號，兩個都是 pairKey 本身。
+    const pairWord = direction === 'en-zh' ? { pairWord: { exact: pairKey, base: pairKey } } : {};
+    assert.deepEqual({ ...t, line: undefined, prompts: undefined }, { id, name, direction, pairKey, section: null, fields: emptyFields, shared, implicit: false, ok: true, line: undefined, prompts: undefined, ...pairWord });
     assert.equal(t.prompts.length, 1);
     const p = qa(t.prompts[0]);
     assert.deepEqual([p.question, p.answer, p.extras, p.typed], [question, answer, extras, typed]);

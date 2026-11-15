@@ -1,6 +1,7 @@
 import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State, StudyPick } from '../state/index.ts';
 import { crumb } from './crumb.ts';
+import { isEnglish, speaksEnglish } from './english.ts';
 import { doneView, firstTry, todayStats, type DoneView } from './done.ts';
 import { createFlow, type Flow, type FlowAction, type LookBack, type ReviewLine } from './flow.ts';
 import type { PickView } from './pick.ts';
@@ -193,7 +194,7 @@ export function createSession(options: SessionOptions): Session {
       // 回看的那張後來被停掉（需要新版，任務說明 2-2）：不能改評分。
       return {
         kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: entry.look.typed, pick: entry.look.pick, allowed: canAnswer(entry.card) ? entry.changeable : [], pressed: entry.rating,
-        english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
+        english: isEnglish(entry.card), speakable: speaksEnglish(entry.card), autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
       };
     }
     if (!current) return null;
@@ -201,7 +202,7 @@ export function createSession(options: SessionOptions): Session {
     const { revealed, allowed, speakable, typed, pick: picked } = flow.view();
     return {
       kind: 'card', card, crumb: current.crumb, revealed, typed, pick: picked, allowed,
-      pressed: null, english: card.target.direction !== null, speakable, autoRead: flow.autoRead, viewing: null, shown: current.shown,
+      pressed: null, english: isEnglish(card), speakable, autoRead: flow.autoRead, viewing: null, shown: current.shown,
     };
   }
 

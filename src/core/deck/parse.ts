@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { readCouplet, readOrder, readPick, typedAnswer } from './question-types.ts';
+import { pairWordOf, readCouplet, readOrder, readPick, readSentence, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -129,17 +129,23 @@ function textSpan(node: Item, from: number, to: number): Span | null {
   return { line: start.line, from: start.column + from - base, to: start.column + to - base };
 }
 
-/** 讀卡組。給 `{ layout: true }` 時另外回傳每個目標的出處原文位置（tasks/edit-markup.md §3-1），讀法完全一樣。 */
-export function parseDeck(text: string, options: { layout: true }): Deck & { layout: Map<number, TargetLayout> };
+/**
+ * 讀卡組。給 `{ layout: true }` 時另外回傳每個目標的出處原文位置（tasks/edit-markup.md §3-1），讀法完全一樣。
+ * `subject` 是屬性沒寫科目時用的科目（AI 草稿還沒有屬性時，tasks/english-typed-order.md §1-1）；屬性寫了照屬性。
+ */
+export function parseDeck(text: string, options: { layout: true; subject?: string | null }): Deck & { layout: Map<number, TargetLayout> };
+export function parseDeck(text: string, options: { subject?: string | null }): Deck;
 // 沒給選項的寫在最後：ReturnType<typeof parseDeck> 取最後一個。
 export function parseDeck(text: string): Deck;
-export function parseDeck(text: string, options?: { layout?: boolean }): Deck & { layout?: Map<number, TargetLayout> } {
+export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null }): Deck & { layout?: Map<number, TargetLayout> } {
   const lines = linesOf(text);
   const { props, start, problems } = readProperties(lines);
   const targets: Target[] = [];
   const layouts = options?.layout ? new Map<number, TargetLayout>() : null;
   const result = (): Deck & { layout?: Map<number, TargetLayout> } => layouts ? { props, targets, problems, layout: layouts } : { props, targets, problems };
   if (props.isTranscript) return result();
+  // 文法、變化與句子排序只在英文的卡組（§1-1）：結尾的詞別科也會用。
+  const english = (props.subject ?? options?.subject ?? null)?.trim() === '英文';
   const seenIds = new Set<string>();
   for (const root of listTree(lines, start)) {
     const head = stripId(root.text);
@@ -172,6 +178,10 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     const target: Target = { id, name, line: root.line, implicit, section: root.section, ...(root.sectionIndex === null ? {} : { sectionIndex: root.sectionIndex }),
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
+    // 文法與變化（tasks/english-typed-order.md §1）：從名稱認，題目讀之前就要知道要不要打字。
+    const typing = english ? readTyping(target) : null;
+    if (typing) target.typing = typing;
+    if (english && target.direction === 'en-zh' && target.pairKey !== null) target.pairWord = pairWordOf(target.pairKey);
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
       problems.push({ line: node.line, targetLine: root.line, level, code, message, ...(columns ? { columns } : {}) });
       if (level === 'error') target.ok = false;
@@ -310,14 +320,16 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
         if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
         let typed: readonly string[] | null = null;
-        if (target.direction === 'zh-en') {
-          const read = typedAnswer(answer);
+        // 文法與變化照中翻英（§1-3）：只在英文的卡組，讀不成打字是錯誤。
+        if (target.direction === 'zh-en' || target.typing) {
+          const read = typedAnswer(answer, target.typing ? '文法與變化' : '中翻英');
           typed = read.typed;
           if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
+      else if (target.typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字；要打字改成問答題');
       const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
       const own = anchorNotes(children);
       if (own) promptNotes.set(cloze, own);
@@ -350,8 +362,10 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     }
     const pick = readPick(target);
     if (pick.group) target.group = pick.group;
-    const order = readOrder(target, notes ?? []);
+    const order = readOrder(target, notes ?? [], english);
     if (order) target.order = order;
+    const sentence = english && !order ? readSentence(target) : null;
+    if (sentence) target.sentence = sentence;
     const couplet = readCouplet(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? []);
     if (couplet) target.couplet = couplet;
     for (const { line, level, code, message } of pick.problems) {

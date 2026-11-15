@@ -1,5 +1,5 @@
 import { maskInline } from './markdown.ts';
-import type { Couplet, PickGroup, PoemOrder, ProblemCode, Prompt, Target } from './types.ts';
+import type { Couplet, PickGroup, PoemOrder, ProblemCode, Prompt, SentenceCells, SentenceOrder, Target, Typing } from './types.ts';
 
 // 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
@@ -15,8 +15,8 @@ interface TypedAnswer {
  * 的連結或嵌入、角括號與參照式連結，字面的括號也一起不收）；任何位置不分大小寫的 http(s)://；全形的｜。
  * 都不能當打字答案，不拆開、typed 是 null（換行要在 trim 之前看；Codex 格式查核 F1、F2，L2 的 S1 與它的格式查核）。
  */
-export function typedAnswer(answer: string): TypedAnswer {
-  const invalid = { code: 'typed-answer-invalid', message: '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式', level: 'error' } as const;
+export function typedAnswer(answer: string, label = '中翻英'): TypedAnswer {
+  const invalid = { code: 'typed-answer-invalid', message: label + '的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式', level: 'error' } as const;
   if (/[\r\n`$[\]<>｜]|\\\||https?:\/\//i.test(answer)) return { typed: null, problem: invalid };
   const typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
   if (typed.some(part => !part || /\p{Script=Han}/u.test(part))) return { typed, problem: invalid };
@@ -149,10 +149,11 @@ export function readPick(target: Target): PickReading {
 
 /**
  * 這個目標是不是全詩順序卡：名稱最後一段是「排序」（前面要有空白或右括號），只有一題，是兩格以上的填空。
- * 不是時照原題型（填空翻面），不另外提示：英文的排序（D-193）寫成問答題，還沒接上。
+ * 不是時照原題型（填空翻面），不另外提示。英文卡組裡沒寫「全詩」的是句子排序（readSentence），不在這裡認。
  */
-export function readOrder(target: Target, notes: readonly string[]): PoemOrder | null {
+export function readOrder(target: Target, notes: readonly string[], english = false): PoemOrder | null {
   const { name, prompts } = target;
+  if (english && !/(^|\s)全詩\s*排序$/.test(name)) return null;
   if (target.implicit || target.direction !== null || target.group || endingOf(name) !== '排序') return null;
   const prompt = prompts.length === 1 ? prompts[0] : null;
   if (prompt?.kind !== 'cloze' || prompt.blanks.length < 2) return null;
@@ -162,6 +163,134 @@ export function readOrder(target: Target, notes: readonly string[]): PoemOrder |
   const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
   const title = name.replace(/\s*排序$/, '').replace(/(^|\s)全詩$/, '').trim();
   return { title, head: text.slice(0, blanks[0].start), lines, tails, notes };
+}
+
+// ── 英文的文法與變化（D-193 第 5、6 點、tasks/english-typed-order.md §1）：只在英文的卡組，從名稱的結尾認，問答題打字。 ──
+
+const INFLECTIONS: ReadonlySet<string> = new Set(['過去式', '過去分詞', '複數', '比較級', '最高級']);
+
+/**
+ * 去掉成對的 `**` 與 `==`（名稱的粗體、螢光筆，§1-1：只為了認結尾與拆字義，名稱本身不改）。變化與英翻中都先做這一步再拆括號（L2 R7）。
+ */
+const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
+
+/** 最後一組成對的括號（全半形都算，左右可以不同）與它前面的字；沒有是 null。 */
+function lastBracket(text: string): { before: string; inner: string } | null {
+  const match = /^(.*?)\s*[（(]([^（）()]*)[）)]\s*$/.exec(text);
+  return match ? { before: match[1].trim(), inner: match[2].trim() } : null;
+}
+const BRACKETS = /[（）()]/;
+
+/** 配對用的鍵（§1-5）：字和意思各自照 pickKey 正規化，再接成 `字(意思)`；括號前的空白不算。 */
+const wordKey = (word: string, meaning: string | null): string => pickKey(word) + (meaning === null ? '' : '(' + pickKey(meaning) + ')');
+
+/** 拆成字與最後一組括號的意思（§1-4、§1-5）；前面還有括號、括號不成對時是 null。 */
+function splitMeaning(text: string): { word: string; meaning: string | null } | null {
+  const bracket = lastBracket(text);
+  const word = bracket ? bracket.before : text.trim();
+  if (!word || BRACKETS.test(word)) return null;
+  return { word, meaning: bracket ? bracket.inner : null };
+}
+
+/**
+ * 名稱結尾是「文法」或變化種類的目標（§1-1）：只在英文的卡組；最上層直接寫題目、有方向、名稱讀得出點選填空的組都不是。
+ * 變化的字（去掉意思的括號）不能有中文：`能說出 go 的 過去式` 照原題型。文法點是名稱去掉結尾與最後一組括號（用法）。
+ */
+export function readTyping(target: Pick<Target, 'name' | 'implicit' | 'direction'>): Typing | null {
+  if (target.implicit || target.direction !== null || target.name.includes('==') || readGroup(target.name)) return null;
+  const name = unbold(target.name).trim();
+  const ending = endingOf(name);
+  if (ending === null || (ending !== '文法' && !INFLECTIONS.has(ending))) return null;
+  const rest = name.slice(0, name.length - ending.length).trim();
+  if (!rest) return null;
+  if (ending === '文法') {
+    const bracket = lastBracket(rest);
+    const point = bracket ? bracket.before : rest;
+    return { kind: 'grammar', hint: point && !BRACKETS.test(point) ? point : null, pair: null };
+  }
+  const split = splitMeaning(rest);
+  if (!split || /\p{Script=Han}/u.test(split.word)) return null;
+  return { kind: 'inflection', hint: split.word, pair: { key: wordKey(split.word, split.meaning), exact: split.meaning !== null } };
+}
+
+/** 英翻中的 pairKey 配對用的寫法（§3-1）：exact 含意思，base 只有字；拆不開時兩個都是整段。 */
+export function pairWordOf(pairKey: string): { exact: string; base: string } {
+  const split = splitMeaning(unbold(pairKey));
+  if (!split) return { exact: pickKey(pairKey), base: pickKey(pairKey) };
+  return { exact: wordKey(split.word, split.meaning), base: wordKey(split.word, null) };
+}
+
+/**
+ * 題目一開頭就寫了這個文法點（§2-2）：去掉 `**`、`==` 與開頭的空白後，第一段是括號包住的文法點（全半形、大小寫不分）。
+ * 題目其他地方出現同樣的字不算（「不要用比較級」）。
+ */
+export function mentions(question: string, point: string): boolean {
+  const label = /^\s*[（(]([^（）()]*)[）)]/.exec(question.replace(/\*\*|==/g, ''));
+  return label !== null && pickKey(label[1]) === pickKey(point);
+}
+
+/** 文法與變化的題目：題幹有幾個空格（AI 草稿的檢查用，§5）。 */
+export const blanksIn = (question: string): number => countBlanks(question);
+
+// ── 英文的句子排序（D-193 第 8 點、§4）：英文卡組裡結尾是「排序」、沒寫「全詩」的。 ──
+
+/** 句末的標點（§4-5）：只拿掉最後一格的，而且後面只剩空白與結束的引號。 */
+const FINAL = /[.?!]+$/;
+/** 英文句子的開頭（§4-6）：前面沒有字，或最後一個字是中文、全形標點。 */
+const OPENS = /(?:^|[\p{Script=Han}\u3000-\u303f\uff00-\uffef])$/u;
+
+/** 一題的格（§4-5、§4-6）；不到兩格、有一格沒有字（空的或只有標點）時是 null。 */
+function sentenceCells(prompt: Prompt): SentenceCells | null {
+  if (prompt.kind !== 'cloze' || prompt.blanks.length < 2) return null;
+  const { text, blanks } = prompt;
+  // 詞塊是純文字（L2 R6 與第二輪）：成對的粗體、斜體拿掉，鍵、句首大寫與比對都照看得到的字；題目的指紋照原文。
+  const read = blanks.map(blank => plainBlock(text.slice(blank.start + 2, blank.end - 2)));
+  if (read.some(word => word === null)) return null;
+  const words = read as string[];
+  const tails = blanks.map((blank, i) => text.slice(blank.end, blanks.at(i + 1)?.start ?? text.length));
+  const last = words.length - 1;
+  const mark = FINAL.exec(words[last])?.[0] ?? '';
+  const bare = words[last].slice(0, words[last].length - mark.length).trim();
+  // 句末才拿：後面只剩空白與結束的引號、括號；拿掉後還有點的是縮寫（U.S.），不拿。
+  if (mark && /^[\s\p{Pe}\p{Pf}"'*_]*$/u.test(tails[last]) && bare && !bare.includes('.')) {
+    words[last] = bare;
+    tails[last] = mark + tails[last];
+  }
+  // 只有標點的格不是詞塊（`==?==`）：照原題型。
+  if (words.some(word => !/[\p{L}\p{N}]/u.test(word))) return null;
+  const head = visibleText(text.slice(0, blanks[0].start)).replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
+  const starts = words.map((_, i) => i === 0 && OPENS.test(head));
+  return { head: text.slice(0, blanks[0].start), words, tails, starts };
+}
+
+/**
+ * 一格的詞塊（§4-3）：成對的 `**`、`*`、`__`、`_` 拿掉後剩下純文字；還有 Markdown 的記號（未成對的 `*`、`_`，連結、程式碼、公式、
+ * 跳脫、字元參照）就是 null，這一題不是句子排序（L2 第二輪：不默默改字，`A_B` 和 `AB` 不會變成同一個鍵）。
+ */
+function plainBlock(raw: string): string | null {
+  const text = raw.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/\*(.+?)\*/g, '$1')
+    .replace(/(?<![\p{L}\p{N}])_(.+?)_(?![\p{L}\p{N}])/gu, '$1').trim();
+  return /[*_[\]<>`$\\|~]|&#?\w+;/.test(text) ? null : text;
+}
+
+/** 題目文字看得到的樣子（判斷句首用，L2 第二輪）：連結換成顯示的字，格式記號拿掉。 */
+function visibleText(text: string): string {
+  return text
+    .replace(/!?\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target)
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|==|__|`/g, '');
+}
+
+/**
+ * 英文的句子排序卡（§4-1）：英文卡組裡名稱最後一段是「排序」、沒有「全詩」、沒有方向，名稱也讀不出點選填空的組；每一題都是兩格以上的填空。
+ * 不是時照原題型（填空翻面），不提示；AI 的草稿另外擋（§5）。
+ */
+export function readSentence(target: Target): SentenceOrder | null {
+  const { name, prompts } = target;
+  if (target.implicit || target.direction !== null || target.group || readGroup(name) || endingOf(name) !== '排序' || /(^|\s)全詩\s*排序$/.test(name) || !prompts.length) return null;
+  const cells = prompts.map(sentenceCells);
+  if (cells.some(each => each === null)) return null;
+  return { title: name.replace(/\s*排序$/, '').trim(), prompts: cells as SentenceCells[] };
 }
 
 // ── 接句卡（D-185 第 6～8 點、tasks/couplet-cards.md §1、§2）：翻面卡的一種，用填空寫，從名稱最後的「接句」認。 ──

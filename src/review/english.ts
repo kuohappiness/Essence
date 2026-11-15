@@ -59,19 +59,43 @@ export function fillBlank(question: string, answer: string): string | null {
 
 /** 題目的文字。 */
 export const questionOf = (prompt: Prompt): string => prompt.kind === 'qa' ? prompt.question : prompt.text;
+/** 英文的打字卡：中翻英、文法、變化（tasks/english-typed-order.md §6-3）：答案出現時念、之後才有喇叭。 */
+const typedEnglish = (card: Card): boolean => card.target.direction === 'zh-en' || card.target.typing !== undefined;
+/** 有喇叭的英文卡：英翻中與英文的打字卡。 */
+export const speaksEnglish = (card: Card): boolean => card.target.direction !== null || card.target.typing !== undefined;
+/** 英文的卡（冠詞連著換行、中文句子後面英文換行）：會念的，再加上英文的句子排序。 */
+export const isEnglish = (card: Card): boolean => speaksEnglish(card) || card.target.sentence !== undefined;
 /** 題目一出現就念的：英翻中的題目念英文（D-116）；其他不念。 */
 export function openingSpeech(card: Card): readonly string[] | null {
   const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
   return parts.length ? parts : null;
 }
-/** 答案出現時念的：中翻英先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
+/** 題目開頭的一組括號（文法標籤：`（現在完成式）`、`(Passive Voice)`）與結尾的一組括號（給的原形或意思：`(know)`、`（去）`）。 */
+const LABEL = /^\s*[（(]([^（）()]*)[）)]\s*/u;
+const HINT = /\s*[（(]([^（）()]*)[）)]\s*$/u;
+/** 括號裡有作答格的是句子本身（`(On days when it ＿＿) I stay inside.`），不拿掉。 */
+const dropUnlessBlank = (match: string, inner: string): string => BLANK.test(inner) ? match : '';
+
+/**
+ * 打字卡把 ＿＿ 換成答案的例句（自動朗讀與題目那一行的喇叭共用）。文法與變化（tasks/english-typed-order.md §6-3、L2 R4）先拿掉粗體與螢光筆
+ * （和第 2 步認標籤的 mentions 相同），再拿掉題目開頭與結尾的一組括號，括號裡有 ＿＿ 的不拿；句子中間的括號照念。中翻英照舊。
+ * 題目沒有 ＿＿ 時是 null，兩個入口都只念答案。
+ */
+export function typedSentence(card: Card, answer: string): string | null {
+  const question = questionOf(card.prompt);
+  if (!card.target.typing) return fillBlank(question, answer);
+  const bare = question.replace(/\*\*|==/g, '').replace(LABEL, dropUnlessBlank).replace(HINT, dropUnlessBlank);
+  return fillBlank(bare, answer);
+}
+
+/** 答案出現時念的：英文的打字卡先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
 export function answerSpeech(card: Card, answer: string): readonly string[] | null {
-  if (card.target.direction !== 'zh-en') return null;
-  const sentence = fillBlank(questionOf(card.prompt), answer);
+  if (!typedEnglish(card)) return null;
+  const sentence = typedSentence(card, answer);
   return sentence ? [answer, sentence] : [answer];
 }
-/** 喇叭現在可以出現：英翻中隨時；中翻英答案出現之後（D-082）。 */
-export const canSpeak = (card: Card, revealed: boolean): boolean => card.target.direction !== null && (card.target.direction === 'en-zh' || revealed);
+/** 喇叭現在可以出現：英翻中隨時；英文的打字卡答案出現之後（D-082）。 */
+export const canSpeak = (card: Card, revealed: boolean): boolean => speaksEnglish(card) && (card.target.direction === 'en-zh' || revealed);
 
 /** 中文字與全形標點。 */
 const CJK =/[\p{Script=Han}　-〿＀-￯]/u;
