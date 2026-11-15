@@ -22,6 +22,13 @@ interface Item { id: string; path: string; entry: DeckEntry; target: Target }
 interface Placed { id: string; path: string; target: Target }
 type Partner<T extends Placed> = (item: Placed) => T | undefined;
 
+/** 接句卡配對用的位置：同一篇、同一個詩名小標題（照第幾個標題）、第幾句；沒有詩名或編號時 null。index 給了就換成那一句。 */
+export function coupletKey(item: Placed, index?: number): string | null {
+  const { couplet, sectionIndex } = item.target;
+  if (!couplet || couplet.title === null || couplet.index === null) return null;
+  return JSON.stringify([item.path, sectionIndex, index ?? couplet.index]);
+}
+
 /**
  * 給一張卡，找它的對方（D-189 第 1 點）。english：英文的兩個方向，同一篇、pairKey 相同、方向相反，各方向取前面的；
  * 每日的份照 D-069，不傳。接句卡（D-185 第 8 點）：同一篇、同一個詩名小標題（照第幾個標題，同名的兩首分得開，L2 R1），第 2k−1 句和第 2k 句；
@@ -29,15 +36,12 @@ type Partner<T extends Placed> = (item: Placed) => T | undefined;
  */
 export function partners<T extends Placed>(items: readonly T[], english: boolean): Partner<T> {
   const keyOf = (item: Placed, side: string | number): string => JSON.stringify([item.path, item.target.pairKey, side]);
-  const coupletKey = (item: Placed, index: number): string => JSON.stringify([item.path, item.target.sectionIndex, index]);
   const sides = new Map<string, T>();
   const lines = new Map<string, T | null>();
   for (const item of items) {
-    const { pairKey, direction, couplet } = item.target;
-    if (couplet && couplet.title !== null && couplet.index !== null) {
-      const key = coupletKey(item, couplet.index);
-      lines.set(key, lines.has(key) ? null : item);
-    }
+    const { pairKey, direction } = item.target;
+    const line = coupletKey(item);
+    if (line !== null) lines.set(line, lines.has(line) ? null : item);
     if (!english || pairKey === null || direction === null) continue;
     const key = keyOf(item, direction);
     if (!sides.has(key)) sides.set(key, item);
@@ -45,8 +49,9 @@ export function partners<T extends Placed>(items: readonly T[], english: boolean
   return item => {
     const { direction, couplet } = item.target;
     if (couplet) {
-      if (couplet.title === null || couplet.index === null || !lines.get(coupletKey(item, couplet.index))) return undefined;
-      return lines.get(coupletKey(item, couplet.index % 2 ? couplet.index + 1 : couplet.index - 1)) ?? undefined;
+      const line = coupletKey(item);
+      if (line === null || couplet.index === null || !lines.get(line)) return undefined;
+      return lines.get(coupletKey(item, couplet.index % 2 ? couplet.index + 1 : couplet.index - 1) ?? '') ?? undefined;
     }
     return !english || direction === null ? undefined : sides.get(keyOf(item, direction === 'en-zh' ? 'zh-en' : 'en-zh'));
   };

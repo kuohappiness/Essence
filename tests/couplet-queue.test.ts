@@ -148,3 +148,33 @@ void test('每日的份：暫停的同編號舊卡不取消配對；對方今天
   const paused = pair.replace('^b3pma1\n', '^b3pma1\n    - 狀態：暫停\n');
   assert.equal(firstOf(`---\n科目: 國語\n---\n### 鳥鳴澗\n${paused}${tail}`), 'b3pmc1', '答過之後才暫停');
 });
+
+// L2 第三輪 R8：另一個佇列（今天的份與「再複習一些」）裡的同編號卡，不會讓這個範圍裡完整的一對失效。
+void test('單篇的今天的份：同編號的另一張被分到「再複習一些」時，這一對照樣隔開（L2 R8）', () => {
+  const fillers = Array.from({ length: 17 }, (_, i) => `- 問答 ${String(i)} ^b3pmf${String(i).padStart(2, '0')}\n    - Q${String(i)} :: A${String(i)}\n`).join('');
+  const pair = couplets('鳥鳴澗', 'b3pma', NIAO).split(/(?=- 鳥鳴澗)/).slice(0, 2).join('');
+  const old = '- 鳥鳴澗 第 1 句 接句 ^b3pmz1\n    - ==人閒桂花落==，夜靜春山空。\n';
+  const deck = entry(`---\n科目: 國語\n---\n${fillers}### 鳥鳴澗\n${pair}- 一般 填空 ^b3pmc1\n    - ==清風==徐來\n${old}`);
+  const narrow = (lines: readonly string[], now: number): TodayInput => ({ ...input(deck, lines, now), settings: { capMinutes: 5, retention: 0.8, filter: [] } });
+  const plan = planToday(narrow([], START));
+  assert.deepEqual(plan.share.slice(-3).map(item => item.lt), ['b3pma1', 'b3pma2', 'b3pmc1']);
+  assert.deepEqual(plan.more.map(item => item.lt), ['b3pmz1'], '同編號的舊卡在再複習一些');
+  const first = encodeEntry(new Date(START + 10_000).toISOString(), { lt: 'b3pma1', r: 'good', v: printOf(deck, 'b3pma1') });
+  const found = nextCard(plan, narrow([first], START + 20_000), { targets: ['b3pma1', 'b3pma2', 'b3pmc1'] });
+  assert.equal(found.kind === 'card' && found.card.lt, 'b3pmc1');
+});
+
+void test('「再複習一些」：同編號的另一張在今天的份時，這一對照樣隔開；另一張今天答過也一樣（L2 R8）', () => {
+  const fillers = Array.from({ length: 19 }, (_, i) => `- 問答 ${String(i)} ^b3pmf${String(i).padStart(2, '0')}\n    - Q${String(i)} :: A${String(i)}\n`).join('');
+  const pair = couplets('鳥鳴澗', 'b3pma', NIAO).split(/(?=- 鳥鳴澗)/).slice(0, 2).join('');
+  const old = '- 鳥鳴澗 第 1 句 接句 ^b3pmz1\n    - ==人閒桂花落==，夜靜春山空。\n';
+  const deck = entry(`---\n科目: 國語\n---\n${fillers}### 鳥鳴澗\n${old}${pair}- 一般 填空 ^b3pmc1\n    - ==清風==徐來\n`);
+  const narrow = (lines: readonly string[], now: number): TodayInput => ({ ...input(deck, lines, now), settings: { capMinutes: 5, retention: 0.8, filter: [] } });
+  const plan = planToday(narrow([], START));
+  assert.deepEqual(plan.share.slice(-1).map(item => item.lt), ['b3pmz1'], '同編號的舊卡在今天的份');
+  assert.deepEqual(plan.more.map(item => item.lt), ['b3pma1', 'b3pma2', 'b3pmc1']);
+  const at = (lt: string, ms: number): string => encodeEntry(new Date(START + ms).toISOString(), { lt, r: 'good', v: printOf(deck, lt) });
+  const pick = (lines: readonly string[]): string | false => { const found = nextCard(plan, narrow(lines, START + 60_000), { more: true }); return found.kind === 'card' && found.card.lt; };
+  assert.equal(pick([at('b3pma1', 10_000)]), 'b3pmc1', '另一張沒答過');
+  assert.equal(pick([at('b3pmz1', 5_000), at('b3pma1', 10_000)]), 'b3pmc1', '另一張今天答過');
+});
