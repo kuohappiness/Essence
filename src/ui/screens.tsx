@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import type { QuestionType, Rating } from '../core/study/index.ts';
-import { anchorBreak, blankCount, extraLabel, fillBlank, lineSpeech, otherAnswers, questionOf, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation } from '../review/index.ts';
+import { anchorBreak, blankCount, extraLabel, lineSpeech, otherAnswers, questionOf, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation, typedSentence } from '../review/index.ts';
 import type { CardView, Spelling, TypedView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
@@ -187,7 +187,7 @@ function TypedBody(props: BodyProps): React.JSX.Element {
   const copying = typing?.step === 3;
   const actions = typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />;
   return <QaCard props={props} parts={{
-    mode: 'typed', revealedQuestion: revealed && !inline, lines, words: revealed ? typed.answer.split(/\s+/) : [], spoken: revealed ? fillBlank(question, typed.answer) ?? question : question, copying,
+    mode: 'typed', revealedQuestion: revealed && !inline, lines, words: revealed ? typed.answer.split(/\s+/) : [], spoken: revealed ? typedSentence(card, typed.answer) ?? question : question, copying,
     middle: <>
       {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
       {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}

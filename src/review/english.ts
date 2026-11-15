@@ -70,12 +70,23 @@ export function openingSpeech(card: Card): readonly string[] | null {
   const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
   return parts.length ? parts : null;
 }
+/** 題目開頭的文法標籤（`（現在完成式）`、`(Passive Voice)`，粗體也算）與結尾給的原形或意思（`(know)`、`（去）`）。 */
+const LABEL = /^\s*(?:\*\*)?[（(][^（）()]*[）)](?:\*\*)?\s*/u;
+const HINT = /\s*(?:\*\*)?[（(][^（）()]*[）)](?:\*\*)?\s*$/u;
+
+/**
+ * 打字卡把 ＿＿ 換成答案的例句（自動朗讀與題目那一行的喇叭共用）。文法與變化（tasks/english-typed-order.md §6-3、L2 R4）先拿掉題目開頭的
+ * 文法標籤與結尾給的提示，句子中間的括號照念；中翻英照舊。題目沒有 ＿＿ 時是 null。
+ */
+export function typedSentence(card: Card, answer: string): string | null {
+  const question = questionOf(card.prompt);
+  return fillBlank(card.target.typing ? question.replace(LABEL, '').replace(HINT, '') : question, answer);
+}
+
 /** 答案出現時念的：英文的打字卡先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
 export function answerSpeech(card: Card, answer: string): readonly string[] | null {
   if (!typedEnglish(card)) return null;
-  const filled = fillBlank(questionOf(card.prompt), answer);
-  // 文法與變化的括號是給的原形（`(know)`），句子裡沒有這段，不念（tasks/english-typed-order.md §6-3）。
-  const sentence = filled !== null && card.target.typing ? filled.replace(/\s*\([^()]*\)/g, '').trim() : filled;
+  const sentence = typedSentence(card, answer);
   return sentence ? [answer, sentence] : [answer];
 }
 /** 喇叭現在可以出現：英翻中隨時；英文的打字卡答案出現之後（D-082）。 */

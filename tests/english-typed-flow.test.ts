@@ -60,3 +60,16 @@ void test('變化的第 2 步提示原形（去掉意思的括號）', async t =
   type(s, 'lied');
   assert.deepEqual([typedOf(s).step, typedOf(s).hint], [2, 'lie']);
 });
+
+void test('朗讀的句子（L2 R4）：題目開頭的英文標籤、結尾的原形不念，句子中間的括號照念', async t => {
+  const read = async (prompt: string, answer: string): Promise<readonly string[] | null> => {
+    const h = await setup(t, { [P]: deck(`- 被動語態 文法 ^grammr\n    - ${prompt}\n`) });
+    const s = await h.open({ subject: '英文' });
+    type(s, 'xyz');
+    type(s, answer);
+    return view(s).autoRead;
+  };
+  assert.deepEqual(await read('(Passive Voice) I ＿＿ every day. (clean) :: am cleaned', 'am cleaned'), ['am cleaned', 'I am cleaned every day.']);
+  assert.deepEqual(await read('I ＿＿ the keys (but not the phone) yesterday. (lose) :: lost', 'lost'), ['lost', 'I lost the keys (but not the phone) yesterday.']);
+  assert.deepEqual(await read('**（Passive）** The window ＿＿ yesterday.（break） :: was broken', 'was broken'), ['was broken', 'The window was broken yesterday.']);
+});
