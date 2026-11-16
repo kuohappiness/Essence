@@ -2,6 +2,17 @@
 export { RULE_MARKER, RULE_SUBJECTS, ruleText } from './rules.ts';
 export type { EmbeddedRule, EmbeddedRules, RuleSubject } from './rules.ts';
 export { check } from './check.ts';
+export { boxBatch, boxOf, findItem, introBoxes, refOf, suspectOf } from './intro.ts';
+export type { BoxKind, ItemRef } from './intro.ts';
+export { moveCandidates, WHY } from './move.ts';
+export type { Left, MovePlan } from './move.ts';
+export { EXISTING_WHY, planExisting } from './existing.ts';
+export type { ExistingInput } from './existing.ts';
+export type { Endpoint } from './existing-sources.ts';
+export { CLEAR_WHY, clearExisting } from './existing-clear.ts';
+export type { ClearItem } from './existing-clear.ts';
+export { planSources, SOURCE_WHY } from './existing-sources.ts';
+export type { SourceOwner as SourceProps } from './existing-sources.ts';
 export { buildPrompt, existingTargets, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { groupHints, issueText, normalizeReply } from './reply.ts';

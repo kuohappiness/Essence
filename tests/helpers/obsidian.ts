@@ -131,6 +131,9 @@ class FakeMarkdownView {
   constructor(path: string | null) { this.file = path ? { path } : null; }
   save() { this.saves++; return Promise.resolve(); }
   getEphemeralState() { return { cursor: 7 }; }
+  /** 編輯畫面是 source（引言框的按鈕只重畫閱讀模式）；閱讀模式是 preview。 */
+  mode: 'source' | 'preview' = 'source';
+  getMode() { return this.mode; }
   addAction(icon: string, label: string, click: () => void) {
     const action = { icon, label, click };
     this.actions.push(action);
@@ -327,6 +330,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       return item;
     }
     registerEditorExtension() { extensions++; }
+    registerMarkdownPostProcessor() {}
     registerEvent() {}
     register(cleanup: () => void) { this.cleanups.push(cleanup); }
     registerInterval(id: number) { timers.registerInterval++; return id; }

@@ -25,7 +25,10 @@ fi
 # 只改文件時，測試會讀的檔案（例如 syntax.md 的範例）有變動，就跑寫到它路徑的那幾個測試檔（2026-10-29 b63c1bb 讓 CI 紅了）。
 # 通過時只印一行。
 tests=$(printf '%s\n' "$staged" | while IFS= read -r path; do
-  [ -n "$path" ] && grep -rlF --include='*.test.ts' -e "$path" tests || true
+  [ -n "$path" ] || continue
+  grep -rlF --include='*.test.ts' -e "$path" tests || true
+  # 嵌進 main.js 的規則檔路徑寫在 rules.ts，測試只寫到其中一份；改哪一份都跑規則的測試（第二次里程碑檢查 R8）。
+  if grep -qF -e "'$path'" src/core/ai/rules.ts; then echo tests/ai-rules.test.ts; fi
 done | sort -u)
 [ -n "$tests" ] || exit 0
 # 測試檔的路徑沒有空白，照空白拆開。

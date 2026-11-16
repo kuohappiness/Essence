@@ -14,6 +14,8 @@ const FIELDS = ['出處', '類型', '重要性', '狀態', '備註', '錯題補�
 const TYPES: Record<string, string[] | undefined> = { 自然: ['定義', '因果', '比較', '順序', '實驗', '公式與單位', '圖表'], 一般知識: ['定義', '因果', '比較', '步驟', '判斷與應用', '數值與標準'] };
 const UNDERSTANDING = ['因果', '比較', '實驗', '判斷與應用']; // 自然預設規則 1；理解題的答案要有粗體重點（D-068）；判斷與應用是一般知識的
 const ID = /^[a-hjkmnp-z2-9]{6}$/; // 6 碼，去掉 0、o、1、l、i
+/** 疑似重複的理由（理由行冒號之後）：`可能重複 <ID>｜<說明>`；ID 也可以是存草稿轉成的連結 `[[卡組#^ID|名稱]]`。 */
+const SUSPECT = /^可能重複\s*(?:[a-hjkmnp-z2-9]{6}|\[\[[^\]]*#\^[A-Za-z0-9-]+(?:\|[^\]]*)?\]\])\s*[｜|]\s*\S/;
 const NOTE_KINDS = [/說法|不一致|簡化|衝突|一般認知|矛盾/, /另外練習|練習/, /印錯|誤植|可能有誤|錯字/];
 
 // 行內程式碼與公式裡的 `::`、`==` 不算（D-089 第 2 條）：換成等長的占位字元，位置不變。
@@ -76,6 +78,15 @@ function openedFence(raw: string, blocks: readonly Block[]): { mark: string; own
   if (mark === null) return null;
   const owner = listOwner(blocks, column);
   return owner || column <= 3 ? { mark, owner, column } : null;
+}
+
+/**
+ * 引言框的標題行（`> [!note] 候選卡片`、預設摺起的 `> [!note]- 候選卡片`）：檢查與引言框的加入（tasks/ai-cards-add.md §1）共用這一份認法。
+ * 不是標題行是 null。
+ */
+export function calloutHead(raw: string): { title: string; folded: boolean } | null {
+  const head = /^\s{0,3}>\s?\[!([^\]]+)\]([-+]?)\s*(.*?)\s*$/.exec(raw);
+  return head ? { title: head[3], folded: head[2] === '-' } : null;
 }
 
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
@@ -221,7 +232,7 @@ function checkEnglish(deck: Deck, issue: Report): void {
 interface Question { line: number; raw: string; kind: 'qa' | 'cloze'; front: string; back: string; multi?: boolean; supplements: TreeNode[] }
 type Where = 'body' | 'candidate' | 'existing';
 /** 檢查時認出的一個學習目標（本文、候選卡片、加進已有的學習目標）。 */
-interface CheckedTarget { line: number; name: string; id?: string; reason?: string; data: Record<string, string>; questions: Question[]; shared: TreeNode[]; where: Where; heading?: string | null }
+interface CheckedTarget { line: number; name: string; id?: string; reason?: string; reasonLine?: number; data: Record<string, string>; questions: Question[]; shared: TreeNode[]; where: Where; heading?: string | null }
 
 export interface CheckOptions {
   /** 預設自然（試用時的預設）；類型的清單照它挑。 */
@@ -364,7 +375,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     let children = node.children;
     if (where === 'candidate') {
       if (!children.length || !/^理由\s*[：:]/.test(children[0].text)) issue(node.line, '不符', 'candidate-reason', '候選卡片的第一行要是一句「理由：」（§2-9）');
-      else { target.reason = children[0].text.replace(/^理由\s*[：:]\s*/, ''); children = children.slice(1); }
+      else { target.reason = children[0].text.replace(/^理由\s*[：:]\s*/, ''); target.reasonLine = children[0].line; children = children.slice(1); }
     }
     if (where === 'existing') {
       const m = /^(\S+)\s+(.*)$/.exec(node.text);
@@ -411,14 +422,14 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
     if (block.kind === 'callout') {
-      const head = /^\s{0,3}>\s?\[!([^\]]+)\]([-+]?)\s*(.*?)\s*$/.exec(block.body[0].raw);
+      const head = calloutHead(block.body[0].raw);
       for (const l of block.body) if (!/^\s{0,3}>( |$)/.test(l.raw)) issue(l.no, '不符', 'callout-prefix', '引言框裡的每一行以「> 」開頭');
       const inner = block.body.slice(1).map(l => ({ no: l.no, raw: l.raw.replace(/^\s{0,3}> ?/, '') }));
-      const title = head?.[3] ?? '';
+      const title = head?.title ?? '';
       const roots = treeOf(blocksOf(inner));
       if (/^給(家長|學習者)的備註$/.test(title)) {
         order.push({ kind: 'note', line: block.line });
-        if (head?.[2] === '-') issue(block.line, '不符', 'note-folded', '給家長的備註不摺起');
+        if (head?.folded) issue(block.line, '不符', 'note-folded', '給家長的備註不摺起');
         for (const item of roots) {
           notes.push(item.text);
           if (!NOTE_KINDS.some(k => k.test(item.text))) issue(item.line, '不符', 'note-kind', `給家長的備註只寫三種事：說法不一致、建議另外練習的計算題、課本可能印錯（§2-9）：${item.text.slice(0, 40)}`);
@@ -440,9 +451,14 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         checkPick(boxText, boxDeck, boxIssue);
         // 英文的規則候選也一樣（L2 R2）：候選搬出去就會出題。
         if (subject === '英文') checkEnglish(boxDeck, boxIssue);
-        if (head?.[2] !== '-') issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
-        for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
-        if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);
+        if (!head?.folded) issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
+        const checked = roots.map(node => analyzeTarget(node, 'candidate'));
+        candidates.push(...checked);
+        // 疑似重複（理由以「可能重複」開頭，tasks/ai-cards-add.md §5 第 2 點）不算進五項的上限；ID、｜ 或說明不全照樣算疑似重複，提醒格式。
+        const suspects = checked.filter(each => each.reason !== undefined && /^可能重複/.test(each.reason));
+        for (const each of suspects) if (!SUSPECT.test(each.reason!)) issue(each.line, '提醒', 'candidate-suspect-format', '疑似重複的理由寫成 `理由：可能重複 <ID>｜<哪裡拿不準>`（§2-9）');
+        const count = checked.length - suspects.length;
+        if (count > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(count)} 個（不算可能重複的），最多 5 個（§2-9）`);
         if (!roots.length) issue(block.line, '不符', 'candidate-empty', '沒有候選時整段省略');
       } else { order.push({ kind: 'other', line: block.line }); issue(block.line, '不符', 'callout-unknown', `不認得的引言框「${title || block.body[0].raw.trim()}」；不要加其他段落`); }
     } else if (block.kind === 'heading') {

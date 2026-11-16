@@ -7,6 +7,7 @@ import { NEED_FORMS } from './helpers/need-forms.ts';
 import { inspectReply, planDraft, RULE_SUBJECTS } from '../src/core/ai/index.ts';
 import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
 import { EDIT_CASES } from './helpers/source-edit-cases.ts';
+import { addTexts } from './helpers/add-cases.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -1182,6 +1183,8 @@ for (const each of EDIT_CASES) { deckCases.add(each.text); if (typeof each.want 
 // §1-4 的例子（§6-1）：改名與半形冒號的輸入、改完的全文，不標的也留著。
 for (const each of [...RENAME_CASES, ...COLON_CASES]) { deckCases.add(each.text); if (typeof each.want === 'string') deckCases.add(each.want); }
 for (const each of [...NOT_RENAMED, ...NOT_COLONS]) deckCases.add(each.text);
+// 引言框的加入（tasks/ai-cards-add.md §7）：候選搬移、加進已有的目的地與來源，輸入與寫出的全文都受往返與冪等保護。
+for (const text of addTexts()) deckCases.add(text);
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 // AI 製卡存成的草稿（tasks/ai-cards-mvp.md §8 的 R2-5）：疑似篇名的每一種寫法擋下或照常讀之後，能存的草稿全文也受上面的往返與冪等保護。

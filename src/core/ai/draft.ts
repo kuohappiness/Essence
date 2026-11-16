@@ -23,6 +23,8 @@ interface InspectedPiece extends Piece {
   names: number[];
   /** 有比較卡：卡組要寫 `需要版本`（D-191）。 */
   pick: boolean;
+  /** 候選的理由行（整理後的行號）：存草稿時只在這幾行核對疑似重複的 ID（L2 R7）。 */
+  reasons: number[];
 }
 
 export interface Inspection {
@@ -91,7 +93,15 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
         const problem = addProblem(add.id, sent, now);
         if (problem) hints.push({ line: normalized.raw[add.line], message: `${problem}：照原文留在框裡，不轉成連結` });
       }
-      pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
+      // 疑似重複的理由（tasks/ai-cards-add.md §5 第 2 點）：理由裡的 ID 和加題同一套核對。只看候選名稱底下第一個直接一層的理由行（檢查認的那一行），
+      // 題目底下、程式圍欄裡、第二個理由的同樣字樣是內容，照原文（L2 R7）。
+      const reasons = result.candidates.flatMap(each => each.reasonLine === undefined ? [] : [each.reasonLine - 1]);
+      for (const i of reasons) {
+        const id = SUSPECT_REASON.exec(lines[i])?.[2];
+        const problem = id === undefined ? null : addProblem(id, sent, now);
+        if (problem) hints.push({ line: rawLine(i), message: `${problem}：理由裡的 ID 照原文留著，不轉成連結` });
+      }
+      pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), reasons: reasons.map(i => piece.lines[i]), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
     }
   }
   // 寫出最後一行（真人測試 2026-11-08：還沒寫完就按了複製，家長看不出少了 <<<完>>>，就勾了確定）。
@@ -160,13 +170,19 @@ function properties(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>
   return '---\n' + stringify(props, { lineWidth: 0 }) + '---\n';
 }
 
-/** 加進已有的學習目標那一項改成連結（§5）：開頭的 `ID 名稱` 換成 `[[卡組檔名#^ID|現在的名稱]]`。 */
+/** 指到已有學習目標的連結：`[[卡組檔名#^ID|現在的名稱]]`。 */
+function linkOf(id: string, found: { path: string; name: string }): string {
+  const file = found.path.slice(found.path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+  return `[[${file}#^${id}|${found.name.replace(/[|\]]/g, char => char === '|' ? '｜' : '］')}]]`;
+}
+/** 加進已有的學習目標那一項改成連結（§5）：開頭的 `ID 名稱` 換成連結。 */
 function linked(line: string, id: string, found: { path: string; name: string }): string {
   const match = /^(\s{0,3}>\s?\s*(?:[-*+]|\d+[.)])\s+)(\S+)(?:\s+.*)?$/.exec(line);
   if (!match || match[2] !== id) return line;
-  const file = found.path.slice(found.path.lastIndexOf('/') + 1).replace(/\.md$/, '');
-  return `${match[1]}[[${file}#^${id}|${found.name.replace(/[|\]]/g, char => char === '|' ? '｜' : '］')}]]`;
+  return match[1] + linkOf(id, found);
 }
+/** 引言框裡疑似重複的理由行（tasks/ai-cards-add.md §5 第 2 點）：前綴到 `可能重複 `、原稿的 ID、後面的字。 */
+const SUSPECT_REASON = /^(\s{0,3}>.*?(?:[-*+]|\d+[.)])\s+理由\s*[：:]\s*可能重複\s*)([a-hjkmnp-z2-9]{6})((?:\s*[｜|].*)?)$/;
 
 /**
  * 存草稿的第 1 步（§5）：定好每一篇的目的地、配好 ID、做出每一篇卡組與快照本文的全文。next() 給一個新的 ID（state 配的，已經避開所有占用）；
@@ -191,6 +207,11 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
       edited[line] = `${base} ^${id}`;
     }
     const body = piece.lines.map(no => {
+      const reason = piece.reasons.includes(no) ? SUSPECT_REASON.exec(edited[no]) : null;
+      if (reason) {
+        const found = addProblem(reason[2], sent, now) ? null : now(reason[2]);
+        return found?.kind === 'one' ? reason[1] + linkOf(reason[2], found) + reason[3] : edited[no];
+      }
       const add = piece.adds.find(each => each.line === no);
       if (!add || addProblem(add.id, sent, now)) return edited[no];
       const found = now(add.id);

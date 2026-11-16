@@ -1,0 +1,12 @@
+/* 引言框的「加入」（tasks/ai-cards-add.md §1）：Obsidian 原本的小按鈕，放在項目第一行與標題列的後面。 */
+.essence-intro-add {
+  margin-left: 8px;
+  font-size: var(--font-smaller);
+  padding: 0 8px;
+  height: auto;
+  vertical-align: baseline;
+}
+.essence-intro-hint {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
