@@ -57,7 +57,8 @@ const ADD_INPUTS: readonly string[] = [
 ];
 
 /**
- * 加入的輸入與寫出的全文（§7）：候選全部搬完、目的地加完、來源拿掉前後。tests/deck.test.ts 登錄進往返範例。每一例都要做得成，做不成丟錯（例子壞了要看得到）。
+ * 加入的輸入與寫出的全文（§7）：候選全部搬完、目的地加完、來源拿掉前後。tests/deck.test.ts 登錄進往返範例，tests/ai-add-old-version.test.ts
+ * 交給已發布的舊版讀。每一例都要做得成，做不成丟錯（例子壞了要看得到）。
  */
 export function addTexts(): string[] {
   const out: string[] = [];
