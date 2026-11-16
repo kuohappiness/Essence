@@ -33,7 +33,7 @@ async function setup(t: TestContext, texts: Record<string, string>, options: Par
   return { ...memory, state, changes: () => count };
 }
 const request = (text: string, extra: Partial<ExistingRequest> = {}): ExistingRequest =>
-  ({ source: SRC, refs: refsOf(text), editorOf: () => null, resolve: link => link, locked: () => false, still: () => true, ...extra });
+  ({ source: SRC, refs: refsOf(text), editorOf: () => null, resolve: link => link, still: () => true, ...extra });
 
 void test('§4 跨篇：目的地加了題與出處、讀回確認，再從來源拿掉（框空了整個拿掉）；整批只通知一次', async t => {
   const item = [LINK, '    - 出處：p.46', Q2];
@@ -101,7 +101,7 @@ void test('§4 只拿掉自己搬的：目的地寫入期間家長改了來源�
   assert.equal(h.texts.get(SRC), edited);
 });
 
-void test('§4 逾時：目的地寫進磁碟逾時，那一篇記進 locked、項目留著；呼叫端標為 locked 的目的地不再寫', async t => {
+void test('§4 逾時：目的地寫進磁碟逾時，那一篇記進 locked、項目留著；之後不再寫它', async t => {
   const item = [LINK, Q2];
   const text = source(item);
   const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { writeTimeout: 30 });
@@ -110,7 +110,8 @@ void test('§4 逾時：目的地寫進磁碟逾時，那一篇記進 locked、�
   assert.deepEqual(result, { kind: 'done', added: [], left: [{ ref: refsOf(text)[0], why: EXISTING_WHY.locked(DEST) }], cleared: true, locked: [DEST], blocked: null });
   held.release();
   assert.equal(h.texts.get(SRC), text);
-  const again = await h.state.addExisting(request(text, { locked: path => path === DEST }));
+  assert.equal(h.state.addLocked(DEST), true);
+  const again = await h.state.addExisting(request(text));
   assert.ok(again.kind === 'done' && again.left[0].why === EXISTING_WHY.locked(DEST) && !again.locked.length);
 });
 
@@ -141,4 +142,60 @@ void test('§4 手機、全部加入確認之後變了：照門檻擋下或回 c
   const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
   assert.deepEqual(await h.state.addExisting(request(text, { still: () => false })), { kind: 'changed' });
   assert.equal(h.texts.get(DEST), DEST_TEXT);
+});
+
+void test('§4 逾時的目的地當下就停用：同一批後面被門檻擋下也留著；放行後再按不寫它（L2 R3）', async t => {
+  const other = ['- [[國二上自然 2-3#^w2e3r4|能說出熱]]', '    - 熱怎麼傳？ :: 傳導'];
+  const text = source([LINK, Q2], other);
+  const third = head('2-3 熱') + '- 能說出熱 ^w2e3r4\n    - 熱？ :: 能量\n';
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT, [THIRD]: third }, { writeTimeout: 30, backup: true });
+  h.state.backupReady(true);
+  const held = h.holdModify(DEST);
+  const running = h.state.addExisting(request(text));
+  // 第一篇寫進去了、還沒回來：等它的時候備份的門檻關上，第二篇被擋。
+  await new Promise(resolve => setTimeout(resolve, 10));
+  h.state.backupReady(false);
+  assert.deepEqual(await running, { kind: 'blocked', reason: 'backup' });
+  assert.equal(h.state.addLocked(DEST), true);
+  assert.equal(h.state.addLocked(THIRD), false);
+  held.release();
+  h.state.backupReady(true);
+  const again = await h.state.addExisting(request(text));
+  assert.ok(again.kind === 'done', JSON.stringify(again));
+  assert.deepEqual(again.left, [{ ref: refsOf(text)[0], why: EXISTING_WHY.locked(DEST) }]);
+  assert.deepEqual(again.added.map(each => each.dest), [THIRD]);
+});
+
+void test('§4 排著的寫入在回呼裡再查停用：前一批逾時之後才輪到，不寫那一篇（L2 R3）', async t => {
+  const other = '- 能說出浮力 ^p7q2w9\n    - 浮力？ :: 向上的力\n\n' + boxed([LINK, '    - 鐵會沉嗎？ :: 會']);
+  const SECOND = 'Essence Cards/學業/國二上/自然/2-4.md';
+  const second = head('2-4 浮力', '草稿') + other;
+  const text = source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT, [SECOND]: second }, { writeTimeout: 30 });
+  const held = h.holdModify(DEST);
+  // 同一刻按下：兩批都在第一篇逾時之前分好組，第二批的寫入排在第一批後面。
+  const first = h.state.addExisting(request(text));
+  const queued = h.state.addExisting({ ...request(second), source: SECOND });
+  const done = await first;
+  assert.ok(done.kind === 'done' && done.locked.includes(DEST), JSON.stringify(done));
+  const afterFirst = h.texts.get(DEST);
+  held.release();
+  const out = await queued;
+  assert.ok(out.kind === 'done', JSON.stringify(out));
+  assert.deepEqual(out.left.map(each => each.why), [EXISTING_WHY.locked(DEST)]);
+  assert.equal(h.texts.get(DEST), afterFirst);
+  assert.equal(h.texts.get(SECOND), second);
+});
+
+void test('§2 候選加入逾時：那一篇當下停用，再按不寫（L2 R3）', async t => {
+  const text = head('2-2 水溶液', '草稿') + BODY + '\n> [!note]- 候選卡片\n> - 能乙 ^bbbbb2\n>     - 理由：x\n>     - 問 :: 答\n';
+  const h = await setup(t, { [SRC]: text }, { writeTimeout: 30 });
+  const held = h.holdModify(SRC);
+  const refs = refsOf(text);
+  assert.deepEqual(await h.state.addCandidates(SRC, refs, null, () => true), { kind: 'timeout' });
+  assert.equal(h.state.addLocked(SRC), true);
+  held.release();
+  const written = h.texts.get(SRC);
+  assert.deepEqual(await h.state.addCandidates(SRC, refs, null, () => true), { kind: 'timeout' });
+  assert.equal(h.texts.get(SRC), written);
 });

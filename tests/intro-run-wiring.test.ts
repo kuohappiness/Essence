@@ -42,10 +42,14 @@ function setup(results: Result[] = []) {
   const calls: Call[] = [], errors: unknown[] = [];
   let refreshed = 0;
   let pending: (() => void) | null = null;
+  // 逾時的那一篇由 state 記（State.addLocked）：替身照同一個約定，回 timeout 時記下。
+  const locks = new Set<string>();
   const state = {
-    addCandidates(_path: string, chosen: readonly ItemRef[], editor: unknown, still: (text: string) => boolean) {
+    addLocked: (path: string) => locks.has(path),
+    addCandidates(path: string, chosen: readonly ItemRef[], editor: unknown, still: (text: string) => boolean) {
       calls.push({ refs: chosen, still, editor });
       const result = results.shift() ?? { kind: 'written', confirmed: true, moved: chosen, left: [] };
+      if (result.kind === 'timeout') locks.add(path);
       if (result.kind === 'hold') return new Promise(resolve => { pending = () => { resolve({ kind: 'written', confirmed: true, moved: chosen, left: [] }); }; });
       return Promise.resolve(result);
     },
@@ -172,13 +176,17 @@ function existingSetup(results: Result[] = []) {
   const module = stub.load<Module>(code);
   const calls: ExistingCall[] = [];
   const decks = [{ path: OLD, deck: { props: { materials: [] }, targets: [{ id: 'q8z3ka', name: '能用密度判斷物體的浮沉', prompts: [{ kind: 'qa', question: '密度怎麼算？', answer: '質量除以體積' }] }] } }];
+  const locks = new Set<string>();
   const state = {
+    addLocked: (path: string) => locks.has(path),
     decks: () => decks,
     unitMaterials: () => [],
     aiTarget: (id: string) => id === 'q8z3ka' ? { kind: 'one', path: OLD, name: '能用密度判斷物體的浮沉' } : { kind: 'none' },
     addExisting(request: ExistingCall) {
       calls.push(request);
-      return Promise.resolve(results.shift() ?? { kind: 'done', added: request.refs.map(ref => ({ ref, dest: OLD })), left: [], cleared: true, locked: [], blocked: null });
+      const result = results.shift() ?? { kind: 'done', added: request.refs.map(ref => ({ ref, dest: OLD })), left: [], cleared: true, locked: [], blocked: null };
+      if (result.kind === 'done') for (const each of result.locked as string[]) locks.add(each);
+      return Promise.resolve(result);
     },
   };
   const runner = module.createIntroRunner({ app: stub.app, state: () => state, notify: (message: string) => { stub.notices.push(message); }, onError() {}, refresh() {} });

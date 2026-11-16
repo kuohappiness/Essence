@@ -111,8 +111,6 @@ export interface ExistingRequest {
   resolve: (link: string, from: string) => string | null;
   /** 出處的教材端點（§3-3 第 8 步），照目的地那一篇給。 */
   endpoint?: (dest: string) => Endpoint;
-  /** 這次開著 Obsidian 的期間寫入逾時過的卡組（§4〈逾時後晚到的寫入〉）：不再寫它。 */
-  locked: (path: string) => boolean;
   /** 「全部加入」確認之後批次還一樣；不一樣回 changed，呼叫端重新確認。 */
   still: (text: string) => boolean;
   /** 單項確認過的目的地（§3-1 沒轉成連結的）：寫入回呼裡目的地最新的文字不一樣了回 changed，重新確認。 */
@@ -304,6 +302,11 @@ export interface State {
    * 同一篇的項目在最後那一次加進自己的目標。整個批次只通知一次。
    */
   addExisting(request: ExistingRequest): Promise<ExistingResult>;
+  /**
+   * 這一篇加入或清來源的寫入逾時過、結果不明（§4〈逾時後晚到的寫入〉）：晚到的寫入可能之後才落盤，這個 state 開著的期間不再對它加入或清來源。
+   * 逾時的當下就登記，排著的寫入在回呼裡也查（L2 R3）。
+   */
+  addLocked(path: string): boolean;
   /** AI 製卡（tasks/ai-cards-mvp.md §2）：會一起送出的已有學習目標，照 core/ai 的 existingTargets；ID 重複的不送。還沒 ready 是空的。 */
   aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
   /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
@@ -892,12 +895,17 @@ export function createState(options: StateOptions): State {
   }
 
   /** 候選加入（§2）：和 changeStatus 同一條寫入；plan 可能跑好幾次（有新的待讀），結果照最後一次。 */
+  /** 加入或清來源的寫入逾時、結果不明的卡組（State.addLocked）。 */
+  const addLocks = new Set<string>();
   async function addCandidates(path: string, refs: readonly ItemRef[], editor: EditorHandle | null, still: (text: string) => boolean): Promise<AddResult> {
-    const last: { plan: MovePlan | null; changed: boolean } = { plan: null, changed: false };
+    if (addLocks.has(path)) return { kind: 'timeout' };
+    const last: { plan: MovePlan | null; changed: boolean; locked: boolean } = { plan: null, changed: false, locked: false };
     const elsewhere = (id: string): boolean => gatedIds.has(id) || (tracker.where([id]).get(id) ?? []).some(each => each !== path);
     const plan = (text: string): Prepared | null => {
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       last.plan = null;
+      last.locked = addLocks.has(path);
+      if (last.locked) return null;
       last.changed = !still(text);
       if (last.changed) return null;
       last.plan = moveCandidates(text, refs, { elsewhere });
@@ -907,8 +915,9 @@ export function createState(options: StateOptions): State {
       return withNeed({ text: last.plan.text, expect, fresh: [], record: null, need: null }, text, version);
     };
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
-    if (result.kind === 'failed') return result.error instanceof WriteTimeout ? { kind: 'timeout' } : result;
-    if (result.kind === 'blocked' || result.kind === 'stale') return result;
+    if (result.kind === 'failed' && result.error instanceof WriteTimeout) { addLocks.add(path); return { kind: 'timeout' }; }
+    if (result.kind === 'failed' || result.kind === 'blocked' || result.kind === 'stale') return result;
+    if (result.kind === 'unchanged' && last.locked) return { kind: 'timeout' };
     if (result.kind === 'unchanged') return last.changed ? { kind: 'changed' } : { kind: 'nothing', left: last.plan?.left ?? [] };
     return { kind: 'written', confirmed: result.kind === 'done', moved: last.plan?.moved ?? [], left: last.plan?.left ?? [] };
   }
@@ -924,7 +933,7 @@ export function createState(options: StateOptions): State {
   }
   /** 一次寫入的結果裡只能說「失敗」的那幾種，對一篇的每一項的原因；逾時記進 locked。 */
   function writeWhy(path: string, result: WriteResult, locked: string[]): string {
-    if (result.kind === 'failed' && result.error instanceof WriteTimeout) { locked.push(path); return EXISTING_WHY.locked(path); }
+    if (result.kind === 'failed' && result.error instanceof WriteTimeout) { addLocks.add(path); locked.push(path); return EXISTING_WHY.locked(path); }
     if (result.kind === 'saved') return EXISTING_WHY.unsure(path);
     if (result.kind === 'stale') return CLEAR_WHY.destChanged;
     if (result.kind === 'blocked' && result.reason === 'needs-update') return EXISTING_WHY.newer;
@@ -945,6 +954,7 @@ export function createState(options: StateOptions): State {
     let text: string | null;
     try { text = editorOf(source)?.text() ?? await writes.readTimed(source); } catch (error) { return { kind: 'failed', error }; }
     if (text === null) return { kind: 'changed' };
+    if (addLocks.has(source)) return { kind: 'done', added: [], left: request.refs.map(ref => ({ ref, why: EXISTING_WHY.locked(source) })), cleared: true, locked: [], blocked: null };
     if (blockedText(source, text)) return { kind: 'blocked', reason: 'needs-update' };
     if (!request.still(text)) return { kind: 'changed' };
     const props = parseDeck(text).props;
@@ -958,7 +968,7 @@ export function createState(options: StateOptions): State {
       const at = locate(id);
       if ('why' in at) { left.push({ ref, why: at.why }); continue; }
       if (at.path === source) { own.push({ ref, id, dest: null }); continue; }
-      if (request.locked(at.path)) { left.push({ ref, why: EXISTING_WHY.locked(at.path) }); continue; }
+      if (addLocks.has(at.path)) { left.push({ ref, why: EXISTING_WHY.locked(at.path) }); continue; }
       groups.set(at.path, [...groups.get(at.path) ?? [], { ref, id, original: found.item.original }]);
     }
     // 第 2、3 步：一篇一次寫入，讀回磁碟上的檔確認。
@@ -967,11 +977,14 @@ export function createState(options: StateOptions): State {
     for (const [dest, items] of groups) {
       if (blocked) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
       const planned = new Map<ItemRef, string>();
-      let moved = false;
+      let moved = false, lockedNow = false;
       const plan = (now: string): Prepared | null => {
         track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
         planned.clear();
         moved = false;
+        // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）。
+        lockedNow = addLocks.has(dest);
+        if (lockedNow) return null;
         if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
         let next = now;
         for (const each of items) {
@@ -985,6 +998,7 @@ export function createState(options: StateOptions): State {
       };
       const editor = editorOf(dest);
       const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(dest, plan));
+      if (lockedNow) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.locked(dest) }); continue; }
       if (moved) { changed = true; continue; }
       if (result.kind === 'blocked' && result.reason !== 'needs-update') { blocked = result.reason; for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
       if (result.kind !== 'done' && result.kind !== 'unchanged') {
@@ -1017,9 +1031,14 @@ export function createState(options: StateOptions): State {
     let last: { done: ItemRef[]; left: Left[] } = { done: [], left: [] };
     const plan = (now: string): Prepared | null => {
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
+      if (addLocks.has(source)) {
+        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })) };
+        return null;
+      }
       const items: ClearItem[] = [];
       const stale: Left[] = [];
       for (const each of confirmedItems) {
+        if (addLocks.has(each.dest)) { stale.push({ ref: each.ref, why: EXISTING_WHY.locked(each.dest) }); continue; }
         const at = locate(each.id);
         const same = tracker.text(each.dest) === each.text && (editorOf(each.dest)?.text() ?? each.text) === each.text
           && !unread.has(each.dest) && !reads.waitingFor(path => path === each.dest) && 'path' in at && at.path === each.dest;
@@ -1043,7 +1062,7 @@ export function createState(options: StateOptions): State {
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(source, plan));
     const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
     if (result.kind === 'done' || result.kind === 'saved' || (result.kind === 'failed' && result.error instanceof WriteTimeout)) {
-      if (result.kind === 'failed') locked.push(source);
+      if (result.kind === 'failed') { addLocks.add(source); locked.push(source); }
       left.push(...last.left);
       return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), result.kind === 'done');
     }
@@ -1066,6 +1085,7 @@ export function createState(options: StateOptions): State {
       return loading;
     },
     unread: () => [...new Set([...unread, ...exam.unread, ...quiz.unread])].sort(),
+    addLocked: path => addLocks.has(path),
     deckStatus(path) {
       if (!life.loaded) return { missing: 0, issues: [], malformed: [] };
       if (gated.includes(path)) return { missing: 0, issues: [], malformed: [], needsUpdate: true };

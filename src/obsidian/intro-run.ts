@@ -9,7 +9,7 @@ import type { AddRequest } from './intro-add.ts';
 import { editorOf } from './save.ts';
 
 // 引言框的「加入」按下去之後（tasks/ai-cards-add.md §2、§4）：「全部加入」先問、確認到寫入之間變了重新問；交給 state 寫；做完一則通知。
-// 同一篇同時只跑一個加入（按鈕停用、雙擊不跑兩次）；寫進磁碟逾時的那一篇，這次開著 Obsidian 的期間不再加入。
+// 同一篇同時只跑一個加入（按鈕停用、雙擊不跑兩次）；寫進磁碟逾時的那一篇，這次開著 Obsidian 的期間不再加入（state 記，State.addLocked）。
 
 const deckName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 /** 通知裡那一項的名字：第一行去掉清單符號、行尾 ID；連結取顯示的字。 */
@@ -126,8 +126,6 @@ const CONFIRM_ROUNDS = 3;
 export function createIntroRunner(host: IntroRunHost): { busy(path: string): boolean; add(request: AddRequest): void; close(): void } {
   const { app } = host;
   const running = new Set<string>();
-  /** 寫進磁碟逾時的那幾篇：晚到的寫入可能之後才落盤，這次開著 Obsidian 的期間不再加入（§4）。 */
-  const locked = new Set<string>();
   const modals = new Set<Modal>();
   let alive = true;
   /**
@@ -187,7 +185,6 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
       source: path, refs, still, destStill, endpoint,
       editorOf: editing,
       resolve: (link, from) => app.metadataCache.getFirstLinkpathDest(link.split('#')[0], from)?.path ?? null,
-      locked: each => locked.has(each),
     });
   }
   /** 這個 ID 現在的目的地（state 的索引）。 */
@@ -236,12 +233,12 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
   }
 
   return {
-    busy: path => running.has(path) || locked.has(path),
+    busy: path => running.has(path) || !!host.state()?.addLocked(path),
     add(request) {
       const { path } = request;
       const state = host.state();
       if (!alive || !state || running.has(path)) return;
-      if (locked.has(path)) { host.notify(ADD_TIPS.locked(path)); return; }
+      if (state.addLocked(path)) { host.notify(ADD_TIPS.locked(path)); return; }
       running.add(path);
       host.refresh();
       void (async () => {
@@ -250,7 +247,6 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
             const result = await existing(state, request);
             if (!alive || result === null) return;
             if (result === 'unsaved') { host.notify(ADD_TIPS.unsaved); return; }
-            if (result.kind === 'done') for (const each of result.locked) locked.add(each);
             if (result.kind === 'failed') host.onError(result.error, path);
             const message = existingMessage(result);
             if (message) host.notify(message);
@@ -259,7 +255,6 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
           const result = await candidates(state, request);
           if (!alive || result === null) return;
           if (result === 'unsaved') { host.notify(ADD_TIPS.unsaved); return; }
-          if (result.kind === 'timeout') locked.add(path);
           if (result.kind === 'failed') host.onError(result.error, path);
           const message = addMessage(path, result);
           if (message) host.notify(message);
