@@ -16,6 +16,8 @@ import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.
 import type { RestoreFlow } from './obsidian/restore.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
+import { wireIntroButtons, type AddRequest } from './obsidian/intro-add.ts';
+import { createIntroRunner } from './obsidian/intro-run.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { activateDeck, changeDeckStatus } from './obsidian/deck-status.ts';
@@ -121,6 +123,12 @@ export default class EssenceCardsPlugin extends Plugin {
   private statusBar: HTMLElement | null = null;
   /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
   private ai: AiCards | null = null;
+  /** 引言框的「加入」按鈕（tasks/ai-cards-add.md §1）：只在電腦；手機是 null。 */
+  intro: { refresh(): void } | null = null;
+  /** 開發命令攔下按鈕（P5 探針）：設了就交給它，不做加入。 */
+  introProbe: ((request: AddRequest) => void) | null = null;
+  /** 按下「加入」之後（§2～§4）：只在電腦。 */
+  private introRunner: ReturnType<typeof createIntroRunner> | null = null;
   /** 電腦上的備份（D-150）；手機、還沒載入或載入失敗是 null。 */
   backup: BackupWiring | null = null;
   /** 電腦專用的功能載入失敗的原因（設定頁顯示）。 */
@@ -219,6 +227,15 @@ export default class EssenceCardsPlugin extends Plugin {
         onError: error => { this.fail('ai', error); },
       });
       wireAiCards(this, { cards: () => this.unloaded ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+      const runner = this.introRunner = createIntroRunner({
+        app: this.app,
+        state: () => this.unloaded ? null : this.state,
+        notify: message => { new Notice(message); this.emit('notice', message); },
+        onError: (error, path) => { this.fail('write', error, path); },
+        refresh: () => { this.intro?.refresh(); },
+      });
+      this.register(() => { runner.close(); });
+      this.intro = wireIntroButtons(this, { state: () => this.state, add: request => { this.addIntro(request); }, busy: path => runner.busy(path) });
     }
     if (Platform.isDesktop) {
       this.statusBar = this.addStatusBarItem();
@@ -538,6 +555,12 @@ export default class EssenceCardsPlugin extends Plugin {
     }
   }
 
+  /** 引言框的加入（tasks/ai-cards-add.md §2～§4）。 */
+  private addIntro(request: AddRequest): void {
+    if (this.introProbe) { this.introProbe(request); return; }
+    this.introRunner?.add(request);
+  }
+
   private start(files: Files): void {
     // onLayoutReady 的回呼不會隨外掛停用取消：layout ready 之前就停用時不建立 state。
     if (this.unloaded) return;
@@ -574,6 +597,6 @@ export default class EssenceCardsPlugin extends Plugin {
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，
     // tasks/error-log.md §2-3），停用不是故障，所以這裡只接住。
-    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.intro?.refresh(); this.updateReminders(); this.warnUpdate(); }, () => {});
   }
 }
