@@ -305,3 +305,77 @@ void test('§4 重排：批次中有人要今天的份，先照已採用的排�
   assert.equal(plans.count(), 2);
   assert.equal(h.changes(), 1);
 });
+
+/** 編輯器替身：記下 apply、persist 的次數；persist 照 apply 的結果寫進記憶體的檔（可延後）。 */
+function editorStub(h: Harness, path: string, options: { typing?: string; delay?: number } = {}): { editor: EditorHandle; applied: () => number; persisted: () => number } {
+  let applied = 0, persisted = 0, pending: string | null = null;
+  const editor: EditorHandle = {
+    path,
+    text: () => (pending ?? h.texts.get(path) ?? '') + (options.typing ?? ''),
+    apply: (_before, after) => { applied++; pending = after; return true; },
+    persist: async () => {
+      persisted++;
+      if (options.delay) await new Promise(resolve => setTimeout(resolve, options.delay));
+      if (pending !== null) h.write(path, pending);
+    },
+  };
+  return { editor, applied: () => applied, persisted: () => persisted };
+}
+const CAND_BOX = '\n> [!note]- 候選卡片\n> - 能乙 ^bbbbb2\n>     - 理由：x\n>     - 問 :: 答\n';
+/** 家長在編輯器裡剛打、還沒存的一段（和框之間隔一行空行，不併進框裡）。 */
+const TYPING = ['', '家長剛打的字', ''].join('\n');
+const ofKind =(text: string, kind: ItemRef['kind']): ItemRef[] => refsOf(text).filter(ref => ref.kind === kind);
+
+void test('§4 停用之後輪到的候選加入：編輯器有沒存的字也不 persist（L2 第二輪 R1）', async t => {
+  const text = source([LINK, Q2]);
+  const dest = DEST_TEXT + CAND_BOX;
+  const h = await setup(t, { [SRC]: text, [DEST]: dest }, { writeTimeout: 30 });
+  const held = h.holdModify(DEST);
+  const first = h.state.addExisting(request(text));
+  await until(() => h.texts.get(DEST) !== dest);
+  const stub = editorStub(h, DEST, { typing: TYPING });
+  const queued = h.state.addCandidates(DEST, ofKind(dest, 'candidate'), stub.editor, () => true);
+  const done = await first;
+  assert.ok(done.kind === 'done' && done.locked.includes(DEST), JSON.stringify(done));
+  assert.deepEqual(await queued, { kind: 'timeout' });
+  held.release();
+  assert.equal(stub.applied(), 0);
+  assert.equal(stub.persisted(), 0);
+});
+
+void test('§4 停用之後輪到的跨篇目的地：編輯器有沒存的字也不 persist（L2 第二輪 R1）', async t => {
+  const SECOND = 'Essence Cards/學業/國二上/自然/2-4.md';
+  const second = head('2-4 浮力', '草稿') + '- 能說出浮力 ^p7q2w9\n    - 浮力？ :: 向上的力\n\n' + boxed([LINK, '    - 鐵會沉嗎？ :: 會']);
+  const text = source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT, [SECOND]: second }, { writeTimeout: 30 });
+  const held = h.holdModify(DEST);
+  const stub = editorStub(h, DEST, { typing: TYPING });
+  const first = h.state.addExisting(request(text));
+  const queued = h.state.addExisting({ ...request(second), source: SECOND, editorOf: path => path === DEST ? stub.editor : null });
+  const done = await first;
+  assert.ok(done.kind === 'done' && done.locked.includes(DEST), JSON.stringify(done));
+  const out = await queued;
+  held.release();
+  assert.ok(out.kind === 'done', JSON.stringify(out));
+  assert.deepEqual(out.left.map(each => each.why), [EXISTING_WHY.locked(DEST)]);
+  assert.equal(stub.applied(), 0);
+  assert.equal(stub.persisted(), 0);
+  assert.equal(h.texts.get(SECOND), second);
+});
+
+void test('§4 停用之後輪到的清來源：編輯器有沒存的字也不 persist（L2 第二輪 R1）', async t => {
+  const text = source([LINK, Q2]) + CAND_BOX;
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { writeTimeout: 30 });
+  // 目的地走較慢的編輯器（不逾時）：寫入期間按下來源的候選加入，排在目的地之後、清來源之前。
+  const destStub = editorStub(h, DEST, { delay: 10 });
+  const srcStub = editorStub(h, SRC, { typing: TYPING });
+  const running = h.state.addExisting({ ...request(text), refs: ofKind(text, 'existing'), editorOf: path => path === DEST ? destStub.editor : path === SRC ? srcStub.editor : null });
+  await until(() => destStub.persisted() > 0);
+  const held = h.holdModify(SRC);
+  assert.deepEqual(await h.state.addCandidates(SRC, ofKind(text, 'candidate'), null, () => true), { kind: 'timeout' });
+  const result = await running;
+  held.release();
+  assert.ok(result.kind === 'done', JSON.stringify(result));
+  assert.equal(srcStub.applied(), 0);
+  assert.equal(srcStub.persisted(), 0);
+});
