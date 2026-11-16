@@ -2,7 +2,7 @@ import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { CLEAR_WHY, EXISTING_WHY, introBoxes, WHY } from '../src/core/ai/index.ts';
-import type { ItemRef } from '../src/core/ai/index.ts';
+import type { Endpoint, ItemRef } from '../src/core/ai/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { EditorHandle, ExistingRequest, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
@@ -432,4 +432,122 @@ void test('§4 第 4 步：同一篇的目標在拿掉前變了、跨篇的已�
   const result = await h.state.addExisting({ ...request(text), destStill: path => path !== SRC });
   assert.deepEqual(result, { kind: 'done', added: [{ ref: crossRef, dest: DEST }], left: [{ ref: ownRef, why: WHY.changed }], cleared: false, locked: [], blocked: null });
   assert.equal(h.texts.get(SRC), text);
+});
+
+/**
+ * 第 3 步確認之後、第 4 步拿掉之前改了別的東西（L2 第二輪〈合併前補驗〉，D-195 第 1 類：決定能不能從來源拿掉）。
+ * 來源前面卡著一個別的寫入，清來源的回呼要等它放行；放行前做 change，等 state 讀完再放行。
+ */
+async function changeBeforeClear(t: TestContext, change: (h: Harness) => void, options: { text?: string; extra?: Partial<ExistingRequest>; files?: Record<string, string> } = {}): Promise<{ h: Harness; text: string; result: Awaited<ReturnType<State['addExisting']>> }> {
+  const text = options.text ?? source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT, ...options.files });
+  const held = h.holdModify(SRC);
+  void h.files.modify(SRC, now => now);
+  const running = h.state.addExisting(request(text, options.extra));
+  await until(() => h.texts.get(DEST) !== DEST_TEXT);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  change(h);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  held.release();
+  return { h, text, result: await running };
+}
+const MOVED = 'Essence Cards/學業/國二上/自然/2-1 改名.md';
+
+void test('§4 第 4 步前目的地改名、刪掉、同路徑換成別的檔、ID 變重複、換科目：來源一字不動（L2 第二輪）', async t => {
+  const cases: [string, (h: Harness) => void][] = [
+    ['改名', h => { const now = h.texts.get(DEST)!; h.remove(DEST); h.write(MOVED, now); }],
+    ['刪掉', h => { h.remove(DEST); }],
+    ['同路徑換檔', h => { h.remove(DEST); h.write(DEST, DEST_TEXT); }],
+    ['ID 重複', h => { h.write(THIRD, head('2-3 熱') + '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 另一題？ :: 另一個答案\n'); }],
+    ['換科目', h => { h.write(DEST, h.texts.get(DEST)!.replace('科目: 自然', '科目: 社會')); }],
+  ];
+  for (const [name, change] of cases) {
+    await t.test(name, async t => {
+      const { h, text, result } = await changeBeforeClear(t, change);
+      assert.equal(h.texts.get(SRC), text);
+      assert.deepEqual(result, { kind: 'done', added: [], left: [{ ref: refsOf(text)[0], why: CLEAR_WHY.destChanged }], cleared: true, locked: [], blocked: null });
+    });
+  }
+  // 對照：不改就照常拿掉（上面不是因為測試的安排而沒拿）。
+  const { h, text, result } = await changeBeforeClear(t, () => {});
+  assert.deepEqual(result, { kind: 'done', added: [{ ref: refsOf(text)[0], dest: DEST }], left: [], cleared: true, locked: [], blocked: null });
+  assert.ok(!h.texts.get(SRC)!.includes('加進已有的學習目標'));
+});
+
+void test('§4 第 4 步前教材的端點改指另一本（目的地的字沒變）：來源一字不動（L2 第二輪）', async t => {
+  const text = source([LINK, '    - 出處：p.46', Q2]).replace('狀態: 草稿', '狀態: 草稿\n材料: "[[課本]]"');
+  // 目的地那一端解析到的教材：第 3 步確認時和來源同一本，第 4 步前改指另一本。
+  let destBook = '課本.md';
+  const endpoint = (): Endpoint => (_link, side) => side === 'source' ? '課本.md' : destBook;
+  const { h, result } = await changeBeforeClear(t, () => { destBook = '別本.md'; }, { text, extra: { endpoint } });
+  assert.equal(h.texts.get(SRC), text);
+  assert.deepEqual(result, { kind: 'done', added: [], left: [{ ref: refsOf(text)[0], why: CLEAR_WHY.destChanged }], cleared: true, locked: [], blocked: null });
+  // 對照：端點不變就照常拿掉。
+  destBook = '課本.md';
+  const control = await changeBeforeClear(t, () => {}, { text, extra: { endpoint } });
+  assert.ok(control.result.kind === 'done' && control.result.cleared && control.result.added.length === 1, JSON.stringify(control.result));
+});
+
+/** 拿掉前後看的那一點：第一次留、重按收尾；回傳重按前後的目的地。 */
+async function pressAgain(t: TestContext, change: (h: Harness) => void, text?: string): Promise<{ before: string; after: string }> {
+  const first = await changeBeforeClear(t, change, { text });
+  assert.deepEqual(first.result, { kind: 'done', added: [], left: [{ ref: refsOf(first.text)[0], why: CLEAR_WHY.destChanged }], cleared: true, locked: [], blocked: null });
+  const before = first.h.texts.get(DEST)!;
+  const again = await first.h.state.addExisting(request(first.text));
+  assert.deepEqual(again, { kind: 'done', added: [{ ref: refsOf(first.text)[0], dest: DEST }], left: [], cleared: true, locked: [], blocked: null });
+  assert.ok(!first.h.texts.get(SRC)!.includes('加進已有的學習目標'));
+  return { before, after: first.h.texts.get(DEST)! };
+}
+
+void test('§4 第 4 步前目的地改成等價的寫法（縮排換 Tab、出處拆成兩行）：第一次照字比留著，重按只拿掉、目的地不再加（L2 第二輪）', async t => {
+  const tab = await pressAgain(t, h => { h.write(DEST, h.texts.get(DEST)!.replaceAll('\n    - ', '\n\t- ')); });
+  assert.equal(tab.after, tab.before);
+  const split = await pressAgain(t, h => { h.write(DEST, h.texts.get(DEST)!.replace('    - 出處：p.30、國二上 2-2\n', '    - 出處：p.30\n    - 出處：國二上 2-2\n')); });
+  assert.equal(split.after, split.before);
+});
+
+void test('§4 第 4 步前出處的前一段換了單元、後一段跟著換：重按照語意補回這一課的兩頁（L2 第二輪）', async t => {
+  const text = source([LINK, '    - 出處：p.46、p.47', Q2]);
+  const { after } = await pressAgain(t, h => { h.write(DEST, h.texts.get(DEST)!.replace('國二上 2-2 p.46', '國二上 2-3 p.46')); }, text);
+  assert.equal(after, head('2-1 密度') + '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 出處：\n        - p.30\n        - 國二上 2-3 p.46\n        - p.47\n        - 國二上 2-2 p.46、p.47\n' + Q1 + '\n' + Q2 + '\n');
+});
+
+void test('§3-3 L01 和 L1 是不同的單元（syntax §2-5）：目的地已有 L1 的頁，L01 的照樣加（L2 第二輪）', async t => {
+  const text = head('L01 水溶液', '草稿') + BODY + '\n' + boxed([LINK, '    - 出處：p.46', Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT.replace('出處：p.30', '出處：p.30、國二上 L1 p.46') });
+  const result = await h.state.addExisting(request(text));
+  assert.deepEqual(result, { kind: 'done', added: [{ ref: refsOf(text)[0], dest: DEST }], left: [], cleared: true, locked: [], blocked: null });
+  assert.equal(h.texts.get(DEST), head('2-1 密度') + '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 出處：\n        - p.30\n        - 國二上 L1 p.46\n        - 國二上 L01 p.46\n' + Q1 + '\n' + Q2 + '\n');
+});
+
+void test('§4 部分成功：第二篇目的地逾時，第一篇已確認的照實發布（state 讀得到加的題）；只通知一次，來源只拿掉第一項（L2 第二輪）', async t => {
+  const HEAT = '- [[國二上自然 2-3#^h3t9qa|能說出熱]]';
+  const third = head('2-3 熱') + '- 能說出熱 ^h3t9qa\n    - 熱？ :: 一種能量\n';
+  const text = source([LINK, Q2], [HEAT, '    - 熱怎麼傳？ :: 傳導、對流、輻射']);
+  const [first, second] = refsOf(text);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT, [THIRD]: third }, { writeTimeout: 30 });
+  const held = h.holdModify(THIRD);
+  const before = h.changes();
+  const result = await h.state.addExisting(request(text));
+  held.release();
+  assert.deepEqual(result, { kind: 'done', added: [{ ref: first, dest: DEST }], left: [{ ref: second, why: EXISTING_WHY.locked(THIRD) }], cleared: true, locked: [THIRD], blocked: null });
+  assert.equal(h.changes() - before, 1);
+  const dest = h.state.decks().find(each => each.path === DEST)!;
+  assert.deepEqual(dest.deck.targets[0].prompts.map(p => p.kind === 'qa' ? p.question : ''), ['密度怎麼算？', '雞蛋為什麼浮起來？']);
+  assert.ok(!h.texts.get(SRC)!.includes('雞蛋為什麼浮起來'));
+  assert.ok(h.texts.get(SRC)!.includes('熱怎麼傳'));
+});
+
+void test('§4 來源寫入途中關閉：之後一次通知都沒有（L2 第二輪）', async t => {
+  const text = source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const held = h.holdModify(SRC);
+  const running = h.state.addExisting(request(text));
+  await until(() => h.texts.get(SRC) !== text);
+  const before = h.changes();
+  await Promise.race([h.state.close(), new Promise(resolve => setTimeout(resolve, 50))]);
+  held.release();
+  await running;
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(h.changes(), before);
 });
