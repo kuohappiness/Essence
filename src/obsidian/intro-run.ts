@@ -1,7 +1,10 @@
 import { MarkdownView, Modal, type App, type WorkspaceLeaf } from 'obsidian';
 import { boxBatch, boxOf, refOf, WHY } from '../core/ai/index.ts';
-import type { ItemRef } from '../core/ai/index.ts';
-import type { AddResult, State, WriteBlock } from '../state/index.ts';
+import type { Endpoint, ItemRef } from '../core/ai/index.ts';
+import { parseDeck } from '../core/deck/index.ts';
+import type { Target } from '../core/deck/index.ts';
+import type { AddResult, ExistingRequest, ExistingResult, State, WriteBlock } from '../state/index.ts';
+import { resolveSource } from '../ui/sources.ts';
 import type { AddRequest } from './intro-add.ts';
 import { editorOf } from './save.ts';
 
@@ -20,7 +23,11 @@ const ADD_TIPS = {
   stale: '這篇筆記剛剛改過，請再按一次',
   failed: '這篇筆記暫時存不進去，沒有加入；請稍後再按一次',
   changed: '框裡的項目一直在變，沒有加入；請再按一次',
-  existing: '加進已有的學習目標還不能加入',
+  added: (count: number, decks: readonly string[]): string => `已把 ${String(count)} 項加進已有的學習目標（${decks.map(each => `「${deckName(each)}」`).join('、')}）`,
+  uncleared: '目的地已確認，來源清除未確認：框裡的項目如果還在，請再按一次',
+  confirmAll: (count: number, decks: number, unchecked: number): string => `把 ${String(count)} 項加進已有的學習目標（${String(decks)} 篇卡組）？` + (unchecked ? `${String(unchecked)} 項沒有核對過，請逐項加入。` : ''),
+  confirmOne: (dest: Dest): string => `把這一項加進「${deckName(dest.path)}」的「${dest.name}」？那個學習目標的第一題：${dest.first}`,
+  noDest: '原本的卡組裡找不到這個學習目標，或它的 ID 重複、寫法有問題',
   locked: (path: string): string => `「${deckName(path)}」的寫入還沒確定，請重開 Obsidian 後再按`,
   saved: (path: string): string => `「${deckName(path)}」可能已經寫好，請再按一次`,
   moved: (count: number): string => `已把 ${String(count)} 個候選卡片加進這一篇的學習目標`,
@@ -49,6 +56,34 @@ function addMessage(path: string, result: AddResult): string | null {
     case 'failed': return ADD_TIPS.failed;
   }
 }
+
+/** 加進已有的做完的通知（§3-4、§4 第 5 步）：加入了幾項、到哪幾篇；來源清除沒確認另說；沒加入的每一項一句原因。 */
+function existingMessage(result: ExistingResult): string | null {
+  switch (result.kind) {
+    case 'done': {
+      const decks = [...new Set(result.added.map(each => each.dest))];
+      return [
+        ...result.blocked ? [BLOCKED[result.blocked] ?? ''] : [],
+        ...result.added.length ? [ADD_TIPS.added(result.added.length, decks)] : [],
+        ...result.added.length && !result.cleared ? [ADD_TIPS.uncleared] : [],
+        ...result.left.map(each => `「${itemName(each.ref)}」：${each.why}`),
+      ].filter(Boolean).join('\n') || null;
+    }
+    case 'changed': return ADD_TIPS.changed;
+    case 'blocked': return BLOCKED[result.reason] ?? null;
+    case 'failed': return ADD_TIPS.failed;
+  }
+}
+
+/** 單項確認框給家長看的目的地（§3-1）：卡組、目標名稱與第一題；寫入時目的地最新的文字和它不同就重新確認（第二輪 R5）。 */
+interface Dest { path: string; name: string; first: string }
+const firstOf = (target: Target): string => {
+  const prompt = target.prompts.at(0);
+  if (!prompt) return '（沒有題目）';
+  return prompt.kind === 'qa' ? `${prompt.question} :: ${prompt.answer}` : prompt.text;
+};
+const describe = (path: string, target: Target): Dest => ({ path, name: target.name, first: firstOf(target) });
+const sameDest = (a: Dest, b: Dest): boolean => a.path === b.path && a.name === b.name && a.first === b.first;
 
 class ConfirmModal extends Modal {
   private readonly text: string;
@@ -132,6 +167,67 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
     return { kind: 'changed' };
   }
 
+  /** 加進已有的寫一次：連結照 Obsidian 的解析，出處的教材端點照兩篇各自的材料（§3-2、§3-3）。 */
+  async function writeExisting(state: State, path: string, refs: readonly ItemRef[], still: (text: string) => boolean, destStill?: ExistingRequest['destStill']): Promise<ExistingResult | 'unsaved'> {
+    const open = view(path);
+    if (open?.file && !sameText(open.editor.getValue(), await app.vault.read(open.file))) return 'unsaved';
+    const materials = (deck: string): readonly string[] => state.decks().find(each => each.path === deck)?.deck.props.materials ?? [];
+    const endpoint = (dest: string): Endpoint => (link, side) => {
+      const deck = side === 'source' ? path : dest;
+      return resolveSource(app, deck, materials(deck), link, (term, code) => state.unitMaterials(deck, term, code));
+    };
+    return state.addExisting({
+      source: path, refs, still, destStill, endpoint,
+      editorOf: each => { const leaf = view(each); return leaf ? editorOf(leaf, each) : null; },
+      resolve: (link, from) => app.metadataCache.getFirstLinkpathDest(link.split('#')[0], from)?.path ?? null,
+      locked: each => locked.has(each),
+    });
+  }
+  /** 這個 ID 現在的目的地（state 的索引）。 */
+  function destOf(state: State, id: string | null): Dest | null {
+    const now = id === null ? null : state.aiTarget(id);
+    if (!now || now.kind !== 'one') return null;
+    const target = state.decks().find(each => each.path === now.path)?.deck.targets.find(t => t.id === id);
+    return target ? describe(now.path, target) : null;
+  }
+
+  async function existing(state: State, request: AddRequest): Promise<ExistingResult | 'unsaved' | null> {
+    const { path } = request;
+    if (!request.all) {
+      const ref = request.refs[0];
+      // 轉成連結的（存草稿時核對過）不問；原文 `ID 名稱` 的先確認目的地，確認框開著時目的地變了就重新問（§3-1）。
+      if (/^\s*(?:[-*+]|\d+[.)])\s+\[\[[^\]]*#\^/.test(ref.original)) return writeExisting(state, path, request.refs, () => true);
+      for (let round = 0; round < CONFIRM_ROUNDS; round++) {
+        const dest = destOf(state, ref.id);
+        // 找不到的照樣交給 state，由它寫出原因。
+        if (!dest) return writeExisting(state, path, request.refs, () => true);
+        if (!await ask(ADD_TIPS.confirmOne(dest)) || !alive) return null;
+        const result = await writeExisting(state, path, request.refs, () => true, (destPath, text) => {
+          const target = parseDeck(text).targets.find(t => t.id === ref.id);
+          return !!target && sameDest(describe(destPath, target), dest);
+        });
+        if (result === 'unsaved' || result.kind !== 'changed') return result;
+      }
+      return { kind: 'changed' };
+    }
+    for (let round = 0; round < CONFIRM_ROUNDS; round++) {
+      const text = await latest(path);
+      const box = text === null ? null : boxOf(text, request.refs);
+      if (!box) return { kind: 'changed' };
+      const batch = boxBatch(box);
+      const refs = batch.items.map(refOf);
+      if (!refs.length) return { kind: 'done', added: [], left: [], cleared: true, locked: [], blocked: null };
+      const decks = new Set(refs.map(ref => destOf(state, ref.id)?.path).filter(each => each !== undefined));
+      if (!await ask(ADD_TIPS.confirmAll(refs.length, decks.size, batch.rest)) || !alive) return null;
+      const result = await writeExisting(state, path, refs, now => {
+        const found = boxOf(now, refs);
+        return !!found && sameRefs(boxBatch(found).items.map(refOf), refs);
+      });
+      if (result === 'unsaved' || result.kind !== 'changed') return result;
+    }
+    return { kind: 'changed' };
+  }
+
   return {
     busy: path => running.has(path) || locked.has(path),
     add(request) {
@@ -139,11 +235,20 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
       const state = host.state();
       if (!alive || !state || running.has(path)) return;
       if (locked.has(path)) { host.notify(ADD_TIPS.locked(path)); return; }
-      if (request.kind === 'existing') { host.notify(ADD_TIPS.existing); return; }
       running.add(path);
       host.refresh();
       void (async () => {
         try {
+          if (request.kind === 'existing') {
+            const result = await existing(state, request);
+            if (!alive || result === null) return;
+            if (result === 'unsaved') { host.notify(ADD_TIPS.unsaved); return; }
+            if (result.kind === 'done') for (const each of result.locked) locked.add(each);
+            if (result.kind === 'failed') host.onError(result.error, path);
+            const message = existingMessage(result);
+            if (message) host.notify(message);
+            return;
+          }
           const result = await candidates(state, request);
           if (!alive || result === null) return;
           if (result === 'unsaved') { host.notify(ADD_TIPS.unsaved); return; }

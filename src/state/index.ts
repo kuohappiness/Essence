@@ -109,7 +109,8 @@ export interface ExistingRequest {
   editorOf: (path: string) => EditorHandle | null;
   /** 連結從某一篇解析到的檔（metadataCache）。 */
   resolve: (link: string, from: string) => string | null;
-  endpoint?: Endpoint;
+  /** 出處的教材端點（§3-3 第 8 步），照目的地那一篇給。 */
+  endpoint?: (dest: string) => Endpoint;
   /** 這次開著 Obsidian 的期間寫入逾時過的卡組（§4〈逾時後晚到的寫入〉）：不再寫它。 */
   locked: (path: string) => boolean;
   /** 「全部加入」確認之後批次還一樣；不一樣回 changed，呼叫端重新確認。 */
@@ -974,7 +975,7 @@ export function createState(options: StateOptions): State {
         if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
         let next = now;
         for (const each of items) {
-          const result = planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: next }, version, resolve, endpoint });
+          const result = planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: next }, version, resolve, endpoint: endpoint?.(dest) });
           if (result.kind === 'leave') planned.set(each.ref, result.why);
           else if (result.text !== null) next = result.text;
         }
@@ -997,7 +998,7 @@ export function createState(options: StateOptions): State {
       for (const each of items) {
         const why = planned.get(each.ref);
         if (why) { left.push({ ref: each.ref, why }); continue; }
-        const again = back === null ? null : planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: back }, version, resolve, endpoint });
+        const again = back === null ? null : planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: back }, version, resolve, endpoint: endpoint?.(dest) });
         if (back !== null && again?.kind === 'plan' && again.text === null) confirmedItems.push({ ref: each.ref, id: each.id, dest, text: back });
         else left.push({ ref: each.ref, why: EXISTING_WHY.unsure(dest) });
       }

@@ -158,3 +158,77 @@ void test('§3-4 通知的字：加入了幾項、沒加入的每一項一句原
     assert.deepEqual(h.stub.notices, message === null ? [] : [message], JSON.stringify(result));
   }
 });
+
+// ── 加進已有的學習目標（§3-1、§3-4、§4）──
+
+const SOURCE = 'Essence Cards/學業/國二上/自然/2-2.md';
+const OLD = 'Essence Cards/學業/國二上/自然/2-1.md';
+const OLD_TEXT = '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 密度怎麼算？ :: 質量除以體積\n';
+const BOX = '> [!note] 加進已有的學習目標\n> - [[國二上自然 2-1#^q8z3ka|能用密度判斷物體的浮沉]]\n>     - 鐵會沉嗎？ :: 會\n> - [[國二上自然 2-3#^w2e3r4|能說出熱]]\n>     - 熱？ :: 能量\n> - q8z3ka 能用密度判斷物體的浮沉\n>     - 木頭會浮嗎？ :: 會\n';
+interface ExistingCall { refs: readonly ItemRef[]; still: (text: string) => boolean; destStill?: (path: string, text: string) => boolean }
+function existingSetup(results: Result[] = []) {
+  const stub = createObsidianStub();
+  stub.texts.set(SOURCE, BOX);
+  const module = stub.load<Module>(code);
+  const calls: ExistingCall[] = [];
+  const decks = [{ path: OLD, deck: { props: { materials: [] }, targets: [{ id: 'q8z3ka', name: '能用密度判斷物體的浮沉', prompts: [{ kind: 'qa', question: '密度怎麼算？', answer: '質量除以體積' }] }] } }];
+  const state = {
+    decks: () => decks,
+    unitMaterials: () => [],
+    aiTarget: (id: string) => id === 'q8z3ka' ? { kind: 'one', path: OLD, name: '能用密度判斷物體的浮沉' } : { kind: 'none' },
+    addExisting(request: ExistingCall) {
+      calls.push(request);
+      return Promise.resolve(results.shift() ?? { kind: 'done', added: request.refs.map(ref => ({ ref, dest: OLD })), left: [], cleared: true, locked: [], blocked: null });
+    },
+  };
+  const runner = module.createIntroRunner({ app: stub.app, state: () => state, notify: (message: string) => { stub.notices.push(message); }, onError() {}, refresh() {} });
+  const modal = (): FakeEl | null => { const open = stub.modals.filter(each => each.isOpen).at(-1); return open ? open.contentEl : null; };
+  const answer = (yes: boolean): void => { modal()!.querySelectorAll('button')[yes ? 1 : 0].click(); };
+  return { stub, runner, calls, modal, answer };
+}
+const boxRefs = refs(BOX);
+
+void test('§3-4 加進已有的全部加入：先問項數與卡組篇數，沒轉成連結的另說；交出轉成連結的那幾項；通知加入了幾項、到哪幾篇', async () => {
+  const h = existingSetup();
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: boxRefs, all: true });
+  await tick();
+  assert.equal(h.modal()!.querySelectorAll('p')[0].text, '把 2 項加進已有的學習目標（1 篇卡組）？1 項沒有核對過，請逐項加入。');
+  h.answer(true);
+  await tick();
+  assert.deepEqual(h.calls[0].refs, boxRefs.slice(0, 2));
+  assert.equal(h.calls[0].still(BOX), true);
+  assert.equal(h.calls[0].still(BOX.replace('鐵會沉嗎', '鐵塊會沉嗎')), false);
+  assert.deepEqual(h.stub.notices, ['已把 2 項加進已有的學習目標（「2-1」）']);
+});
+
+void test('§3-1 轉成連結的單項不問；沒轉成連結的先確認卡組、名稱與第一題，寫入時目的地變了就重新確認', async () => {
+  const linked = existingSetup();
+  linked.runner.add({ path: SOURCE, kind: 'existing', refs: [boxRefs[0]], all: false });
+  await tick();
+  assert.equal(linked.modal(), null);
+  assert.equal(linked.calls.length, 1);
+  const h = existingSetup([{ kind: 'changed' }]);
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: [boxRefs[2]], all: false });
+  await tick();
+  assert.equal(h.modal()!.querySelectorAll('p')[0].text, '把這一項加進「2-1」的「能用密度判斷物體的浮沉」？那個學習目標的第一題：密度怎麼算？ :: 質量除以體積');
+  h.answer(true);
+  await tick();
+  const destStill = h.calls[0].destStill!;
+  assert.equal(destStill(OLD, OLD_TEXT), true);
+  assert.equal(destStill(OLD, OLD_TEXT.replace('質量除以體積', '體積除以質量')), false);
+  assert.equal(destStill(OLD, OLD_TEXT.replace('浮沉', '浮與沉')), false);
+  // state 回 changed：重新問一次。
+  assert.ok(h.modal(), '重新確認');
+  h.answer(true);
+  await tick();
+  assert.equal(h.calls.length, 2);
+});
+
+void test('§4 通知的字：來源清除沒確認、沒加入的原因；逾時的目的地這次開著 Obsidian 的期間停用', async () => {
+  const [first, second] = boxRefs;
+  const h = existingSetup([{ kind: 'done', added: [{ ref: first, dest: OLD }], left: [{ ref: second, why: '原本的卡組裡找不到這個學習目標' }], cleared: false, locked: [OLD], blocked: null }]);
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: [first], all: false });
+  await tick();
+  assert.deepEqual(h.stub.notices, ['已把 1 項加進已有的學習目標（「2-1」）\n目的地已確認，來源清除未確認：框裡的項目如果還在，請再按一次\n「能說出熱」：原本的卡組裡找不到這個學習目標']);
+  assert.equal(h.runner.busy(OLD), true);
+});

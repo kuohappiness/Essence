@@ -23,7 +23,8 @@ export interface ClearInput {
   items: readonly ClearItem[];
   version: string | null;
   resolve?: (link: string, from: string) => string | null;
-  endpoint?: Endpoint;
+  /** 教材端點（§3-3 第 8 步），照目的地那一篇給。 */
+  endpoint?: (dest: string) => Endpoint;
 }
 /** text：拿掉（與同篇加入）之後的全文，沒有要改是 null。done：拿掉了的；left：留在框裡的與原因。 */
 export interface ClearPlan { text: string | null; done: ItemRef[]; left: Left[] }
@@ -42,7 +43,7 @@ export function clearExisting(input: ClearInput): ClearPlan {
       continue;
     }
     if (!each.dest) { own.push({ each, item: found.item, box: found.box }); continue; }
-    const plan = planExisting({ original: found.item.original, id: each.id, source: { path, props }, dest: each.dest, version: input.version, resolve: input.resolve, endpoint: input.endpoint });
+    const plan = planExisting({ original: found.item.original, id: each.id, source: { path, props }, dest: each.dest, version: input.version, resolve: input.resolve, endpoint: input.endpoint?.(each.dest.path) });
     if (plan.kind === 'plan' && plan.text === null) cross.push({ each, item: found.item, box: found.box });
     else left.push({ ref: each.ref, why: CLEAR_WHY.destChanged });
   }
