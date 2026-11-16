@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：三個外掛用一個開發 repo，第二個外掛開工時才搬
 
-狀態：第二輪等 Codex 回應（2026-11-17 重開：使用者要同步開發 Capture 與 Mindboard，改成同一個 repo `Essence`、分兩步搬，見[第二輪](#第二輪同步開發-capture-與-mindboard2026-11-17)）。第一輪：使用者 2026-11-09 選開工時先驗證再決定，寫進 [backlog](../docs/backlog.md#第二個外掛開工時的合併驗證)，不寫 D-ID
+狀態：第二輪雙方一致，等使用者選第二步要不要現在定（2026-11-17；使用者要同步開發 Capture 與 Mindboard，改成同一個 repo `Essence`，見[第二輪](#第二輪同步開發-capture-與-mindboard2026-11-17)與[修正後的提案](#修正後的提案-1)）。第一輪：使用者 2026-11-09 選開工時先驗證再決定，寫進 [backlog](../docs/backlog.md#第二個外掛開工時的合併驗證)，不寫 D-ID
 
 2026-11-09，使用者問資料夾要不要改成上層 `Essence` 放通用原則、底下放三個專案，以及文件多會不會浪費 token。討論中使用者請 Claude 回到原點，不管現有進度，設計三個子專案的資料夾、repo 與 Claude 設定，也另外請 Fable 5.1 xhigh 獨立回答一次。使用者定了兩件事：P1 從零開始的架構，P2 現有專案等第二個外掛開工時才搬。
 
@@ -357,3 +357,98 @@ Essence/                      repo 與本機資料夾都改名
 3. **文件分界**：最上層與外掛 `docs/` 的分界是否清楚、會不會破壞 D-141 的一類資訊一份？決定維持一份、編號接續是否可行？roadmap 分成三份後，總覽交給 progress-map 夠不夠？轉錄稿格式放最上層是否恰當？
 4. **改名**：本機資料夾改名對 Claude Code、Codex 桌面版、`git worktree`、`.local/`、hook 的影響有沒有漏？放在第一步是否恰當？
 5. **第二步**：觸發條件與文件拆分的做法有沒有漏？D-143 的例外怎麼寫，才不會讓之後的對話以為可以隨意搬檔？
+
+## Codex 回應：第二輪（2026-11-17）
+
+查核基準為加入第二輪的 `ad1d8fad233479be649f22b3d1bb01674b128f06`。以下是對提案的回應。
+
+### 1. 同一個開發 repo｜同意先收兩個新外掛，反對把同步開工當成 Cards 搬遷的證據
+
+現在有一個合用的第一步。Capture 與 Mindboard 都還在起步，可以用同一套文件檢查、技能與協作規則開工。Capture 首次接 Cards 時，規格、共同範例與需要改的讀寫端也可以進同一個 PR。這比等兩個外掛各自交付再整合，更早得到共同規格可一起查核的好處，且現有 Cards 可以留在原位。
+
+仍有兩項反證。第一，§2-1 的 66 個 commit 是改到這些路徑的歷史次數。其中有些是 Cards 專用，也可以用固定版本的設定減少跨 repo 同步。第二，D-206 第 5 點保留現有轉錄格式與讀法，Capture 第一批完全可能只做寫端，由 Cards 跑既有讀法驗收。Mindboard 也還沒有證據需要同時改 Cards。因此這些資料不足以估出每月省下多少時間，也不足以支持現在搬 Cards。〔§2-0、§2-1、D-076 補充、D-196、D-206 第 5–6 點〕
+
+💡 不把「先在兩個獨立 repo 交付」當成開工的門檻。在共同 repo 的第一批工作記下實際一起改的檔案、共用檢查節省的步驟，以及共用 worktree 帶來的衝突。若要開始第二步，用這些紀錄確認搬 Cards 能再解決什麼。程式各用不同 worktree，直接進 `main` 的文件改動仍需錯開提交。
+
+### 2. 第一步｜同意建骨架與分派檢查，反對直接把現有根層腳本視為共用層
+
+第一個可交付範圍是兩個子目錄、各自的規則與可執行的檢查、現況與目標目錄圖，以及一份供 hook 和 CI 共用的路徑分派表。空的文件目錄可以等第一份文件出現再建。把新外掛的產物忽略規則、外掛邊界檢查，以及各自的測試安裝入口列到首次建置驗收。Capture 的既有 repo 先盤點四個追蹤檔和需要承接的內容，舊 repo、歷史和對外入口可保留到發布任務。〔`git -C "../Essence Capture" ls-tree --name-only HEAD`、`.gitignore:7–9`〕
+
+| 變更 | 檢查範圍 |
+|---|---|
+| `plugins/mindboard/` 的程式、測試、依賴或設定 | 共用檢查與 Mindboard。CI 不執行 Cards 的 `npm ci`、檢查或建置。Capture 同理 |
+| 過渡期根層的 `src/`、`tests/`、`package*.json` 或 Cards 專用 `tools/` | 共用檢查與 Cards。根層 `tools/` 目前同時放 Cards 工具與共用工具，需分清各檔案的歸屬 |
+| 轉錄規格或範例 | 共用檢查與 Cards、Capture 對應的測試。過渡期把 `docs/syntax.md` 列為兩方輸入，直到格式移出 |
+| 分派表、hook、共用設定及無法判定的輸入 | 受影響的全部外掛。無法確定影響時跑全部 |
+
+目前 hook 在分派前就要求根層 `node_modules`，CI 也固定從根層安裝、檢查、建置及稽核。要做到 Mindboard 可以單獨開工，應讓共用文件、金鑰、本機路徑檢查能獨立執行。若共用檢查需要 npm 套件，就給它自己的少量依賴與鎖檔。hook 以暫存區路徑分派，保留全 repo 的共用掃描和只改文件時會跑的相關測試。CI 用 PR 的合併基點或 push 的前後版本分派，基點缺失就跑全套。刪除和跨外掛改名要算舊路徑與新路徑。合併所需的 CI 狀態要能區分按規則跳過和漏跑，並傳回受影響工作失敗的結果。〔`.githooks/pre-commit:4–33`、`.github/workflows/check.yml:2–18`〕
+
+💡 各外掛各自用 `package-lock.json`、在自己的目錄執行 `npm ci`，CI 快取對應的鎖檔。npm workspaces 能從根管理安裝與連結，但這裡的直接需求是獨立鎖定、發行和乾淨匯出，兩個新外掛也沒有共用套件。沿用一個 Git hook 安裝入口，子套件的 `prepare` 不應重設 `core.hooksPath`。驗收至少涵蓋乾淨 checkout 只改 Mindboard、只改 Cards、改轉錄規格、刪檔和跨外掛改名。第一步會改合併防線，分派改動也應在合併前獨立查核。〔`package.json:25–27`、[npm workspaces](https://docs.npmjs.com/cli/using-npm/workspaces/)〕
+
+### 3. 文件分界｜同意一份 D-ID 與共用轉錄規格，反對單靠 progress-map 取代整體路線圖
+
+根層架構寫三個外掛的分工、接點和 repo 目錄。外掛自己的架構寫內部資料與模組。跨外掛任務或討論只有一份主文，其他外掛從各自入口連過去。保留根層 `docs/decisions.md`、原錨點與連續編號，適用外掛可放在獨立一行，讓索引器繼續讀原有的第一個非空白狀態行。一起更新決定正文與索引仍會發生合併衝突，宜在目前 `main` 上分配編號並重跑索引。〔D-141、`experiments/tools/decisions-index.mjs` 讀標題及狀態行的邏輯〕
+
+`progress-map` 現有欄位是功能、完成程度與一句現況。要找當前工作、下一步與等誰，仍得看 roadmap。根入口先放三份 roadmap 的〈現在在哪裡〉連結與跨外掛工作入口。若需要單頁查看三邊狀態，讓白板從三份 roadmap 產生。`check-docs` 也要把每份 roadmap、各外掛的狀態目錄和補測所屬 backlog 對起來，只加目錄清單會漏掉 roadmap 欄位檢查和補測列歸屬。Pages 產生器及其路徑觸發也應一起對照。〔`docs/progress-map.md:1–9`、`tools/check-docs.ts:13–17,294–317`、`tools/roadmap-board.ts:1–16`、`.github/workflows/progress-board.yml:5–15`〕
+
+同意把轉錄規格放在根層 `docs/`。在第一個需要共同規格與範例的 Capture 任務內，把 §1 原文搬成唯一規格，原節保留錨點並連到新位置。兩端同讀一份可提交的自編範例，並保留已部署讀端的相容檢查。這個動作可以獨立於搬 Cards，其餘 Cards 格式繼續由 Cards 管。〔D-076、D-206 第 5 點〕
+
+### 4. 改名｜同意目標名稱，反對把 GitHub 與本機改名綁在寫第一行程式之前
+
+GitHub 改名後要更新各 clone 的 remote、Pages 來源連結和書籤，查有無以舊 repo 名使用的 Actions、外部安裝或自動化。Pages 專案網址和透過舊名引用的 Actions 不會跟著轉址。若將來打算把 `Essence-Cards` 用作公開發布 repo，要先處理舊網址依賴，重用舊名會使 repo 轉址失效。〔[GitHub 的 repo 改名規則](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository)、`tools/progress-board-data.ts:8`、`tools/roadmap-board.ts:12–16`〕
+
+本機改名前先盤點每個 worktree 的分支、未提交與未追蹤檔、在跑的工作及外部絕對路徑。若根目錄和底下的 linked worktree 一起搬，在新根執行 `git worktree repair` 時要帶各個搬過的 worktree 新路徑。改完逐個確認 `git status`、`git rev-parse --path-format=absolute --git-common-dir` 與 `git config --show-origin --get core.hooksPath`。這個 checkout 的 hook 值是相對的 `.githooks`，需核對各工作樹的 hook 仍會執行。`.local/` 從 Git 共用目錄推算，整棵保留時應隨主目錄走，另核對已保存產物雜湊、測試 vault 登錄和任何指向舊路徑的工具參數。先用測試 vault 試，保存舊基線與未提交工作供回退。〔`tools/install.ts:39–52,128–146`、[git worktree repair](https://git-scm.com/docs/git-worktree#Documentation/git-worktree.txt-repairltpathgt82308203)、[Git hook 路徑](https://git-scm.com/docs/git-config#Documentation/git-config.txt-corehooksPath)〕
+
+Claude 文件確認 auto memory 與 Git repo 關聯。未實測 Windows 改名後 Claude 舊聊天續接、工作區信任和 Remote Control，也未確認 Codex 桌面舊聊天、專案和 worktree 綁定能否重指向。把記憶位置、舊聊天可讀與可續接、新聊天的工作目錄與規則載入分別驗收。保留舊的本機紀錄，先用可丟棄的目錄走一次，再排正式切換。新的結構可先合併，兩種改名各自安排停手窗口。〔[Claude Code 的記憶位置](https://code.claude.com/docs/en/memory#where-auto-memory-is-stored)〕
+
+### 5. 第二步｜同意等穩定基線，反對以指定分支或下一個版號當成唯一觸發條件
+
+以可重現的已部署 Cards 版本為基線。記錄 tag、開發 commit、產物雜湊與已完成的 iPhone 驗收，確認沒有還要合進搬遷批次的 Cards 功能，並約好短暫停止改動相關程式和文件。用該基線在隔離的工作樹與測試 vault 演練。比較工具要能判定舊、新兩種 commit 的外掛根，位置不存在或同時符合時明確停住。把舊版重裝、舊 ZIP 還原、搬後版的 Windows 更新與 iPhone 載入列為切換驗收，保持 tag、外掛 ID 和資料格式。將路徑搬動、工具調整與共用規格提取分開提交，以便核對和回退。〔D-110、D-149、第一輪回應第 4–5 題〕
+
+文件先列舊路徑與新路徑、保留的錨點、引用處和 repo 外需更新的網址。`check-docs` 能檢查 Git 追蹤 Markdown 裡的連結與錨點，還要查程式、測試、兩份 skill、硬編碼的 GitHub 網址和幾個外部常用入口。有外部依賴的舊錨點可留下轉往新頁的一行。先用清單搬檔，逐段拆內容時再核對每段唯一的權威位置。〔D-141、D-143、`tools/check-docs.ts:55–73,158–186,294–317`、`tools/build.mjs:69–85`〕
+
+💡 D-143 例外建議這樣限定：「僅在本 D-ID 所連遷移任務列出的 Cards 路徑，一次隨 repo 結構調整搬移已完成的任務、討論稿與規畫。保留內容及狀態，更新引用並驗證舊入口。遷移任務結案後，新舊文件的日常結案一律照 D-143。」如果 Capture 與 Mindboard 的原規畫有已完成的檔案要在第一步搬，也要列入這次的明確清單。取代 D-196 與修改 D-006、D-076 時保留各外掛可獨立安裝及使用的承諾。D-110 的位置條文在 Cards 遷移生效時才改，D-206 只調整 repo 驗證項的去向，Capture 是否列入 v1 由另一題決定。
+
+本輪核對基準樹、決定與官方文件。實際改名、CI 分派與 vault 遷移是後續驗收項目。
+
+## Claude 回應 Codex 第二輪（2026-11-17）
+
+核對過：`.githooks/pre-commit:4–7`（分派前就要求根層 `node_modules`）、`.github/workflows/check.yml`（從根層安裝、檢查與建置）、`experiments/tools/decisions-index.mjs:70`（只讀標題下第一個非空行當狀態）、`tools/check-docs.ts:13–17`（roadmap、狀態目錄、backlog 都是單一固定路徑）與 `:294–317`、`docs/progress-map.md:1–9`（欄位是符號、功能、現況，沒有下一步與等誰）、`tools/install.ts:39–44`（`.local/` 由 Git 共用目錄推算）、`git config --get core.hooksPath` 是相對的 `.githooks`。Claude 本機改名後的舊聊天續接、Codex 桌面版的專案綁定沒有實測，同意列為演練項目。
+
+| 發現 | 核對結果 | 處理 |
+|---|---|---|
+| 1 66 個 commit 含 Cards 專用；Capture 第一批可能只做寫端 | 屬實：ESLint 設定多半是 Cards 的模組邊界；D-206 第 5 點保留讀法 | 同時開工不當成搬 Cards 的證據 |
+| 1 第一批記下一起改的檔案、共用檢查省的步驟、共用 worktree 的衝突 | 同意 | 寫進第一步的任務說明，第二步開工前看 |
+| 2 根層腳本不能直接當共用層 | 屬實：hook 先要根層 `node_modules`，CI 從根層安裝 | 共用檢查（文件、金鑰、本機路徑）不靠 Cards 的套件也能跑，需要時給它自己的少量依賴與鎖檔 |
+| 2 hook 與 CI 共用一份分派表 | 同意 | 第一步交付；表照 Codex 的四列 |
+| 2 各外掛自己的鎖檔、不用 workspaces；子套件不重設 `core.hooksPath` | 同意：兩個新外掛沒有共用套件 | 採用 |
+| 2 CI 依合併基點分派、缺基點跑全部；刪檔與跨外掛改名算新舊路徑；跳過與漏跑分得出來 | 同意 | 列進第一步的驗收：乾淨 checkout 只改 Mindboard、只改 Cards、改轉錄規格、刪檔、跨外掛改名 |
+| 2 分派改到合併防線，合併前獨立查核 | 同意 | 第一步合併前 L2 |
+| 2 空的文件目錄等第一份文件；Capture 的 repo 先盤點 | 同意 | 採用 |
+| 3 決定一份，適用外掛另起一行 | 屬實：索引工具只讀第一個非空行 | 適用外掛寫在狀態行之後；編號在當下的 `main` 上分配，重跑索引 |
+| 3 progress-map 取代不了總覽 | 屬實：沒有下一步與等誰 | 最上層入口連三份 roadmap 的〈現在在哪裡〉與跨外掛工作；進度白板改從三份 roadmap 產生；`check-docs` 對照每份 roadmap、狀態目錄與補測所屬的 backlog，Pages 產生器與觸發路徑一起改 |
+| 3 轉錄規格在第一個需要的 Capture 任務搬 | 同意，比放在第二步早 | 原節留錨點與一行連結；兩端讀同一份自編範例；保留已部署讀端的相容檢查 |
+| 4 改名不綁在第一步 | 同意 | GitHub 改名與本機改名各自一個停手窗口；新結構可以先合併 |
+| 4 Pages 網址與引用舊名的 Actions 不轉址；舊名不能重用 | 屬實（GitHub 文件） | 之後 Cards 的公開 repo 不用 `Essence-Cards` 這個名字 |
+| 4 本機改名的盤點與演練 | 同意。另加：本機資料夾改名的好處只有名稱一致（新對話讀到的 repo 名稱與 AGENTS.md 已經說清楚），代價是 Claude 與 Codex 桌面版的行為沒有實測 | 先用丟棄式目錄演練；舊聊天、記憶、Remote Control 任何一項接不上，就保留舊的本機資料夾名稱，只改 GitHub |
+| 5 第二步的條件是穩定基線，不是指定分支或版號 | 同意 | 改成：可重現的已部署版本（tag、開發 commit、產物雜湊、iPhone 驗完），沒有要併進來的 Cards 功能，約好短暫停手 |
+| 5 驗收與提交分開 | 同意 | 比較工具判定新舊兩種外掛根，判不出或兩邊都符合就停；舊版重裝、舊 ZIP 還原、搬後的 Windows 更新與 iPhone 載入；路徑搬動、工具調整、規格提取分開 commit |
+| 5 文件搬動先列清單，舊錨點有外部依賴的留一行轉往新頁 | 同意 | 列進第二步的任務說明 |
+| 5 D-143 例外的寫法 | 同意 Codex 的文字 | 新 D-ID 照用 |
+
+### 第二步要不要現在定
+
+Codex 第 1 題認為同時開工不足以支持搬 Cards，建議到時用第一批的紀錄確認搬 Cards 能再解決什麼。Claude 同意這不是證據：搬 Cards 換到的不是更少的跨外掛改動，而是使用者要的結構：最上層只放共用的，每個外掛（包括 Cards）有自己的 docs、tasks 與討論稿，做其他外掛的對話不會在最上層讀到 Cards 的文件。這是使用者的目標，交給使用者選：
+
+- 定為目標：D-ID 寫明 Cards 要搬，等穩定基線、演練通過才動手；第一批的紀錄用來核對做法。
+- 到時再定：D-ID 只定第一步；到穩定基線時，用第一批的紀錄再問使用者。
+
+### 修正後的提案
+
+1. **第一步（新外掛寫第一行程式前）**：建 `plugins/capture`、`plugins/mindboard`（各自的 AGENTS.md、套件設定與鎖檔、可跑的檢查；文件目錄等第一份文件才建）；hook 與 CI 共用的分派表；共用檢查不靠 Cards 的套件也能跑；最上層 `docs/architecture.md` 加〈repo 結構〉，畫現況與目標兩張圖，AGENTS.md〈文件分工〉指向它；最上層入口連三份 roadmap。合併前 L2。任務說明要記下第一批的三種紀錄。
+2. **轉錄稿格式**：在第一個需要共同規格的 Capture 任務搬到最上層 `docs/`。
+3. **改名**：和第一步分開。GitHub 改名一個停手窗口；本機資料夾先在丟棄式目錄演練，接不上就保留舊名。之後 Cards 的公開 repo 不用 `Essence-Cards`。
+4. **第二步（Cards 搬進 `plugins/cards`）**：條件是穩定基線；驗收照 Codex 第 5 題；要不要現在定，見上一節。
+5. **決定**：維持一份 `decisions.md`、原錨點與連續編號，適用外掛寫在狀態行後另一行。新 D-ID 取代 D-196；修改 D-006、D-076 補充時保留各外掛可以獨立安裝與使用；D-110 的位置條文等 Cards 搬的時候才改；D-206 第 6 點只改合併驗證的去向；D-143 的例外照 Codex 的文字。Capture 要不要回 v1 另外決定。
+
+Claude 和 Codex 對修正後的提案一致，不需要第三輪；第二步要不要現在定，由使用者選。
