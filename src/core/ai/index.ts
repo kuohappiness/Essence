@@ -4,6 +4,7 @@ export type { EmbeddedRule, EmbeddedRules, RuleSubject } from './rules.ts';
 export { check } from './check.ts';
 export { findItem, introBoxes, suspectOf } from './intro.ts';
 export type { BoxItem, BoxKind, IntroBox, ItemRef } from './intro.ts';
+export { moveCandidates, WHY } from './move.ts';
 export { buildPrompt, existingTargets, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { groupHints, issueText, normalizeReply } from './reply.ts';
