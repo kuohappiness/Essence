@@ -35,7 +35,8 @@ async function until<T>(read: () => T | null | undefined | false | Promise<T | n
   }
 }
 
-export async function introAddDev(host: IntroDevHost, folder: string): Promise<unknown> {
+export async function introAddDev(host: IntroDevHost, folder: string, notices: readonly string[]): Promise<unknown> {
+  const noticeStart = notices.length;
   const app: App = host.app;
   const state = host.state;
   if (!state) throw Error('state 還沒建立');
@@ -84,19 +85,26 @@ export async function introAddDev(host: IntroDevHost, folder: string): Promise<u
         (result.shots as unknown[]).push(await capturePng(app, `${folder}/2 加入之後.png`));
         // 今天的份：啟用的目的地照常出（新題在同一個目標底下）；草稿的來源不出。
         await until(() => state.deckTargets(srcPath).length === 0 && state.deckTargets(destPath).length === 1);
+        // 今天的份可能已經被別的測試卡組排滿（上限），所以連「再複習一些」一起看：目的地的目標在其中一個，草稿的來源都不在。
+        const today = state.today();
+        const queued = (deck: string): string[] => [...today.share, ...today.more].filter(item => item.deck === deck).map(item => item.lt);
         result.after = {
           destTargets: state.deckTargets(destPath),
           srcTargets: state.deckTargets(srcPath),
-          todayDest: state.today().share.filter(item => item.deck === destPath).map(item => item.lt),
-          todaySrc: state.today().share.filter(item => item.deck === srcPath).map(item => item.lt),
+          share: today.share.length,
+          todayDest: today.share.filter(item => item.deck === destPath).map(item => item.lt),
+          queuedDest: queued(destPath),
+          queuedSrc: queued(srcPath),
         };
         const finalDest = await read(destPath), finalSrc = await read(srcPath);
         result.ok = {
           dest: finalDest === DEST.replace('    - Q1 :: A1\n', '    - Q1 :: A1\n    - Q3 :: A3\n    - Q4 :: A4\n'),
           src: finalSrc === ['---', '狀態: 草稿', '---', '## 乙', '', '- 能乙一 ^zqxwf2', '    - Q2 :: A2', '', '- 能丙 ^zqxwg2', '    - Q5 :: A5', '', '- 能丁 ^zqxwh2', '    - Q6 :: A6', ''].join('\n'),
-          confirmTexts: result.existingConfirm === '把 1 項加進已有的學習目標（1 篇卡組）？' && result.candidateConfirm === '把 1 個候選卡片加進這一篇的學習目標？',
+          queued: queued(destPath).includes('zqxwa2') && queued(srcPath).length === 0,
+          confirmTexts: result.existingConfirm ==='把 1 項加進已有的學習目標（1 篇卡組）？' && result.candidateConfirm === '把 1 個候選卡片加進這一篇的學習目標？',
         };
         result.final = { dest: finalDest, src: finalSrc };
+        result.notices = notices.slice(noticeStart);
         // 改回原文再關掉分頁，withTempFile 才認得是這次建的、清得掉。
         (leaf as WorkspaceLeaf | null)?.detach();
         leaf = null;

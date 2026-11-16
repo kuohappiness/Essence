@@ -142,7 +142,7 @@ const commands: Record<string, DevCommand> = {
   // tasks/edit-markup.md §6-3：編輯畫面的標示、填出處的圖示與表單、300 個目標的速度。
   // tasks/ai-cards-add.md §1 的平台事實 P1～P5：引言框的加入按鈕，截圖寫在 Essence W5/結果/引言框 …/。
   intro: { name: 'Essence 開發：引言框的加入按鈕（P1～P5）', run: host => introDev(host, `${root}/結果/引言框 ${stampOf(new Date())}`), desktop: true },
-  'intro-add': { name: 'Essence 開發：引言框的加入（兩篇卡組實際加入）', run: host => introAddDev(host, `${root}/結果/引言框加入 ${stampOf(new Date())}`), desktop: true },
+  'intro-add': { name: 'Essence 開發：引言框的加入（兩篇卡組實際加入）', run: (host, ids) => introAddDev(host, `${root}/結果/引言框加入 ${stampOf(new Date())}`, ids.devLog.notices), desktop: true },
   markup: { name: 'Essence 開發：編輯畫面標示（截圖）', run: host => markupCheck(host.app, host.ids, `${root}/結果/標示 ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
