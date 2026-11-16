@@ -265,3 +265,43 @@ void test('§3-1 目的地是這一篇的原文項目也要過確認：確認之
   assert.ok(ok.kind === 'done' && ok.added.length === 1 && ok.cleared, JSON.stringify(ok));
   assert.equal(h.texts.get(SRC), head('2-2 水溶液', '草稿') + BODY + self[1] + '\n');
 });
+
+/** 排了幾次今天的份：每一次排都由 input() 取一次時間（呼叫堆疊裡有 input）。 */
+function planCounter(): { now: () => number; count: () => number; reset: () => void } {
+  let plans = 0;
+  return {
+    now: () => { if (/\bat input \(/.test(new Error().stack ?? '')) plans++; return Date.parse('2026-11-16T10:00:00.000+08:00'); },
+    count: () => plans,
+    reset: () => { plans = 0; },
+  };
+}
+
+void test('§4 重排：一批跨篇加入（寫兩篇）只排一次今天的份、通知一次（L2 R8）', async t => {
+  const text = source([LINK, Q2]);
+  const plans = planCounter();
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { now: plans.now });
+  plans.reset();
+  const result = await h.state.addExisting(request(text));
+  assert.ok(result.kind === 'done' && result.cleared, JSON.stringify(result));
+  // 兩篇寫入的 Files.watch 回聲在批次之後才讀到：內容相同，不再排、不再通知。
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(plans.count(), 1);
+  assert.equal(h.changes(), 1);
+});
+
+void test('§4 重排：批次中有人要今天的份，先照已採用的排；之後又採用了來源，批次結束再排一次；通知仍只一次（L2 R8）', async t => {
+  const text = source([LINK, Q2]);
+  const plans = planCounter();
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { now: plans.now });
+  const held = h.holdModify(SRC);
+  plans.reset();
+  const running = h.state.addExisting(request(text));
+  await until(() => h.texts.get(SRC) !== text);
+  h.state.today();
+  assert.equal(plans.count(), 1);
+  held.release();
+  await running;
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(plans.count(), 2);
+  assert.equal(h.changes(), 1);
+});

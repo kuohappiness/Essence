@@ -604,7 +604,12 @@ export function createState(options: StateOptions): State {
     current = plan(input());
     notifyChange();
   }
-  /** 存檔或家長選了之後，state 把這份文字當成這篇卡組現在的內容（tracker 已經比對過），立刻重排。 */
+  /**
+   * 引言框加入的批次（tasks/ai-cards-add.md §4〈重排〉，L2 R8）：批次中的採用（含自己寫入的回聲）只重建索引、記下要重排（今天的份清掉，中途有人要時 fresh()
+   * 照已採用的排）；批次結束時還沒排過的才排，排過而之後沒有新的採用就只通知。
+   */
+  let batching = 0, replanHeld = false;
+  /** 存檔或家長選了之後，state 把這份文字當成這篇卡組現在的內容（tracker 已經比對過），立刻重排（加入的批次中留到批次結束）。 */
   function adopt(path: string): void {
     const text = tracker.text(path);
     if (text === undefined) return;
@@ -612,6 +617,11 @@ export function createState(options: StateOptions): State {
     rebuild();
     // 先排入紀錄，再通知會讀新排程的畫面。
     observe();
+    replanOrHold();
+  }
+  /** 要重排：加入的批次中只記下（今天的份清掉），批次結束才排；其他時候立刻排。 */
+  function replanOrHold(): void {
+    if (batching > 0) { current = null; replanHeld = true; return; }
     replan();
   }
 
@@ -819,7 +829,8 @@ export function createState(options: StateOptions): State {
         // 內容和快取相同也要比：這一批可能正好補齊了讀不到的。
         observe();
       }
-      if (life.loaded && (decksChanged || logsChanged)) replan();
+      // 自己寫的那幾篇的回聲也從這裡採用：加入的批次中一樣留到批次結束（L2 R8）。
+      if (life.loaded && (decksChanged || logsChanged)) replanOrHold();
       // 內容和快取相同也要查：這一批可能正好補齊了讀不到的。
       if (life.loaded) snapshots.check();
     };
@@ -945,7 +956,16 @@ export function createState(options: StateOptions): State {
   /** 加進已有的學習目標（§4）：批次中照常採用、重建索引，通知留到最後一次（第二輪 R6）。 */
   async function addExisting(request: ExistingRequest): Promise<ExistingResult> {
     holdingNow++;
-    try { return await existingBatch(request); } finally { release(); }
+    batching++;
+    try { return await existingBatch(request); } finally {
+      batching--;
+      if (batching === 0 && replanHeld) {
+        replanHeld = false;
+        // 關閉（停用）時不排、不通知（§4〈重排〉）。
+        if (!life.closed) { current ??= plan(input()); notifyChange(); }
+      }
+      release();
+    }
   }
   async function existingBatch(request: ExistingRequest): Promise<ExistingResult> {
     const { source, editorOf, resolve, endpoint } = request;
@@ -1003,6 +1023,8 @@ export function createState(options: StateOptions): State {
       };
       const editor = editorOf(dest);
       const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(dest, plan));
+      // 核對過的寫入當場採用（L2 R8）：之後的 Files.watch 回聲內容相同、不再重排或通知。
+      if (result.kind === 'done') adopt(dest);
       if (lockedNow) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.locked(dest) }); continue; }
       if (moved) { changed = true; continue; }
       if (result.kind === 'blocked' && result.reason !== 'needs-update') { blocked = result.reason; for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
@@ -1071,6 +1093,8 @@ export function createState(options: StateOptions): State {
     };
     const editor = editorOf(source);
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(source, plan));
+    // 核對過的寫入當場採用（L2 R8）：之後的 Files.watch 回聲內容相同、不再重排或通知。
+    if (result.kind === 'done') adopt(source);
     const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
     if (ownMoved && !confirmedItems.length) return { kind: 'changed' };
     if (result.kind === 'done' || result.kind === 'saved') {
