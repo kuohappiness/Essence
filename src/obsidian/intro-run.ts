@@ -131,7 +131,7 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
   const modals = new Set<Modal>();
   let alive = true;
   /**
-   * 開在編輯模式的分頁（寫入、「還沒存進去」與最新的字都只看它）。閱讀模式的分頁改隱藏的編輯器，view.save() 不會寫進磁碟；
+   * 開在編輯模式的分頁（寫入、「還沒存進去」與最新的字都只看它）。閱讀模式的分頁改隱藏的編輯器，磁碟上留不住（view.save() 沒寫，或寫了又被舊內容蓋回，實機分不出）；
    * 它也不跟著外部的修改重讀，拿來比對會一直是「還沒存進去的修改」（Windows 實機 2026-11-16，開發命令 intro-add）。
    * 只開在閱讀模式時走檔案，Obsidian 收到修改會重讀。
    */
