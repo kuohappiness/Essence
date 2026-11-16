@@ -6,6 +6,10 @@ export { boxBatch, boxOf, findItem, introBoxes, refOf, suspectOf } from './intro
 export type { BoxKind, ItemRef } from './intro.ts';
 export { moveCandidates, WHY } from './move.ts';
 export type { Left, MovePlan } from './move.ts';
+export { EXISTING_WHY, planExisting } from './existing.ts';
+export type { ExistingInput } from './existing.ts';
+export { planSources, SOURCE_WHY } from './existing-sources.ts';
+export type { SourceOwner as SourceProps } from './existing-sources.ts';
 export { buildPrompt, existingTargets, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { groupHints, issueText, normalizeReply } from './reply.ts';

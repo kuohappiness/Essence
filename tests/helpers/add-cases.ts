@@ -19,6 +19,20 @@ export const box = (...items: string[][]): string => ['> [!note]- 候選卡片',
 /** 一項候選：名稱行尾有 ID，第一個子項目是理由。 */
 export const cand = (name: string, id: string, ...rest: string[]): string[] => [`- ${name} ^${id}`, '    - 理由：x', ...rest.map(each => '    - ' + each)];
 
+/**
+ * §3-2 加進已有的例子：框裡那一項（去掉引言框前綴）、目的地全文、來源的單元。tests/deck.test.ts 把目的地寫前、寫後的全文登錄進往返範例。
+ * 目的地都是國二上自然 2-1 的目標 q8z3ka。
+ */
+const existingHead = (unit: string): string => `---\n年級學期: 國二上\n科目: 自然\n單元: "${unit}"\n---\n`;
+const LINK = '- [[國二上自然 2-1#^q8z3ka|能用密度判斷物體的浮沉]]';
+const NAME = '- 能用密度判斷物體的浮沉 ^q8z3ka';
+export const EXISTING_INPUTS: readonly { original: string; text: string; unit: string }[] = [
+  { original: [LINK, '    - 出處：p.46', '    - 雞蛋為什麼浮起來？ :: 鹽水的**密度變大**'].join('\n'), text: existingHead('2-1 密度') + [NAME, '    - 出處：p.30', '    - 密度怎麼算？ :: 質量除以體積', '        - 補充：說明', '', '- 能說出浮力 ^p7q2w8', '    - 浮力？ :: 向上的力', ''].join('\n'), unit: '2-2 水溶液' },
+  { original: [LINK, '    - 雞蛋為什麼浮起來？ :: 鹽水的**密度變大**'].join('\n'), text: existingHead('2-1 密度') + [NAME, '\t- 密度怎麼算？ :: 質量除以體積', ''].join('\n'), unit: '2-1 密度' },
+  { original: [LINK, '    - 備註：容易和重量搞混', '    - 記憶錨點：重的沉', '        - 輕的浮'].join('\n'), text: (existingHead('2-1 密度') + [NAME, '    - 類型：計算', '    - 密度怎麼算？ :: 質量除以體積', ''].join('\n')).replaceAll('\n', '\r\n'), unit: '2-1 密度' },
+  { original: [LINK, '    - 夏天的昆蟲 ::', '        - 蚱蜢', '        - ![[蚱蜢.png]]'].join('\n'), text: existingHead('2-1 密度') + [NAME, '    - 密度怎麼算？ :: 質量除以體積'].join('\n'), unit: '2-3 熱' },
+];
+
 const one = (): string => box(cand('能乙', 'bbbbb2', 'Q :: B'));
 /** 全部候選都搬得動的幾篇：插入位置、縮排、換行字元、框留不留、比較卡。 */
 export const ADD_INPUTS: readonly string[] = [

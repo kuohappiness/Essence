@@ -31,7 +31,7 @@ export const WHY = {
 
 const REASON = /^理由\s*[：:]/;
 /** 一行的縮排寬度（Tab 展開）與縮排之後的字。 */
-function indentOf(raw: string): { width: number; rest: string } {
+export function indentOf(raw: string): { width: number; rest: string } {
   const lead = /^[ \t]*/.exec(raw)![0];
   return { width: expandTabs(lead).length, rest: raw.slice(lead.length) };
 }
@@ -44,7 +44,7 @@ function usesTabs(lines: readonly Line[], boxes: readonly IntroBox[]): boolean {
   }
   return false;
 }
-const encode = (width: number, tabs: boolean): string => tabs ? '\t'.repeat(Math.floor(width / 4)) + ' '.repeat(width % 4) : ' '.repeat(width);
+export const encode = (width: number, tabs: boolean): string => tabs ? '\t'.repeat(Math.floor(width / 4)) + ' '.repeat(width % 4) : ' '.repeat(width);
 
 /** 框裡一項搬出來的幾行（不含換行字元）：拿掉理由、照最後一個目標的根項對齊。不能自動搬回傳原因。 */
 function unboxed(item: BoxItem, rootIndent: number, tabs: boolean): { lines: string[] } | { why: string } {
