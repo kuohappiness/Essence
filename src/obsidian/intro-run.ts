@@ -3,7 +3,7 @@ import { boxBatch, boxOf, refOf, WHY } from '../core/ai/index.ts';
 import type { Endpoint, ItemRef } from '../core/ai/index.ts';
 import { parseDeck } from '../core/deck/index.ts';
 import type { Target } from '../core/deck/index.ts';
-import type { AddResult, ExistingRequest, ExistingResult, State, WriteBlock } from '../state/index.ts';
+import type { AddResult, EditorHandle, ExistingRequest, ExistingResult, State, WriteBlock } from '../state/index.ts';
 import { resolveSource } from '../ui/sources.ts';
 import type { AddRequest } from './intro-add.ts';
 import { editorOf } from './save.ts';
@@ -130,9 +130,16 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
   const locked = new Set<string>();
   const modals = new Set<Modal>();
   let alive = true;
-  const view = (path: string): MarkdownView | null => app.workspace.getLeavesOfType('markdown').map(leaf => viewOf(leaf, path)).find(each => each !== null) ?? null;
+  /**
+   * 開在編輯模式的分頁（寫入、「還沒存進去」與最新的字都只看它）。閱讀模式的分頁改隱藏的編輯器，view.save() 不會寫進磁碟；
+   * 它也不跟著外部的修改重讀，拿來比對會一直是「還沒存進去的修改」（Windows 實機 2026-11-16，開發命令 intro-add）。
+   * 只開在閱讀模式時走檔案，Obsidian 收到修改會重讀。
+   */
+  const editingView = (path: string): MarkdownView | null =>
+    app.workspace.getLeavesOfType('markdown').map(leaf => viewOf(leaf, path)).find(each => each !== null && each.getMode() === 'source') ?? null;
+  const editing = (path: string): EditorHandle | null => { const open = editingView(path); return open ? editorOf(open, path) : null; };
   const latest = async (path: string): Promise<string | null> => {
-    const open = view(path);
+    const open = editingView(path);
     if (open) return open.editor.getValue();
     const file = app.vault.getFileByPath(path);
     return file ? app.vault.read(file) : null;
@@ -141,9 +148,9 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
 
   /** 寫一次：開著的筆記先確認編輯器的字都存進去了，走編輯器；沒開著的走檔案。 */
   async function write(state: State, path: string, refs: readonly ItemRef[], still: (text: string) => boolean): Promise<AddResult | 'unsaved'> {
-    const open = view(path);
+    const open = editingView(path);
     if (open?.file && !sameText(open.editor.getValue(), await app.vault.read(open.file))) return 'unsaved';
-    return state.addCandidates(path, refs, open && editorOf(open, path), still);
+    return state.addCandidates(path, refs, editing(path), still);
   }
 
   async function candidates(state: State, request: AddRequest): Promise<AddResult | 'unsaved' | null> {
@@ -169,7 +176,7 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
 
   /** 加進已有的寫一次：連結照 Obsidian 的解析，出處的教材端點照兩篇各自的材料（§3-2、§3-3）。 */
   async function writeExisting(state: State, path: string, refs: readonly ItemRef[], still: (text: string) => boolean, destStill?: ExistingRequest['destStill']): Promise<ExistingResult | 'unsaved'> {
-    const open = view(path);
+    const open = editingView(path);
     if (open?.file && !sameText(open.editor.getValue(), await app.vault.read(open.file))) return 'unsaved';
     const materials = (deck: string): readonly string[] => state.decks().find(each => each.path === deck)?.deck.props.materials ?? [];
     const endpoint = (dest: string): Endpoint => (link, side) => {
@@ -178,7 +185,7 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
     };
     return state.addExisting({
       source: path, refs, still, destStill, endpoint,
-      editorOf: each => { const leaf = view(each); return leaf ? editorOf(leaf, each) : null; },
+      editorOf: editing,
       resolve: (link, from) => app.metadataCache.getFirstLinkpathDest(link.split('#')[0], from)?.path ?? null,
       locked: each => locked.has(each),
     });

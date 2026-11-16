@@ -28,7 +28,7 @@ const TIPS = {
 };
 
 type Result = Record<string, unknown> & { kind: string };
-interface Call { refs: readonly ItemRef[]; still: (text: string) => boolean }
+interface Call { refs: readonly ItemRef[]; still: (text: string) => boolean; editor: unknown }
 interface Runner { busy(path: string): boolean; add(request: unknown): void; close(): void }
 interface Module {
   createIntroRunner: (host: unknown) => Runner;
@@ -43,8 +43,8 @@ function setup(results: Result[] = []) {
   let refreshed = 0;
   let pending: (() => void) | null = null;
   const state = {
-    addCandidates(_path: string, chosen: readonly ItemRef[], _editor: unknown, still: (text: string) => boolean) {
-      calls.push({ refs: chosen, still });
+    addCandidates(_path: string, chosen: readonly ItemRef[], editor: unknown, still: (text: string) => boolean) {
+      calls.push({ refs: chosen, still, editor });
       const result = results.shift() ?? { kind: 'written', confirmed: true, moved: chosen, left: [] };
       if (result.kind === 'hold') return new Promise(resolve => { pending = () => { resolve({ kind: 'written', confirmed: true, moved: chosen, left: [] }); }; });
       return Promise.resolve(result);
@@ -165,7 +165,7 @@ const SOURCE = 'Essence Cards/學業/國二上/自然/2-2.md';
 const OLD = 'Essence Cards/學業/國二上/自然/2-1.md';
 const OLD_TEXT = '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 密度怎麼算？ :: 質量除以體積\n';
 const BOX = '> [!note] 加進已有的學習目標\n> - [[國二上自然 2-1#^q8z3ka|能用密度判斷物體的浮沉]]\n>     - 鐵會沉嗎？ :: 會\n> - [[國二上自然 2-3#^w2e3r4|能說出熱]]\n>     - 熱？ :: 能量\n> - q8z3ka 能用密度判斷物體的浮沉\n>     - 木頭會浮嗎？ :: 會\n';
-interface ExistingCall { refs: readonly ItemRef[]; still: (text: string) => boolean; destStill?: (path: string, text: string) => boolean }
+interface ExistingCall { refs: readonly ItemRef[]; still: (text: string) => boolean; destStill?: (path: string, text: string) => boolean; editorOf: (path: string) => unknown }
 function existingSetup(results: Result[] = []) {
   const stub = createObsidianStub();
   stub.texts.set(SOURCE, BOX);
@@ -231,4 +231,51 @@ void test('§4 通知的字：來源清除沒確認、沒加入的原因；逾�
   await tick();
   assert.deepEqual(h.stub.notices, ['已把 1 項加進已有的學習目標（「2-1」）\n目的地已確認，來源清除未確認：框裡的項目如果還在，請再按一次\n「能說出熱」：原本的卡組裡找不到這個學習目標']);
   assert.equal(h.runner.busy(OLD), true);
+});
+
+// Windows 實機（2026-11-16，開發命令 intro-add）：閱讀模式的分頁改隱藏的編輯器，view.save() 沒把它寫進磁碟，
+// 之後每次都是「還沒存進去的修改」。按鈕只在閱讀模式，所以只有開在編輯模式的分頁才走編輯器，其餘走檔案。
+const openTab = (stub: ReturnType<typeof createObsidianStub>, path: string, text: string, mode: 'source' | 'preview'): void => {
+  const leaf = stub.leaf(path);
+  Object.assign(leaf.view as object, { value: text, mode });
+  stub.leaves.push(leaf);
+};
+
+void test('§2 只開在閱讀模式的那一篇走檔案（不交編輯器）；另有開在編輯模式的分頁才走編輯器', async () => {
+  const h = setup();
+  openTab(h.stub, DECK, TEXT, 'preview');
+  h.runner.add(one);
+  await tick();
+  assert.equal(h.calls[0].editor, null);
+  openTab(h.stub, DECK, TEXT, 'source');
+  h.runner.add(one);
+  await tick();
+  assert.notEqual(h.calls[1].editor, null);
+});
+
+void test('§4 加進已有：來源與目的地只開在閱讀模式時都走檔案；目的地開在編輯模式才走編輯器', async () => {
+  const h = existingSetup();
+  openTab(h.stub, SOURCE, BOX, 'preview');
+  openTab(h.stub, OLD, OLD_TEXT, 'preview');
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: [boxRefs[0]], all: false });
+  await tick();
+  assert.equal(h.calls[0].editorOf(SOURCE), null);
+  assert.equal(h.calls[0].editorOf(OLD), null);
+  openTab(h.stub, OLD, OLD_TEXT, 'source');
+  assert.notEqual(h.calls[0].editorOf(OLD), null);
+});
+
+void test('§2、§4 閱讀模式的隱藏編輯器不跟著重讀（實機）：它的字和磁碟不同也不算「還沒存進去」，確認框的項數照磁碟', async () => {
+  const h = setup();
+  // 磁碟上已經搬走第一項，閱讀模式的隱藏編輯器還是舊的。
+  const now = TEXT.replace('> - 能說出浮力 ^p7q2w8\n>     - 理由：x\n>     - 浮力？ :: 向上的力\n', '');
+  h.stub.texts.set(DECK, now);
+  openTab(h.stub, DECK, TEXT, 'preview');
+  h.runner.add({ path: DECK, kind: 'candidate', refs: refs(now).filter(ref => ref.id === 'r5t6y7'), all: true });
+  await tick();
+  assert.equal(h.modal()!.querySelectorAll('p')[0].text, TIPS.confirm.replace('2 個', '1 個'));
+  h.answer(true);
+  await tick();
+  assert.deepEqual(h.calls.map(each => each.refs.map(ref => ref.id)), [['r5t6y7']]);
+  assert.deepEqual(h.stub.notices, [TIPS.moved(1)]);
 });
