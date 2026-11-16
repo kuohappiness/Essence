@@ -1060,15 +1060,14 @@ export function createState(options: StateOptions): State {
     if (blocked) return unclear(EXISTING_WHY.notNow);
     // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
     let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
-    let ownMoved = false;
+    let ownMoved = false, sourceLocked = false;
     const plan = (now: string): Prepared | null | typeof STOP => {
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
+      last = { done: [], left: [], text: null };
       ownMoved = own.length > 0 && !!request.destStill && !request.destStill(source, now);
-      if (ownMoved) { last = { done: [], left: [], text: null }; return null; }
-      if (addLocks.has(source)) {
-        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
-        return STOP;
-      }
+      if (ownMoved) return null;
+      sourceLocked = addLocks.has(source);
+      if (sourceLocked) return STOP;
       const items: ClearItem[] = [];
       const stale: Left[] = [];
       for (const each of confirmedItems) {
@@ -1098,19 +1097,26 @@ export function createState(options: StateOptions): State {
     if (result.kind === 'done') adopt(source);
     const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
     if (ownMoved && !confirmedItems.length) return { kind: 'changed' };
+    // 來源這次一項都沒拿、或結局不明（同一篇的目標變了、停用、逾時）：不論回呼跑過沒有，跨篇的照第 3 步的讀回算加入，
+    // 同一篇的一項都不算（L2 第二輪 R2）。
+    if (ownMoved) return unclear(WHY.changed);
+    if (sourceLocked) return unclear(EXISTING_WHY.locked(source));
+    if (result.kind === 'failed' && result.error instanceof WriteTimeout) {
+      addLocks.add(source);
+      locked.push(source);
+      return unclear(EXISTING_WHY.locked(source));
+    }
     if (result.kind === 'done' || result.kind === 'saved') {
       // 寫入的結果不證明來源拿掉了（保存的核對只看目標的 ID 與名稱）：讀回來源，和這次的輸出相同（換行字元除外）才算（L2 R4）。
       let back: string | null = null;
       try { back = await writes.readTimed(source); } catch { back = null; }
       const unify = (value: string): string => value.replace(/\r\n?/g, '\n');
       left.push(...last.left);
-      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), back !== null && last.text !== null && unify(back) === unify(last.text));
-    }
-    if (result.kind === 'failed' && result.error instanceof WriteTimeout) {
-      addLocks.add(source);
-      locked.push(source);
-      left.push(...last.left);
-      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), false);
+      if (back !== null && last.text !== null && unify(back) === unify(last.text)) return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), true);
+      // 讀回不同：同一篇的落盤沒確認，不算加入（L2 第二輪 R2）；跨篇的目的地在第 3 步確認過。
+      const ownRefs = new Set(own.map(each => each.ref));
+      for (const ref of last.done) if (ownRefs.has(ref)) left.push({ ref, why: EXISTING_WHY.unsure(source) });
+      return finish(last.done.filter(ref => !ownRefs.has(ref)).map(ref => ({ ref, dest: destOf(ref) })), false);
     }
     if (result.kind === 'unchanged') { left.push(...last.left); return finish([], true); }
     if (result.kind === 'blocked' && result.reason !== 'needs-update') blocked = result.reason;

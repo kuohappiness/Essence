@@ -302,3 +302,12 @@ void test('§3-1 確認時找不到目的地：交給 state 時不算確認過�
   assert.equal(h.calls.length, 2);
   assert.equal(h.calls[1].destStill?.(OLD, OLD_TEXT), true);
 });
+
+void test('§4 通知的字：來源停用時，已加入的照實說，來源改說要重開 Obsidian（L2 第二輪 R2）', async () => {
+  const [first] = boxRefs;
+  const h = existingSetup([{ kind: 'done', added: [{ ref: first, dest: OLD }], left: [], cleared: false, locked: [SOURCE], blocked: null }]);
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: [first], all: false });
+  await tick();
+  assert.deepEqual(h.stub.notices, [`已把 1 項加進已有的學習目標（「2-1」）\n「${SOURCE.split('/').at(-1)!.replace(/\.md$/, '')}」的寫入還沒確定，請重開 Obsidian 後再按`]);
+  assert.equal(h.runner.busy(SOURCE), true);
+});
