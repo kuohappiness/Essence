@@ -4,10 +4,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 import { NEED_FORMS } from './helpers/need-forms.ts';
-import { clearExisting, introBoxes, inspectReply, moveCandidates, planDraft, planExisting, RULE_SUBJECTS } from '../src/core/ai/index.ts';
+import { inspectReply, planDraft, RULE_SUBJECTS } from '../src/core/ai/index.ts';
 import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
 import { EDIT_CASES } from './helpers/source-edit-cases.ts';
-import { ADD_INPUTS, EXISTING_INPUTS } from './helpers/add-cases.ts';
+import { addTexts } from './helpers/add-cases.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -1183,29 +1183,8 @@ for (const each of EDIT_CASES) { deckCases.add(each.text); if (typeof each.want 
 // §1-4 的例子（§6-1）：改名與半形冒號的輸入、改完的全文，不標的也留著。
 for (const each of [...RENAME_CASES, ...COLON_CASES]) { deckCases.add(each.text); if (typeof each.want === 'string') deckCases.add(each.want); }
 for (const each of [...NOT_RENAMED, ...NOT_COLONS]) deckCases.add(each.text);
-// 引言框的候選加入（tasks/ai-cards-add.md §7）：輸入與全部搬完的全文都受往返與冪等保護。
-for (const text of ADD_INPUTS) {
-  deckCases.add(text);
-  const refs = introBoxes(text).filter(box => box.kind === 'candidate').flatMap(box => box.items).map(({ kind, id, original }) => ({ kind, id, original }));
-  const plan = moveCandidates(text, refs, { elsewhere: () => false });
-  if (plan.text === null || plan.left.length) throw Error('ADD_INPUTS 的例子要全部搬得動：' + JSON.stringify(plan.left));
-  deckCases.add(plan.text);
-}
-// 加進已有的學習目標（§7）：目的地寫前、寫後的全文。
-for (const each of EXISTING_INPUTS) {
-  deckCases.add(each.text);
-  const props = parse(`---\n年級學期: 國二上\n科目: 自然\n單元: "${each.unit}"\n---\n`).props;
-  const plan = planExisting({ original: each.original, id: 'q8z3ka', source: { path: 'Essence Cards/來源.md', props }, dest: { path: 'Essence Cards/目的地.md', text: each.text }, version: '0.5.0', resolve: link => link });
-  if (plan.kind !== 'plan' || plan.text === null) throw Error('EXISTING_INPUTS 的例子要加得進去：' + JSON.stringify(plan));
-  deckCases.add(plan.text);
-  // §4 第 4 步：來源把那一項放在框裡，目的地確認之後拿掉的前後全文。
-  const source = `---\n年級學期: 國二上\n科目: 自然\n單元: "${each.unit}"\n---\n- 能乙 ^bbbbb2\n    - 問 :: 答\n\n> [!note]- 加進已有的學習目標\n${each.original.split('\n').map(line => '> ' + line).join('\n')}\n`;
-  const [item] = introBoxes(source).flatMap(box => box.items);
-  const cleared = clearExisting({ path: 'Essence Cards/來源.md', text: source, items: [{ ref: { kind: item.kind, id: item.id, original: item.original }, id: 'q8z3ka', dest: { path: 'Essence Cards/目的地.md', text: plan.text } }], version: '0.5.0', resolve: link => link });
-  if (cleared.text === null) throw Error('EXISTING_INPUTS 的例子要拿得掉：' + JSON.stringify(cleared.left));
-  deckCases.add(source);
-  deckCases.add(cleared.text);
-}
+// 引言框的加入（tasks/ai-cards-add.md §7）：候選搬移、加進已有的目的地與來源，輸入與寫出的全文都受往返與冪等保護。
+for (const text of addTexts()) deckCases.add(text);
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 // AI 製卡存成的草稿（tasks/ai-cards-mvp.md §8 的 R2-5）：疑似篇名的每一種寫法擋下或照常讀之後，能存的草稿全文也受上面的往返與冪等保護。
