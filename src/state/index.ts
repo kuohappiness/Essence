@@ -958,6 +958,8 @@ export function createState(options: StateOptions): State {
     if (blockedText(source, text)) return { kind: 'blocked', reason: 'needs-update' };
     if (!request.still(text)) return { kind: 'changed' };
     const props = parseDeck(text).props;
+    // 第 4 步要比的第 1 步的來源全文（L2 R1）。
+    const read = text;
     const left: Left[] = [], locked: string[] = [];
     const own: ClearItem[] = [];
     const groups = new Map<string, { ref: ItemRef; id: string; original: string }[]>();
@@ -1050,7 +1052,7 @@ export function createState(options: StateOptions): State {
         if ('path' in at && at.path === source) items.push(each);
         else stale.push({ ref: each.ref, why: 'why' in at ? at.why : WHY.changed });
       }
-      const result = clearExisting({ path: source, text: now, items, version, resolve, endpoint });
+      const result = clearExisting({ path: source, text: now, read, items, version, resolve, endpoint });
       last = { done: result.done, left: [...stale, ...result.left] };
       if (result.text === null) return null;
       const deck = parseDeck(result.text);

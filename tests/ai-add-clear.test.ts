@@ -83,3 +83,18 @@ void test('§4 同一篇的項目：加進這一篇自己的目標、從框裡�
   const out2 = clear(text2, [{ ref: refClash, id: 'p7q2w8', dest: null }, cross(refOther, dest)]);
   assert.deepEqual(out2, { text: head('2-1 密度') + BODY + '\n' + boxed(clash), done: [refOther], left: [{ ref: refClash, why: EXISTING_WHY.qaConflict('2-2') }] });
 });
+
+void test('§4 第 4 步：來源從第 1 步讀到之後改過（別處的字、同一路徑換成別的檔、同文項目少了一份）一項都不拿；換行字元不同不算（L2 R1）', () => {
+  const item = [LINK, '    - 出處：p.46', Q2];
+  const read = source('2-2 水溶液', item);
+  const [ref] = refsOf(read);
+  const dest = added(item.join('\n'), destText(Q1));
+  for (const now of [read.replace('溶質均勻分散', '另一個檔案的內容'), read + '\n家長補一行\n']) {
+    assert.deepEqual(clearExisting({ path: SRC, text: now, read, items: [cross(ref, dest)], version: '0.5.0' }), { text: null, done: [], left: [{ ref, why: CLEAR_WHY.sourceChanged }] });
+  }
+  // 同文的兩份，第 1 步之後少了一份：還在的那一份也不拿。
+  const twice = source('2-2 水溶液', item, item);
+  const once = source('2-2 水溶液', item);
+  assert.equal(clearExisting({ path: SRC, text: once, read: twice, items: [cross(ref, dest)], version: '0.5.0' }).text, null);
+  assert.deepEqual(clearExisting({ path: SRC, text: read.replaceAll('\n', '\r\n'), read, items: [cross(ref, dest)], version: '0.5.0' }).done, [ref]);
+});

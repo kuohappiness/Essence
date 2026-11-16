@@ -12,6 +12,7 @@ import type { Left } from './move.ts';
 export const CLEAR_WHY = {
   edited: '這一項剛改過，題目已經加進去了，框裡的請自己看要不要刪',
   destChanged: '原本的卡組剛改過，請再按一次',
+  sourceChanged: '這篇筆記剛改過，題目已經加進原本的卡組；這一項先留在框裡，請再按一次',
 } as const;
 
 /** 一項：dest 是第 3 步確認過的目的地那一版；null 是目的地就是這一篇。 */
@@ -20,6 +21,11 @@ export interface ClearInput {
   path: string;
   /** 來源最新的全文。 */
   text: string;
+  /**
+   * 第 1 步讀到的來源全文：最新的和它不同（換行字元除外）就一項都不拿（L2 R1）。路徑上的檔可能已經換成別的一篇，
+   * 只看那一項的原文分不出來；家長在這段時間改了別處，也等重按時照新的文字再算。
+   */
+  read?: string;
   items: readonly ClearItem[];
   version: string | null;
   resolve?: (link: string, from: string) => string | null;
@@ -35,6 +41,7 @@ export function clearExisting(input: ClearInput): ClearPlan {
   const left: Left[] = [];
   const cross: { each: ClearItem; item: BoxItem; box: IntroBox }[] = [];
   let own: { each: ClearItem; item: BoxItem; box: IntroBox }[] = [];
+  const moved = input.read !== undefined && input.read.replace(/\r\n?/g, '\n') !== text.replace(/\r\n?/g, '\n');
   for (const each of input.items) {
     const found = findItem(text, each.ref);
     if (found.kind !== 'found' || found.item.kind !== 'existing' || found.item.id !== each.id) {
@@ -42,6 +49,7 @@ export function clearExisting(input: ClearInput): ClearPlan {
       left.push({ ref: each.ref, why: found.kind === 'duplicate' ? WHY.duplicate : each.dest ? CLEAR_WHY.edited : WHY.changed });
       continue;
     }
+    if (moved) { left.push({ ref: each.ref, why: each.dest ? CLEAR_WHY.sourceChanged : WHY.changed }); continue; }
     if (!each.dest) { own.push({ each, item: found.item, box: found.box }); continue; }
     const plan = planExisting({ original: found.item.original, id: each.id, source: { path, props }, dest: each.dest, version: input.version, resolve: input.resolve, endpoint: input.endpoint?.(each.dest.path) });
     if (plan.kind === 'plan' && plan.text === null) cross.push({ each, item: found.item, box: found.box });

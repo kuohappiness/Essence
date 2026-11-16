@@ -199,3 +199,19 @@ void test('§2 候選加入逾時：那一篇當下停用，再按不寫（L2 R3
   assert.deepEqual(await h.state.addCandidates(SRC, refs, null, () => true), { kind: 'timeout' });
   assert.equal(h.texts.get(SRC), written);
 });
+
+void test('§4 同一路徑換成別的檔：目的地寫好之後，來源被刪掉、原路徑放了另一篇（同一個框），不拿（L2 R1）', async t => {
+  const text = source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const held = h.holdModify(DEST);
+  const running = h.state.addExisting(request(text));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  h.remove(SRC);
+  const other = text.replace('溶質均勻分散', '另一個檔案的內容');
+  h.write(SRC, other);
+  held.release();
+  const result = await running;
+  assert.ok(result.kind === 'done', JSON.stringify(result));
+  assert.deepEqual(result.left.map(each => each.why), [CLEAR_WHY.sourceChanged]);
+  assert.equal(h.texts.get(SRC), other);
+});
