@@ -239,16 +239,16 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 外掛 | 目前狀態 | 清單 |
 |---|---|---|
 | Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](plans/capture.md) |
-| Essence Mindboard | 未來的第三個外掛，還沒開工；開始寫程式時才建 repo（[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)） | [查看](plans/mindboard.md) |
+| Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `plugins/mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](plans/mindboard.md) |
 
-### 第二個外掛開工時的合併驗證
+### 三個外掛併進同一個 repo
 
-使用者 2026-11-09 談定（[討論稿](<../Claude Codex Discussion/2026-11-09-one-repo-three-plugins.md>)）：三個外掛現在不併成一個開發 repo，[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫) 補充、[D-110](decisions.md#d-110-v1-外掛的程式結構)、[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建) 照舊。第二個外掛也不直接搬，先用它的第一個交付驗證。
+定案在 [D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)（使用者 2026-11-17），細節與驗收在決定本文：
 
-- **觸發點**：第二個外掛（Capture 或 Mindboard）要開始寫程式時。
-- **做法**：第一個交付照舊用獨立 repo，任務說明加一節「合併驗證」，開發時記下：① 必須同時改兩個 repo 的工作，次數與內容；② 因兩邊不一致造成的錯誤或返工；③ 檢查工具或流程規則要手動同步的次數；④ 開工時為了讀另一個 repo 的規則多花的步驟。
-- **完成條件**：交付結案前，用這些紀錄重跑討論稿 §4 的比較，由使用者決定搬或不搬。這一項寫進那件任務的驗收。
-- **要搬時**：候選架構見討論稿 §2，搬動清單與發布流程的修正見〈Claude 回應 Codex 第一輪〉；舊 tag 與正式產物照現有流程保留。
+- **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。任務說明還沒寫。
+- **轉錄稿格式**：第一個需要共同規格的 Capture 任務搬到最上層 `docs/`（第 6 點）。
+- **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
+- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。
 
 ## 歷史索引
 

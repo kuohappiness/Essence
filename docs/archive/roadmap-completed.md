@@ -10,6 +10,7 @@
 
 | 項目 | 現況 |
 |---|---|
+| 2026-11-12 | 設定改存 `Essence Cards/設定.json`，電腦不再寫 `data.json`：一般資料夾的檔沒被 iCloud 改名，兩台實測 V1～V4 通過；舊版那台改的讀到就採用，允許退回 0.4.x；Codex L2 四輪，2026-11-13 合併進 `main`，還沒發布（[D-201](../decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)） |
 | 2026-11-12 | 第一個里程碑的品質檢查結案：R6 (b) 寫入口畫面時加了 happy-dom，R9 在 2026-11-03 的 iPhone 測試做了（[報告](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)） |
 | 2026-11-11 | 電腦寫的設定檔會被 iCloud 改成衝突副本、設定回預設：0.4.0 照樣升版，設定在 iPhone 改並寫進更新說明，下一版先修（[D-199](../decisions.md#d-199-040-帶著電腦設定檔的衝突上線下一版先修)） |
 | 2026-11-10 | 外掛內的還原畫面合併（只在電腦）：家長選一份備份、看差異、逐檔勾選，先備份現況再寫，紀錄只補不刪；寫入途中卡住就請家長重開 Obsidian；還沒升版；Windows 實機通過，iPhone 併入下一次實機測試；Codex L2 四輪，剩下的少見時序使用者決定記技術債（[任務說明](../../tasks/plugin-restore.md)、[L2 報告](<../../Claude Codex Discussion/2026-11-10-plugin-restore-l2.md>)） |
