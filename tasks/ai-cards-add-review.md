@@ -1,62 +1,62 @@
 # AI 製卡第 1 批（引言框的「加入」）的 L2 審查請求（給 Codex）
 
-狀態：待審
+狀態：待審（第二輪）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
 ## 審查對象
 
 - repo：Essence Cards；worktree `.claude/worktrees/edit-markup-2ba4bd`；分支 `claude/ai-cards-batch-1-intro-39e0ff`。
-- 待審 commit：`5376a8fd3a89968b1bfa6bb12ef8beb6518ba99d`；共同祖先：`5562207`（`origin/main`）。這份請求在下一個 commit，只改這個檔。
-- 程式的 commit：`d17d32d`（§1）、`2086056`、`d6be885`（§2）、`cf1ad14`（§3）、`18897c0`（§4 的 state）、`fa4abae`（接上按鈕）、`45c4a18`（§5 提示 v3、檢查、存草稿）、`0693275`（Windows 實機找到的閱讀模式寫入）；開發命令 `0ac589c`、`4442d2d`；pre-commit 只改規則檔也跑規則的測試 `4c5fcc7`（技術債，不屬於這批的規格）；其他是文件與規則檔（`b01b4c0`、`5376a8f`）。
+- 第二輪待審 commit：`4be66d8203b117b158fcce4fbd0db6dd70ae9275`；第一輪待審 `5376a8fd3a89968b1bfa6bb12ef8beb6518ba99d`；共同祖先 `5562207`（`origin/main`）。這份請求在下一個 commit，只改這個檔。
+- **這一輪只查第一輪修正的差異與受影響的路徑**（`eb08162..4be66d8`），不必整包重審：R2 `c822759`、R6 `ef1e384`、R7 `9ec3d64`、第一輪報告進分支 `1c41f13`、R9 `93a895b`、R3 `8b35f9f`、R1 `423803a`、R4 `0be816c`、R5 `fad704a`、R8 `b31bc32`、舊版讀取的測試 `37eb492`、文件 `4be66d8`。
 - 沒有未提交的修改。
 
 ## 規格與優先順序
 
-- [任務說明](ai-cards-add.md) §0～§7 與〈結果〉；格式查核報告 `Claude Codex Discussion/2026-11-16-ai-cards-add-format-review.md`（四輪）與後面的回應；§5 的討論稿 `Claude Codex Discussion/2026-11-16-existing-targets-for-ai.md`。任務說明和報告不一致時以任務說明為準，並回報。
-- 決定：D-089 第 8 條、D-027、D-092、D-167 第 9、10 點、D-134、D-170、D-157、D-149；§4 的限制 1、2 使用者已接受（任務說明 §4〈剩下的限制〉），不必再報，除非實作讓它們變大或多出新的觸發。
-- 格式：[syntax](../docs/syntax.md) §2-9（這次改了〈候選卡片〉那一列與〈引言框〉的加入說明）、§2-5。
-- §5 的 `提示 v3` 與三份科目預設（國小社會 v0.9、國語 v0.8、英文 v0.15）**還沒試用**；試用要使用者貼提示，和這次審查同時進行，結果出來另外交使用者決定。請審程式與規則文字是否一致，不必判斷 AI 會不會照做。
+- 第一輪報告與 Claude 的核對：`Claude Codex Discussion/2026-11-16-ai-cards-add-l2.md`（最後一節〈Claude 核對與修正〉是每一項的判定與修法）。
+- [任務說明](ai-cards-add.md) §0～§7 與〈結果〉；格式查核報告 `Claude Codex Discussion/2026-11-16-ai-cards-add-format-review.md`。任務說明和報告不一致時以任務說明為準，並回報。
+- 決定：D-089 第 8 條、D-027、D-092、D-167 第 9、10 點、D-134、D-170、D-157、D-149；§4 的限制 1、2 使用者已接受（任務說明 §4〈剩下的限制〉），不必再報，除非修正讓它們變大或多出新的觸發。
+- 格式：[syntax](../docs/syntax.md) §2-9（這一輪加了兩種留在框裡的情況）。
+- §5 的 `提示 v3` 與科目預設（國小社會 v0.9、國語 v0.8、英文 v0.15，加上這一輪的通用 v0.16、一般知識 v0.5）**還沒試用**；試用要使用者貼提示，結果另外交使用者決定。請審程式與規則文字是否一致，不必判斷 AI 會不會照做。
 
 ## 行為與風險
 
-- 公開介面：`src/core/ai/` 的 `introBoxes`、`findItem`、`boxBatch`、`moveCandidates`（`move.ts`）、`planExisting`（`existing.ts`）、`planSources`（`existing-sources.ts`）、`clearExisting`、`takeOut`；`state` 的 `addCandidates`、`addExisting`（`ExistingRequest`、`ExistingResult`）；`src/obsidian/intro-run.ts` 的 `createIntroRunner`；`buildPrompt` 的 `提示 v3` 與 `ExistingTarget.first`；`check` 的 `candidate-suspect-format`；存草稿時疑似重複理由的 ID 轉連結。
-- 主要呼叫端：閱讀模式的 post processor（`src/obsidian/intro-add.ts`）→ `main.ts` → `intro-run.ts` → `state`。
-- 不可破壞的性質：
-  - 加入只改兩篇卡組的字，不刪檔；從框裡**只拿掉自己搬的**（§4 第 4 步、§6 是 R8「只刪自己建的」在文字層的版本）：家長在中間改了那一項、目的地確認之後又變了、有兩個原文相同的項目，都不拿。**請特別查這一條**。
-  - 先寫目的地、讀回確認，才拿掉來源；確認不了的留在框裡，重按只補缺的（已經在的不再加）。
-  - 逾時的那一篇這次開著 Obsidian 的期間不再寫（§4〈逾時後晚到的寫入〉）。
-  - 一次「加入」或「全部加入」只通知、重排一次。
-  - 草稿、別科、沒有引言框的卡組解析與排程和 `main` 相同；手機不寫卡組。
-- 已知邊界例子：任務說明 §7 的清單；已寫成測試的在 `tests/ai-add*.test.ts`、`tests/ai-check-suspect.test.ts`、`tests/intro-run-wiring.test.ts`、`tests/ai-cards.test.ts`、`tests/deck.test.ts` 的 `deckCases`。**§7 列了但沒寫成測試的**在任務說明〈結果〉的「延後的測試」與 backlog 技術債「補測：AI 製卡第 1 批」：請判斷裡面有沒有屬於改不回來、合併前要補的（D-195）。
-- 明確延後：即時預覽的按鈕（P3 不成立，技術債「補做」）、R8 的刪除入口（§6）、工作紀錄與恢復按鈕（§4）。
+- 公開介面的變動：`State.addLocked(path)`（新增）；`ExistingRequest` 拿掉 `locked`；`ClearInput.read`（新增）；`CLEAR_WHY.sourceChanged`（新增）；`ExistingResult` 的 `added` 改成「目的地確認過的」，`cleared: false` 涵蓋來源寫不進去、被擋、讀回不同；`EXISTING_WHY.multiline` 的字。
+- 不可破壞的性質（同第一輪）：只拿掉自己搬的；先寫目的地、讀回確認，才拿掉來源；逾時的那一篇這次開著 Obsidian 的期間不再寫；一次加入只重排、通知一次；草稿、別科、沒有引言框的卡組和 `main` 相同；手機不寫卡組。
+- 請特別看：
+  - **R8 的修法改了 state 的共用路徑**：加入的批次中，讀取層因外部變動要的重排也留到批次結束（今天的份清掉，`fresh()` 照需要排）；核對過的寫入當場 `adopt`。請查還原（`restore` 也用 `holdingNow`）、存檔、答題、換日與這段期間的互動，以及 `current = null` 有沒有讀者沒經過 `fresh()`。
+  - **R1 的全文相等條件**：會不會讓真實路徑（例如來源開在編輯模式、Obsidian 自動存檔補 ID、iCloud 換行字元）一直清不掉；重按是否一定收斂。
+  - **R4 讀回**：來源經編輯器寫、`saved` 時的讀回；`added` 的新語意下通知的字是否誤導（同一篇的項目在 `cleared: false` 時）。
+  - **R3**：停用跟著 state 的生命週期（外掛重新載入時是新的 state）；按鈕的 `busy` 改問 state。
+- 已知邊界例子：各項的回歸測試在 `tests/ai-add-existing.test.ts`、`tests/ai-add-existing-state.test.ts`、`tests/ai-add-clear.test.ts`、`tests/ai-add-move.test.ts`、`tests/ai-cards.test.ts`、`tests/intro-run-wiring.test.ts`、`tests/ai-add-old-version.test.ts`。§7 仍沒寫成測試的在任務說明〈結果〉的「延後的測試」與 backlog 技術債「補測：AI 製卡第 1 批」：請再判斷裡面有沒有屬於改不回來、合併前要補的（D-195）。
+- 明確延後：即時預覽的按鈕（技術債「補做」）、R8 的刪除入口（§6）、工作紀錄與恢復按鈕（§4）。
 
 ## 驗證方式
 
-- `npm run check`（Codex 在沙箱外跑，照 [quality.md](../docs/agents/quality.md#檢查指令)：一次等到結束）。
-- 只跑這次的測試：`node --test --test-timeout=60000 tests/ai-add.test.ts tests/ai-add-move.test.ts tests/ai-add-state.test.ts tests/ai-add-existing.test.ts tests/ai-add-sources.test.ts tests/ai-add-clear.test.ts tests/ai-add-existing-state.test.ts tests/ai-check-suspect.test.ts tests/intro-run-wiring.test.ts tests/ai-cards.test.ts tests/ai-rules.test.ts tests/deck.test.ts`。
-- 平台事實表（任務說明 §1 的 P1～P5，加上這次實機找到的一列）：
+- `npm run check`（Codex 在沙箱外跑，照 [quality.md](../docs/agents/quality.md#檢查指令)：一次等到結束）。每個修正的 commit 在 pre-commit 都跑過一次。
+- 只跑這批的測試：`node --test --test-timeout=300000 tests/ai-add.test.ts tests/ai-add-move.test.ts tests/ai-add-state.test.ts tests/ai-add-existing.test.ts tests/ai-add-sources.test.ts tests/ai-add-clear.test.ts tests/ai-add-existing-state.test.ts tests/ai-add-old-version.test.ts tests/ai-check-suspect.test.ts tests/intro-run-wiring.test.ts tests/ai-cards.test.ts tests/ai-rules.test.ts tests/deck.test.ts`（舊版的測試會 clone 兩個 tag，較慢）。
+- 平台事實表（同第一輪，這一輪沒有新的平台假設；修正沒有重跑 Windows 實機）：
 
 | 假設 | 探針 | 結果 |
 |---|---|---|
 | P1～P5（起訖行、`li` 順序、即時預覽、重畫、摺起） | Windows 版 Obsidian 1.15.1，開發命令 `intro` | P1、P2、P4、P5 成立；P3 不成立（只有閱讀模式） |
-| 閱讀模式的分頁改 `view.editor` 再 `view.save()`，磁碟上留得住 | 開發命令 `intro-add` 第一次跑（修正前） | **不成立**：通知說加好了，磁碟的來源還是舊的；隱藏的編輯器也不跟著外部修改重讀。改成只有編輯模式的分頁走編輯器（`0693275`），修後四步都通過（任務說明〈結果〉） |
-| 只開在閱讀模式的那一篇用 `vault.process` 寫，Obsidian 重讀、不把舊內容存回去 | 修後的 `intro-add`：同一個分頁連按四次，每次讀磁碟 | 成立（四次都照預期，沒有「還沒存進去」） |
-| 編輯模式的分頁開著同一篇時（加入時另開一個編輯分頁） | 沒跑 | 待驗：單元測試只驗了交出的是編輯模式那個分頁的編輯器 |
+| 閱讀模式的分頁改 `view.editor` 再 `view.save()`，磁碟上留得住 | 開發命令 `intro-add` 第一次跑（修正前） | **不成立**，改成只有編輯模式的分頁走編輯器（`0693275`） |
+| 只開在閱讀模式的那一篇用 `vault.process` 寫，Obsidian 重讀、不把舊內容存回去 | 修後的 `intro-add`：同一個分頁連按四次 | 成立 |
+| 編輯模式的分頁開著同一篇時 | 沒跑 | 待驗 |
 | iPhone：加入的卡組同步後照常出題、引言框沒有按鈕 | 下一次 iPhone 實機測試 | 待驗 |
 
-## 實作者自己選的做法
+## 實作者自己選的做法（這一輪）
 
-- **同一篇的項目**（`clearExisting`）：同一篇裡的幾項先一起從框裡拿掉，再對拿掉後的文字依序套 `planExisting`；有一項不成立就把它放回、重算整批，不留半套。
-- **第 4 步回呼的重驗**（`state` 的 `existingBatch`）：目的地照 `tracker.text` 和確認時同一份、開著的編輯器的字相同、沒有未讀與等待中的讀取、`locate(id)` 還是同一篇，才交給 `clearExisting`。
-- **來源清除逾時**：來源也記進 `locked`（和目的地逾時一樣），這次開著 Obsidian 的期間停用。
-- **通知只一次**：沿用還原用的 `holdingNow` 計數與 `release()`，批次內每篇寫成照常採用，批次結束才重排、通知一次。
-- **確認框**：轉成連結的單項不問；沒轉成連結的單項先問目的地（卡組、名稱、第一題），寫入時目的地的字變了就重新問；「全部加入」問項數與目的地篇數，沒核對過的另說一句；一直在變問三次就停（`CONFIRM_ROUNDS`）。
-- **出處的教材端點**：兩篇各自用自己的材料清單（`resolveSource`）；連結的解析用 `metadataCache.getFirstLinkpathDest`。
-- **閱讀模式**（Windows 實機後改，`0693275`）：只有開在編輯模式的分頁才交編輯器、做「還沒存進去」的比對、取最新的字；只開在閱讀模式的照沒開著處理。
-- **疑似重複**：`check.ts` 的 `SUSPECT` 認 `理由：可能重複 <ID 或連結>｜<說明>`；格式不全（沒有 `｜` 與說明）的照樣不算進五個，另給 `candidate-suspect-format` 提示。存草稿時理由裡的 ID 只在加題的核對成立時轉成連結，其餘照原文、提示。
-- **第一題**：圖換成「［圖］」、多行用「／」接、填空整行；比較卡送第一句（`tests/ai-cards.test.ts` 的 §5 第一題那個測試）。
+- **R1**：不追檔案身分（`Files` 沒有），改成第 4 步要求來源最新的全文和第 1 步讀到的相同（只把 `\r\n`、`\r` 當成 `\n`）；不同就一項都不拿，跨篇的提示「這篇筆記剛改過，題目已經加進原本的卡組；這一項先留在框裡，請再按一次」，同一篇的照 `WHY.changed`。那一項自己被改的仍先報 `CLEAR_WHY.edited`。
+- **R2**：留項的條件從「備註、錯題補強」放寬到來源那一項的**任何**資料欄位（類型、重要性、狀態、出處也算），只要那一行底下有子項目或接續行。
+- **R3**：鎖在 `state`，`addCandidates` 進佇列前也查；來源被停用時整批不寫、每一項寫停用的原因。
+- **R4**：`done` 與 `saved` 都讀回來源比；逾時照舊停用、`cleared: false`；批次中途被門檻擋下時，已確認的目的地也列進 `added`（第一輪沒列）。
+- **R5**：`destStill` 只在單項、沒轉成連結時才有；同一篇的在拿掉的回呼裡問，不成立回 `changed`。
+- **R6**：候選加上一行 `# <插入處的小標題>` 再讀，和搬完的比；名稱裡的詩名和小標題不同不擋（詩名照小標題顯示，規則這樣寫）。
+- **R7**：理由只認候選名稱底下第一個直接一層、而且是檢查認的那一行（`check` 的 `children[0]`）；`suspectOf`（按鈕用）仍是第一個 `理由：` 子項目，在通過檢查的草稿裡兩者相同。
+- **R8**：核對過的寫入（`done`）在批次中當場 `adopt`；批次中所有要重排的（`adopt` 與讀取層）都只記下；批次結束時若 `current` 還是空的才排，否則只通知。
+- **R9**：國小社會 v0.9、國語 v0.8 只改〈和學生已有的目標比對〉開頭那一句，沒升版（還沒試用、沒發布）；通用、一般知識升版。
 
 ## 回報
 
-只審查，不改產品程式。寫在 `Claude Codex Discussion/2026-11-16-ai-cards-add-l2.md`，格式照 code-quality 的 `review.md`〈回報格式〉。
+只審查，不改產品程式。接在 `Claude Codex Discussion/2026-11-16-ai-cards-add-l2.md` 最後，標題〈第二輪〉；延續第一輪的標「延續 Rx」，修正帶出的標「Rx 修正引入」；格式照 code-quality 的 `review.md`〈回報格式〉。
