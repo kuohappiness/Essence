@@ -1,6 +1,6 @@
 # AI 製卡第 1 批（引言框的加入）開工前的格式查核（給 Codex）
 
-狀態：第一、二輪已查核（[報告](<../Claude Codex Discussion/2026-11-16-ai-cards-add-format-review.md>)）；第三輪待查核
+狀態：第一、二輪已查核（[報告](<../Claude Codex Discussion/2026-11-16-ai-cards-add-format-review.md>)）、第三輪已查核；第四輪等使用者接受任務說明 §4〈剩下的限制 2〉後再請
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
