@@ -1,6 +1,6 @@
 import { MarkdownView, type MarkdownPostProcessorContext, type Plugin } from 'obsidian';
-import { introBoxes, suspectOf } from '../core/ai/index.ts';
-import type { BoxItem, BoxKind, IntroBox, ItemRef } from '../core/ai/index.ts';
+import { boxBatch, introBoxes, refOf, suspectOf } from '../core/ai/index.ts';
+import type { BoxKind, ItemRef } from '../core/ai/index.ts';
 import { isDeckPath, linesOf, readProperties } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 
@@ -16,12 +16,6 @@ export interface IntroButtonsOptions {
   /** 這一篇正在加入（§4〈同一篇同時只跑一個加入〉）或寫入還沒確定（〈逾時後晚到的寫入〉）：按鈕停用。 */
   busy: (path: string) => boolean;
 }
-
-/** 加進已有的那一項是存草稿時核對過、轉成連結的（§3-1）；原文 `ID 名稱` 的不進「全部加入」。 */
-const linkedItem = (item: Pick<BoxItem, 'original'>): boolean => /^\s*(?:[-*+]|\d+[.)])\s+\[\[[^\]]*#\^[A-Za-z0-9-]+[|\]]/.test(item.original);
-/** 「全部加入」會做的那幾項：一般候選（疑似重複只能逐項）、轉成連結的加進已有。 */
-const batchItems = (box: IntroBox): BoxItem[] => box.items.filter(item => box.kind === 'candidate' ? !suspectOf(item.original) : linkedItem(item));
-const refOf = (item: BoxItem): ItemRef => ({ kind: item.kind, id: item.id, original: item.original });
 
 export function wireIntroButtons(plugin: Plugin, options: IntroButtonsOptions): { refresh(): void } {
   plugin.registerMarkdownPostProcessor((el, ctx) => { draw(el, ctx, options); });
@@ -77,7 +71,7 @@ function draw(el: HTMLElement, ctx: MarkdownPostProcessorContext, options: Intro
     const nested = li.querySelector(':scope > ul, :scope > ol');
     li.insertBefore(b, nested);
   });
-  const batch = batchItems(box);
+  const batch = boxBatch(box).items;
   const title = callout.querySelector(':scope > .callout-title');
   if (batch.length && title) title.appendChild(button('全部加入', { path, kind: box.kind, refs: batch.map(refOf), all: true }));
   // 加進已有的：點連結可以打開原本的學習目標（§3-4、§5 第 4 點）；不寫進檔案。

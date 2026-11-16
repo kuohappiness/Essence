@@ -70,6 +70,8 @@ class NothingToFill extends Error {}
  * 檔案不存在時那等於建立空檔。
  */
 class Stopped extends Error {}
+/** 寫進磁碟超過 writeTimeout 沒有回來（§3 最後一段）：底層的寫入可能之後才落盤（S28）。引言框的加入靠它停用那一篇到重開（tasks/ai-cards-add.md §4〈逾時後晚到的寫入〉）。 */
+export class WriteTimeout extends Error {}
 
 /** 先讀完待讀最多幾輪（§3 第 2 步）。 */
 const DRAIN_ROUNDS = 5;
@@ -193,11 +195,11 @@ export function createWrites(options: WritesOptions) {
    * 代價：還原或當成新的在逾時之後才寫成時，可能多出一個待處理問題，要家長再選一次。
    */
   function persist(work: Promise<void>): Promise<void> {
-    return within(work, writeTimeout, `寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`);
+    return within(work, writeTimeout, `寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`, WriteTimeout);
   }
-  function within<T>(work: Promise<T>, ms: number, late: string): Promise<T> {
+  function within<T>(work: Promise<T>, ms: number, late: string, kind: new (message: string) => Error = Error): Promise<T> {
     let id: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(Error(late)); }, ms); });
+    const timeout = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(new kind(late)); }, ms); });
     return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
   }
   /**

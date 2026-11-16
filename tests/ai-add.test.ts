@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { findItem, introBoxes, suspectOf } from '../src/core/ai/index.ts';
+import { boxBatch, boxOf, findItem, introBoxes, refOf, suspectOf } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-add.md §1：引言框裡的項目、按下去時在最新的文字裡重新找。只用 syntax.md 的例子與自編的內容。
 
@@ -120,4 +120,16 @@ void test('§2 疑似重複的認法（第二輪 R4）：三種存法、半形�
   assert.equal(suspectOf('- 能甲 ^aaaaa2\n    - Q :: A\n        - 理由：可能重複 abc234｜x'), false);
   assert.equal(suspectOf('- 能甲 ^aaaaa2\n    - 理由：段考不一定考\n    - 理由：可能重複 abc234｜x\n    - Q :: A'), false);
   assert.equal(suspectOf('- 能甲 ^aaaaa2\n    - Q :: A'), false);
+});
+
+void test('§2、§3-4 全部加入的那幾項：候選框是一般候選、加進已有是轉成連結的；boxOf 找第一個還在的項目所在的框', () => {
+  const text = '> [!note]- 候選卡片\n> - 能乙 ^bbbbb2\n>     - 理由：x\n> - 能丙 ^ccccc2\n>     - 理由：可能重複 aaaaa2\n> - 能丁 ^ddddd2\n>     - 理由:可能重複\n\n> [!note] 加進已有的學習目標\n> - [[甲#^aaaaa2|能甲]]\n>     - Q :: A\n> - eeeee2 能戊\n>     - Q :: E\n';
+  const [candidate, existing] = introBoxes(text);
+  assert.deepEqual(boxBatch(candidate).items.map(item => item.id), ['bbbbb2']);
+  assert.equal(boxBatch(candidate).rest, 2);
+  assert.deepEqual(boxBatch(existing).items.map(item => item.id), ['aaaaa2']);
+  assert.equal(boxBatch(existing).rest, 1);
+  const gone = { ...refOf(candidate.items[0]), original: '已經不在' };
+  assert.equal(boxOf(text, [gone, refOf(existing.items[1])])?.line, existing.line);
+  assert.equal(boxOf(text, [gone]), null);
 });

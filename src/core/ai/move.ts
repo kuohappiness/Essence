@@ -7,8 +7,8 @@ import type { BoxItem, IntroBox, ItemRef } from './intro.ts';
 // 候選卡片的加入（tasks/ai-cards-add.md §2）：同一篇，把框裡的項目搬到本文最後一個學習目標的後面，拿掉引言框的前綴與「理由」。只算文字，不寫檔。
 
 /** 沒搬的那一項與原因（給家長看的一句話）。 */
-interface Left { ref: ItemRef; why: string }
-interface MovePlan {
+export interface Left { ref: ItemRef; why: string }
+export interface MovePlan {
   /** 搬完的全文；一項都沒搬是 null。 */
   text: string | null;
   moved: ItemRef[];

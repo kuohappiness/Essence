@@ -92,3 +92,24 @@ export function suspectOf(original: string): boolean {
   const reason = root?.children.find(child => /^理由\s*[：:]/.test(child.text));
   return !!reason && /^理由\s*[：:]\s*可能重複/.test(reason.text);
 }
+
+/** 加進已有的那一項是存草稿時核對過、轉成連結的（§3-1）；原文 `ID 名稱` 的不進「全部加入」。 */
+const linked = (item: BoxItem): boolean => /^\s*(?:[-*+]|\d+[.)])\s+\[\[[^\]]*#\^[A-Za-z0-9-]+[|\]]/.test(item.original);
+/**
+ * 「全部加入」會做的那幾項（§2、§3-4）：候選框是一般候選（疑似重複只能逐項），加進已有的框是轉成連結的。rest 是其餘只能逐項的項數。
+ * 畫按鈕、確認框、寫入前的核對共用這一份。
+ */
+export function boxBatch(box: IntroBox): { items: BoxItem[]; rest: number } {
+  const items = box.items.filter(item => box.kind === 'candidate' ? !suspectOf(item.original) : linked(item));
+  return { items, rest: box.items.length - items.length };
+}
+/** 那幾項（畫按鈕時的身分與原文）現在在哪個框：第一個在最新文字裡找得到的；都找不到是 null。 */
+export function boxOf(text: string, refs: readonly ItemRef[]): IntroBox | null {
+  for (const ref of refs) {
+    const found = findItem(text, ref);
+    if (found.kind === 'found') return found.box;
+  }
+  return null;
+}
+/** 畫按鈕時記下的身分與原文。 */
+export const refOf = (item: BoxItem): ItemRef => ({ kind: item.kind, id: item.id, original: item.original });

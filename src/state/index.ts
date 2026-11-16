@@ -14,11 +14,11 @@ export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads, refuseIncomplete } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
-import { createWrites } from './writes.ts';
+import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-import { existingTargets } from '../core/ai/index.ts';
-import type { ExistingNow, ExistingTarget } from '../core/ai/index.ts';
+import { existingTargets, moveCandidates } from '../core/ai/index.ts';
+import type { ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 import { createObserver } from './observe.ts';
@@ -94,6 +94,13 @@ export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
 /** 目錄的暫停／恢復寫進卡組屬性 `狀態` 的值。 */
 export type DeckStatusValue = '啟用' | '暫停';
+/** 引言框的候選加入的結果（State.addCandidates）。nothing：一項都沒搬（left 寫原因）。 */
+export type AddResult =
+  | { kind: 'written'; confirmed: boolean; moved: readonly ItemRef[]; left: readonly Left[] }
+  | { kind: 'nothing'; left: readonly Left[] }
+  | { kind: 'changed' }
+  | { kind: 'timeout' }
+  | Extract<WriteResult, { kind: 'blocked' | 'stale' | 'failed' }>;
 /** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
 /** 畫面打開時選定的是哪一份。 */
 interface ExamTarget { path: string | null; id: string | null }
@@ -258,6 +265,12 @@ export interface State {
    * 不是草稿（啟用、暫停）是 unchanged；需要新版、屬性區讀不懂的照 setDeckStatus。
    */
   activateDraft(path: string, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
+  /**
+   * 引言框的候選加入（tasks/ai-cards-add.md §2）：同一篇，和補 ID 走同一條寫入（同一列、同樣的門檻）。寫入回呼裡對這一篇最新的文字先問 still
+   * （「全部加入」確認之後批次變了就不寫，回 changed，呼叫端重新確認），再照 core/ai 的 moveCandidates 算；ID 和別篇卡組（含需要新版的）重複的留項。
+   * 核對讀取確認新目標都在才是 written confirmed；寫進磁碟、讀不回來是 confirmed false。寫進磁碟逾時回 timeout（§4〈逾時後晚到的寫入〉）。
+   */
+  addCandidates(path: string, refs: readonly ItemRef[], editor: EditorHandle | null, still: (text: string) => boolean): Promise<AddResult>;
   /** AI 製卡（tasks/ai-cards-mvp.md §2）：會一起送出的已有學習目標，照 core/ai 的 existingTargets；ID 重複的不送。還沒 ready 是空的。 */
   aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
   /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
@@ -840,6 +853,28 @@ export function createState(options: StateOptions): State {
     return result;
   }
 
+  /** 候選加入（§2）：和 changeStatus 同一條寫入；plan 可能跑好幾次（有新的待讀），結果照最後一次。 */
+  async function addCandidates(path: string, refs: readonly ItemRef[], editor: EditorHandle | null, still: (text: string) => boolean): Promise<AddResult> {
+    const last: { plan: MovePlan | null; changed: boolean } = { plan: null, changed: false };
+    const elsewhere = (id: string): boolean => gatedIds.has(id) || (tracker.where([id]).get(id) ?? []).some(each => each !== path);
+    const plan = (text: string): Prepared | null => {
+      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+      last.plan = null;
+      last.changed = !still(text);
+      if (last.changed) return null;
+      last.plan = moveCandidates(text, refs, { elsewhere });
+      if (last.plan.text === null) return null;
+      const deck = parseDeck(last.plan.text);
+      const expect = last.plan.moved.flatMap(ref => deck.targets.filter(t => t.id !== null && t.id === ref.id).map(t => ({ id: t.id!, name: t.name })));
+      return withNeed({ text: last.plan.text, expect, fresh: [], record: null, need: null }, text, version);
+    };
+    const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+    if (result.kind === 'failed') return result.error instanceof WriteTimeout ? { kind: 'timeout' } : result;
+    if (result.kind === 'blocked' || result.kind === 'stale') return result;
+    if (result.kind === 'unchanged') return last.changed ? { kind: 'changed' } : { kind: 'nothing', left: last.plan?.left ?? [] };
+    return { kind: 'written', confirmed: result.kind === 'done', moved: last.plan?.moved ?? [], left: last.plan?.left ?? [] };
+  }
+
   return {
     ready() {
       // 除了 close() 之外，讓 ready() 拒絕的每一條路都恰好經過一次 onError（tasks/error-log.md §2-3）：監看拋錯、首次排程
@@ -876,6 +911,7 @@ export function createState(options: StateOptions): State {
     },
     setDeckStatus: (path, value, editor) => changeStatus(path, value, editor, false),
     activateDraft: (path, editor) => changeStatus(path, '啟用', editor, true),
+    addCandidates,
     aiExisting(subject, term) {
       if (!life.loaded) return [];
       return existingTargets(deckList, subject, term, new Set([...tracker.duplicates().map(each => each.id), ...gatedIds]));
