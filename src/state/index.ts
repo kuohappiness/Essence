@@ -17,8 +17,8 @@ import type { Life, Texts } from './reads.ts';
 import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-import { existingTargets, moveCandidates } from '../core/ai/index.ts';
-import type { ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
+import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, moveCandidates, planExisting, WHY } from '../core/ai/index.ts';
+import type { ClearItem, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 import { createObserver } from './observe.ts';
@@ -101,6 +101,31 @@ export type AddResult =
   | { kind: 'changed' }
   | { kind: 'timeout' }
   | Extract<WriteResult, { kind: 'blocked' | 'stale' | 'failed' }>;
+/** 加進已有的學習目標（State.addExisting）：來源是哪一篇、按的是哪幾項，與只有 Obsidian 層知道的事。 */
+export interface ExistingRequest {
+  source: string;
+  refs: readonly ItemRef[];
+  /** 那一篇開著的編輯器；沒開著是 null。 */
+  editorOf: (path: string) => EditorHandle | null;
+  /** 連結從某一篇解析到的檔（metadataCache）。 */
+  resolve: (link: string, from: string) => string | null;
+  endpoint?: Endpoint;
+  /** 這次開著 Obsidian 的期間寫入逾時過的卡組（§4〈逾時後晚到的寫入〉）：不再寫它。 */
+  locked: (path: string) => boolean;
+  /** 「全部加入」確認之後批次還一樣；不一樣回 changed，呼叫端重新確認。 */
+  still: (text: string) => boolean;
+  /** 單項確認過的目的地（§3-1 沒轉成連結的）：寫入回呼裡目的地最新的文字不一樣了回 changed，重新確認。 */
+  destStill?: (path: string, text: string) => boolean;
+}
+/**
+ * 加進已有的學習目標的結果（§4 第 5 步）。added：目的地確認過、從來源拿掉了的（cleared false 是來源寫進磁碟但讀不回來，
+ * 「目的地已確認，來源清除未確認」）；left：留在框裡的與原因；locked：這次逾時、之後停用到重開的卡組；blocked：做到一半被全域的門檻擋下。
+ */
+export type ExistingResult =
+  | { kind: 'done'; added: readonly { ref: ItemRef; dest: string }[]; left: readonly Left[]; cleared: boolean; locked: readonly string[]; blocked: WriteBlock | null }
+  | { kind: 'changed' }
+  | { kind: 'blocked'; reason: WriteBlock | 'needs-update' }
+  | { kind: 'failed'; error: unknown };
 /** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
 /** 畫面打開時選定的是哪一份。 */
 interface ExamTarget { path: string | null; id: string | null }
@@ -271,6 +296,13 @@ export interface State {
    * 核對讀取確認新目標都在才是 written confirmed；寫進磁碟、讀不回來是 confirmed false。寫進磁碟逾時回 timeout（§4〈逾時後晚到的寫入〉）。
    */
   addCandidates(path: string, refs: readonly ItemRef[], editor: EditorHandle | null, still: (text: string) => boolean): Promise<AddResult>;
+  /**
+   * 加進已有的學習目標（tasks/ai-cards-add.md §3、§4）：先讀完已知的變動；每一項照 ID 找目的地（整個 vault 剛好一個正式的目標）；
+   * 照目的地分組，一篇一次寫入（和補 ID 同一列、同樣的門檻），讀回磁碟上的檔確認〈目的地已經有這一項〉；最後一次寫入從來源拿掉，
+   * 寫入回呼裡重新確認目的地還是確認過的那一版、沒有未讀的通知或未寫回的編輯、ID 仍唯一，用來源最新的文字與屬性再確認一次。
+   * 同一篇的項目在最後那一次加進自己的目標。整個批次只通知一次。
+   */
+  addExisting(request: ExistingRequest): Promise<ExistingResult>;
   /** AI 製卡（tasks/ai-cards-mvp.md §2）：會一起送出的已有學習目標，照 core/ai 的 existingTargets；ID 重複的不送。還沒 ready 是空的。 */
   aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
   /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
@@ -538,11 +570,16 @@ export function createState(options: StateOptions): State {
   }
   /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（§2-1）。 */
   const blockedText = (path: string, text?: string): boolean => gated.includes(path) || (text !== undefined && needsUpdate(parseDeck(text)));
-  /** 還原的時段：還原到一半的樣子不給訂閱者看，放開時補通知一次（tasks/plugin-restore.md §5，L2 的 R7）。 */
-  let restoringNow = 0, notifyHeld = false;
+  /** 不給訂閱者看一半的樣子的時段：還原（tasks/plugin-restore.md §5，L2 的 R7）、引言框加入的批次（tasks/ai-cards-add.md §4〈重排〉）；放開時補通知一次。 */
+  let holdingNow = 0, notifyHeld = false;
+  /** 放開一段通知的時段（還原、加入的批次）：最後一段放開時，期間有要通知的補一次。 */
+  function release(): void {
+    holdingNow--;
+    if (holdingNow === 0 && notifyHeld) { notifyHeld = false; notifyChange(); }
+  }
   function notifyChange(): void {
     if (life.closed) return;
-    if (restoringNow > 0) { notifyHeld = true; return; }
+    if (holdingNow > 0) { notifyHeld = true; return; }
     for (const listener of [...listeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
@@ -875,6 +912,147 @@ export function createState(options: StateOptions): State {
     return { kind: 'written', confirmed: result.kind === 'done', moved: last.plan?.moved ?? [], left: last.plan?.left ?? [] };
   }
 
+  /** §3-1：這個 ID 的目的地。整個 vault 剛好一個正式的目標（讀得懂、不是隱含題、沒有寫法問題）、那一篇不需要新版才是 path。 */
+  function locate(id: string): { path: string } | { why: string } {
+    if (gatedIds.has(id)) return { why: EXISTING_WHY.newer };
+    if (tracker.isDuplicate(id)) return { why: WHY.takenId(id) };
+    const found = deckList.flatMap(entry => entry.deck.targets.filter(t => t.id === id).map(target => ({ path: entry.path, target })));
+    if (!found.length) return { why: EXISTING_WHY.noTarget };
+    if (found.length > 1) return { why: WHY.takenId(id) };
+    return found[0].target.ok && !found[0].target.implicit ? { path: found[0].path } : { why: EXISTING_WHY.targetBroken };
+  }
+  /** 一次寫入的結果裡只能說「失敗」的那幾種，對一篇的每一項的原因；逾時記進 locked。 */
+  function writeWhy(path: string, result: WriteResult, locked: string[]): string {
+    if (result.kind === 'failed' && result.error instanceof WriteTimeout) { locked.push(path); return EXISTING_WHY.locked(path); }
+    if (result.kind === 'saved') return EXISTING_WHY.unsure(path);
+    if (result.kind === 'stale') return CLEAR_WHY.destChanged;
+    if (result.kind === 'blocked' && result.reason === 'needs-update') return EXISTING_WHY.newer;
+    return EXISTING_WHY.failed(path);
+  }
+  /** 加進已有的學習目標（§4）：批次中照常採用、重建索引，通知留到最後一次（第二輪 R6）。 */
+  async function addExisting(request: ExistingRequest): Promise<ExistingResult> {
+    holdingNow++;
+    try { return await existingBatch(request); } finally { release(); }
+  }
+  async function existingBatch(request: ExistingRequest): Promise<ExistingResult> {
+    const { source, editorOf, resolve, endpoint } = request;
+    // 第 1 步：先讀完已知的變動，找目的地才照最新的索引。
+    const stopped = await writes.enqueue(() => writes.drain({ count: 0 }, true));
+    if (stopped) return stopped.kind === 'blocked' ? stopped : { kind: 'blocked', reason: 'unread' };
+    const gate = writes.blockedNow();
+    if (gate) return { kind: 'blocked', reason: gate };
+    let text: string | null;
+    try { text = editorOf(source)?.text() ?? await writes.readTimed(source); } catch (error) { return { kind: 'failed', error }; }
+    if (text === null) return { kind: 'changed' };
+    if (blockedText(source, text)) return { kind: 'blocked', reason: 'needs-update' };
+    if (!request.still(text)) return { kind: 'changed' };
+    const props = parseDeck(text).props;
+    const left: Left[] = [], locked: string[] = [];
+    const own: ClearItem[] = [];
+    const groups = new Map<string, { ref: ItemRef; id: string; original: string }[]>();
+    for (const ref of request.refs) {
+      const found = findItem(text, ref);
+      if (found.kind !== 'found' || found.item.kind !== 'existing' || found.item.id === null) { left.push({ ref, why: found.kind === 'duplicate' ? WHY.duplicate : WHY.changed }); continue; }
+      const id = found.item.id;
+      const at = locate(id);
+      if ('why' in at) { left.push({ ref, why: at.why }); continue; }
+      if (at.path === source) { own.push({ ref, id, dest: null }); continue; }
+      if (request.locked(at.path)) { left.push({ ref, why: EXISTING_WHY.locked(at.path) }); continue; }
+      groups.set(at.path, [...groups.get(at.path) ?? [], { ref, id, original: found.item.original }]);
+    }
+    // 第 2、3 步：一篇一次寫入，讀回磁碟上的檔確認。
+    const confirmedItems: { ref: ItemRef; id: string; dest: string; text: string }[] = [];
+    let blocked: WriteBlock | null = null, changed = false;
+    for (const [dest, items] of groups) {
+      if (blocked) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
+      const planned = new Map<ItemRef, string>();
+      let moved = false;
+      const plan = (now: string): Prepared | null => {
+        track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
+        planned.clear();
+        moved = false;
+        if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
+        let next = now;
+        for (const each of items) {
+          const result = planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: next }, version, resolve, endpoint });
+          if (result.kind === 'leave') planned.set(each.ref, result.why);
+          else if (result.text !== null) next = result.text;
+        }
+        if (next === now) return null;
+        const expect = parseDeck(next).targets.filter(t => t.id !== null && items.some(each => each.id === t.id)).map(t => ({ id: t.id!, name: t.name }));
+        return withNeed({ text: next, expect, fresh: [], record: null, need: null }, now, version);
+      };
+      const editor = editorOf(dest);
+      const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(dest, plan));
+      if (moved) { changed = true; continue; }
+      if (result.kind === 'blocked' && result.reason !== 'needs-update') { blocked = result.reason; for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
+      if (result.kind !== 'done' && result.kind !== 'unchanged') {
+        const why = writeWhy(dest, result, locked);
+        for (const each of items) left.push({ ref: each.ref, why: planned.get(each.ref) ?? why });
+        continue;
+      }
+      // 第 3 步：寫入的結果不證明內容在磁碟上，讀回來再確認一次。
+      let back: string | null = null;
+      try { back = await writes.readTimed(dest); } catch { back = null; }
+      for (const each of items) {
+        const why = planned.get(each.ref);
+        if (why) { left.push({ ref: each.ref, why }); continue; }
+        const again = back === null ? null : planExisting({ original: each.original, id: each.id, source: { path: source, props }, dest: { path: dest, text: back }, version, resolve, endpoint });
+        if (back !== null && again?.kind === 'plan' && again.text === null) confirmedItems.push({ ref: each.ref, id: each.id, dest, text: back });
+        else left.push({ ref: each.ref, why: EXISTING_WHY.unsure(dest) });
+      }
+    }
+    if (blocked && !confirmedItems.length) return { kind: 'blocked', reason: blocked };
+    if (changed && !confirmedItems.length && !own.length) return { kind: 'changed' };
+    const finish = (added: { ref: ItemRef; dest: string }[], cleared: boolean): ExistingResult => {
+      const order = (list: Left[]): Left[] => list.sort((a, b) => request.refs.indexOf(a.ref) - request.refs.indexOf(b.ref));
+      return { kind: 'done', added, left: order(left), cleared, locked, blocked };
+    };
+    if ((!confirmedItems.length && !own.length) || blocked) {
+      for (const each of [...confirmedItems, ...own]) left.push({ ref: each.ref, why: blocked ? EXISTING_WHY.notNow : WHY.changed });
+      return finish([], true);
+    }
+    // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
+    let last: { done: ItemRef[]; left: Left[] } = { done: [], left: [] };
+    const plan = (now: string): Prepared | null => {
+      track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
+      const items: ClearItem[] = [];
+      const stale: Left[] = [];
+      for (const each of confirmedItems) {
+        const at = locate(each.id);
+        const same = tracker.text(each.dest) === each.text && (editorOf(each.dest)?.text() ?? each.text) === each.text
+          && !unread.has(each.dest) && !reads.waitingFor(path => path === each.dest) && 'path' in at && at.path === each.dest;
+        if (same) items.push({ ref: each.ref, id: each.id, dest: { path: each.dest, text: each.text } });
+        else stale.push({ ref: each.ref, why: CLEAR_WHY.destChanged });
+      }
+      for (const each of own) {
+        const at = locate(each.id);
+        if ('path' in at && at.path === source) items.push(each);
+        else stale.push({ ref: each.ref, why: 'why' in at ? at.why : WHY.changed });
+      }
+      const result = clearExisting({ path: source, text: now, items, version, resolve, endpoint });
+      last = { done: result.done, left: [...stale, ...result.left] };
+      if (result.text === null) return null;
+      const deck = parseDeck(result.text);
+      const ownIds = new Set(own.filter(each => result.done.includes(each.ref)).map(each => each.id));
+      const expect = deck.targets.filter(t => t.id !== null && ownIds.has(t.id)).map(t => ({ id: t.id!, name: t.name }));
+      return withNeed({ text: result.text, expect, fresh: [], record: null, need: null }, now, version);
+    };
+    const editor = editorOf(source);
+    const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(source, plan));
+    const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
+    if (result.kind === 'done' || result.kind === 'saved' || (result.kind === 'failed' && result.error instanceof WriteTimeout)) {
+      if (result.kind === 'failed') locked.push(source);
+      left.push(...last.left);
+      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), result.kind === 'done');
+    }
+    if (result.kind === 'unchanged') { left.push(...last.left); return finish([], true); }
+    if (result.kind === 'blocked' && result.reason !== 'needs-update') blocked = result.reason;
+    const why = result.kind === 'stale' ? WHY.changed : result.kind === 'blocked' && result.reason === 'needs-update' ? EXISTING_WHY.newer : blocked ? EXISTING_WHY.notNow : EXISTING_WHY.failed(source);
+    for (const each of [...confirmedItems, ...own]) left.push({ ref: each.ref, why });
+    return finish([], true);
+  }
+
   return {
     ready() {
       // 除了 close() 之外，讓 ready() 拒絕的每一條路都恰好經過一次 onError（tasks/error-log.md §2-3）：監看拋錯、首次排程
@@ -912,6 +1090,7 @@ export function createState(options: StateOptions): State {
     setDeckStatus: (path, value, editor) => changeStatus(path, value, editor, false),
     activateDraft: (path, editor) => changeStatus(path, '啟用', editor, true),
     addCandidates,
+    addExisting,
     aiExisting(subject, term) {
       if (!life.loaded) return [];
       return existingTargets(deckList, subject, term, new Set([...tracker.duplicates().map(each => each.id), ...gatedIds]));
@@ -948,7 +1127,7 @@ export function createState(options: StateOptions): State {
       const gate = new Promise<void>(resolve => { open = resolve; });
       const examBefore = examWrites, quizBefore = quiz.after(gate);
       examWrites = examWrites.then(() => gate);
-      restoringNow++;
+      holdingNow++;
       return writes.exclusive(() => Promise.allSettled([examBefore, quizBefore]), () => {
         return work({
           deck: writes.restoreDeck,
@@ -965,8 +1144,7 @@ export function createState(options: StateOptions): State {
         });
       }).finally(() => {
         open();
-        restoringNow--;
-        if (restoringNow === 0 && notifyHeld) { notifyHeld = false; notifyChange(); }
+        release();
       });
     },
     backupReady(ready) { if (options.backup) backupPending = !ready; },

@@ -8,6 +8,8 @@ import { encode, indentOf } from './move.ts';
 // 和目的地這個目標已有的逐字比（一對一配對），只加缺的；出處照 §3-3。只算文字，不寫檔。
 // 計畫（算缺什麼）、§4 的確認（整項都在）與拿掉來源用同一個函式：計畫的 text 是 null 就是「目的地已經有這一項」。
 
+/** 通知裡的卡組名：檔名去掉 .md。 */
+const deckName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 export const EXISTING_WHY = {
   noTarget: '原本的卡組裡找不到這個學習目標',
   fieldInside: '題目或補充底下有資料欄位，請手動搬',
@@ -20,6 +22,13 @@ export const EXISTING_WHY = {
   qaConflict: (deck: string): string => `「${deck}」已經有同一個問題、答案不一樣：可能是改過的答案，也可能這題本來就有好幾個答案（例如舉一種會導電的金屬）。請打開對照；要加就改寫題目或手動貼上`,
   verify: '加過去會改到別的內容，請手動搬',
   sources: SOURCE_WHY,
+  // §3-1、§4：目的地這一篇的狀況（state 判斷）。
+  targetBroken: '原本的學習目標寫法有問題，請先改好',
+  newer: '原本的卡組需要新版的外掛才讀得懂，更新外掛之前不能加入',
+  locked: (path: string): string => `「${deckName(path)}」的寫入還沒確定，請重開 Obsidian 後再按`,
+  unsure: (path: string): string => `「${deckName(path)}」可能已經寫好，請再按一次`,
+  failed: (path: string): string => `「${deckName(path)}」暫時存不進去，請稍後再按一次`,
+  notNow: '這次沒有加入，請照上面的說明再按一次',
 } as const;
 
 /** 一個要搬的單位：題目（連同它的完整範圍）或其他（記憶錨點這類共用補充、第一層圖片）。lines 是原文的行，key 是比對用的正規化。 */
@@ -166,7 +175,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
     const prompt = unit.prompt;
     if (!prompt) continue;
     if (prompt.kind === 'qa' && destPrompts.some(each => each.prompt!.kind === 'qa' && questionSide(each.prompt!.question) === questionSide(prompt.question) && each.prompt!.answer !== prompt.answer)) {
-      return leave(EXISTING_WHY.qaConflict(input.dest.path.slice(input.dest.path.lastIndexOf('/') + 1).replace(/\.md$/, '')));
+      return leave(EXISTING_WHY.qaConflict(deckName(input.dest.path)));
     }
     if (destPrompts.some(each => each.prompt!.fingerprint === prompt.fingerprint && each.key !== unit.key)) return leave(EXISTING_WHY.sameQuestion);
   }

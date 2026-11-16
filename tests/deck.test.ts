@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 import { NEED_FORMS } from './helpers/need-forms.ts';
-import { introBoxes, inspectReply, moveCandidates, planDraft, planExisting, RULE_SUBJECTS } from '../src/core/ai/index.ts';
+import { clearExisting, introBoxes, inspectReply, moveCandidates, planDraft, planExisting, RULE_SUBJECTS } from '../src/core/ai/index.ts';
 import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
 import { EDIT_CASES } from './helpers/source-edit-cases.ts';
 import { ADD_INPUTS, EXISTING_INPUTS } from './helpers/add-cases.ts';
@@ -1198,6 +1198,13 @@ for (const each of EXISTING_INPUTS) {
   const plan = planExisting({ original: each.original, id: 'q8z3ka', source: { path: 'Essence Cards/來源.md', props }, dest: { path: 'Essence Cards/目的地.md', text: each.text }, version: '0.5.0', resolve: link => link });
   if (plan.kind !== 'plan' || plan.text === null) throw Error('EXISTING_INPUTS 的例子要加得進去：' + JSON.stringify(plan));
   deckCases.add(plan.text);
+  // §4 第 4 步：來源把那一項放在框裡，目的地確認之後拿掉的前後全文。
+  const source = `---\n年級學期: 國二上\n科目: 自然\n單元: "${each.unit}"\n---\n- 能乙 ^bbbbb2\n    - 問 :: 答\n\n> [!note]- 加進已有的學習目標\n${each.original.split('\n').map(line => '> ' + line).join('\n')}\n`;
+  const [item] = introBoxes(source).flatMap(box => box.items);
+  const cleared = clearExisting({ path: 'Essence Cards/來源.md', text: source, items: [{ ref: { kind: item.kind, id: item.id, original: item.original }, id: 'q8z3ka', dest: { path: 'Essence Cards/目的地.md', text: plan.text } }], version: '0.5.0', resolve: link => link });
+  if (cleared.text === null) throw Error('EXISTING_INPUTS 的例子要拿得掉：' + JSON.stringify(cleared.left));
+  deckCases.add(source);
+  deckCases.add(cleared.text);
 }
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。

@@ -104,7 +104,7 @@ export function moveCandidates(text: string, refs: readonly ItemRef[], context: 
   }
   const attempt = (chosen: typeof plans): string | null => {
     if (!chosen.length) return null;
-    const next = compose(lines, boxes, chosen, last ? last.line : null, last ? before.layout.get(last.line)!.end : null);
+    const next = compose(lines, boxes, chosen, last ? before.layout.get(last.line)!.end : chosen[0].box.line);
     const after = parseDeck(next);
     // 寫之前核對（F4、第三輪 R5）：原本的每個目標完整內容不變，新的目標恰好這幾個、和在框裡時相同。
     const fresh = new Set(chosen.map(each => each.id));
@@ -137,10 +137,17 @@ export function moveCandidates(text: string, refs: readonly ItemRef[], context: 
 const sortLeft = (left: Left[], refs: readonly ItemRef[]): Left[] => left.sort((a, b) => refs.indexOf(a.ref) - refs.indexOf(b.ref));
 
 /**
- * 組出搬完的全文：拿掉框裡搬走的那幾項（框空了整個拿掉），在最後一個目標完整根項的結束處（沒有目標時在第一個搬出項目的框前面）插入，
- * 前後各留一個外部空行。換行字元照這一篇，檔尾有沒有換行照舊。
+ * 從框裡拿掉這幾項（§4 第 4 步：跨篇加入確認之後）：和搬移同一套拿法，框空了整個拿掉。
  */
-function compose(lines: readonly Line[], boxes: readonly IntroBox[], chosen: readonly { item: BoxItem; box: IntroBox; lines: string[] }[], lastLine: number | null, lastEnd: number | null): string {
+export function takeOut(text: string, items: readonly { item: BoxItem; box: IntroBox }[]): string {
+  return items.length ? compose(linesOf(text), introBoxes(text), items.map(each => ({ ...each, lines: [] })), null) : text;
+}
+
+/**
+ * 組出搬完的全文：拿掉框裡搬走的那幾項（框空了整個拿掉），在 at（最後一個目標完整根項的結束處，沒有目標時在第一個搬出項目的框前面）插入，
+ * 前後各留一個外部空行；at 是 null 時只拿不插。換行字元照這一篇，檔尾有沒有換行照舊。
+ */
+function compose(lines: readonly Line[], boxes: readonly IntroBox[], chosen: readonly { item: BoxItem; box: IntroBox; lines: string[] }[], at: number | null): string {
   const eol = lines.find(line => line.eol)?.eol ?? '\n';
   const finalEol = (lines.at(-1)?.eol ?? '') !== '';
   const remove = new Set<number>();
@@ -152,7 +159,6 @@ function compose(lines: readonly Line[], boxes: readonly IntroBox[], chosen: rea
     for (let i = box.line + 1; i < box.end; i++) if (!remove.has(i)) rest.push(lines[i].raw);
     if (rest.every(raw => /^\s{0,3}>\s*$/.test(raw))) for (let i = box.line; i < box.end; i++) remove.add(i);
   }
-  const at = lastLine !== null && lastEnd !== null ? lastEnd : chosen[0].box.line;
   const block = chosen.flatMap(each => each.lines);
   // 照原本的行走一次：拿掉的那幾段記成一個缺口（gap），插入處記成 null。
   type Slot = { raw: string } | { gap: true } | null;
