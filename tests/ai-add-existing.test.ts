@@ -87,6 +87,20 @@ void test('§3-2 欄位：備註、錯題補強在資料欄位後面加一行，
   assert.equal(left(item('    - 備註：', '        - 甲'), dest(Q1)), EXISTING_WHY.multiline);
 });
 
+void test('§3-2 欄位那一行底下還有字（子項目或接續行）一律留項：複合欄位的首項或非首項、不搬的欄位、出處都一樣（L2 R2）', () => {
+  const lines = [
+    '    - 類型：事實｜備註：甲', '    - 備註：甲｜類型：事實', '    - 重要性：高｜錯題補強：乙', '    - 錯題補強：乙｜重要性：高',
+    '    - 類型：事實', '    - 出處：p.46', '    - 備註：甲',
+  ];
+  for (const line of lines) {
+    for (const below of ['        - 家長補充不可刪', '      家長補充不可刪']) {
+      assert.equal(left(item(line, below, '    - 新問 :: 新答'), dest(Q1)), EXISTING_WHY.multiline, `${line} / ${below}`);
+    }
+  }
+  // 底下沒有字的複合欄位照常：備註照讀出的值加一行，類型不搬。
+  assert.equal(planned(item('    - 類型：事實｜備註：甲', Q2), dest(Q1)), dest('    - 備註：甲', Q1, Q2));
+});
+
 void test('§3-2 留項：欄位在題目或補充底下、這一項讀不懂、目的地找不到或是隱含題或寫錯', () => {
   assert.equal(left(item(Q1, '        - 出處：p.3'), dest(Q2)), EXISTING_WHY.fieldInside);
   assert.equal(left(item('    - 記憶錨點：重的沉', '        - 狀態：暫停'), dest(Q1)), EXISTING_WHY.fieldInside);

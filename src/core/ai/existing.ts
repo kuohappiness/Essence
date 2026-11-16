@@ -13,7 +13,7 @@ const deckName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 export const EXISTING_WHY = {
   noTarget: '原本的卡組裡找不到這個學習目標',
   fieldInside: '題目或補充底下有資料欄位，請手動搬',
-  multiline: '「備註」或「錯題補強」有子項目或分成好幾行，請手動搬',
+  multiline: '資料欄位（例如備註、錯題補強）底下有子項目或分成好幾行，請手動搬',
   broken: '這一項的寫法有問題，請先改好',
   rootText: '名稱那一行底下有接續的文字，請手動搬',
   nothing: '這一項沒有要加的題目或補充，請手動處理',
@@ -57,8 +57,9 @@ function unitsOf(lines: readonly Line[], root: Item, target: Target | null, fiel
   const units: Unit[] = [];
   for (const child of root.children) {
     if (fieldStart.test(child.text)) {
-      // 備註、錯題補強要能照原樣變成目的地的一行（第二輪 R5）。
-      if (strict && /^(備註|錯題補強)\s*[：:]/.test(child.text) && (child.children.length || child.starts.length > 1)) return { why: EXISTING_WHY.multiline };
+      // 欄位只搬讀出的值（備註、錯題補強各成一行，類型、重要性、狀態不搬）：那一行底下的子項目、接續行不會跟著走，拿掉來源就丟了；
+      // 複合欄位（`類型：事實｜備註：甲`）不論哪一個欄位在前都一樣（第二輪 R5、L2 R2）。
+      if (strict && (child.children.length || child.starts.length > 1)) return { why: EXISTING_WHY.multiline };
       continue;
     }
     // 欄位出現在題目或補充底下（例如記憶錨點底下的 `狀態：暫停`、題目底下的 `出處：`）：不知道該不該跟著走（F5）。目的地自己這樣寫照常比。

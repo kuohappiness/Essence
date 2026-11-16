@@ -125,6 +125,15 @@ void test('§4 同一篇與跨篇混在一起：同篇的加進自己的目標�
   assert.equal(h.texts.get(SRC), head('2-2 水溶液', '草稿') + BODY + self[1] + '\n');
 });
 
+void test('§3-2 複合欄位底下有家長補充：整項留在框裡、兩篇都不寫（L2 R2）', async t => {
+  const text = source([LINK, '    - 類型：事實｜備註：甲', '        - 家長補充不可刪', Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const result = await h.state.addExisting(request(text));
+  assert.deepEqual(result, { kind: 'done', added: [], left: [{ ref: refsOf(text)[0], why: EXISTING_WHY.multiline }], cleared: true, locked: [], blocked: null });
+  assert.equal(h.texts.get(DEST), DEST_TEXT);
+  assert.equal(h.texts.get(SRC), text);
+});
+
 void test('§4 手機、全部加入確認之後變了：照門檻擋下或回 changed，不寫', async t => {
   const text = source([LINK, Q2]);
   const phone = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { fillIds: false });
