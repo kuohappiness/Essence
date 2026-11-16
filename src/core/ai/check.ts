@@ -78,6 +78,15 @@ function openedFence(raw: string, blocks: readonly Block[]): { mark: string; own
   return owner || column <= 3 ? { mark, owner, column } : null;
 }
 
+/**
+ * 引言框的標題行（`> [!note] 候選卡片`、預設摺起的 `> [!note]- 候選卡片`）：檢查與引言框的加入（tasks/ai-cards-add.md §1）共用這一份認法。
+ * 不是標題行是 null。
+ */
+export function calloutHead(raw: string): { title: string; folded: boolean } | null {
+  const head = /^\s{0,3}>\s?\[!([^\]]+)\]([-+]?)\s*(.*?)\s*$/.exec(raw);
+  return head ? { title: head[3], folded: head[2] === '-' } : null;
+}
+
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
@@ -411,14 +420,14 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
     if (block.kind === 'callout') {
-      const head = /^\s{0,3}>\s?\[!([^\]]+)\]([-+]?)\s*(.*?)\s*$/.exec(block.body[0].raw);
+      const head = calloutHead(block.body[0].raw);
       for (const l of block.body) if (!/^\s{0,3}>( |$)/.test(l.raw)) issue(l.no, '不符', 'callout-prefix', '引言框裡的每一行以「> 」開頭');
       const inner = block.body.slice(1).map(l => ({ no: l.no, raw: l.raw.replace(/^\s{0,3}> ?/, '') }));
-      const title = head?.[3] ?? '';
+      const title = head?.title ?? '';
       const roots = treeOf(blocksOf(inner));
       if (/^給(家長|學習者)的備註$/.test(title)) {
         order.push({ kind: 'note', line: block.line });
-        if (head?.[2] === '-') issue(block.line, '不符', 'note-folded', '給家長的備註不摺起');
+        if (head?.folded) issue(block.line, '不符', 'note-folded', '給家長的備註不摺起');
         for (const item of roots) {
           notes.push(item.text);
           if (!NOTE_KINDS.some(k => k.test(item.text))) issue(item.line, '不符', 'note-kind', `給家長的備註只寫三種事：說法不一致、建議另外練習的計算題、課本可能印錯（§2-9）：${item.text.slice(0, 40)}`);
@@ -440,7 +449,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         checkPick(boxText, boxDeck, boxIssue);
         // 英文的規則候選也一樣（L2 R2）：候選搬出去就會出題。
         if (subject === '英文') checkEnglish(boxDeck, boxIssue);
-        if (head?.[2] !== '-') issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
+        if (!head?.folded) issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
         for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
         if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);
         if (!roots.length) issue(block.line, '不符', 'candidate-empty', '沒有候選時整段省略');

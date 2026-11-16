@@ -25,9 +25,11 @@ import { versionCheck } from './dev-version.ts';
 import { errorProbe } from './dev-errors.ts';
 import { backupDev } from './dev-backup.ts';
 import { restoreDev } from './dev-restore.ts';
+import { introDev } from './dev-intro.ts';
 import type { RestoreFlow } from './restore.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import type { BackupWiring } from './backup.ts';
+import type { AddRequest } from './intro-add.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 /** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；writeResult 把它寫進每個結果檔的 plugin，才核對得到跑的是哪一次建置。 */
@@ -43,6 +45,8 @@ interface Host extends Plugin {
   ids: IdsWiring | null;
   backup: BackupWiring | null;
   restoreFlow: RestoreFlow | null;
+  intro: { refresh(): void } | null;
+  introProbe: ((request: AddRequest) => void) | null;
   store: SettingsStore;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
@@ -135,6 +139,8 @@ const commands: Record<string, DevCommand> = {
   // 外掛內的還原（tasks/plugin-restore.md §8）：走真的視窗，每一步截圖，寫在 Essence W5/結果/還原 …/。
   restore: { name: 'Essence 開發：還原', run: (host, _ids, params) => restoreDev(host, params, `${root}/結果/還原 ${host.device} ${stampOf(new Date())}`), desktop: true },
   // tasks/edit-markup.md §6-3：編輯畫面的標示、填出處的圖示與表單、300 個目標的速度。
+  // tasks/ai-cards-add.md §1 的平台事實 P1～P5：引言框的加入按鈕，截圖寫在 Essence W5/結果/引言框 …/。
+  intro: { name: 'Essence 開發：引言框的加入按鈕（P1～P5）', run: host => introDev(host, `${root}/結果/引言框 ${stampOf(new Date())}`), desktop: true },
   markup: { name: 'Essence 開發：編輯畫面標示（截圖）', run: host => markupCheck(host.app, host.ids, `${root}/結果/標示 ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
