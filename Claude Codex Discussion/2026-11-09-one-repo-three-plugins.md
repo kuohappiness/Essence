@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：三個外掛用一個開發 repo，第二個外掛開工時才搬
 
-狀態：已定案 → [backlog](../docs/backlog.md#第二個外掛開工時的合併驗證)（使用者 2026-11-09 選開工時先驗證再決定；不寫 D-ID，D-076 補充、D-110、D-196 照舊）
+狀態：第二輪等 Codex 回應（2026-11-17 重開：使用者要同步開發 Capture 與 Mindboard，改成同一個 repo `Essence`、分兩步搬，見[第二輪](#第二輪同步開發-capture-與-mindboard2026-11-17)）。第一輪：使用者 2026-11-09 選開工時先驗證再決定，寫進 [backlog](../docs/backlog.md#第二個外掛開工時的合併驗證)，不寫 D-ID
 
 2026-11-09，使用者問資料夾要不要改成上層 `Essence` 放通用原則、底下放三個專案，以及文件多會不會浪費 token。討論中使用者請 Claude 回到原點，不管現有進度，設計三個子專案的資料夾、repo 與 Claude 設定，也另外請 Fable 5.1 xhigh 獨立回答一次。使用者定了兩件事：P1 從零開始的架構，P2 現有專案等第二個外掛開工時才搬。
 
@@ -231,3 +231,129 @@ Claude 和 Codex 對 P2 的修正一致，不需要第二輪。
 |---|---|---|
 | 考量 | 一開始就只有一種結構，不必中途再換 | 先有跨 repo 真實成本的數據，才付有風險的搬動 |
 | 不採用的代價 | 第二個外掛的檢查工具可能設定一次又併回來 | 搬動要做足跨新舊目錄的比較與正式 vault 驗證，可能多輪 L2，第二個外掛會晚開工，而好處還沒有證據 |
+
+## 第二輪：同步開發 Capture 與 Mindboard（2026-11-17）
+
+### 2-0 為什麼重開
+
+使用者 2026-11-17（台北時間）說「我想要同步進行 mindboard 和 capture 的開發了」，問現在做 repo 架構重構的代價與何時開始，代價太大可以調整計畫。Claude 估了代價、建議分兩步之後，使用者再提兩點：最上層改名 `Essence`；各外掛要有自己的 `docs/`、`tasks/`、`Claude Codex Discussion/`。並要求「資料夾調整後的架構要有一個文件裡面有說明到」，「依照以上討論我們來開始做準備」。
+
+第一輪的結論建立在「只有一個新外掛開工，用它的第一個交付收集跨 repo 的成本」。兩個新外掛同時開工，前提變了：獨立 repo 的成本同時出現兩份；合併驗證要在兩個 repo 各記一次，之後決定合併，要把兩個 repo 連歷史併回來。
+
+不在本稿處理：Capture 回到 v1，或當第二階段的工作和 v1 並行（[D-206](../docs/decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)、[D-111](../docs/decisions.md#d-111-v1-的開發順序capture-延後)）由使用者另定。本稿只談資料夾與 repo，兩種答案都適用。Claude 已向使用者說明，三個外掛同時開發會讓 Cards v1 與真實使用驗證延後。
+
+### 2-1 查到的現況（2026-11-17，`main` 的 `5562207`）
+
+| 項目 | 現況 |
+|---|---|
+| 已部署的版本 | tag `v0.1.0`～`v0.5.0`，正式 vault 是 `0.5.0`（第一輪時 3 個） |
+| 進行中的程式 | 分支 `claude/ai-cards-batch-1-intro` 在 `main` 之後 41 個 commit，L2 第二輪；接句卡、英文打字與排序已合併、還沒發布 |
+| 根目錄檢查的範圍 | `tsconfig.json` 的 include、`npm run lint` 的 `src tools tests`、`knip.jsonc` 的 entry 與 project 都明寫 `src/`、`tools/`、`tests/`；`.gitignore` 的 `/main.js`、`/styles.css` 只綁根目錄。新增的 `plugins/` 不會被 Cards 的檢查掃到 |
+| pre-commit | `src/`、`tests/`、`tools/`、設定檔變動才跑 `npm run check`（`.githooks/pre-commit`）；`plugins/` 的改動目前只會跑文件、金鑰、本機路徑三項 |
+| 寫死根目錄路徑的工具與設定 | 用關鍵字算 24 個：`tools/` 19 個（含 `compare/adapter.ts`），加 `eslint.config.js`、`tsconfig.json`、`knip.jsonc`、`package.json`、`.gitignore`；讀 repo 路徑的測試 29 個 |
+| 讀 `docs/` 路徑的程式 | `check-docs`、`progress-board*`、`roadmap-board`、`.github/workflows/progress-board.yml`、三個 skill；建置的 `embedRules` 讀 `docs/card-rules/` |
+| repo 名稱 | 34 個檔案寫了 `github.com/kuohappiness/Essence-Cards` 或 Pages 網址，其中工具與 workflow 3 處是 Pages 網址。`src/` 裡的 `essence-cards`、`Essence Cards/` 是外掛 ID 與 vault 裡的資料夾，不跟 repo 改名 |
+| 共用的檢查工具與 skill 多常改 | 2026-10-17 以來 66 個 commit 改過 `check-docs`、`secretlint`、`check-local-paths`、`check-skill-mirror`、`knip`、ESLint 設定、`.githooks/` 或 skill |
+| 文件量 | `tasks/` 103 份、討論稿 85 份、決定 206 條 |
+
+### 2-2 提案：目標架構
+
+```text
+Essence/                      repo 與本機資料夾都改名
+├─ AGENTS.md、CLAUDE.md        全專案的底線與文件地圖；做哪個外掛先讀它的 AGENTS.md
+├─ README.md                   三個外掛的介紹
+├─ .claude/、.agents/          權限、hook、skill，三個外掛共用
+├─ .githooks/、.github/        依改到的外掛分別檢查；CI 每個外掛一個 job
+├─ docs/                       三個外掛共用
+│  ├─ architecture.md          三個外掛的定位與關係、外掛之間的接點、〈repo 結構〉
+│  ├─ （轉錄稿格式）            從 Cards 的 syntax.md §1 拉上來，Capture 寫、Cards 讀
+│  ├─ decisions.md             全部的 D-ID，編號接續
+│  ├─ progress-map.md          三個外掛的功能地圖
+│  └─ agents/、ai-models.md、archive/
+├─ tasks/                      只放跨外掛的任務（例如這次的搬家）
+├─ Claude Codex Discussion/    只放跨外掛的討論（例如本稿）
+├─ experiments/                試作場
+├─ tools/                      跨外掛的檢查：文件、金鑰、本機路徑、skill 鏡像、進度網頁
+└─ plugins/
+   ├─ cards/
+   │  ├─ AGENTS.md             只寫 Cards 特有的
+   │  ├─ README.md、manifest.json、package.json
+   │  ├─ docs/                 product、architecture、roadmap、backlog、syntax、question-types、card-rules/、plans/、research/
+   │  ├─ tasks/、Claude Codex Discussion/
+   │  └─ src/、tests/、tools/  建置、安裝、更新、備份、還原、新舊版比較
+   ├─ capture/                 結構同上
+   └─ mindboard/               結構同上；大型套件只裝在這裡
+```
+
+- **架構說明只寫一處**：使用者要求調整後的架構要有一份文件說明。放在最上層 `docs/architecture.md` 的〈repo 結構〉：上面這棵樹、每一層放什麼、新文件放哪裡的判斷。AGENTS.md 的〈文件分工〉表改成指向它，只留每個 session 都要的一句「做哪個外掛先讀它的 AGENTS.md」（[D-141](../docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-147](../docs/decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)）。
+- **決定維持一份、編號接續**：很多決定全專案通用（北極星、D-117、D-140、D-141、D-171）；206 條的編號已寫進程式註解、測試與記憶；`decisions-index.mjs` 照 ID 讀單一條，放同一份不多花 token。新決定在標題下的來源行標適用的外掛。
+- **roadmap 每個外掛一份**：「現在在哪裡」各自維護；三個外掛的總覽交給 `progress-map.md` 與進度網頁，取代 [D-076](../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫) 補充（2026-10-13）的「這個 repo 的路線圖當作三個外掛的總覽」。
+- **接點**：轉錄稿格式放最上層，Capture 寫、Cards 讀的測試都讀同一份範例。第一輪 §2 的 `contracts/` 併進最上層 `docs/`，不另開資料夾。
+- **外掛之間不 import**，由機械檢查擋；互通只走最上層的格式文件，或 Cards 執行時開放的介面（[D-056](../docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。共用程式等兩個外掛真的要用才建。
+- **照舊各自安裝、各自可用**（[D-006](../docs/decisions.md#d-006-兩個獨立外掛)）。自己家用從這個 repo 直接裝；給別人裝時，每個外掛一個公開 repo 放發布檔（第一輪〈Claude 回應〉修正後的發布流程），現有的 `Essence-Capture` repo 改當 Capture 的公開 repo。
+
+### 2-3 提案：分兩步
+
+**第一步：新外掛寫第一行程式之前。** 不碰 Cards 的程式，也不碰會動到正式 vault 的工具。
+
+1. 改名：GitHub repo `Essence-Cards` → `Essence`，本機資料夾 `Essence Cards` → `Essence`。挑沒有對話在跑的時候做：搬 Claude 本機的記憶與對話紀錄（照資料夾路徑存）、`git worktree repair`、Claude 專案與 Remote Control 重新核准新路徑、Codex 桌面版的專案、Pages 網址（工具與 workflow 3 處）、文件與記憶裡的網址。
+2. 建 `plugins/capture/`、`plugins/mindboard/`：各自的 AGENTS.md、`docs/`（現在的 `docs/plans/capture.md`、`mindboard.md` 搬進去當起點）、`tasks/`、`Claude Codex Discussion/`、套件設定與檢查。
+3. pre-commit 與 CI 依改到的外掛分派；最上層的格式文件、`tools/`、`.githooks/`、根目錄設定這類共用輸入變動時，所有受影響的外掛都要檢查（第一輪 Codex 第 1 題）。
+4. 最上層 `docs/architecture.md` 加〈repo 結構〉，AGENTS.md 改〈文件分工〉；`check-docs` 的狀態目錄加上兩個外掛的 `tasks/`、討論稿與 `plans/`。
+
+過渡期：Cards 的 `src/`、`tests/`、`tools/`、`manifest.json`、`package.json` 與大部分 `docs/` 仍在最上層，轉錄稿格式也還在 `docs/syntax.md` §1。
+
+**第二步：Cards 搬進 `plugins/cards/`。** 挑安靜的空檔。
+
+- 條件：`claude/ai-cards-batch-1-intro` 已合併、沒有開著的程式分支、下一版已發布並在 iPhone 驗完、搬的期間沒有對話在改程式或文件。也可以延到 v1 之後。
+- 程式：第一輪〈Codex 回應〉第 4 題的四組驗收（安裝、退版與比較跨新舊目錄；`.local/` 與 vault 備份；hook、CI 與本機檢查的執行根；`check-docs` 與兩份 skill），以及〈Claude 回應〉補進搬動清單的項目。比較工具改成照每個 commit 的樹判斷外掛根，一次處理全部舊版。
+- 文件：`product.md`、`architecture.md`、`syntax.md` 逐段拆成共用與 Cards 專用；roadmap、backlog、plans、card-rules、question-types、research、`tasks/`、討論稿搬進 `plugins/cards/`；`embedRules`、約 29 個測試、`check-docs`、進度網頁與 skill 的路徑跟著改。GitHub 不替搬過的檔案轉址，指到個別檔案的連結與記憶裡的路徑要改。
+- [D-143](../docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限) 規定做完的任務、討論稿不搬。這次整個資料夾連同連結一起搬，要寫成一次性的例外：D-143 怕的是連結斷，這次全部連結由 `check-docs` 驗。
+- 演練：先在丟棄式複本跑 `npm run check`、建置與文件檢查，再做 Windows 實機（安裝、更新、備份、還原）與 L2。
+
+### 2-4 和不做比較
+
+**① 不做（照第一輪：兩個新外掛各開獨立 repo，Capture 用現有的、Mindboard 新建）會怎樣**
+
+- 開發檢查（pre-commit、ESLint、knip、secretlint、文件檢查）與 skill 要各複製一份，Capture 從來沒設過；這些一個月內改了 66 個 commit（2-1），之後每次改都要同步三處。
+- Codex 從另兩個 repo 開對話，不會讀到 Cards 的 AGENTS.md（第一輪 Codex 第 3 題）；Capture、Mindboard 的 Claude 對話每次要手動加入 Cards 資料夾。
+- 轉錄稿格式改的時候要跨 repo 各 commit 一次，`check-docs` 查不到另一邊的連結。Capture 的第一個交付就要和 Cards 一起驗證轉錄稿，第一輪 Codex 第 2 題認為這正是同一個 repo 的實際好處。
+- 第一輪擔心的「多個對話共用同一個資料夾」不做也躲不掉：兩個新外掛的規劃照 D-196 仍寫進 Cards 的 `main`。
+- 影響開發，不影響學生與家長；從兩個外掛開工起，每次流程或格式改動都會發生。
+
+**② 做的代價**
+
+| 代價 | 解得了嗎 |
+|---|---|
+| 改名：本機記憶與對話紀錄、核准的資料夾、Remote Control、Codex 專案、Pages 與文件網址 | 解得了：一次性，沒有對話在跑時做；GitHub 的 repo 網址會自動轉址，Pages 不會 |
+| 第一步的分派檢查與各外掛的套件設定 | 解得了，沒做過：要證明只改 Mindboard 不會安裝或檢查 Cards，共用輸入變動會檢查到全部（第一輪 Codex 第 1 題） |
+| 過渡期兩種結構並存 | 解得了：根目錄的檢查範圍本來就明寫，不會互相掃到；過渡期長短看第二步何時做 |
+| 第二步的程式搬動 | 解得了：第一輪的四組驗收、演練、實機與 L2，可能多輪；部署過的版本從 3 個變 5 個 |
+| 第二步的文件拆分 | 解得了，費工：三份文件要逐段判斷；連結交給 `check-docs` 驗 |
+| D-143 的例外 | 解得了：新 D-ID 寫明一次性整個搬、連結由工具驗 |
+| token 隔離 | 部分：Claude 從根目錄開對話，子資料夾的 AGENTS.md 碰到檔案才載入；Codex 只在啟動時從根走到工作目錄（第一輪 Codex 第 3 題）。各外掛自己的 `docs/` 讓要讀的範圍變小；Codex 查核單一外掛時從該外掛資料夾開 |
+| 對外發布 | 解得了：第一輪修正後的發布流程，等第一個外部使用者才做 |
+
+**③ 更小的做法**
+
+- 只做第一步、Cards 不搬：新外掛拿到大部分好處，風險最低；但最上層 `docs/` 長期混著 Cards 的文件，和「每個外掛有自己的 docs」不一致。保留成退路：第二步可以延到 v1 之後。
+- 不改名：省一次性的改名成本，但三個外掛放在 `Essence-Cards` 裡，名稱會一直讓新對話把整個 repo 當成 Cards（使用者 2026-11-17 要求改名）。
+- 只分 `docs/`，任務與討論稿留在最上層：少搬 188 份檔案，但 Mindboard 的對話仍要在 Cards 的 103 份任務裡找自己的；使用者要求三種都分。
+
+### 2-5 談定後要改的決定與文件
+
+- 新 D-ID：取代 [D-196](../docs/decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)；修改 D-006 與 D-076 補充（2026-10-13 的總覽、2026-10-14 的分開 repo）、[D-110](../docs/decisions.md#d-110-v1-外掛的程式結構) 的「程式放在 repo 最上層」（第二步生效）、D-143（一次性例外）、D-206 第 6 點（合併驗證不再需要）。
+- backlog〈第二個外掛開工時的合併驗證〉移除；roadmap 那一列改寫；Capture repo 的 AGENTS.md 與 README 改成公開 repo 的說明。
+- 兩步各寫一份任務說明，交本機 session 施工；第二步動到正式 vault 的工具，合併前 L2。
+
+## 請 Codex 回應：第二輪（2026-11-17）
+
+給 Codex：新開一個對話，推理等級：高。只回應，不改其他文件；回應寫在本檔最後。這一輪只讀〈第二輪〉各節，需要時讀第一輪的〈Codex 回應〉與〈Claude 回應〉；用 `node experiments/tools/decisions-index.mjs D-xxx` 查 D-006、D-076、D-110、D-143、D-196、D-206；需要時查 `.githooks/`、`.github/workflows/`、`package.json`、`tsconfig.json`、`knip.jsonc`、`eslint.config.js`、`tools/check-docs.ts`、`tools/build.mjs`。基準 commit：`main` 上加入第二輪的 commit（`git log -1 --format=%h -- "Claude Codex Discussion/2026-11-09-one-repo-three-plugins.md"`）。只改文件，不用跑 `npm run check`。
+
+請逐題回答同意或反對，反對附證據（檔案:行、文件或可重現的指令），查不到的直接說：
+
+1. **站在「不做」那一方**：兩個新外掛同時開工後，同一個 repo 的優勢是否變得明顯？第一輪「先用第一個交付收集數據」在這個前提下是否仍比較好？
+2. **第一步**：範圍有沒有漏、能不能更小？過渡期的 pre-commit 與 CI 怎麼分派，才不會漏查共用輸入，也不會在只改 Mindboard 時安裝或檢查 Cards？套件設定用 npm workspaces，還是各外掛各自的鎖檔？
+3. **文件分界**：最上層與外掛 `docs/` 的分界是否清楚、會不會破壞 D-141 的一類資訊一份？決定維持一份、編號接續是否可行？roadmap 分成三份後，總覽交給 progress-map 夠不夠？轉錄稿格式放最上層是否恰當？
+4. **改名**：本機資料夾改名對 Claude Code、Codex 桌面版、`git worktree`、`.local/`、hook 的影響有沒有漏？放在第一步是否恰當？
+5. **第二步**：觸發條件與文件拆分的做法有沒有漏？D-143 的例外怎麼寫，才不會讓之後的對話以為可以隨意搬檔？
