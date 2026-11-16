@@ -27,9 +27,9 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
   const r3 = ['格式', '短規則', '判斷邊界', '五步'];
   assert.deepEqual(Object.fromEntries(RULE_SUBJECTS.map(subject => [subject.key, subject.files.map(file => `${file.name} ${file.version}`)])), {
     chinese: [...r3.map(name => name + ' R3 第二輪'), '國小國語 v0.8'],
-    english: ['通用 v0.15', '英文 v0.15'],
+    english: ['通用 v0.16', '英文 v0.15'],
     science: r3.map(name => name + ' R3 第二輪'),
-    general: ['通用 v0.15', '一般知識 v0.4'],
+    general: ['通用 v0.16', '一般知識 v0.5'],
     social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.9'],
   });
   for (const path of ruleFiles().filter(path => path.startsWith('docs/'))) {
