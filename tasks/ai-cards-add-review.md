@@ -8,7 +8,7 @@
 
 - repo：Essence Cards；worktree `.claude/worktrees/edit-markup-2ba4bd`；分支 `claude/ai-cards-batch-1-intro-39e0ff`。
 - 第二輪待審 commit：`4be66d8203b117b158fcce4fbd0db6dd70ae9275`；第一輪待審 `5376a8fd3a89968b1bfa6bb12ef8beb6518ba99d`；共同祖先 `5562207`（`origin/main`）。這份請求在下一個 commit，只改這個檔。
-- **這一輪只查第一輪修正的差異與受影響的路徑**（`eb08162..4be66d8`），不必整包重審：R2 `c822759`、R6 `ef1e384`、R7 `9ec3d64`、第一輪報告進分支 `1c41f13`、R9 `93a895b`、R3 `8b35f9f`、R1 `423803a`、R4 `0be816c`、R5 `fad704a`、R8 `b31bc32`、舊版讀取的測試 `37eb492`、文件 `4be66d8`。
+- **這一輪只查第一輪修正的差異與受影響的路徑**（`eb08162..4be66d8`），不必整包重審：R2 `c822759`、R6 `ef1e384`、R7 `9ec3d64`、第一輪報告進分支 `1c41f13`、R9 `93a895b`、R3 `8b35f9f`、R1 `423803a`、R4 `0be816c`、R5 `fad704a`、R8 `b31bc32`、文件 `4be66d8`（`37eb492` 的舊版讀取測試已在後面的 commit 拿掉）。
 - 沒有未提交的修改。
 
 ## 規格與優先順序
@@ -17,6 +17,7 @@
 - [任務說明](ai-cards-add.md) §0～§7 與〈結果〉；格式查核報告 `Claude Codex Discussion/2026-11-16-ai-cards-add-format-review.md`。任務說明和報告不一致時以任務說明為準，並回報。
 - 決定：D-089 第 8 條、D-027、D-092、D-167 第 9、10 點、D-134、D-170、D-157、D-149；§4 的限制 1、2 使用者已接受（任務說明 §4〈剩下的限制〉），不必再報，除非修正讓它們變大或多出新的觸發。
 - 格式：[syntax](../docs/syntax.md) §2-9（這一輪加了兩種留在框裡的情況）。
+- **舊版外掛的相容不在範圍**（使用者 2026-11-16：產品還沒開始使用，不會有舊版外掛，不做）：不報舊版讀不讀得到。
 - §5 的 `提示 v3` 與科目預設（國小社會 v0.9、國語 v0.8、英文 v0.15，加上這一輪的通用 v0.16、一般知識 v0.5）**還沒試用**；試用要使用者貼提示，結果另外交使用者決定。請審程式與規則文字是否一致，不必判斷 AI 會不會照做。
 
 ## 行為與風險
@@ -28,13 +29,13 @@
   - **R1 的全文相等條件**：會不會讓真實路徑（例如來源開在編輯模式、Obsidian 自動存檔補 ID、iCloud 換行字元）一直清不掉；重按是否一定收斂。
   - **R4 讀回**：來源經編輯器寫、`saved` 時的讀回；`added` 的新語意下通知的字是否誤導（同一篇的項目在 `cleared: false` 時）。
   - **R3**：停用跟著 state 的生命週期（外掛重新載入時是新的 state）；按鈕的 `busy` 改問 state。
-- 已知邊界例子：各項的回歸測試在 `tests/ai-add-existing.test.ts`、`tests/ai-add-existing-state.test.ts`、`tests/ai-add-clear.test.ts`、`tests/ai-add-move.test.ts`、`tests/ai-cards.test.ts`、`tests/intro-run-wiring.test.ts`、`tests/ai-add-old-version.test.ts`。§7 仍沒寫成測試的在任務說明〈結果〉的「延後的測試」與 backlog 技術債「補測：AI 製卡第 1 批」：請再判斷裡面有沒有屬於改不回來、合併前要補的（D-195）。
+- 已知邊界例子：各項的回歸測試在 `tests/ai-add-existing.test.ts`、`tests/ai-add-existing-state.test.ts`、`tests/ai-add-clear.test.ts`、`tests/ai-add-move.test.ts`、`tests/ai-cards.test.ts`、`tests/intro-run-wiring.test.ts`。§7 仍沒寫成測試的在任務說明〈結果〉的「延後的測試」與 backlog 技術債「補測：AI 製卡第 1 批」：請再判斷裡面有沒有屬於改不回來、合併前要補的（D-195）。
 - 明確延後：即時預覽的按鈕（技術債「補做」）、R8 的刪除入口（§6）、工作紀錄與恢復按鈕（§4）。
 
 ## 驗證方式
 
 - `npm run check`（Codex 在沙箱外跑，照 [quality.md](../docs/agents/quality.md#檢查指令)：一次等到結束）。每個修正的 commit 在 pre-commit 都跑過一次。
-- 只跑這批的測試：`node --test --test-timeout=300000 tests/ai-add.test.ts tests/ai-add-move.test.ts tests/ai-add-state.test.ts tests/ai-add-existing.test.ts tests/ai-add-sources.test.ts tests/ai-add-clear.test.ts tests/ai-add-existing-state.test.ts tests/ai-add-old-version.test.ts tests/ai-check-suspect.test.ts tests/intro-run-wiring.test.ts tests/ai-cards.test.ts tests/ai-rules.test.ts tests/deck.test.ts`（舊版的測試會 clone 兩個 tag，較慢）。
+- 只跑這批的測試：`node --test --test-timeout=300000 tests/ai-add.test.ts tests/ai-add-move.test.ts tests/ai-add-state.test.ts tests/ai-add-existing.test.ts tests/ai-add-sources.test.ts tests/ai-add-clear.test.ts tests/ai-add-existing-state.test.ts tests/ai-check-suspect.test.ts tests/intro-run-wiring.test.ts tests/ai-cards.test.ts tests/ai-rules.test.ts tests/deck.test.ts`。
 - 平台事實表（同第一輪，這一輪沒有新的平台假設；修正沒有重跑 Windows 實機）：
 
 | 假設 | 探針 | 結果 |
