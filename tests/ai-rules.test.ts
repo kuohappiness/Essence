@@ -26,11 +26,11 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
   assert.deepEqual(RULE_SUBJECTS.map(subject => subject.label), ['國語（國小）', '英文（國中）', '自然', '一般知識', '社會（國小）']);
   const r3 = ['格式', '短規則', '判斷邊界', '五步'];
   assert.deepEqual(Object.fromEntries(RULE_SUBJECTS.map(subject => [subject.key, subject.files.map(file => `${file.name} ${file.version}`)])), {
-    chinese: [...r3.map(name => name + ' R3 第二輪'), '國小國語 v0.7'],
-    english: ['通用 v0.15', '英文 v0.14'],
+    chinese: [...r3.map(name => name + ' R3 第二輪'), '國小國語 v0.8'],
+    english: ['通用 v0.15', '英文 v0.15'],
     science: r3.map(name => name + ' R3 第二輪'),
     general: ['通用 v0.15', '一般知識 v0.4'],
-    social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.8'],
+    social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.9'],
   });
   for (const path of ruleFiles().filter(path => path.startsWith('docs/'))) {
     const text = await readFile(join(root, path), 'utf8');
@@ -52,10 +52,10 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
 void test('§3 社會的提示：規則寫的已有目標格式和任務段實際送出的相同（L2 規格核對）', async () => {
   const social = RULE_SUBJECTS.find(subject => subject.key === 'social')!;
   const rules = (await embedRules(root)).social;
-  const prompt = buildPrompt({ subject: 'social', term: '小五上', unit: '2-2 人口', purpose: '準備段考', supplement: true, adjust: '', material: '' }, social, rules, [{ id: 'k3m9qa', name: '能說出台灣東部海岸的地形', source: '小五上 2-1 p.30', path: 'a.md' }]);
-  assert.ok(prompt.text.includes('收到的已有目標每項是 `ID 名稱｜出處`'));
+  const prompt = buildPrompt({ subject: 'social', term: '小五上', unit: '2-2 人口', purpose: '準備段考', supplement: true, adjust: '', material: '' }, social, rules, [{ id: 'k3m9qa', name: '能說出台灣東部海岸的地形', source: '小五上 2-1 p.30', path: 'a.md', first: '台灣東部海岸是什麼地形？ :: 斷層海岸' }]);
+  assert.ok(prompt.text.includes('收到的已有目標每項是 `ID 名稱｜出處｜第一題`'));
   assert.ok(!prompt.text.includes('名稱｜ID｜出處'));
-  assert.ok(prompt.parts.at(-1)!.text.includes('  - k3m9qa 能說出台灣東部海岸的地形｜小五上 2-1 p.30'));
+  assert.ok(prompt.parts.at(-1)!.text.includes('  - k3m9qa 能說出台灣東部海岸的地形｜小五上 2-1 p.30｜第一題：台灣東部海岸是什麼地形？ :: 斷層海岸\n'));
 });
 
 void test('§1 建置：表上的檔讀不到就失敗，說出是哪一份', async t => {
