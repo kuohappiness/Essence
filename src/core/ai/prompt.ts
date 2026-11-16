@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { compareCode, compareTerm } from '../catalog/index.ts';
-import type { Deck } from '../deck/index.ts';
+import type { Deck, Prompt as DeckPrompt } from '../deck/index.ts';
 import { termKey, termRank } from '../deck/index.ts';
 import { formatTime } from '../study/index.ts';
 import type { EmbeddedRule, RuleSubject } from './rules.ts';
@@ -9,7 +9,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 提示的組成（tasks/ai-cards-mvp.md §3）：規則組的每一份 → 任務段，照順序、中間空一行接起來；每一部分與整份提示各算 SHA-256。
 
 /** §3 的任務段與附加說明的版號：改字就加一（§1〈提示模板的版本〉）。 */
-const PROMPT_VERSION = '提示 v2';
+const PROMPT_VERSION = '提示 v3';
 export const PURPOSES = ['準備段考', '準備小考', '平常複習'] as const;
 export type Purpose = (typeof PURPOSES)[number];
 
@@ -26,8 +26,18 @@ export interface CardForm {
   material: string;
 }
 
-/** 學生已有的一個學習目標（§2）：送出時在哪一篇（之後轉成連結時核對，§5）。 */
-export interface ExistingTarget { id: string; name: string; source: string; path: string }
+/**
+ * 學生已有的一個學習目標（§2）：送出時在哪一篇（之後轉成連結時核對，§5）。first 是送出的第一題（tasks/ai-cards-add.md §5 第 1 點，`提示 v3`）；
+ * 沒有題目、或 `提示 v3` 之前存的工作沒有這一欄。
+ */
+export interface ExistingTarget { id: string; name: string; source: string; path: string; first?: string }
+
+/** 第一題的一行：問答寫 `題目 :: 答案`、填空整行；多行答案用「／」接；圖寫「［圖］」。 */
+function firstLine(prompt: DeckPrompt): string {
+  const image = (text: string): string => text.replace(/!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)/g, '［圖］');
+  const flat = (text: string): string => image(text).split('\n').map(line => line.trim()).filter(Boolean).join('／');
+  return prompt.kind === 'qa' ? `${flat(prompt.question)} :: ${flat(prompt.answer)}` : flat(prompt.text);
+}
 /** 送出的一部分：名稱、版號、全文與它的 SHA-256。 */
 export interface SentPart { name: string; version: string; text: string; sha256: string }
 export interface Prompt { parts: SentPart[]; text: string; sha256: string }
@@ -74,8 +84,38 @@ export function existingTargets(decks: readonly { path: string; deck: Deck }[], 
     || compareCode(a.deck.props.unit?.code ?? '', b.deck.props.unit?.code ?? '') || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return sorted.flatMap(({ path, deck: { props, targets } }) => targets.filter(t => t.id !== null && t.ok && !skip.has(t.id)).map(t => {
     const where = [props.term, props.unit?.code, t.fields.sources.join('、')].filter(Boolean).join(' ');
-    return { id: t.id!, name: t.name, source: where, path };
+    const first = t.prompts.at(0);
+    return { id: t.id!, name: t.name, source: where, path, ...first ? { first: firstLine(first) } : {} };
   }));
+}
+
+/**
+ * 和已有目標比對的說明（`提示 v3`，tasks/ai-cards-add.md §5 第 2、3、5 點）：同池例與另立例、拿不準的放進候選（不算上限）、
+ * 一律用清單的 ID、兩個引言框的短範例。只在有已有目標時送。
+ */
+function existingRules(r3: boolean): string[] {
+  return [
+    '- 「學生已有的學習目標」每一項寫 `ID 名稱｜出處｜第一題`，第一題是那個目標現在的第一題。這次的內容和它們比對：',
+    '  - 換了情境，答題靠的還是同一個判準：加題，寫在「加進已有的學習目標」。例如兩題都要用「地勢平坦、交通方便」解釋人口分布，換了地點也是加題。',
+    '  - 要用新的機制才答得對：另立新的學習目標。例如新題要用「工作機會吸引人口」才答得對，就另立。',
+    '  - 拿不準是不是同一個（第一題和名稱對不上、只涵蓋一部分、要看圖才答得出、合起來仍確認不了）：寫成完整的新目標放進候選卡片，理由那一行寫 `理由：可能重複 <ID>｜<哪裡拿不準>`。這種不算進候選卡片最多 5 個的上限，上限只算其他的候選。',
+    '  - 提到已有的學習目標一律用這份清單的 ID，不要自己編。',
+    ...r3 ? ['  - 架構段的比對結果寫「加題」「另立」或「放進候選」，加一句理由；全貌寫到和已有目標的關係時，用一句話寫清楚是哪兩個目標、為什麼有關。'] : [],
+    '  - 兩個引言框的寫法與順序（加進已有的放在學習目標之後，候選卡片放在最後）：',
+    '',
+    '    ```markdown',
+    '    > [!note] 加進已有的學習目標',
+    '    > - <ID> <已有的名稱>',
+    '    >     - 出處：<這次的頁碼>',
+    '    >     - <新的題目> :: <答案>',
+    '',
+    '    > [!note]- 候選卡片',
+    '    > - <新目標的名稱>',
+    '    >     - 理由：可能重複 <ID>｜<哪裡拿不準>',
+    '    >     - <題目> :: <答案>',
+    '    ```',
+    '',
+  ];
 }
 
 /** 任務段（§3）：`## 這一次的任務`、任務資料、附加說明。 */
@@ -92,11 +132,12 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
     `- 家長調整：${form.adjust.trim() || '無'}`,
     `- 教材：${form.material.trim() ? `附件（${form.material.trim()}）` : '附件的課本頁面'}`,
     existing.length ? '- 學生已有的學習目標：' : '- 學生已有的學習目標：無',
-    ...existing.map(each => `  - ${each.id} ${each.name}｜${each.source}`),
+    ...existing.map(each => `  - ${each.id} ${each.name}｜${each.source}${each.first === undefined ? '' : `｜第一題：${each.first}`}`),
     '',
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
+    ...existing.length ? existingRules(subject.r3) : [],
     ...prefix === null ? [] : [`- 一課分成幾篇時，篇名照 \`${prefix} <篇名>\` 寫${subject.subject === '英文' ? `，例如 \`${prefix} 單字\`` : ''}，單獨一行、前面不加 \`#\`。`],
     '- 不要寫學習目標 ID 與屬性區，程式會加。',
     ...subject.r3 ? ['- 照規則交三段，標記照抄（`<<<全貌>>>`、`<<<架構>>>`、`<<<卡組>>>`）。'] : [],

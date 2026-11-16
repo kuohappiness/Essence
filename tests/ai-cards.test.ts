@@ -16,13 +16,13 @@ const counter = (): (() => string) => { let n = 0; const ids = ['aaaaa2', 'bbbbb
 void test('§3 提示：同樣的表單、規則與已有目標組出的文字一字不差、雜湊相同；部分照規則組 → 任務段', () => {
   const rules = [rule('通用', 'v0.15', '# 通用'), rule('英文', 'v0.14', '# 英文')];
   const english = subject('english');
-  const existing: ExistingTarget[] = [{ id: 'k3m9qa', name: 'borrow 英翻中', source: '國二上 L1 p.12', path: 'Essence Cards/學業/國二上/英文/L1.md' }];
-  const a = buildPrompt(form({ subject: 'english', unit: 'L3 Sports' }), english, rules, existing);
+  const existing: ExistingTarget[] = [{ id: 'k3m9qa', name: 'borrow 英翻中', source: '國二上 L1 p.12', path: 'Essence Cards/學業/國二上/英文/L1.md', first: 'borrow :: 借入' }];
+  const a =buildPrompt(form({ subject: 'english', unit: 'L3 Sports' }), english, rules, existing);
   const b = buildPrompt(form({ subject: 'english', unit: 'L3 Sports' }), english, rules, existing);
   assert.equal(a.text, b.text);
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.sha256, sha256Hex(a.text));
-  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v2']);
+  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v3']);
   assert.equal(a.text, ['# 通用', '# 英文', a.parts[2].text].join('\n\n'));
   assert.equal(a.parts[2].text, [
     '## 這一次的任務',
@@ -35,11 +35,30 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
     '- 家長調整：無',
     '- 教材：附件的課本頁面',
     '- 學生已有的學習目標：',
-    '  - k3m9qa borrow 英翻中｜國二上 L1 p.12',
+    '  - k3m9qa borrow 英翻中｜國二上 L1 p.12｜第一題：borrow :: 借入',
     '',
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
+    '- 「學生已有的學習目標」每一項寫 `ID 名稱｜出處｜第一題`，第一題是那個目標現在的第一題。這次的內容和它們比對：',
+    '  - 換了情境，答題靠的還是同一個判準：加題，寫在「加進已有的學習目標」。例如兩題都要用「地勢平坦、交通方便」解釋人口分布，換了地點也是加題。',
+    '  - 要用新的機制才答得對：另立新的學習目標。例如新題要用「工作機會吸引人口」才答得對，就另立。',
+    '  - 拿不準是不是同一個（第一題和名稱對不上、只涵蓋一部分、要看圖才答得出、合起來仍確認不了）：寫成完整的新目標放進候選卡片，理由那一行寫 `理由：可能重複 <ID>｜<哪裡拿不準>`。這種不算進候選卡片最多 5 個的上限，上限只算其他的候選。',
+    '  - 提到已有的學習目標一律用這份清單的 ID，不要自己編。',
+    '  - 兩個引言框的寫法與順序（加進已有的放在學習目標之後，候選卡片放在最後）：',
+    '',
+    '    ```markdown',
+    '    > [!note] 加進已有的學習目標',
+    '    > - <ID> <已有的名稱>',
+    '    >     - 出處：<這次的頁碼>',
+    '    >     - <新的題目> :: <答案>',
+    '',
+    '    > [!note]- 候選卡片',
+    '    > - <新目標的名稱>',
+    '    >     - 理由：可能重複 <ID>｜<哪裡拿不準>',
+    '    >     - <題目> :: <答案>',
+    '    ```',
+    '',
     '- 一課分成幾篇時，篇名照 `國二上英文 L3 <篇名>` 寫，例如 `國二上英文 L3 單字`，單獨一行、前面不加 `#`。',
     '- 不要寫學習目標 ID 與屬性區，程式會加。',
     '- 回覆的最後單獨一行寫 `<<<完>>>`。',
@@ -68,13 +87,25 @@ void test('§2 已有目標：同科、之前或相同的年級學期，草稿�
     { path: 'f.md', deck: deck('補習班', '自然', '1 浮力', '啟用', '- 能說出浮力 ^ggggg2\n    - 浮力？ :: 向上的力') },
     { path: 'g.md', deck: deck('國二上', '自然', '2-2 沒有 ID', '啟用', '- 能說出沒有 ID\n    - 問？ :: 答') },
   ];
-  assert.deepEqual(existingTargets(decks, '自然', '國二上').map(each => `${each.id} ${each.name}｜${each.source}`), [
-    'aaaaa2 能說出酵素的作用｜國一下 3-1',
-    'bbbbb2 能說出溶質｜國二上 2-1 p.40',
-    'ccccc2 能說出溶劑｜國二上 2-1',
+  assert.deepEqual(existingTargets(decks, '自然', '國二上').map(each => `${each.id} ${each.name}｜${each.source}｜${each.first ?? ''}`), [
+    'aaaaa2 能說出酵素的作用｜國一下 3-1｜酵素有什麼作用？ :: 加快反應',
+    'bbbbb2 能說出溶質｜國二上 2-1 p.40｜溶質是什麼？ :: 被溶解的物質',
+    'ccccc2 能說出溶劑｜國二上 2-1｜溶劑是什麼？ :: 溶解別人的物質',
   ]);
   assert.deepEqual(existingTargets(decks, '自然', '補習班').map(each => each.id), ['ggggg2']);
   assert.deepEqual(existingTargets(decks, '自然', '國二上', new Set(['bbbbb2'])).map(each => each.id), ['aaaaa2', 'ccccc2']);
+});
+
+void test('§5 已有目標的第一題：問答、填空整行、多行答案用「／」接、圖寫［圖］、比較卡寫第一句、不送記憶錨點；沒有題目不寫', () => {
+  const deck = (body: string) => parseDeck(`---\n年級學期: 國二上\n科目: 自然\n單元: 2-1 密度\n狀態: 啟用\n---\n\n${body}`);
+  const firstOf = (body: string): string | undefined => existingTargets([{ path: 'a.md', deck: deck(body) }], '自然', '國二上')[0]?.first;
+  assert.equal(firstOf('- 能甲 ^aaaaa2\n    - 記憶錨點：先記這個\n    - 密度是==質量==除以體積'), '密度是==質量==除以體積');
+  assert.equal(firstOf('- 能甲 ^aaaaa2\n    - 夏天的昆蟲 ::\n        - 蚱蜢\n        - ![[蚱蜢.png]]'), '夏天的昆蟲 :: 蚱蜢／［圖］');
+  assert.equal(firstOf('- 能甲 ^aaaaa2\n    - 看 ![圖](a.png) 這是什麼？ :: 甲'), '看 ［圖］ 這是什麼？ :: 甲');
+  assert.equal(firstOf('- 寨（寨、塞） 相似字 ^aaaaa2\n    - 山＿＿。 :: 寨\n    - 村＿＿。 :: 寨'), '山＿＿。 :: 寨');
+  assert.equal(firstOf('- 能甲 ^aaaaa2\n    - 記憶錨點：只有錨點'), undefined);
+  const task = taskSection(form(), subject('science'), [{ id: 'aaaaa2', name: '能甲', source: '國二上 2-1', path: 'a.md' }]);
+  assert.ok(task.includes('  - aaaaa2 能甲｜國二上 2-1\n'));
 });
 
 const R3_REPLY = [
@@ -465,6 +496,21 @@ void test('§5 存草稿的全文：屬性用 YAML 序列化（L3 Sports: Week 1
   assert.ok(plan.snapshotBody.includes('\n> - q8z3ka 能用密度判斷物體的浮沉\n') && plan.snapshotBody.endsWith('<<<完>>>\n'));
   assert.deepEqual(plan.edits, ['第 15 行 拿掉 ^k3m9x2']);
   assert.equal(plan.snapshotPath, 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上自然 2-2 水溶液： 濃度.md');
+});
+
+void test('§5 疑似重複的理由：存草稿時 ID 照加題的同一套核對轉成連結；核對不到的照原文、提示', () => {
+  const sent: ExistingTarget[] = [{ id: 'q8z3ka', name: '能用密度判斷物體的浮沉', source: '國二上 2-1 p.46', path: 'Essence Cards/學業/國二上/自然/2-1.md' }];
+  const reply = R3_REPLY.replace('>     - 理由：知識快遞的內容，段考不一定考', '>     - 理由：可能重複 q8z3ka｜第一題要看圖');
+  const science = subject('science');
+  const now = (): ExistingNow => ({ kind: 'one', path: sent[0].path, name: '能用密度判斷浮沉' });
+  const ok = inspectReply(reply, form(), science, sent, now);
+  const plan = planDraft(ok, form(), science, sent, now, counter(), new Set(), '2026-11-16');
+  assert.ok(plan.decks[0].text.includes('\n>     - 理由：可能重複 [[2-1#^q8z3ka|能用密度判斷浮沉]]｜第一題要看圖\n'), plan.decks[0].text);
+  assert.ok(plan.snapshotBody.includes('\n>     - 理由：可能重複 q8z3ka｜第一題要看圖\n'));
+  const missing = inspectReply(reply, form(), science, sent, nobody);
+  assert.ok(missing.hints.some(each => /找不到學習目標「q8z3ka」：理由裡的 ID 照原文留著/.test(each.message)), JSON.stringify(missing.hints));
+  const kept = planDraft(missing, form(), science, sent, nobody, counter(), new Set(), '2026-11-16');
+  assert.ok(kept.decks[0].text.includes('\n>     - 理由：可能重複 q8z3ka｜第一題要看圖\n'));
 });
 
 void test('§5 有比較卡的篇寫需要版本；一般知識只寫狀態；檔名撞名往後加（同資料夾、別的資料夾、大小寫不同、 2 已經有人用）', () => {

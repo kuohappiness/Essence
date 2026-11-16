@@ -14,6 +14,8 @@ const FIELDS = ['出處', '類型', '重要性', '狀態', '備註', '錯題補�
 const TYPES: Record<string, string[] | undefined> = { 自然: ['定義', '因果', '比較', '順序', '實驗', '公式與單位', '圖表'], 一般知識: ['定義', '因果', '比較', '步驟', '判斷與應用', '數值與標準'] };
 const UNDERSTANDING = ['因果', '比較', '實驗', '判斷與應用']; // 自然預設規則 1；理解題的答案要有粗體重點（D-068）；判斷與應用是一般知識的
 const ID = /^[a-hjkmnp-z2-9]{6}$/; // 6 碼，去掉 0、o、1、l、i
+/** 疑似重複的理由（理由行冒號之後）：`可能重複 <ID>｜<說明>`；ID 也可以是存草稿轉成的連結 `[[卡組#^ID|名稱]]`。 */
+const SUSPECT = /^可能重複\s*(?:[a-hjkmnp-z2-9]{6}|\[\[[^\]]*#\^[A-Za-z0-9-]+(?:\|[^\]]*)?\]\])\s*[｜|]\s*\S/;
 const NOTE_KINDS = [/說法|不一致|簡化|衝突|一般認知|矛盾/, /另外練習|練習/, /印錯|誤植|可能有誤|錯字/];
 
 // 行內程式碼與公式裡的 `::`、`==` 不算（D-089 第 2 條）：換成等長的占位字元，位置不變。
@@ -450,8 +452,13 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         // 英文的規則候選也一樣（L2 R2）：候選搬出去就會出題。
         if (subject === '英文') checkEnglish(boxDeck, boxIssue);
         if (!head?.folded) issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
-        for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
-        if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);
+        const checked = roots.map(node => analyzeTarget(node, 'candidate'));
+        candidates.push(...checked);
+        // 疑似重複（理由以「可能重複」開頭，tasks/ai-cards-add.md §5 第 2 點）不算進五項的上限；ID、｜ 或說明不全照樣算疑似重複，提醒格式。
+        const suspects = checked.filter(each => each.reason !== undefined && /^可能重複/.test(each.reason));
+        for (const each of suspects) if (!SUSPECT.test(each.reason!)) issue(each.line, '提醒', 'candidate-suspect-format', '疑似重複的理由寫成 `理由：可能重複 <ID>｜<哪裡拿不準>`（§2-9）');
+        const count = checked.length - suspects.length;
+        if (count > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(count)} 個（不算可能重複的），最多 5 個（§2-9）`);
         if (!roots.length) issue(block.line, '不符', 'candidate-empty', '沒有候選時整段省略');
       } else { order.push({ kind: 'other', line: block.line }); issue(block.line, '不符', 'callout-unknown', `不認得的引言框「${title || block.body[0].raw.trim()}」；不要加其他段落`); }
     } else if (block.kind === 'heading') {
