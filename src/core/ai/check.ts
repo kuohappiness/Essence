@@ -232,7 +232,7 @@ function checkEnglish(deck: Deck, issue: Report): void {
 interface Question { line: number; raw: string; kind: 'qa' | 'cloze'; front: string; back: string; multi?: boolean; supplements: TreeNode[] }
 type Where = 'body' | 'candidate' | 'existing';
 /** 檢查時認出的一個學習目標（本文、候選卡片、加進已有的學習目標）。 */
-interface CheckedTarget { line: number; name: string; id?: string; reason?: string; data: Record<string, string>; questions: Question[]; shared: TreeNode[]; where: Where; heading?: string | null }
+interface CheckedTarget { line: number; name: string; id?: string; reason?: string; reasonLine?: number; data: Record<string, string>; questions: Question[]; shared: TreeNode[]; where: Where; heading?: string | null }
 
 export interface CheckOptions {
   /** 預設自然（試用時的預設）；類型的清單照它挑。 */
@@ -375,7 +375,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     let children = node.children;
     if (where === 'candidate') {
       if (!children.length || !/^理由\s*[：:]/.test(children[0].text)) issue(node.line, '不符', 'candidate-reason', '候選卡片的第一行要是一句「理由：」（§2-9）');
-      else { target.reason = children[0].text.replace(/^理由\s*[：:]\s*/, ''); children = children.slice(1); }
+      else { target.reason = children[0].text.replace(/^理由\s*[：:]\s*/, ''); target.reasonLine = children[0].line; children = children.slice(1); }
     }
     if (where === 'existing') {
       const m = /^(\S+)\s+(.*)$/.exec(node.text);

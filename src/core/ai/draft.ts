@@ -23,6 +23,8 @@ interface InspectedPiece extends Piece {
   names: number[];
   /** 有比較卡：卡組要寫 `需要版本`（D-191）。 */
   pick: boolean;
+  /** 候選的理由行（整理後的行號）：存草稿時只在這幾行核對疑似重複的 ID（L2 R7）。 */
+  reasons: number[];
 }
 
 export interface Inspection {
@@ -91,13 +93,15 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
         const problem = addProblem(add.id, sent, now);
         if (problem) hints.push({ line: normalized.raw[add.line], message: `${problem}：照原文留在框裡，不轉成連結` });
       }
-      // 疑似重複的理由（tasks/ai-cards-add.md §5 第 2 點）：理由裡的 ID 和加題同一套核對。
-      for (const [i, line] of lines.entries()) {
-        const id = SUSPECT_REASON.exec(line)?.[2];
+      // 疑似重複的理由（tasks/ai-cards-add.md §5 第 2 點）：理由裡的 ID 和加題同一套核對。只看候選名稱底下第一個直接一層的理由行（檢查認的那一行），
+      // 題目底下、程式圍欄裡、第二個理由的同樣字樣是內容，照原文（L2 R7）。
+      const reasons = result.candidates.flatMap(each => each.reasonLine === undefined ? [] : [each.reasonLine - 1]);
+      for (const i of reasons) {
+        const id = SUSPECT_REASON.exec(lines[i])?.[2];
         const problem = id === undefined ? null : addProblem(id, sent, now);
         if (problem) hints.push({ line: rawLine(i), message: `${problem}：理由裡的 ID 照原文留著，不轉成連結` });
       }
-      pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
+      pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), reasons: reasons.map(i => piece.lines[i]), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
     }
   }
   // 寫出最後一行（真人測試 2026-11-08：還沒寫完就按了複製，家長看不出少了 <<<完>>>，就勾了確定）。
@@ -203,7 +207,7 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
       edited[line] = `${base} ^${id}`;
     }
     const body = piece.lines.map(no => {
-      const reason = SUSPECT_REASON.exec(edited[no]);
+      const reason = piece.reasons.includes(no) ? SUSPECT_REASON.exec(edited[no]) : null;
       if (reason) {
         const found = addProblem(reason[2], sent, now) ? null : now(reason[2]);
         return found?.kind === 'one' ? reason[1] + linkOf(reason[2], found) + reason[3] : edited[no];

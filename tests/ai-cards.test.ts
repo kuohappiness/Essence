@@ -558,3 +558,23 @@ void test('§3 待貼回的工作：最多 5 個、14 天；過期的只丟還�
   assert.deepEqual([read.broken, read.expired], [1, 2]);
   assert.deepEqual(readJobs('not a list', now), { jobs: [], broken: 0, expired: 0 });
 });
+
+void test('§5 疑似重複只認候選名稱底下第一個直接一層的理由：題目底下、程式圍欄裡、第二個理由的同樣字樣照原文（L2 R7）', () => {
+  const sent: ExistingTarget[] = [{ id: 'q8z3ka', name: '能用密度判斷物體的浮沉', source: '國二上 2-1 p.46', path: 'Essence Cards/學業/國二上/自然/2-1.md' }];
+  const now = (): ExistingNow => ({ kind: 'one', path: sent[0].path, name: '能用密度判斷浮沉' });
+  const science = subject('science');
+  const lookalike = [
+    '>         - 理由：可能重複 q8z3ka｜巢狀的一行',
+    '>         ```',
+    '>         - 理由：可能重複 q8z3ka｜這是一行測試文字',
+    '>         ```',
+    '>     - 理由：可能重複 q8z3ka｜第二個理由',
+  ];
+  const reply = R3_REPLY.replace('>     - 理由：知識快遞的內容，段考不一定考', '>     - 理由：補充')
+    .replace('>     - 水溫升高時，糖的溶解度會怎麼變？ :: 變**大**', ['>     - 水溫升高時，糖的溶解度會怎麼變？ :: 變**大**', ...lookalike].join('\n'));
+  const inspected = inspectReply(reply, form(), science, sent, now);
+  assert.deepEqual(inspected.errors, []);
+  assert.ok(!inspected.hints.some(each => each.message.includes('理由裡的 ID')), JSON.stringify(inspected.hints));
+  const plan = planDraft(inspected, form(), science, sent, now, counter(), new Set(), '2026-11-16');
+  for (const line of lookalike) assert.ok(plan.decks[0].text.includes('\n' + line + '\n'), line);
+});
