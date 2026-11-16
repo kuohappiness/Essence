@@ -14,7 +14,7 @@ export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads, refuseIncomplete } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
-import { createWrites, STOP, WriteTimeout } from './writes.ts';
+import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, moveCandidates, planExisting, WHY } from '../core/ai/index.ts';
@@ -915,12 +915,11 @@ export function createState(options: StateOptions): State {
     if (addLocks.has(path)) return { kind: 'timeout' };
     const last: { plan: MovePlan | null; changed: boolean; locked: boolean } = { plan: null, changed: false, locked: false };
     const elsewhere = (id: string): boolean => gatedIds.has(id) || (tracker.where([id]).get(id) ?? []).some(each => each !== path);
-    // 停用的那一篇回 STOP：連編輯器沒存的字也不 persist（L2 第二輪 R1）。
-    const plan = (text: string): Prepared | null | typeof STOP => {
+    const plan = (text: string): Prepared | null => {
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       last.plan = null;
       last.locked = addLocks.has(path);
-      if (last.locked) return STOP;
+      if (last.locked) return null;
       last.changed = !still(text);
       if (last.changed) return null;
       last.plan = moveCandidates(text, refs, { elsewhere });
@@ -1004,13 +1003,13 @@ export function createState(options: StateOptions): State {
       if (blocked) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
       const planned = new Map<ItemRef, string>();
       let moved = false, lockedNow = false;
-      const plan = (now: string): Prepared | null | typeof STOP => {
+      const plan = (now: string): Prepared | null => {
         track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
         planned.clear();
         moved = false;
         // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）。
         lockedNow = addLocks.has(dest);
-        if (lockedNow) return STOP;
+        if (lockedNow) return null;
         if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
         let next = now;
         for (const each of items) {
@@ -1061,13 +1060,13 @@ export function createState(options: StateOptions): State {
     // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
     let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
     let ownMoved = false;
-    const plan = (now: string): Prepared | null | typeof STOP => {
+    const plan = (now: string): Prepared | null => {
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
       ownMoved = own.length > 0 && !!request.destStill && !request.destStill(source, now);
       if (ownMoved) { last = { done: [], left: [], text: null }; return null; }
       if (addLocks.has(source)) {
         last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
-        return STOP;
+        return null;
       }
       const items: ClearItem[] = [];
       const stale: Left[] = [];
