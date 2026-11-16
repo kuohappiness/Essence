@@ -215,3 +215,39 @@ void test('§4 同一路徑換成別的檔：目的地寫好之後，來源被�
   assert.deepEqual(result.left.map(each => each.why), [CLEAR_WHY.sourceChanged]);
   assert.equal(h.texts.get(SRC), other);
 });
+
+/** 等到條件成立（最多約 1 秒）：寫入在背景跑，測試要在中間插一步。 */
+async function until(ok: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !ok(); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(ok(), '等不到');
+}
+
+void test('§4 第 4 步：來源寫好之後、讀回之前又變回有那一項：目的地已確認、來源清除未確認（L2 R4）', async t => {
+  const text = source([LINK, Q2]);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const held = h.holdModify(SRC);
+  const running = h.state.addExisting(request(text));
+  await until(() => h.texts.get(SRC) !== text);
+  h.write(SRC, text);
+  held.release();
+  const result = await running;
+  assert.ok(result.kind === 'done', JSON.stringify(result));
+  assert.deepEqual(result.added, [{ ref: refsOf(text)[0], dest: DEST }]);
+  assert.equal(result.cleared, false);
+  assert.equal(h.texts.get(SRC), text);
+});
+
+void test('§4 第 4 步：來源寫不進去、或寫的時候被門檻擋下：已確認的目的地照實回報，來源清除未確認；同一篇的留著寫原因（L2 R4）', async t => {
+  const self = ['- [[國二上自然 2-2#^p7q2w8|能說出溶解]]', '    - 糖溶在水裡看得到嗎？ :: 看不到'];
+  const text = source(self, [LINK, Q2]);
+  const [ownRef, crossRef] = refsOf(text);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const held = h.holdModify(DEST);
+  const running = h.state.addExisting(request(text));
+  await until(() => h.texts.get(DEST) !== DEST_TEXT);
+  h.control.failModify = true;
+  held.release();
+  const result = await running;
+  assert.deepEqual(result, { kind: 'done', added: [{ ref: crossRef, dest: DEST }], left: [{ ref: ownRef, why: EXISTING_WHY.failed(SRC) }], cleared: false, locked: [], blocked: null });
+  assert.equal(h.texts.get(SRC), text);
+});

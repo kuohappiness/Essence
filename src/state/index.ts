@@ -117,7 +117,7 @@ export interface ExistingRequest {
   destStill?: (path: string, text: string) => boolean;
 }
 /**
- * 加進已有的學習目標的結果（§4 第 5 步）。added：目的地確認過、從來源拿掉了的（cleared false 是來源寫進磁碟但讀不回來，
+ * 加進已有的學習目標的結果（§4 第 5 步）。added：目的地確認過的（cleared false 是來源這次沒有確認拿掉：寫不進去、被擋、讀回來和寫的不同，
  * 「目的地已確認，來源清除未確認」）；left：留在框裡的與原因；locked：這次逾時、之後停用到重開的卡組；blocked：做到一半被全域的門檻擋下。
  */
 export type ExistingResult =
@@ -1025,16 +1025,19 @@ export function createState(options: StateOptions): State {
       const order = (list: Left[]): Left[] => list.sort((a, b) => request.refs.indexOf(a.ref) - request.refs.indexOf(b.ref));
       return { kind: 'done', added, left: order(left), cleared, locked, blocked };
     };
-    if ((!confirmedItems.length && !own.length) || blocked) {
-      for (const each of [...confirmedItems, ...own]) left.push({ ref: each.ref, why: blocked ? EXISTING_WHY.notNow : WHY.changed });
-      return finish([], true);
-    }
+    if (!confirmedItems.length && !own.length) return finish([], true);
+    // 目的地已經確認的照實回報（L2 R4）：題目在那一篇，來源這次沒拿掉；同一篇的沒加，留著寫原因。
+    const unclear = (why: string): ExistingResult => {
+      for (const each of own) left.push({ ref: each.ref, why });
+      return finish(confirmedItems.map(each => ({ ref: each.ref, dest: each.dest })), false);
+    };
+    if (blocked) return unclear(EXISTING_WHY.notNow);
     // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
-    let last: { done: ItemRef[]; left: Left[] } = { done: [], left: [] };
+    let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
     const plan = (now: string): Prepared | null => {
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
       if (addLocks.has(source)) {
-        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })) };
+        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
         return null;
       }
       const items: ClearItem[] = [];
@@ -1053,7 +1056,7 @@ export function createState(options: StateOptions): State {
         else stale.push({ ref: each.ref, why: 'why' in at ? at.why : WHY.changed });
       }
       const result = clearExisting({ path: source, text: now, read, items, version, resolve, endpoint });
-      last = { done: result.done, left: [...stale, ...result.left] };
+      last = { done: result.done, left: [...stale, ...result.left], text: result.text };
       if (result.text === null) return null;
       const deck = parseDeck(result.text);
       const ownIds = new Set(own.filter(each => result.done.includes(each.ref)).map(each => each.id));
@@ -1063,16 +1066,24 @@ export function createState(options: StateOptions): State {
     const editor = editorOf(source);
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(source, plan));
     const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
-    if (result.kind === 'done' || result.kind === 'saved' || (result.kind === 'failed' && result.error instanceof WriteTimeout)) {
-      if (result.kind === 'failed') { addLocks.add(source); locked.push(source); }
+    if (result.kind === 'done' || result.kind === 'saved') {
+      // 寫入的結果不證明來源拿掉了（保存的核對只看目標的 ID 與名稱）：讀回來源，和這次的輸出相同（換行字元除外）才算（L2 R4）。
+      let back: string | null = null;
+      try { back = await writes.readTimed(source); } catch { back = null; }
+      const unify = (value: string): string => value.replace(/\r\n?/g, '\n');
       left.push(...last.left);
-      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), result.kind === 'done');
+      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), back !== null && last.text !== null && unify(back) === unify(last.text));
+    }
+    if (result.kind === 'failed' && result.error instanceof WriteTimeout) {
+      addLocks.add(source);
+      locked.push(source);
+      left.push(...last.left);
+      return finish(last.done.map(ref => ({ ref, dest: destOf(ref) })), false);
     }
     if (result.kind === 'unchanged') { left.push(...last.left); return finish([], true); }
     if (result.kind === 'blocked' && result.reason !== 'needs-update') blocked = result.reason;
     const why = result.kind === 'stale' ? WHY.changed : result.kind === 'blocked' && result.reason === 'needs-update' ? EXISTING_WHY.newer : blocked ? EXISTING_WHY.notNow : EXISTING_WHY.failed(source);
-    for (const each of [...confirmedItems, ...own]) left.push({ ref: each.ref, why });
-    return finish([], true);
+    return unclear(why);
   }
 
   return {
