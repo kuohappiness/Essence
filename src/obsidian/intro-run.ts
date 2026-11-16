@@ -57,18 +57,15 @@ function addMessage(path: string, result: AddResult): string | null {
   }
 }
 
-/**
- * 加進已有的做完的通知（§3-4、§4 第 5 步）：加入了幾項、到哪幾篇；來源清除沒確認另說（來源停用時說要重開，L2 第二輪 R2）；
- * 沒加入的每一項一句原因。
- */
-function existingMessage(source: string, result: ExistingResult, sourceLocked: boolean): string | null {
+/** 加進已有的做完的通知（§3-4、§4 第 5 步）：加入了幾項、到哪幾篇；來源清除沒確認另說；沒加入的每一項一句原因。 */
+function existingMessage(result: ExistingResult): string | null {
   switch (result.kind) {
     case 'done': {
       const decks = [...new Set(result.added.map(each => each.dest))];
       return [
         ...result.blocked ? [BLOCKED[result.blocked] ?? ''] : [],
         ...result.added.length ? [ADD_TIPS.added(result.added.length, decks)] : [],
-        ...result.added.length && !result.cleared ? [sourceLocked ? ADD_TIPS.locked(source) : ADD_TIPS.uncleared] : [],
+        ...result.added.length && !result.cleared ? [ADD_TIPS.uncleared] : [],
         ...result.left.map(each => `「${itemName(each.ref)}」：${each.why}`),
       ].filter(Boolean).join('\n') || null;
     }
@@ -251,7 +248,7 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
             if (!alive || result === null) return;
             if (result === 'unsaved') { host.notify(ADD_TIPS.unsaved); return; }
             if (result.kind === 'failed') host.onError(result.error, path);
-            const message = existingMessage(path, result, state.addLocked(path));
+            const message = existingMessage(result);
             if (message) host.notify(message);
             return;
           }
