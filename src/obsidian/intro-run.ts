@@ -203,10 +203,10 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
       if (/^\s*(?:[-*+]|\d+[.)])\s+\[\[[^\]]*#\^/.test(ref.original)) return writeExisting(state, path, request.refs, () => true);
       for (let round = 0; round < CONFIRM_ROUNDS; round++) {
         const dest = destOf(state, ref.id);
-        // 找不到的照樣交給 state，由它寫出原因。
-        if (!dest) return writeExisting(state, path, request.refs, () => true);
-        if (!await ask(ADD_TIPS.confirmOne(dest)) || !alive) return null;
+        // 找不到的照樣交給 state，由它寫出原因；家長沒確認過任何目的地，state 讀完變動才找到的回 changed，下一輪照找到的問（L2 R5）。
+        if (dest && (!await ask(ADD_TIPS.confirmOne(dest)) || !alive)) return null;
         const result = await writeExisting(state, path, request.refs, () => true, (destPath, text) => {
+          if (!dest) return false;
           const target = parseDeck(text).targets.find(t => t.id === ref.id);
           return !!target && sameDest(describe(destPath, target), dest);
         });

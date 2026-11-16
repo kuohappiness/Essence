@@ -113,7 +113,10 @@ export interface ExistingRequest {
   endpoint?: (dest: string) => Endpoint;
   /** 「全部加入」確認之後批次還一樣；不一樣回 changed，呼叫端重新確認。 */
   still: (text: string) => boolean;
-  /** 單項確認過的目的地（§3-1 沒轉成連結的）：寫入回呼裡目的地最新的文字不一樣了回 changed，重新確認。 */
+  /**
+   * 單項確認過的目的地（§3-1 沒轉成連結的）：寫入回呼裡目的地最新的文字不一樣了回 changed，重新確認。目的地是這一篇時在拿掉的同一個回呼裡問
+   * （L2 R5）；確認時找不到目的地的，呼叫端給一律不成立的，讀完變動才找到的也回 changed。
+   */
   destStill?: (path: string, text: string) => boolean;
 }
 /**
@@ -1034,8 +1037,11 @@ export function createState(options: StateOptions): State {
     if (blocked) return unclear(EXISTING_WHY.notNow);
     // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
     let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
+    let ownMoved = false;
     const plan = (now: string): Prepared | null => {
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
+      ownMoved = own.length > 0 && !!request.destStill && !request.destStill(source, now);
+      if (ownMoved) { last = { done: [], left: [], text: null }; return null; }
       if (addLocks.has(source)) {
         last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
         return null;
@@ -1066,6 +1072,7 @@ export function createState(options: StateOptions): State {
     const editor = editorOf(source);
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(source, plan));
     const destOf = (ref: ItemRef): string => confirmedItems.find(each => each.ref === ref)?.dest ?? source;
+    if (ownMoved && !confirmedItems.length) return { kind: 'changed' };
     if (result.kind === 'done' || result.kind === 'saved') {
       // 寫入的結果不證明來源拿掉了（保存的核對只看目標的 ID 與名稱）：讀回來源，和這次的輸出相同（換行字元除外）才算（L2 R4）。
       let back: string | null = null;

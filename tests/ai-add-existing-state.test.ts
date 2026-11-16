@@ -251,3 +251,17 @@ void test('§4 第 4 步：來源寫不進去、或寫的時候被門檻擋下�
   assert.deepEqual(result, { kind: 'done', added: [{ ref: crossRef, dest: DEST }], left: [{ ref: ownRef, why: EXISTING_WHY.failed(SRC) }], cleared: false, locked: [], blocked: null });
   assert.equal(h.texts.get(SRC), text);
 });
+
+void test('§3-1 目的地是這一篇的原文項目也要過確認：確認之後那個目標變了回 changed，不寫（L2 R5）', async t => {
+  const self = ['- p7q2w8 能說出溶解', '    - 糖溶在水裡看得到嗎？ :: 看不到'];
+  const text = source(self);
+  const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT });
+  const asked: string[] = [];
+  const changed = await h.state.addExisting(request(text, { destStill: path => { asked.push(path); return false; } }));
+  assert.deepEqual(changed, { kind: 'changed' });
+  assert.deepEqual(asked, [SRC]);
+  assert.equal(h.texts.get(SRC), text);
+  const ok = await h.state.addExisting(request(text, { destStill: path => path === SRC }));
+  assert.ok(ok.kind === 'done' && ok.added.length === 1 && ok.cleared, JSON.stringify(ok));
+  assert.equal(h.texts.get(SRC), head('2-2 水溶液', '草稿') + BODY + self[1] + '\n');
+});

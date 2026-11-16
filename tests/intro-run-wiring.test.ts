@@ -170,7 +170,8 @@ const OLD = 'Essence Cards/學業/國二上/自然/2-1.md';
 const OLD_TEXT = '- 能用密度判斷物體的浮沉 ^q8z3ka\n    - 密度怎麼算？ :: 質量除以體積\n';
 const BOX = '> [!note] 加進已有的學習目標\n> - [[國二上自然 2-1#^q8z3ka|能用密度判斷物體的浮沉]]\n>     - 鐵會沉嗎？ :: 會\n> - [[國二上自然 2-3#^w2e3r4|能說出熱]]\n>     - 熱？ :: 能量\n> - q8z3ka 能用密度判斷物體的浮沉\n>     - 木頭會浮嗎？ :: 會\n';
 interface ExistingCall { refs: readonly ItemRef[]; still: (text: string) => boolean; destStill?: (path: string, text: string) => boolean; editorOf: (path: string) => unknown }
-function existingSetup(results: Result[] = []) {
+/** foundAfter：state 被叫了這麼多次之後才找得到 q8z3ka（讀完變動才出現的目的地）。 */
+function existingSetup(results: Result[] = [], foundAfter = 0) {
   const stub = createObsidianStub();
   stub.texts.set(SOURCE, BOX);
   const module = stub.load<Module>(code);
@@ -181,7 +182,7 @@ function existingSetup(results: Result[] = []) {
     addLocked: (path: string) => locks.has(path),
     decks: () => decks,
     unitMaterials: () => [],
-    aiTarget: (id: string) => id === 'q8z3ka' ? { kind: 'one', path: OLD, name: '能用密度判斷物體的浮沉' } : { kind: 'none' },
+    aiTarget: (id: string) => id === 'q8z3ka' && calls.length >= foundAfter ? { kind: 'one', path: OLD, name: '能用密度判斷物體的浮沉' } : { kind: 'none' },
     addExisting(request: ExistingCall) {
       calls.push(request);
       const result = results.shift() ?? { kind: 'done', added: request.refs.map(ref => ({ ref, dest: OLD })), left: [], cleared: true, locked: [], blocked: null };
@@ -286,4 +287,18 @@ void test('§2、§4 閱讀模式的隱藏編輯器不跟著重讀（實機）�
   await tick();
   assert.deepEqual(h.calls.map(each => each.refs.map(ref => ref.id)), [['r5t6y7']]);
   assert.deepEqual(h.stub.notices, [TIPS.moved(1)]);
+});
+
+void test('§3-1 確認時找不到目的地：交給 state 時不算確認過；state 讀完變動才找到的回 changed，下一輪照找到的問（L2 R5）', async () => {
+  const raw = boxRefs[2];
+  const h = existingSetup([{ kind: 'changed' }], 1);
+  h.runner.add({ path: SOURCE, kind: 'existing', refs: [raw], all: false });
+  await tick();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].destStill?.(OLD, OLD_TEXT), false);
+  assert.equal(h.modal()!.querySelectorAll('p')[0].text, '把這一項加進「2-1」的「能用密度判斷物體的浮沉」？那個學習目標的第一題：密度怎麼算？ :: 質量除以體積');
+  h.answer(true);
+  await tick();
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1].destStill?.(OLD, OLD_TEXT), true);
 });
