@@ -173,3 +173,21 @@ void test('§2 同一篇搬移後，本文原本的區塊引用照樣有效；�
   const out = moved(text);
   assert.equal(out.split('\n').filter(line => /\^bbbbb2$/.test(line)).length, 1);
 });
+
+void test('§2 接句與全詩順序的候選照插入處的小標題讀詩名：本文有目標、沒有目標、和一般候選混批都搬得動（L2 R6）', () => {
+  const head = '---\n科目: 國語\n狀態: 草稿\n---\n';
+  const couplet = ['- 自編 第 1 句 接句 ^aaaaa2', '    - 理由：x', '    - ==清風穿竹徑==，淺水映山光。'];
+  const order = ['- 自編四句 排序 ^ccccc2', '    - 理由：x', '    - ==清風穿竹徑==，==淺水映山光==。'];
+  const plain = cand('能乙', 'ddddd2', 'Q :: B');
+  const body = '- 自編 第 2 句 接句 ^bbbbb2\n    - 清風穿竹徑，==淺水映山光==。\n';
+  for (const text of [
+    `${head}### 自編四句\n\n${body}\n${box(couplet)}\n`,
+    `${head}### 自編四句\n\n${box(couplet)}\n`,
+    `${head}### 自編四句\n\n${body}\n${box(couplet, order, plain)}\n`,
+  ]) {
+    const out = moved(text);
+    const added = parseDeck(out).targets.find(t => t.id === 'aaaaa2');
+    assert.equal(added?.couplet?.title, '自編四句', out);
+    assert.equal(added.section, '自編四句');
+  }
+});

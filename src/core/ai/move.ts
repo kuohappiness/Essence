@@ -112,7 +112,9 @@ export function moveCandidates(text: string, refs: readonly ItemRef[], context: 
     if (content(kept) !== content(before.targets)) return null;
     for (const each of chosen) {
       const target = after.targets.filter(t => t.id === each.id);
-      const alone = parseDeck(each.lines.join('\n'), { subject: before.props.subject }).targets;
+      // 用插入處的小標題讀這一項（L2 R6）：接句卡的詩名就是它所在的小標題，脫離標題讀會和搬完的不同。
+      const section = target[0]?.section ?? null;
+      const alone = parseDeck((section === null ? '' : `# ${section}\n`) + each.lines.join('\n'), { subject: before.props.subject }).targets;
       if (target.length !== 1 || alone.length !== 1 || content(target, ['section', 'sectionIndex']) !== content(alone, ['section', 'sectionIndex'])) return null;
     }
     if (after.problems.some(p => p.code === 'duplicate-id')) return null;
