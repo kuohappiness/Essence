@@ -281,20 +281,24 @@ export default class EssenceCardsPlugin extends Plugin {
         // 快照的 `對象` 跟著改名走（L2 R7）：搬資料夾時裡面每一篇都算；之後 Obsidian 對個別檔案再送的 rename 找不到舊連結，不會重寫。
         const links: SnapshotLinkIo = {
           autoUpdate: () => (app.vault as unknown as { getConfig(key: string): unknown }).getConfig('alwaysUpdateLinks') === true,
-          blocked: () => this.state?.writeBlock() != null,
-          snapshots: () => this.deepenSnapshots(),
+          // state 還沒建立、外掛停用中都當成擋著（L2 R11）。
+          blocked: () => this.unloaded || !this.state || this.state.writeBlock() !== null,
+          // 讀磁碟上最新的：前一次改名剛改過的快照，快取可能還是舊的（L2 R11）。
+          snapshots: () => this.deepenSnapshots(true),
           named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
           process: async (path, change) => { const file = app.vault.getFileByPath(path); if (file) await app.vault.process(file, change); },
         };
+        let renames: Promise<void> = Promise.resolve();
         const moves = (file: TFile | TFolder, old: string): [string, string][] => file instanceof TFolder
           ? app.vault.getMarkdownFiles().filter(each => each.path.startsWith(file.path + '/')).map(each => [old + each.path.slice(file.path.length), each.path])
           : file.path.endsWith('.md') ? [[old, file.path]] : [];
         this.registerEvent(app.vault.on('rename', (file, old) => {
           aiPrefs.moveDeepenSkip(app, old, file.path);
           const pairs = file instanceof TFile || file instanceof TFolder ? moves(file, old) : [];
-          void (async () => {
+          // 照收到的順序一次做一個（L2 R11）：A→B 還沒寫完時又改成 C，B→C 要看到 A→B 寫好的快照。
+          renames = renames.then(async () => {
             for (const [from, to] of pairs) await retargetSnapshots(links, from, to);
-          })().catch((error: unknown) => { this.fail('ai', error); }).finally(() => { this.refreshDeepen(); });
+          }).catch((error: unknown) => { this.fail('ai', error); }).finally(() => { this.refreshDeepen(); });
         }));
         this.registerEvent(app.vault.on('delete', file => { aiPrefs.moveDeepenSkip(app, file.path, null); this.refreshDeepen(); }));
         this.registerEvent(app.vault.on('modify', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
@@ -435,11 +439,11 @@ export default class EssenceCardsPlugin extends Plugin {
     this.deepenTimer = window.setTimeout(() => { this.deepenTimer = null; void this.deepen?.refresh(); }, delay);
   }
 
-  /** AI 輸出資料夾裡的快照（不含 `原文/`）：加深讀基準、改名時改連結共用。 */
-  private async deepenSnapshots(): Promise<{ path: string; text: string }[]> {
+  /** AI 輸出資料夾裡的快照（不含 `原文/`）：加深讀基準、改名時改連結共用；fresh 讀磁碟、不用快取。 */
+  private async deepenSnapshots(fresh = false): Promise<{ path: string; text: string }[]> {
     const { vault } = this.app;
     const files = vault.getMarkdownFiles().filter(file => file.path.startsWith(`${SNAPSHOT_FOLDER}/`) && !file.path.startsWith(`${SNAPSHOT_FOLDER}/原文/`));
-    const read = await Promise.all(files.map(file => vault.cachedRead(file).then(text => ({ path: file.path, text }), () => null)));
+    const read = await Promise.all(files.map(file => (fresh ? vault.read(file) : vault.cachedRead(file)).then(text => ({ path: file.path, text }), () => null)));
     return read.filter((each): each is { path: string; text: string } => each !== null);
   }
 

@@ -253,6 +253,34 @@ void test('寫入順序：記 writing → 寫卡組 → 原文 → 快照 → �
   assert.deepEqual(again.log, []);
 });
 
+void test('L2 R13 快照寫好、工作還在，之後改名改了快照的對象：恢復時認得是同一份，不再建一份；同識別碼有別的不同就停下', async () => {
+  const files = new Map([[HERE.path, DECK]]);
+  const job = started();
+  assert.deepEqual(await runDeepen(job, fakeIo(files).io), { kind: 'done', wrote: true });
+  const path = job.save!.snapshotPath;
+  const done = { ...job, save: { ...job.save!, writing: true, written: true } };
+  // 外掛改連結（只換對象那一行）、Obsidian 改連結（重排整個屬性區）。
+  const moved = job.save!.snapshot.replace('國二上自然 2-1.md|國二上自然 2-1]]', '國二上自然 2-1 溫度.md|國二上自然 2-1 溫度]]');
+  assert.notEqual(moved, job.save!.snapshot);
+  const resorted = moved.replace(/^(日期: .*)\n(時間: .*)$/m, '$2\n$1');
+  for (const text of [moved, resorted]) {
+    files.set(path, text);
+    const again = fakeIo(files);
+    assert.deepEqual(await runDeepen(done, again.io), { kind: 'done', wrote: true });
+    assert.deepEqual(again.log, []);
+    assert.equal([...files.keys()].filter(each => each.includes('加深')).length, 1);
+  }
+  // 同一個識別碼、對象以外也不同：不往後加、不重發。
+  files.set(path, moved.replace('已有目標: 1', '已有目標: 2'));
+  const conflict = fakeIo(files);
+  assert.deepEqual(await runDeepen(done, conflict.io), { kind: 'stop', why: 'conflict', detail: path });
+  assert.equal([...files.keys()].filter(each => each.includes('加深')).length, 1);
+  // 別的識別碼占了那個位置：照舊往後加。
+  files.set(path, moved.replace(`識別碼: ${job.id}`, '識別碼: other1'));
+  assert.deepEqual(await runDeepen(done, fakeIo(files).io), { kind: 'done', wrote: true });
+  assert.ok(files.has(path.replace('加深.md', '加深 2.md')));
+});
+
 void test('寫入回呼裡重驗：複製時的 ID 不見了就不寫、拿掉 writing；沒有 ID 時比全文', async () => {
   const files = new Map([[HERE.path, DECK.replace(' ^abc234', ' ^zzz234')]]);
   const { io, stored } = fakeIo(files);

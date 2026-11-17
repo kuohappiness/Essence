@@ -91,6 +91,25 @@ void test('L2 R7 改名後改快照的對象：完整路徑照路徑比、只寫
   assert.equal(retargetSnapshot(body, OLD, NEXT, none), null);
   // 單引號裡放不下新路徑的 `'`：改完讀不懂，不改。
   assert.equal(retargetSnapshot(text(`[[${OLD}|x]]`).replace(/"/g, "'"), OLD, OLD.replace('2-1', "2-1'"), none), null);
+  // 同一行的值、段落錨：照改。
+  const inline = text(`[[${OLD}#溫度計|國二上自然 2-1]]`).replace('對象:\n  - "', '對象: "');
+  assert.equal(retargetSnapshot(inline, OLD, NEXT, none), inline.replace(`${OLD}#溫度計|國二上自然 2-1`, `${NEXT}#溫度計|國二上自然 2-1 溫度`));
+});
+
+void test('L2 R12 改快照連結：新路徑有連結放不下的字、外掛沒寫過的寫法都不改', () => {
+  const OLD = 'Essence Cards/學業/國二上/自然/國二上自然 2-1.md';
+  const text = (line: string): string => `---\n時間: 2026-11-10T10:00:00+08:00\n識別碼: m1\n工作: 加深\n${line}\n記穩目標: 無\n---\n\n本文\n`;
+  const none = (): number => 0;
+  const listed = text(`對象:\n  - "[[${OLD}|國二上自然 2-1]]"`);
+  for (const bad of ['#', '^', '|', '[', ']']) assert.equal(retargetSnapshot(listed, OLD, OLD.replace('2-1.md', `2-1${bad}新.md`), none), null, bad);
+  const NEXT = OLD.replace('2-1.md', '2-1 溫度.md');
+  for (const line of [
+    `對象:\n  - "[[${OLD}|國二上自然 2-1]]" # 舊的 [[${OLD}]]`, // 後面有註解
+    `對象: ["[[${OLD}|國二上自然 2-1]]"]`, // flow 清單
+    `對象:\n  - [[${OLD}]]`, // 沒有引號
+    `對象:\n  - "[[${OLD}|國二上\\"自然]]"`, // 引號裡有跳脫
+    `# 對象: "[[${OLD}]]"\n對象: 無`, // 註解掉的舊連結
+  ]) assert.equal(retargetSnapshot(text(line), OLD, NEXT, none), null, line);
 });
 
 void test('基準：比時刻（不同時區）、同時刻比識別碼再比路徑；未來超過一天、kind 是 null 的不採用', () => {

@@ -54,6 +54,24 @@ void test('L2 R7 不改的情況：Obsidian 會自己改、寫入被擋、舊位
   assert.equal(await retargetSnapshots(twin.handle, OLD, NEXT), 0);
 });
 
+void test('L2 R11 掃描中寫入門檻關了：寫入回呼裡再看一次，不改', async () => {
+  let closed = false;
+  const { handle, texts, written } = io({ [NEXT]: '卡組', [SNAP]: snapshot(`[[${OLD}|國二上自然 2-1]]`) }, { blocked: () => closed });
+  const list = handle.snapshots.bind(handle);
+  handle.snapshots = () => { closed = true; return list(); };
+  assert.equal(await retargetSnapshots(handle, OLD, NEXT), 0);
+  assert.deepEqual(written, []);
+  assert.match(texts.get(SNAP)!, /國二上自然 2-1\.md\|/);
+});
+
+void test('L2 R11 連續改名 A→B→C 照順序做：最後指到 C', async () => {
+  const C = NEXT.replace('溫度.md', '溫度與熱.md');
+  const { handle, texts } = io({ [C]: '卡組', [SNAP]: snapshot(`[[${OLD}|國二上自然 2-1]]`), [FIRST]: snapshot('[[國二上自然 2-1]]', '製卡') });
+  await retargetSnapshots(handle, OLD, NEXT);
+  await retargetSnapshots(handle, NEXT, C);
+  for (const path of [SNAP, FIRST]) assert.match(texts.get(path)!, /國二上自然 2-1 溫度與熱(?:\.md)?\|國二上自然 2-1 溫度與熱\]\]/, path);
+});
+
 void test('L2 R7 讀了之後快照被改過：寫入當下照最新的全文改', async () => {
   const { handle, texts } = io({ [NEXT]: '卡組', [SNAP]: snapshot(`[[${OLD}|國二上自然 2-1]]`) });
   const process = handle.process.bind(handle);

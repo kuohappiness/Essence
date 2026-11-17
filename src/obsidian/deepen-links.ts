@@ -8,7 +8,7 @@ import { isDeckPath } from '../core/deck/index.ts';
 export interface SnapshotLinkIo {
   /** Obsidian 的「自動更新內部連結」開著：它會自己改（連本文的連結一起），外掛不再寫同一份，免得兩邊同時寫掉對方的改動。 */
   autoUpdate(): boolean;
-  /** 寫入的門檻（state 的 writeBlock）擋著。 */
+  /** 寫入的門檻（state 的 writeBlock）擋著；state 還沒建立、外掛停用中也算。入口和每一份的寫入回呼裡都看。 */
   blocked(): boolean;
   /** 快照資料夾裡的快照（不含 `原文/`）。 */
   snapshots(): Promise<{ path: string; text: string }[]>;
@@ -25,9 +25,15 @@ export async function retargetSnapshots(io: SnapshotLinkIo, old: string, next: s
   let count = 0;
   for (const each of await io.snapshots()) {
     if (retargetSnapshot(each.text, old, next, left) === null) continue;
-    // 寫入的當下對最新的全文再做一次：讀了之後被改過、或已經被改好的，照最新的算。
-    await io.process(each.path, text => retargetSnapshot(text, old, next, left) ?? text);
-    count++;
+    // 寫入的當下對最新的全文再做一次：讀了之後被改過、或已經被改好的，照最新的算；門檻在掃描中關了就不改（L2 R11，回傳原文 Obsidian 不寫）。
+    let changed = false;
+    await io.process(each.path, text => {
+      if (io.blocked()) return text;
+      const result = retargetSnapshot(text, old, next, left);
+      changed = result !== null;
+      return result ?? text;
+    });
+    if (changed) count++;
   }
   return count;
 }

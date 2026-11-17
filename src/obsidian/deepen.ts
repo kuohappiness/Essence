@@ -2,10 +2,10 @@ import {
   baselineOf, beginDeepen, buildDeepenPrompt, chooseBase, composeBatch, deepenPending, deepenRow, deepenTargets, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSkips, readSnapshot, remindOf, RULE_SUBJECTS, skipFor, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
 } from '../core/ai/index.ts';
 import type { CardForm, Purpose, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
-import { deckInScope, unitKey } from '../core/catalog/index.ts';
+import { deckInScope, scopeDate, unitKey } from '../core/catalog/index.ts';
 import { blockIds, isDeckPath, newId } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { masteryOf, parseTime } from '../core/study/index.ts';
+import { dayOf, masteryOf, parseTime } from '../core/study/index.ts';
 import type { Mastery } from '../core/study/index.ts';
 import type { EditorHandle, State } from '../state/index.ts';
 
@@ -37,6 +37,8 @@ export interface DeepenDeps {
   now: () => { ms: number; offset: number };
   random?: () => number;
   onError: (error: unknown) => void;
+  /** 一次讀取最多等多久（毫秒，預設 30 秒；L2 R14）：iCloud 佔位檔可能一直不回來，提醒的重算與手動加深不能卡在同一次讀取。 */
+  readWait?: number;
 }
 
 /** 這一篇能不能加深（§1 第 1、4 點）：能的話附上卡組與三個數字。 */
@@ -45,6 +47,9 @@ export type Readiness =
   | { ok: false; why: string };
 
 export type DeepenOutcome = { kind: 'done'; wrote: boolean; path: string } | { kind: 'stop'; message: string; unclear: boolean };
+
+/** 讀取等不到（L2 R14）：同步中的正常狀態，不記錯誤。 */
+class Late extends Error {}
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 
@@ -58,7 +63,7 @@ const STOP: Record<DeepenStop['why'], string> = {
   blocked: '先不寫；等一下再按「繼續」',
   failed: '寫不進去，這次停在一半；按「繼續」會從停下的地方接著做',
   unreadable: '讀不到檔（可能還在從 iCloud 下載）；等一下再按「繼續」',
-  conflict: '原文的檔對不上：那個位置已經有不同的內容，沒有覆蓋',
+  conflict: '原文或快照的檔對不上：那個位置已經有不同的內容，沒有覆蓋',
   name: '快照的檔名一直被占用（可能正在同步）；等一下再按「繼續」',
   timeout: '寫進去花太久，不知道寫成沒有。看過卡組最後面的加深框再選：已經寫進去就選「當作完成」，沒有就選「放棄」',
   phone: '加深只在電腦上做',
@@ -103,7 +108,15 @@ export function createDeepen(deps: DeepenDeps) {
     return [...new Set(deck.targets.filter(t => t.id !== null && t.ok && !t.fields.paused && t.prompts.length > 0 && !stopped({ id: t.id, line: t.line })).map(t => t.id!))];
   }
   /** 紀錄或卡組有讀不到的（state 的 unread，L2 R4）：記穩了的數字不可靠，不問也不讓發起。 */
-  const partial = (state: State): boolean => state.writeBlock() === 'unread';
+  // 直接看 unread()：writeBlock 會先回備份、還原等原因，蓋掉讀不到的篇（L2 R14）。
+  const partial = (state: State): boolean => state.writeBlock() === 'unread' || state.unread().length > 0;
+  /** 讀取等不到就丟錯（L2 R14）：照讀不到處理，晚到的結果不用。 */
+  const readWait = deps.readWait ?? 30_000;
+  function limited<T>(work: Promise<T>): Promise<T> {
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(new Late(`讀取超過 ${readWait / 1000} 秒沒有回來`)); }, readWait); });
+    return Promise.race([work, late]).finally(() => { clearTimeout(id); });
+  }
 
   /** 這一篇現在的樣子（§1）：卡組筆記、啟用或暫停、讀得懂、不需要新版、至少一個有 ID 的目標。 */
   function ready(path: string): Readiness {
@@ -134,7 +147,7 @@ export function createDeepen(deps: DeepenDeps) {
     return found.length === 1 ? found[0] : null;
   }
   async function owned(path: string, deck: Deck): Promise<SnapshotInfo[]> {
-    const list = (await deps.snapshots()).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
+    const list = (await limited(deps.snapshots())).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
     return ownSnapshots(list, path, new Set(deck.targets.flatMap(t => t.id ?? [])), resolve);
   }
 
@@ -146,7 +159,8 @@ export function createDeepen(deps: DeepenDeps) {
     const state = deps.state();
     if (!state) return '平常複習';
     const at = deps.now();
-    const today = stamp(at.ms, at.offset).slice(0, 10);
+    // 照清晨 4 點換日（syntax §4-1，L2 R15）：小考隔天凌晨還算考試當天。
+    const today = scopeDate(dayOf(at.ms, at.offset));
     const { term, subject, unit } = deck.props;
     const key = term !== null && subject !== null && unit !== null ? unitKey(term, subject, unit.code) : null;
     if (state.quizzes().some(quiz => quiz.date !== null && quiz.date >= today && quiz.refs.some(ref => 'deck' in ref ? ref.deck === path : ref.unit === key))) return '準備小考';
@@ -206,7 +220,7 @@ export function createDeepen(deps: DeepenDeps) {
     // 讀不到的時候只留這台電腦自己知道的「等你貼回」：記穩了的數字與卡組裡的框都不可靠（L2 R4）。
     if (partial(state)) return waitingRows(state);
     const now = deps.now().ms;
-    const infos = (await deps.snapshots()).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
+    const infos = (await limited(deps.snapshots())).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
     const skips = readSkips(deps.store.skips(), text => parseTime(text)?.at ?? null);
     const history = state.history();
     const found: DeepenRow[] = [];
@@ -219,7 +233,7 @@ export function createDeepen(deps: DeepenDeps) {
       if (!waiting) {
         // 一篇讀不到只略過那一篇，不讓整次重算失敗、留著舊的列（L2 R4）。
         let text: string | null;
-        try { text = await deps.read(entry.path); } catch { continue; /* 讀不到是同步中的正常狀態，下一次重算再看；不記錯誤 */ }
+        try { text = await limited(deps.read(entry.path)); } catch { continue; /* 讀不到是同步中的正常狀態，下一次重算再看；不記錯誤 */ }
         if (text === null) continue;
         pending = deepenPending(text);
       }
@@ -250,7 +264,7 @@ export function createDeepen(deps: DeepenDeps) {
         again = false;
         let next: DeepenRow[];
         // 算到一半出錯：不留舊的可以按的列，只留等你貼回（L2 R4）。
-        try { next = await compute(); } catch (error) { deps.onError(error); next = rows.filter(row => row.kind === 'waiting' || row.kind === 'writing'); }
+        try { next = await compute(); } catch (error) { if (!(error instanceof Late)) deps.onError(error); next = rows.filter(row => row.kind === 'waiting' || row.kind === 'writing'); }
         if (JSON.stringify(next) !== JSON.stringify(rows)) { rows = next; for (const listener of listeners) listener(); }
       } while (again);
     })().finally(() => { computing = null; });
@@ -294,7 +308,7 @@ export function createDeepen(deps: DeepenDeps) {
       if (text === null) return { error: '找不到這一篇' };
       const at = deps.now();
       let snapshots: SnapshotInfo[];
-      try { snapshots = await owned(path, now.deck); } catch (error) { deps.onError(error); return { error: '讀不到以前的快照；等一下再按' }; }
+      try { snapshots = await owned(path, now.deck); } catch (error) { if (!(error instanceof Late)) deps.onError(error); return { error: '讀不到以前的快照；等一下再按' }; }
       const ids = new Set(now.deck.targets.flatMap(t => t.id ?? []));
       const map = latestMap(snapshots, at.ms)?.map ?? null;
       const targets = deepenTargets(now.deck, now.mastery);

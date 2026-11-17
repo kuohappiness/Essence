@@ -72,6 +72,12 @@ class NothingToFill extends Error {}
 class Stopped extends Error {}
 /** 寫進磁碟超過 writeTimeout 沒有回來（§3 最後一段）：底層的寫入可能之後才落盤（S28）。引言框的加入靠它停用那一篇到重開（tasks/ai-cards-add.md §4〈逾時後晚到的寫入〉）。 */
 export class WriteTimeout extends Error {}
+/**
+ * plan 明確拒寫（L2 R10）：和回傳 null（沒有要改的字，edit 照樣存一次編輯器）不同，edit 不改編輯器、不存、不登記核對，回 fallback；
+ * fillFile 不改檔。用在「這一篇鎖著」「編輯器有沒存的字」這種連編輯器的字都不該存回的情況。
+ */
+export const REFUSE: unique symbol = Symbol('refuse');
+export type Plan = (text: string) => Prepared | null | typeof REFUSE;
 
 /** 先讀完待讀最多幾輪（§3 第 2 步）。 */
 const DRAIN_ROUNDS = 5;
@@ -339,7 +345,7 @@ export function createWrites(options: WritesOptions) {
     return new Promise(settle => { checks.set(path, { output, prepared, fallback, settle }); });
   }
   /** 沒開著的檔（離開筆記補 ID、目錄的暫停／恢復）：在 modify 的回呼裡對最新的原文準備（W5 §8-2 第 4 點）；plan 回傳 null 是沒有要改的。 */
-  async function fillFile(path: string, plan: (text: string) => Prepared | null = text => prepare(path, text)): Promise<WriteResult> {
+  async function fillFile(path: string, plan: Plan = text => prepare(path, text)): Promise<WriteResult> {
     const rounds = { count: 0 };
     for (;;) {
       const stop = await admit(path, rounds);
@@ -358,7 +364,8 @@ export function createWrites(options: WritesOptions) {
           gate = writable(path, text);
           if (gate) return text;
           if (waiting(path)) { again = true; return text; }
-          prepared = plan(text);
+          const planned = plan(text);
+          prepared = planned === REFUSE ? null : planned;
           // 準備時監聽者可能 close()（見 edit）：不寫。
           if (life.closed) throw new Stopped();
           return prepared ? prepared.text : text;
@@ -379,7 +386,7 @@ export function createWrites(options: WritesOptions) {
    * 開著的筆記（save、resolve）：第 4、5 步從最後一次檢查（await admit 之後同步重查）到 apply 之間沒有 await。plan 對編輯器最新的文字準備
    * （先把它當成新版本比對、觀察到的原文照常採用）；回傳 null 時沒有要寫的，照樣 persist、等核對讀取，回 fallback。
    */
-  async function edit(editor: EditorHandle, plan: (text: string) => Prepared | null, fallback: WriteResult): Promise<WriteResult> {
+  async function edit(editor: EditorHandle, plan: Plan, fallback: WriteResult): Promise<WriteResult> {
     const path = editor.path;
     const rounds = { count: 0 };
     for (;;) {
@@ -402,6 +409,8 @@ export function createWrites(options: WritesOptions) {
       // plan 觀察到新的原文時會同步通知監聽者（adopt → replan），監聽者或 onError 可能在裡面 close()（Codex L2 的 R2）：
       // 這時還沒改編輯器、還沒寫，停下來；close() 不用等這一份。
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      // 明確拒寫：編輯器的字不改、不存（L2 R10：存回去會蓋掉剛同步來或前一筆寫進磁碟的字）。
+      if (prepared === REFUSE) return fallback;
       if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
       // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
       await persist(editor.persist());

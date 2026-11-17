@@ -39,7 +39,7 @@ function machine() {
     },
   };
 }
-async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>, box: ReturnType<typeof machine>) {
+async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>, box: ReturnType<typeof machine>, at = NOW, extra: { readWait?: number; hang?: Set<string> } = {}) {
   const clipboard: string[] = [];
   const errors: unknown[] = [];
   /** 只有加深的 read 讀不到的篇（state 照常讀得到）。 */
@@ -51,15 +51,16 @@ async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>
     rules, state: () => state, store: box.store, random: Math.random,
     names: () => new Set(md().map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
     named: name => md().filter(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
-    snapshots: () => Promise.resolve(md().filter(path => path.startsWith('Essence Cards/紀錄/AI 輸出/') && !path.includes('/原文/')).map(path => ({ path, text: memory.texts.get(path)! }))),
-    read: path => broken.has(path) ? Promise.reject(Error('讀不到')) : Promise.resolve(memory.texts.get(path) ?? null),
+    readWait: extra.readWait,
+    snapshots: () => extra.hang?.has('snapshots') ? new Promise(() => {}) : Promise.resolve(md().filter(path => path.startsWith('Essence Cards/紀錄/AI 輸出/') && !path.includes('/原文/')).map(path => ({ path, text: memory.texts.get(path)! }))),
+    read: path => extra.hang?.has(path) ? new Promise(() => {}) : broken.has(path) ? Promise.reject(Error('讀不到')) : Promise.resolve(memory.texts.get(path) ?? null),
     editor: () => null,
     unsaved: () => Promise.resolve(false),
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
-    now: () => ({ ms: NOW, offset: 480 }),
+    now: () => ({ ms: at, offset: 480 }),
     onError: error => { errors.push(error); },
   });
-  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random: Math.random, reserved: () => deepen.reserved(), now: () => NOW, offset: () => 480, onError() {} });
+  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random: Math.random, reserved: () => deepen.reserved(), now: () => at, offset: () => 480, onError() {} });
   t.after(() => state.close());
   await state.ready();
   return { deepen, state, clipboard, errors, broken };
@@ -233,6 +234,27 @@ void test('L2 R4 紀錄讀不到：不出可以按的列、手動加深也先擋
   assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
 });
 
+void test('L2 R14 快照或卡組的讀取一直不回來：重算照時間上限結束、不留可以按的列、不記錯誤；回來後照常', async t => {
+  const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
+  const hang = new Set<string>();
+  const { deepen, errors } = await load(t, memory, machine(), NOW, { readWait: 30, hang });
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
+  for (const stuck of ['snapshots', THREE]) {
+    hang.add(stuck);
+    await deepen.refresh();
+    assert.deepEqual(deepen.rows(), [], stuck);
+    hang.delete(stuck);
+  }
+  // 手動加深等不到快照：告訴家長等一下再按。
+  hang.add('snapshots');
+  assert.deepEqual(await deepen.copy(THREE, '', ''), { error: '讀不到以前的快照；等一下再按' });
+  hang.delete('snapshots');
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
+  assert.deepEqual(errors, []);
+});
+
 void test('L2 R4 一篇讀不到只略過那一篇，不留舊的列、不擋別篇', async t => {
   const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [DECK]: DECK_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
   const box = machine();
@@ -283,6 +305,18 @@ void test('L2 R8 學習目的：今天以後有這個單元的小考是準備小
   assert.equal(await purpose({ [exam]: examText, [quiz]: quizText }), '準備小考');
   // 已經考過的小考不算。
   assert.equal(await purpose({ [quiz]: quizText.replace('2026-11-20', '2026-11-10') }), '平常複習');
+});
+
+void test('L2 R15 小考隔天凌晨：清晨 4 點換日之前還是準備小考，4 點起是平常複習', async t => {
+  const quiz = 'Essence Cards/考試範圍/小考/熱.md';
+  const quizText = '---\n識別碼: q4m8t2\n小考日期: 2026-11-16\n---\n- 國二上 自然 2-2\n';
+  for (const [at, expected] of [['2026-11-17T03:59:00+08:00', '準備小考'], ['2026-11-17T04:00:00+08:00', '平常複習']] as const) {
+    const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [quiz]: quizText });
+    const { deepen, clipboard } = await load(t, memory, machine(), Date.parse(at));
+    const copied = await deepen.copy(THREE, '', '');
+    assert.ok('job' in copied);
+    assert.equal(/- 學習目的：(.+)/.exec(clipboard[0])![1], expected, at);
+  }
 });
 
 void test('L2 R9 寫入中按取消：取消不了、工作照常寫完；列是「正在寫」', async t => {
