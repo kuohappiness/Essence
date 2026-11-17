@@ -122,13 +122,43 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await run('git', ['add', '--', 'a.md'], isolated);
   await assert.rejects(run('git', commit, isolated), /a\.md:3 {2}missing\.md {2}找不到檔案/);
   // 只改文件也掃金鑰（第二次里程碑檢查 R4）：repo 公開，規劃文件直接推上 main。假的 GitHub token 拆開寫，本檔才不會被掃到。
+  const secret = '# C\n\n' + 'gh' + 'p_' + 'x7Kq2'.repeat(7) + 'Z\n';
   await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
-  await writeFile(join(root, 'c.md'), '# C\n\n' + 'gh' + 'p_' + 'x7Kq2'.repeat(7) + 'Z\n');
+  await writeFile(join(root, 'c.md'), secret);
   await run('git', ['add', '--', 'a.md', 'c.md'], isolated);
   await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
   await writeFile(join(root, 'c.md'), '# C\n');
   await run('git', ['add', '--', 'c.md'], isolated);
   await run('git', commit, isolated);
+  // 掃的是這次 commit 的內容，不是工作檔（L2 R1）。暫存區有金鑰、工作檔已經刪掉：擋。
+  await writeFile(join(root, 'c.md'), secret);
+  await run('git', ['add', '--', 'c.md'], isolated);
+  await writeFile(join(root, 'c.md'), '# C\n\n改了\n');
+  await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
+  // 暫存區乾淨、工作檔有金鑰（只 stage 一部分）：放行。
+  await run('git', ['add', '--', 'c.md'], isolated);
+  await writeFile(join(root, 'c.md'), secret);
+  await run('git', commit, isolated);
+  // git commit -a、git commit -- <路徑> 用的是工作檔（暫時的索引）：擋。
+  await assert.rejects(run('git', [...commit, '-a'], isolated), /secretlint-rule-github/);
+  await assert.rejects(run('git', [...commit, '--', 'c.md'], isolated), /secretlint-rule-github/);
+  // 別的檔已經 stage 了金鑰，git commit -- <路徑> 不含它：放行。
+  await writeFile(join(root, 'c.md'), '# C\n');
+  await writeFile(join(root, 'e.md'), secret);
+  await run('git', ['add', '--', 'e.md'], isolated);
+  await run('git', [...commit, '--', 'c.md'], isolated);
+  await run('git', ['rm', '-q', '--cached', '--', 'e.md'], isolated);
+  // symlink 換成含金鑰的一般檔（型別變更 T）也掃。物件直接寫進索引，Windows 不用開 symlink。
+  const object = async (text: string) => {
+    await writeFile(join(root, 'e.md'), text);
+    return (await run('git', ['hash-object', '-w', '--', 'e.md'], isolated)).stdout.trim();
+  };
+  await run('git', ['update-index', '--add', '--cacheinfo', `120000,${await object('c.md')},s.md`], isolated);
+  await run('git', commit, isolated);
+  await run('git', ['update-index', '--cacheinfo', `100644,${await object(secret)},s.md`], isolated);
+  await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
+  await run('git', ['reset', '-q', '--', 's.md'], isolated);
+  await rm(join(root, 'e.md'));
   // 本機路徑也每次都掃，檔案內容與 commit 訊息都擋（第二次里程碑檢查 R5）。帳號名是自編的，拆開寫本檔才不會被掃到。
   const local = 'C:' + String.raw`\Users\alice\AppData`;
   await writeFile(join(root, 'c.md'), '# C\n\n' + local + '\n');
