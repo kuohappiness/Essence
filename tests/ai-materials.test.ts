@@ -78,6 +78,17 @@ void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或
   assert.ok(prompt.text.includes('：go'));
 });
 
+void test('L2 第一輪 R1、R2：沒勾時的名稱例子讀得進來、不被當成點選填空；排序不做', () => {
+  const off = taskSection(form({ pick: false }), subject('chinese'), []);
+  assert.ok(off.includes('`寨 辨字`') && off.includes('`質量和重量的差別`'));
+  assert.ok(off.includes('排序的題型（例如英文的排序、國語的全詩順序卡）不做'));
+  const chinese = (name: string): ReturnType<typeof parseDeck> => parseDeck(`---\n科目: 國語\n年級學期: 四上\n單元: L3\n狀態: 啟用\n---\n- ${name}\n    - 盜匪躲在山＿＿裡。（寨、塞、寒、賽） :: 寨\n`);
+  assert.deepEqual(chinese('寨 辨字').problems, []);
+  assert.ok(!chinese('寨 辨字').targets[0].group);
+  // 對照：舊的寫法 `寨 相似字` 會有 pick-not-recognized（貼回時擋下），所以提示不能這樣寫。
+  assert.ok(chinese('寨 相似字').problems.some(problem => problem.code === 'pick-not-recognized'));
+});
+
 void test('§2-1 預設：國語、英文勾，其他不勾', () => {
   assert.deepEqual(Object.fromEntries(RULE_SUBJECTS.map(each => [each.key, each.pick])), { chinese: true, english: true, science: false, general: false, social: false });
 });
