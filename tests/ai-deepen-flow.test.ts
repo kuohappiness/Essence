@@ -255,6 +255,21 @@ void test('L2 R14 快照或卡組的讀取一直不回來：重算照時間上�
   assert.deepEqual(errors, []);
 });
 
+void test('L2 R18 按鈕的重算有自己的期限：讀取卡住又一直有新的重算時回 false，不跟著背景的重算一直等；讀得到時回 true', async t => {
+  const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
+  const hang = new Set<string>(['snapshots']);
+  const { deepen } = await load(t, memory, machine(), NOW, { readWait: 25, hang });
+  const again = setInterval(() => { void deepen.refresh(); }, 7);
+  const started = Date.now();
+  const ok = await deepen.refreshForClick(120);
+  clearInterval(again);
+  assert.equal(ok, false);
+  assert.ok(Date.now() - started < 1000);
+  hang.delete('snapshots');
+  assert.equal(await deepen.refreshForClick(1000), true);
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
+});
+
 void test('L2 R4 一篇讀不到只略過那一篇，不留舊的列、不擋別篇', async t => {
   const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [DECK]: DECK_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
   const box = machine();

@@ -266,6 +266,28 @@ void test('§3-1 目的地是這一篇的原文項目也要過確認：確認之
   assert.equal(h.texts.get(SRC), head('2-2 水溶液', '草稿') + BODY + self[1] + '\n');
 });
 
+void test('第 2 批 L2 R16 同一篇補題排在逾時的加深後面：來源鎖著時不管確認還成不成立，都不存回舊分頁、加深的字留著', async t => {
+  const self = ['- p7q2w8 能說出溶解', '    - 糖溶在水裡看得到嗎？ :: 看不到'];
+  const text = source(self);
+  for (const still of [true, false]) {
+    const h = await setup(t, { [SRC]: text, [DEST]: DEST_TEXT }, { writeTimeout: 30 });
+    let saved = 0;
+    const editor: EditorHandle = {
+      path: SRC, text: () => text, apply: () => true,
+      persist() { saved++; h.write(SRC, text); return Promise.resolve(); },
+    };
+    const held = h.holdModify(SRC);
+    // 補題先開始（第 1 步讀完變動），加深接著排進來；補題拿掉來源那一筆排在加深後面。
+    const added = h.state.addExisting(request(text, { editorOf: path => path === SRC ? editor : null, destStill: () => still }));
+    const deepen = h.state.aiAppend(SRC, null, now => ({ text: now + '\nA\n' }));
+    assert.deepEqual(await deepen, { kind: 'timeout' });
+    held.release();
+    const result = await added;
+    assert.equal(saved, 0, `確認${still ? '成立' : '不成立'}`);
+    assert.ok(h.texts.get(SRC)!.endsWith('\nA\n'), JSON.stringify(result));
+  }
+});
+
 /** 排了幾次今天的份：每一次排都由 input() 取一次時間（呼叫堆疊裡有 input）。 */
 function planCounter(): { now: () => number; count: () => number; reset: () => void } {
   let plans = 0;

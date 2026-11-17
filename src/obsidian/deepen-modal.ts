@@ -4,6 +4,7 @@ import { deepenPending, groupHints, issueText } from '../core/ai/index.ts';
 import type { DeepenInspection, DeepenJob } from '../core/ai/index.ts';
 import { isDeckPath } from '../core/deck/index.ts';
 import { SERVICES } from './ai-cards.ts';
+import { limitedRead } from './deepen.ts';
 import type { Deepen, DeepenOutcome } from './deepen.ts';
 
 // 加深這一節的視窗（tasks/ai-cards-deepen.md §1）：沿用 AI 製卡的視窗，第一步換成加深的內容。只在電腦（D-134、D-039）。
@@ -21,6 +22,7 @@ const TEXT = {
   hints: '提示（可以寫）：',
   writing: '正在寫進卡組…',
   resume: '上一次的結果寫到一半，按「繼續」從停下的地方接著做。',
+  unreadable: '讀不到這一篇（可能還在從 iCloud 下載）；等一下再按「重試」。',
 };
 
 /** 貼到一半的回覆：關掉視窗也留著（只在這次開著 Obsidian 的期間）。 */
@@ -32,6 +34,8 @@ export interface DeepenHost {
   read: (path: string) => Promise<string | null>;
   openNote: (path: string) => void;
   notify: (message: string) => void;
+  /** 打開時讀這一篇最多等多久（毫秒，預設同 deepen.ts 的 READ_WAIT；L2 R17），只在測試裡改。 */
+  readWait?: number;
 }
 
 class DeepenModal extends Modal {
@@ -43,6 +47,8 @@ class DeepenModal extends Modal {
   private direction = '';
   private material = '';
   private readonly host: DeepenHost;
+  /** 第幾次開始讀（L2 R17）：關掉或重試之後，前一次晚到的結果不接手。 */
+  private round = 0;
   private readonly modals: Set<Modal>;
   readonly path: string;
   constructor(app: App, host: DeepenHost, modals: Set<Modal>, path: string) {
@@ -57,7 +63,7 @@ class DeepenModal extends Modal {
     this.titleEl.setText(TEXT.title);
     void this.start();
   }
-  onClose(): void { this.modals.delete(this); this.contentEl.empty(); }
+  onClose(): void { this.round++; this.modals.delete(this); this.contentEl.empty(); }
   private reset(): HTMLElement {
     this.contentEl.empty();
     this.contentEl.addClass('essence-cards-ai');
@@ -72,7 +78,19 @@ class DeepenModal extends Modal {
     const job = deepen.jobOf(this.path);
     if (job?.save) { this.job = job; this.showStop(job.save.unclear ? { kind: 'stop', message: TEXT.resume, unclear: true } : { kind: 'stop', message: TEXT.resume, unclear: false }); return; }
     if (job) { this.job = job; this.showPaste(null); return; }
-    const text = await this.host.read(this.path);
+    // 讀這一篇有上限（L2 R17）：讀不到、等不到就停在可以重試的訊息，不留空白的視窗。
+    const round = ++this.round;
+    let text: string | null;
+    try { text = await limitedRead(this.host.read(this.path), this.host.readWait); } catch {
+      if (round !== this.round) return;
+      const el = this.reset();
+      el.createEl('p', { text: TEXT.unreadable });
+      const row = this.buttons(el);
+      row.createEl('button', { text: '重試', cls: 'mod-cta' }).addEventListener('click', () => { void this.start(); });
+      row.createEl('button', { text: '關閉' }).addEventListener('click', () => { this.close(); });
+      return;
+    }
+    if (round !== this.round) return;
     if (text !== null && deepenPending(text)) {
       const el = this.reset();
       el.createEl('p', { text: TEXT.pending });

@@ -925,11 +925,11 @@ export function createState(options: StateOptions): State {
     const last: { plan: MovePlan | null; changed: boolean; locked: boolean } = { plan: null, changed: false, locked: false };
     const elsewhere = (id: string): boolean => gatedIds.has(id) || (tracker.where([id]).get(id) ?? []).some(each => each !== path);
     const plan = (text: string): Prepared | null | typeof REFUSE => {
-      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       last.plan = null;
       last.locked = addLocks.has(path);
-      // 前一筆逾時鎖著：編輯器的字可能比磁碟舊，不存回去（第 2 批 L2 R10）。
+      // 前一筆逾時鎖著：編輯器的字可能比磁碟舊，不讀進來、不存回去（第 2 批 L2 R10、R16）。
       if (last.locked) return REFUSE;
+      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       last.changed = !still(text);
       if (last.changed) return null;
       last.plan = moveItems(text, refs, { elsewhere });
@@ -1017,12 +1017,12 @@ export function createState(options: StateOptions): State {
       const planned = new Map<ItemRef, string>();
       let moved = false, lockedNow = false;
       const plan = (now: string): Prepared | null | typeof REFUSE => {
-        track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
         planned.clear();
         moved = false;
-        // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）；鎖著時編輯器的字不存回去（第 2 批 L2 R10）。
+        // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）。鎖最先看：鎖著時編輯器的字不讀進來、不存回去（第 2 批 L2 R10、R16）。
         lockedNow = addLocks.has(dest);
         if (lockedNow) return REFUSE;
+        track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
         if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
         let next = now;
         for (const each of items) {
@@ -1074,14 +1074,15 @@ export function createState(options: StateOptions): State {
     let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
     let ownMoved = false;
     const plan = (now: string): Prepared | null | typeof REFUSE => {
+      // 鎖最先看（第 2 批 L2 R10、R16）：鎖著時編輯器的字不讀進來、不存回去，其他拒絕的理由都排在後面。
+      ownMoved = false;
+      if (addLocks.has(source)) {
+        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
+        return REFUSE;
+      }
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
       ownMoved = own.length > 0 && !!request.destStill && !request.destStill(source, now);
       if (ownMoved) { last = { done: [], left: [], text: null }; return null; }
-      if (addLocks.has(source)) {
-        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
-        // 鎖著時編輯器的字不存回去（第 2 批 L2 R10）。
-        return REFUSE;
-      }
       const items: ClearItem[] = [];
       const stale: Left[] = [];
       for (const each of confirmedItems) {

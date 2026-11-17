@@ -451,7 +451,8 @@ export default class EssenceCardsPlugin extends Plugin {
   private async deepenAct(row: DeepenRow, action: 'deepen' | 'skip' | 'open' | 'cancel'): Promise<void> {
     const deepen = this.deepen;
     if (!deepen) return;
-    await deepen.refresh();
+    // 重算最多等一段時間（L2 R18）：讀取一直不回來時請家長等一下再按，不照舊的列做。
+    if (!await deepen.refreshForClick()) { new Notice('還在讀取筆記（可能正在從 iCloud 下載）；等一下再按'); return; }
     const now = deepen.rows().find(each => each.path === row.path);
     if (!now || now.kind !== row.kind) { new Notice('這一篇的情況已經變了，已經重新整理'); this.entry?.refresh(); return; }
     if (action === 'skip') { await deepen.skip(row.path); return; }

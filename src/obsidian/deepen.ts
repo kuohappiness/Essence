@@ -50,6 +50,14 @@ export type DeepenOutcome = { kind: 'done'; wrote: boolean; path: string } | { k
 
 /** 讀取等不到（L2 R14）：同步中的正常狀態，不記錯誤。 */
 class Late extends Error {}
+/** 一次讀取最多等多久（L2 R14）：iCloud 佔位檔可能一直不回來；同還原的上限。 */
+const READ_WAIT = 30_000;
+/** 等一件事最多 ms 毫秒，沒回來丟 Late；晚到的結果沒有人接。 */
+export function limitedRead<T>(work: Promise<T>, ms = READ_WAIT): Promise<T> {
+  let id: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(new Late(`讀取超過 ${ms / 1000} 秒沒有回來`)); }, ms); });
+  return Promise.race([work, late]).finally(() => { clearTimeout(id); });
+}
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 
@@ -111,12 +119,8 @@ export function createDeepen(deps: DeepenDeps) {
   // 直接看 unread()：writeBlock 會先回備份、還原等原因，蓋掉讀不到的篇（L2 R14）。
   const partial = (state: State): boolean => state.writeBlock() === 'unread' || state.unread().length > 0;
   /** 讀取等不到就丟錯（L2 R14）：照讀不到處理，晚到的結果不用。 */
-  const readWait = deps.readWait ?? 30_000;
-  function limited<T>(work: Promise<T>): Promise<T> {
-    let id: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(new Late(`讀取超過 ${readWait / 1000} 秒沒有回來`)); }, readWait); });
-    return Promise.race([work, late]).finally(() => { clearTimeout(id); });
-  }
+  const readWait = deps.readWait ?? READ_WAIT;
+  const limited = <T>(work: Promise<T>): Promise<T> => limitedRead(work, readWait);
 
   /** 這一篇現在的樣子（§1）：卡組筆記、啟用或暫停、讀得懂、不需要新版、至少一個有 ID 的目標。 */
   function ready(path: string): Readiness {
@@ -275,6 +279,15 @@ export function createDeepen(deps: DeepenDeps) {
     ready,
     rows: (): readonly DeepenRow[] => rows,
     refresh,
+    /**
+     * 按鈕按下去時的重算（L2 R18）：等到一次重算完，但最多等 within 毫秒（預設一次讀取的上限再加 5 秒）；等不到回 false，
+     * 呼叫端請家長等一下再按，不照舊的列做。背景接著排的重算不延長這一次的等待。
+     */
+    async refreshForClick(within = readWait + 5_000): Promise<boolean> {
+      let id: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<false>(resolve => { id = setTimeout(() => { resolve(false); }, within); });
+      return Promise.race([refresh().then(() => true), late]).finally(() => { clearTimeout(id); });
+    },
     onRows(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; },
     /** 「這次不用」（§5-1）：記下這一篇現在記穩了的目標與時間；之後的門檻從這裡算。 */
     async skip(path: string): Promise<void> {
