@@ -101,6 +101,8 @@ function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'ser
     已有目標: job.sent,
     記穩目標: job.stable.length ? [...new Set(job.stable)].sort() : '無',
   };
+  // 複製時這一篇的目標（L2 R7）：同一路徑的快照靠它認回，這次的新目標全部捨棄、又一個都沒記穩時也不會當成換了一篇。
+  if (job.ids.length) fields['原有目標'] = [...new Set(job.ids)].sort();
   if (job.form.material.trim()) fields['教材說明'] = job.form.material.trim();
   fields['接法'] = '複製貼上';
   if (save.service) fields['服務'] = save.service;

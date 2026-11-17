@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  baselineOf, buildDeepenPrompt, chooseBase, deepenPending, deepenRow, deepenTask, goneTargets, readSkips, skipFor, hasOutsideItem, introBoxes, latestMap, moveDeepen, moveItems, ownSnapshots, readSnapshot, refOf, remindOf,
+  baselineOf, buildDeepenPrompt, chooseBase, deepenPending, deepenRow, deepenTask, goneTargets, readSkips, skipFor, hasOutsideItem, introBoxes, latestMap, moveDeepen, moveItems, ownSnapshots, readSnapshot, refOf, remindOf, retargetSnapshot,
 } from '../src/core/ai/index.ts';
 import type { DeepenInput, SnapshotInfo } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
@@ -34,7 +34,7 @@ void test('快照：工作與記穩目標一起讀；時間要合法；對象讀
   assert.equal(readSnapshot('f.md', '沒有屬性區'), null);
 });
 
-const info = (path: string, over: Partial<SnapshotInfo>): SnapshotInfo => ({ path, at: Date.parse('2026-11-10T10:00:00+08:00'), id: 'x', kind: 'deepen', stable: [], links: ['D'], map: null, named: [], ...over });
+const info = (path: string, over: Partial<SnapshotInfo>): SnapshotInfo => ({ path, at: Date.parse('2026-11-10T10:00:00+08:00'), id: 'x', kind: 'deepen', stable: [], links: ['D'], map: null, named: [], original: [], ...over });
 const NOW = Date.parse('2026-11-17T10:00:00+08:00');
 
 void test('歸屬：只認解析到這一篇的連結；ID 一個都不在這一篇時不算（同一路徑換了一篇）', () => {
@@ -49,6 +49,48 @@ void test('歸屬：只認解析到這一篇的連結；ID 一個都不在這一
     info('f', { links: ['D'], stable: ['abc222'] }),
   ];
   assert.deepEqual(ownSnapshots(list, 'deck.md', ids, resolve).map(each => each.path), ['a', 'd', 'f']);
+});
+
+void test('L2 R7 原有目標：讀成 original；壞值當成沒寫；只在連結指到這一篇時幫忙認回', () => {
+  const read = (value: string) => readSnapshot('a.md', snap({ 時間: '2026-11-10T10:00:00+08:00', 識別碼: 'm1', 工作: '加深', 對象: '"[[D]]"', 記穩目標: '無', 原有目標: value }))!.original;
+  assert.deepEqual(read('\n  - abc222\n  - abc333\n  - abc222'), ['abc222', 'abc333']);
+  assert.deepEqual(read('\n  - abc222\n  - 不是 ID'), []);
+  assert.deepEqual(read('abc222'), []);
+  const resolve = (link: string): string | null => link === 'D' ? 'deck.md' : link === 'E' ? 'other.md' : null;
+  const ids = new Set(['abc222']);
+  const list = [
+    // 這次的新目標全部捨棄、送出時沒有記穩的：靠原有目標認回。
+    info('a', { links: ['D'], named: [{ id: 'zzz999', name: 'x' }], original: ['abc222'] }),
+    // 同一路徑換了一篇：原有目標也不在，照舊不算。
+    info('b', { links: ['D'], named: [{ id: 'zzz999', name: 'x' }], original: ['zzz888'] }),
+    // 連結指到別篇：原有目標在這一篇也不算（不跨篇找）。
+    info('c', { links: ['E'], original: ['abc222'] }),
+  ];
+  assert.deepEqual(ownSnapshots(list, 'deck.md', ids, resolve).map(each => each.path), ['a']);
+});
+
+void test('L2 R7 改名後改快照的對象：完整路徑照路徑比、只寫檔名的要沒有別篇同名；只改對象那幾行', () => {
+  const OLD = 'Essence Cards/學業/國二上/自然/國二上自然 2-1.md', NEXT = 'Essence Cards/學業/國二上/自然/國二上自然 2-1 溫度.md';
+  const body = '\n<<<卡組>>>\n> - [[國二上自然 2-1#^abc222|能說明溶解]]\n';
+  const text = (target: string, extra = ''): string => `---\n時間: 2026-11-10T10:00:00+08:00\n識別碼: m1\n工作: 加深\n對象:\n  - "${target}"${extra}\n記穩目標: 無\n---\n${body}`;
+  const none = (): number => 0, one = (): number => 1;
+  // 加深寫的完整路徑：路徑與顯示的名稱都換；本文的連結不動。
+  assert.equal(retargetSnapshot(text(`[[${OLD}|國二上自然 2-1]]`), OLD, NEXT, none), text(`[[${NEXT}|國二上自然 2-1 溫度]]`));
+  // 沒有 .md 的完整路徑；家長改過的顯示名稱照留。
+  assert.equal(retargetSnapshot(text('[[Essence Cards/學業/國二上/自然/國二上自然 2-1|溶解]]'), OLD, NEXT, none), text('[[Essence Cards/學業/國二上/自然/國二上自然 2-1 溫度|溶解]]'));
+  // 初次製卡只寫檔名：沒有別篇同名才改，改成完整路徑。
+  assert.equal(retargetSnapshot(text('[[國二上自然 2-1]]'), OLD, NEXT, none), text('[[Essence Cards/學業/國二上/自然/國二上自然 2-1 溫度|國二上自然 2-1 溫度]]'));
+  assert.equal(retargetSnapshot(text('[[國二上自然 2-1]]'), OLD, NEXT, one), null);
+  // 指到別篇、不是對象的屬性都不動。
+  assert.equal(retargetSnapshot(text('[[Essence Cards/學業/國二上/自然/別篇.md|別篇]]'), OLD, NEXT, none), null);
+  assert.equal(retargetSnapshot(text('[[別篇]]', `\n來源: "[[${OLD}]]"`), OLD, NEXT, none), null);
+  // 好幾項只改指到舊位置的那一項；CRLF 照留。
+  const two = text(`[[${OLD}|國二上自然 2-1]]"\n  - "[[別篇]]`).replace(/\n/g, '\r\n');
+  assert.equal(retargetSnapshot(two, OLD, NEXT, none), two.replace(`[[${OLD}|國二上自然 2-1]]`, `[[${NEXT}|國二上自然 2-1 溫度]]`));
+  // 沒有屬性區：null。
+  assert.equal(retargetSnapshot(body, OLD, NEXT, none), null);
+  // 單引號裡放不下新路徑的 `'`：改完讀不懂，不改。
+  assert.equal(retargetSnapshot(text(`[[${OLD}|x]]`).replace(/"/g, "'"), OLD, OLD.replace('2-1', "2-1'"), none), null);
 });
 
 void test('基準：比時刻（不同時區）、同時刻比識別碼再比路徑；未來超過一天、kind 是 null 的不採用', () => {

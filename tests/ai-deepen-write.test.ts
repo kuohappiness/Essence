@@ -230,6 +230,13 @@ void test('快照：工作是加深、對象一項寫完整路徑、記穩目標
   assert.match(beginDeepen({ ...JOB, stable: [] }, REPLY, null, { boxes: [], noteItems: [], ids: [], edits: [], snapshotBody: 'x' }, '2026-11-17T10:00:00+08:00', new Set()).save!.snapshot, /^記穩目標: 無$/m);
 });
 
+void test('L2 R7 快照寫上原有目標：複製時這一篇的目標 ID（照 ID 排序、去重）；一個都沒有時不寫', () => {
+  const at = '2026-11-17T10:00:00+08:00', batch = { boxes: [], noteItems: [], ids: [], edits: [], snapshotBody: 'x' };
+  const many = beginDeepen({ ...JOB, ids: ['def234', 'abc234', 'def234'] }, REPLY, null, batch, at, new Set()).save!.snapshot;
+  assert.match(many, /^原有目標:\n {2}- abc234\n {2}- def234$/m);
+  assert.doesNotMatch(beginDeepen({ ...JOB, ids: [] }, REPLY, null, batch, at, new Set()).save!.snapshot, /原有目標/);
+});
+
 void test('寫入順序：記 writing → 寫卡組 → 原文 → 快照 → 清掉；快照已經寫了就不動卡組', async () => {
   const files = new Map([[HERE.path, DECK]]);
   const { io, log, stored } = fakeIo(files);

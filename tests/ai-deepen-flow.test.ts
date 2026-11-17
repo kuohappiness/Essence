@@ -153,6 +153,26 @@ void test('§4 提醒一區：複製後是等待貼回，寫好後是待審核�
   assert.deepEqual(box.saved.skips, { [DECK]: { ids: [], at: '2026-11-17T10:00:00+08:00' } });
 });
 
+void test('L2 R7 加深成功、送出時沒有記穩的，家長把這次的新目標全部捨棄：快照照樣是這一篇的（原有目標認回）', async t => {
+  const memory = createMemoryFiles({ [DECK]: DECK_TEXT });
+  const box = machine();
+  const { deepen, state, clipboard } = await load(t, memory, box);
+  const copied = await deepen.copy(DECK, '', '');
+  assert.ok('job' in copied);
+  assert.deepEqual(await deepen.save(copied.job, REPLY, null), { kind: 'done', wrote: true, path: DECK });
+  const snapshot = [...memory.texts.keys()].find(path => path.endsWith('加深.md'))!;
+  assert.match(memory.texts.get(snapshot)!, /^原有目標:\n {2}- abc234$/m);
+  // 捨棄：加深框整個刪掉，卡組回到加深之前。
+  memory.write(DECK, DECK_TEXT);
+  await state.flush();
+  const again = await deepen.copy(DECK, '', '');
+  assert.ok('job' in again, JSON.stringify(again));
+  const prompt = clipboard.at(-1)!;
+  // 地圖用這次加深的；捨棄的新目標列在以前出過、現在不在這一篇的目標。
+  assert.match(prompt, /<<<全貌>>>\n溫度的全貌/);
+  assert.match(prompt, /能比較酒精與水銀溫度計的差異/);
+});
+
 void test('§3-2 複製之後卡組改名再貼回：不寫，新的那一篇不動', async t => {
   const memory = createMemoryFiles({ [DECK]: DECK_TEXT });
   const box = machine();

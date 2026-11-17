@@ -23,6 +23,8 @@ export interface SnapshotInfo {
   map: { whole: string; structure: string } | null;
   /** 卡組段裡名稱行行尾有 ID 的（新目標、候選；加進已有的原文沒有行尾 ID）：ID 與名稱。 */
   named: { id: string; name: string }[];
+  /** 加深的 `原有目標`：複製時這一篇的目標 ID（L2 R7）；沒寫、或清單裡有不是 ID 的字是空的。 */
+  original: string[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -77,17 +79,20 @@ export function readSnapshot(path: string, text: string): SnapshotInfo | null {
   const whole = found.get('全貌') ?? '', structure = found.get('架構') ?? '';
   const deck = found.has('卡組') ? found.get('卡組')! : found.size ? '' : body;
   const named = deck.split('\n').flatMap(line => { const m = TRAILING_ID.exec(line); return m ? [{ id: m[1], name: nameOf(line) }] : []; });
-  return { path, at: time?.at ?? null, id, ...kindOf(props['工作'], props['記穩目標']), links, map: whole && structure ? { whole, structure } : null, named };
+  const listed = props['原有目標'];
+  const original = Array.isArray(listed) && listed.every(each => typeof each === 'string' && ID.test(each)) ? [...new Set(listed as string[])] : [];
+  return { path, at: time?.at ?? null, id, ...kindOf(props['工作'], props['記穩目標']), links, map: whole && structure ? { whole, structure } : null, named, original };
 }
 
 /**
  * 歸屬這一篇的快照（§2-3）：`對象` 有一項解析到這一篇（resolve 回傳那個連結指到的卡組路徑；解析不到、有歧義是 null），
- * 而且不是「同一路徑換了一篇」：快照裡的 ID（卡組段與 `記穩目標`）有、卻一個都不在這一篇時不算。
+ * 而且不是「同一路徑換了一篇」：快照裡的 ID（卡組段、`記穩目標` 與 `原有目標`）有、卻一個都不在這一篇時不算。
+ * `原有目標` 只在連結已經指到這一篇時幫忙認回（新目標全部捨棄的同一篇，L2 R7），不拿來跨篇找。
  */
 export function ownSnapshots(list: readonly SnapshotInfo[], deckPath: string, deckIds: ReadonlySet<string>, resolve: (link: string) => string | null): SnapshotInfo[] {
   return list.filter(each => {
     if (!each.links.some(link => resolve(link) === deckPath)) return false;
-    const ids = [...each.named.map(target => target.id), ...each.stable ?? []];
+    const ids = [...each.named.map(target => target.id), ...each.stable ?? [], ...each.original];
     return !ids.length || ids.some(id => deckIds.has(id));
   });
 }
@@ -113,4 +118,45 @@ export function goneTargets(owned: readonly SnapshotInfo[], deckIds: ReadonlySet
     for (const target of each.named) if (!deckIds.has(target.id) && !seen.has(target.id)) seen.set(target.id, target.name);
   }
   return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+const LINK = /\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
+
+/**
+ * 卡組改名或搬走之後，把快照 `對象` 裡指向舊位置的連結改到新位置（L2 R7）：只改屬性區 `對象` 那幾行，其他字一個都不動。
+ * 寫完整路徑的照路徑比（和加深解析連結相同：補上 `.md` 後完全相同）。只寫檔名的：檔名相同（不分大小寫），而且現在已經沒有
+ * 同檔名的卡組（left 回 0）才是那一篇，改成完整路徑（新位置的檔名不一定只有一篇）。顯示的名稱是舊檔名的跟著換。
+ * 沒有要改的、改完讀不懂（引號裡放不下新路徑之類）回 null。
+ */
+export function retargetSnapshot(text: string, old: string, next: string, left: (name: string) => number): string | null {
+  const lines = text.split(/(?<=\n)/);
+  const start = lines[0]?.replace(BOM, '').trim() === '---' ? 1 : -1;
+  if (start < 0) return null;
+  const close = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
+  if (close < 0) return null;
+  const key = lines.findIndex((line, i) => i >= start && i < close && /^對象\s*:/.test(line));
+  if (key < 0) return null;
+  let end = key + 1;
+  while (end < close && /^(?:[ \t-]|\r?\n$)/.test(lines[end])) end++;
+  const oldName = baseName(old), nextName = baseName(next);
+  let changed = false;
+  for (let i = key; i < end; i++) {
+    lines[i] = lines[i].replace(LINK, (whole, raw: string, hash: string | undefined, alias: string | undefined) => {
+      const target = raw.trim();
+      const shown = alias === undefined || alias.trim() === oldName ? nextName : alias;
+      if (target.includes('/')) {
+        if ((target.endsWith('.md') ? target : `${target}.md`) !== old) return whole;
+        changed = true;
+        return `[[${target.endsWith('.md') ? next : next.replace(/\.md$/, '')}${hash ?? ''}|${shown}]]`;
+      }
+      if (target.toLowerCase() !== oldName.toLowerCase() || left(target.toLowerCase()) !== 0) return whole;
+      changed = true;
+      return `[[${next.replace(/\.md$/, '')}${hash ?? ''}|${shown}]]`;
+    });
+  }
+  if (!changed) return null;
+  const result = lines.join('');
+  const before = readSnapshot('', text), after = readSnapshot('', result);
+  return before && after && after.links.length === before.links.length ? result : null;
 }

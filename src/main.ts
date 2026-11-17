@@ -1,4 +1,4 @@
-import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin } from 'obsidian';
+import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin, TFile, TFolder } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
@@ -21,6 +21,7 @@ import { wireIntroButtons, type AddRequest } from './obsidian/intro-add.ts';
 import { createIntroRunner } from './obsidian/intro-run.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
 import { createDeepen, type Deepen } from './obsidian/deepen.ts';
+import { retargetSnapshots, type SnapshotLinkIo } from './obsidian/deepen-links.ts';
 import { wireDeepen } from './obsidian/deepen-modal.ts';
 import { editorOf } from './obsidian/save.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
@@ -244,11 +245,7 @@ export default class EssenceCardsPlugin extends Plugin {
         state: () => this.state,
         names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
         named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
-        snapshots: async () => {
-          const files = app.vault.getMarkdownFiles().filter(file => file.path.startsWith(`${SNAPSHOT_FOLDER}/`) && !file.path.startsWith(`${SNAPSHOT_FOLDER}/原文/`));
-          const read = await Promise.all(files.map(file => app.vault.cachedRead(file).then(text => ({ path: file.path, text }), () => null)));
-          return read.filter((each): each is { path: string; text: string } => each !== null);
-        },
+        snapshots: () => this.deepenSnapshots(),
         store: {
           jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); },
           skips: () => aiPrefs.deepenSkips(app), saveSkips: value => { aiPrefs.saveDeepenSkips(app, value); },
@@ -281,7 +278,24 @@ export default class EssenceCardsPlugin extends Plugin {
       this.deepen.onRows(() => { this.updateReminders(); this.entry?.refresh(); });
       // 監看不了時 state 建立時也會失敗、照常記錄與提示（D-155 補充）；這幾個監聽只讓提醒更即時，失敗了不擋外掛載入。
       try {
-        this.registerEvent(app.vault.on('rename', (file, old) => { aiPrefs.moveDeepenSkip(app, old, file.path); this.refreshDeepen(); }));
+        // 快照的 `對象` 跟著改名走（L2 R7）：搬資料夾時裡面每一篇都算；之後 Obsidian 對個別檔案再送的 rename 找不到舊連結，不會重寫。
+        const links: SnapshotLinkIo = {
+          autoUpdate: () => (app.vault as unknown as { getConfig(key: string): unknown }).getConfig('alwaysUpdateLinks') === true,
+          blocked: () => this.state?.writeBlock() != null,
+          snapshots: () => this.deepenSnapshots(),
+          named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+          process: async (path, change) => { const file = app.vault.getFileByPath(path); if (file) await app.vault.process(file, change); },
+        };
+        const moves = (file: TFile | TFolder, old: string): [string, string][] => file instanceof TFolder
+          ? app.vault.getMarkdownFiles().filter(each => each.path.startsWith(file.path + '/')).map(each => [old + each.path.slice(file.path.length), each.path])
+          : file.path.endsWith('.md') ? [[old, file.path]] : [];
+        this.registerEvent(app.vault.on('rename', (file, old) => {
+          aiPrefs.moveDeepenSkip(app, old, file.path);
+          const pairs = file instanceof TFile || file instanceof TFolder ? moves(file, old) : [];
+          void (async () => {
+            for (const [from, to] of pairs) await retargetSnapshots(links, from, to);
+          })().catch((error: unknown) => { this.fail('ai', error); }).finally(() => { this.refreshDeepen(); });
+        }));
         this.registerEvent(app.vault.on('delete', file => { aiPrefs.moveDeepenSkip(app, file.path, null); this.refreshDeepen(); }));
         this.registerEvent(app.vault.on('modify', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
         this.registerEvent(app.vault.on('create', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
@@ -419,6 +433,14 @@ export default class EssenceCardsPlugin extends Plugin {
     if (!this.deepen) return;
     if (this.deepenTimer !== null) window.clearTimeout(this.deepenTimer);
     this.deepenTimer = window.setTimeout(() => { this.deepenTimer = null; void this.deepen?.refresh(); }, delay);
+  }
+
+  /** AI 輸出資料夾裡的快照（不含 `原文/`）：加深讀基準、改名時改連結共用。 */
+  private async deepenSnapshots(): Promise<{ path: string; text: string }[]> {
+    const { vault } = this.app;
+    const files = vault.getMarkdownFiles().filter(file => file.path.startsWith(`${SNAPSHOT_FOLDER}/`) && !file.path.startsWith(`${SNAPSHOT_FOLDER}/原文/`));
+    const read = await Promise.all(files.map(file => vault.cachedRead(file).then(text => ({ path: file.path, text }), () => null)));
+    return read.filter((each): each is { path: string; text: string } => each !== null);
   }
 
   /** 提醒一區的加深列按下去（§4-2 最後一點）：先重算，那一篇的情況變了就通知、重畫，不照舊的列做。 */
