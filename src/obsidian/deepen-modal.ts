@@ -79,9 +79,14 @@ class DeepenModal extends Modal {
     if (job?.save) { this.job = job; this.showStop(job.save.unclear ? { kind: 'stop', message: TEXT.resume, unclear: true } : { kind: 'stop', message: TEXT.resume, unclear: false }); return; }
     if (job) { this.job = job; this.showPaste(null); return; }
     // 讀這一篇有上限（L2 R17）：讀不到、等不到就停在可以重試的訊息，不留空白的視窗。
+    // 讀到空（剛被移走、刪掉或同步中暫時看不到）也一樣（L2 R19）。
     const round = ++this.round;
-    let text: string | null;
-    try { text = await limitedRead(this.host.read(this.path), this.host.readWait); } catch {
+    let text: string;
+    try {
+      const read = await limitedRead(this.host.read(this.path), this.host.readWait);
+      if (read === null) throw Error('missing');
+      text = read;
+    } catch {
       if (round !== this.round) return;
       const el = this.reset();
       el.createEl('p', { text: TEXT.unreadable });
@@ -91,7 +96,7 @@ class DeepenModal extends Modal {
       return;
     }
     if (round !== this.round) return;
-    if (text !== null && deepenPending(text)) {
+    if (deepenPending(text)) {
       const el = this.reset();
       el.createEl('p', { text: TEXT.pending });
       const row = this.buttons(el);

@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深這一節與主動提示）的 L2 審查請求（給 Codex）
 
-狀態：第四輪待審（2026-11-17）；前三輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
+狀態：完成（2026-11-17）；四輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 

@@ -39,6 +39,16 @@ void test('L2 R17 打開時讀不到、等不到：停在可以重試的訊息�
   assert.ok(texts(modal.contentEl).some(each => each.includes('上一次加深的結果還沒審完')), texts(modal.contentEl).join('|'));
 });
 
+void test('L2 R19 讀到空（剛被移走或同步中看不到）：同一個可以重試的訊息；檔回來後重試往下走', async () => {
+  let attempt = 0;
+  const { modal } = setup(() => Promise.resolve(++attempt === 1 ? null : PENDING));
+  await sleep(10);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('讀不到這一篇')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '重試')!.click();
+  await sleep(10);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('上一次加深的結果還沒審完')), texts(modal.contentEl).join('|'));
+});
+
 void test('L2 R17 讀取丟錯：同一個訊息；等不到之後才回來的結果不改視窗', async () => {
   const failed = setup(() => Promise.reject(Error('EBUSY')));
   await sleep(10);
