@@ -4,7 +4,7 @@ import { ESLint } from 'eslint';
 import tseslint from 'typescript-eslint';
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, chmod, rm, symlink, unlink } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, writeFile, readFile, chmod, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,29 +49,33 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與
   await run('git', ['init', '-q'], isolated);
   await mkdir(join(root, '.githooks'));
   await mkdir(join(root, 'src'));
+  await mkdir(join(root, 'tools'));
   const original = (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, original.replaceAll('\n', '\r\n'));
   await chmod(hook, 0o755);
-  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: { preprepare: string; prepare: string } };
-  await shell(pkg.scripts.preprepare, isolated);
-  await shell(pkg.scripts.prepare, isolated);
+  // 安裝入口在 tools/package.json（D-208 第一步 §1）：npm 在 tools/ 執行，從子資料夾設的相對 core.hooksPath 照樣以工作樹的根解讀。
+  const pkg = JSON.parse(await readFile(new URL('../tools/package.json', import.meta.url), 'utf8')) as { scripts: { preprepare: string; prepare: string } };
+  const inTools = { ...isolated, cwd: join(root, 'tools') };
+  await shell(pkg.scripts.preprepare, inTools);
+  await shell(pkg.scripts.prepare, inTools);
   assert.equal(await readFile(hook, 'utf8'), original);
   await writeFile(join(root, 'src/probe.ts'), 'export {};\n');
   await run('git', ['add', '--', 'src/probe.ts'], isolated);
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
-  await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
+  await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
   await run('git', ['rm', '--cached', '--', 'src/probe.ts'], isolated);
   await writeFile(join(root, 'doc.md'), '文件\n');
   await run('git', ['add', '--', 'doc.md'], isolated);
-  await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
+  await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
 });
 
 void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件不跑程式檢查，沒 stage 的壞連結不擋', async t => {
-  // 相依借用本 repo 的 node_modules（junction，Linux 上是 symlink），檢查程式複製一份；兩者都不 stage。
+  // 相依借用本 repo 的 tools/node_modules（junction，Linux 上是 symlink），檢查程式複製一份；兩者都不 stage。
+  // 根目錄沒有 node_modules：共用檢查只靠 tools/ 的相依（D-208 第一步 §1）。
   // 清理時先拆掉連結再刪資料夾，不會碰到本 repo 的 node_modules。
   const root = await mkdtemp(join(tmpdir(), 'essence-hook-docs-'));
-  const modules = join(root, 'node_modules');
+  const modules = join(root, 'tools/node_modules');
   t.after(async () => {
     await unlink(modules).catch(() => undefined);
     await rm(root, { recursive: true, force: true });
@@ -82,8 +86,8 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
-  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), modules, 'junction');
   await mkdir(join(root, 'tools'));
+  await symlink(fileURLToPath(new URL('../tools/node_modules', import.meta.url)), modules, 'junction');
   // 本 repo 的例外表在這裡會變成「沒用到」，複製時清空。
   const checker = await readFile(new URL('../tools/check-docs.ts', import.meta.url), 'utf8');
   const emptied = checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];');
@@ -104,6 +108,7 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'b.md'), '# B\n');
   await run('git', ['add', '--', 'a.md', 'b.md'], isolated);
   await run('git', commit, isolated);
+  await assert.rejects(access(join(root, 'node_modules')), { code: 'ENOENT' });
   // 部分 stage：工作樹的壞連結沒 stage，照樣能 commit。
   await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)、[壞](missing.md)\n');
   await writeFile(join(root, 'b.md'), '# B\n\n改了\n');
@@ -157,7 +162,7 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
-  await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
+  await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
 });
 
 // 第二次里程碑檢查 R2：還原分支沒 push 過就合併，Linux 上的失敗合併後才看到。合併進 main 之前，要合併的 commit 的 Check 要綠。
@@ -233,9 +238,9 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
-  // hook 只看 node_modules 在不在；文件檢查與金鑰掃描換成什麼都不做的替身，不 stage。
+  // hook 只看 tools/ 與根目錄的 node_modules 在不在；文件檢查與金鑰掃描換成什麼都不做的替身，不 stage。
   await mkdir(join(root, 'node_modules'));
-  await mkdir(join(root, 'tools'));
+  await mkdir(join(root, 'tools/node_modules'), { recursive: true });
   await writeFile(join(root, 'tools/check-docs.ts'), 'export {};\n');
   await writeFile(join(root, 'tools/secretlint.mjs'), 'export {};\n');
   await writeFile(join(root, 'tools/check-local-paths.ts'), 'export {};\n');

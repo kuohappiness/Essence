@@ -1,6 +1,6 @@
 // 開發進度白板：把 docs/roadmap.md 的「現在在哪裡」與「已完成」換成手機好讀的一頁（D-141：roadmap 是唯一來源，這頁只換樣子顯示）。
 // main 上的 roadmap 一改，GitHub Actions（.github/workflows/progress-board.yml）就產生並發布到 GitHub Pages：https://kuohappiness.github.io/Essence-Cards/roadmap.html
-// 本機預覽：npm run roadmap-board，輸出 _site/roadmap.html（_site/ 在 .gitignore）；--out <檔案> 改輸出位置。
+// 本機預覽：node tools/roadmap-board.ts（要先在 tools/ 裝過相依），輸出 _site/roadmap.html（_site/ 在 .gitignore）；--out <檔案> 改輸出位置。
 // 找不到需要的節或欄時印出「行號  原因」並以 exit code 1 結束；表格內容怎麼改都照樣產生。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

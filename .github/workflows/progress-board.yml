@@ -9,9 +9,11 @@ on:
       - docs/progress-map.md
       - docs/backlog.md
       - docs/roadmap.md
+      - plugins/*/docs/roadmap.md
       - tools/check-docs.ts
       - tools/progress-board*.ts
       - tools/roadmap-board.ts
+      - tools/package-lock.json
       - .github/workflows/progress-board.yml
   workflow_dispatch:
 
@@ -36,9 +38,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: tools/package-lock.json
+      # 產生網頁只用共用工具的相依（tools/ 自己的 package.json，D-208 第一步 §1），不裝根目錄（Cards）。
       - run: npm ci
-      - run: npm run progress-board
-      - run: npm run roadmap-board
+        working-directory: tools
+      - run: node tools/progress-board.ts
+      - run: node tools/roadmap-board.ts
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

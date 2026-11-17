@@ -1,10 +1,17 @@
 #!/bin/sh
 set -eu
 
-if [ ! -d node_modules ]; then
-  echo '先執行 npm install' >&2
+# 共用檢查的相依在 tools/ 自己的 package.json（D-208 第一步 §1）；Cards 的檢查另外要根目錄的相依，跑到時才查。
+if [ ! -d tools/node_modules ]; then
+  echo '先在 tools/ 執行 npm ci（共用檢查的相依）' >&2
   exit 1
 fi
+need_root() {
+  if [ ! -d node_modules ]; then
+    echo '先在根目錄執行 npm ci（Cards 的檢查）' >&2
+    exit 1
+  fi
+}
 # 文件檢查每次都跑，讀暫存區（D-141）；程式檢查只在程式相關的檔案有變動時跑。
 node tools/check-docs.ts --staged
 # 金鑰也每次都掃，只掃這次暫存的檔：repo 公開，只改文件的 commit 也會直接推上 main（第二次里程碑檢查 R4）。
@@ -19,6 +26,7 @@ unset $(git rev-parse --local-env-vars)
 if printf '%s\n' "$staged" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
   # 測試改用 dot reporter：通過的只印一個點，失敗的照常印出，exit code 照常傳回。AI 讀 commit 的輸出要花 token，
   # 原本約 4.2 萬字（外掛架構檢查環節 9 的 Q2）。手動跑與 CI 不變。
+  need_root
   NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--test-reporter=dot" npm run check
   exit 0
 fi
@@ -31,6 +39,7 @@ tests=$(printf '%s\n' "$staged" | while IFS= read -r path; do
   if grep -qF -e "'$path'" src/core/ai/rules.ts; then echo tests/ai-rules.test.ts; fi
 done | sort -u)
 [ -n "$tests" ] || exit 0
+need_root
 # 測試檔的路徑沒有空白，照空白拆開。
 # shellcheck disable=SC2086
 if ! out=$(node --test --test-concurrency=1 --test-reporter=dot $tests 2>&1); then

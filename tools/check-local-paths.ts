@@ -92,8 +92,12 @@ export function findLocalPaths(text: string, rules: Rule[]): Found[] {
   return found;
 }
 
+/** repo 根：列檔與讀檔以這裡為準。npm 在 tools/ 執行 script，照 CWD 只會掃到 tools/（D-208 第一步 §1）。執行時才取，測試 import 規則時不跑 git。 */
+let root: string | undefined;
+const repoRoot = () => (root ??= execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
+
 function git(args: string[], input?: string): Buffer {
-  return execFileSync('git', args, { input, maxBuffer: 1 << 30 });
+  return execFileSync('git', args, { cwd: repoRoot(), input, maxBuffer: 1 << 30 });
 }
 
 /** 這台電腦的資訊；讀不到的就略過（CI 上沒有 Obsidian）。 */
@@ -155,7 +159,8 @@ function main(args: string[]): number {
     if (paths.length) for (const [path, data] of stagedContents(paths)) scan(path, data);
   } else {
     for (const path of git(['ls-files', '-z']).toString('utf8').split('\0').filter(Boolean)) {
-      if (existsSync(path)) scan(path, readFileSync(path));
+      const file = join(repoRoot(), path);
+      if (existsSync(file)) scan(path, readFileSync(file));
     }
   }
   if (!report.length) return 0;

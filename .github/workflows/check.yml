@@ -12,6 +12,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/package-lock.json
+      # 共用檢查的相依在 tools/ 自己的 package.json（D-208 第一步 §1）；Cards 的檢查兩邊都要裝。
+      - run: npm ci
+        working-directory: tools
       - run: npm ci
       - run: npm run check
       - run: npm run build
