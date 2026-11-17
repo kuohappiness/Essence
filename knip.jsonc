@@ -11,8 +11,9 @@
       "ignoreDependencies": ["@emnapi/core", "@emnapi/runtime", "electron"]
     },
     "tools": {
-      // check-skill-mirror.ts 等由 tools/package.json 的 script 自動列為入口。
-      "entry": ["*.mjs"],
+      // check-skill-mirror.ts 等由 tools/package.json 的 script 自動列為入口。hooks.ts 由 .githooks 直接用 node 執行、
+      // 沒有程式 import 它（D-208 第一步 §3），另外列；沒列時 knip 報它是沒用到的檔。
+      "entry": ["*.mjs", "hooks.ts"],
       "project": ["*.{ts,mjs}", "compare/*.ts"],
       // secretlint 的 recommend preset 由 .secretlintrc.json 動態載入（secretlint 本身由 tools/secretlint.mjs import）。
       "ignoreDependencies": ["@secretlint/secretlint-rule-preset-recommend"]

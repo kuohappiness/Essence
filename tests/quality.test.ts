@@ -6,7 +6,7 @@ import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { access, mkdtemp, mkdir, writeFile, readFile, chmod, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 void test('ESLint 的模組邊界與日期規則會擋下違規寫法，允許公開介面與 UTC', async () => {
@@ -95,7 +95,11 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
   await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../tools/secretlint.mjs', import.meta.url), 'utf8'));
   await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../.secretlintrc.json', import.meta.url), 'utf8'));
-  await writeFile(join(root, 'tools/check-local-paths.ts'), await readFile(new URL('../tools/check-local-paths.ts', import.meta.url), 'utf8'));
+  // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製；兩份 skill 的檢查換成替身（這裡沒有 skill）。
+  for (const name of ['check-local-paths.ts', 'hooks.ts', 'dispatch.ts', 'check-plugin-imports.ts']) {
+    await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
+  }
+  await writeFile(join(root, 'tools/check-skill-mirror.ts'), 'export {};\n');
   await mkdir(join(root, '.githooks'));
   for (const name of ['pre-commit', 'commit-msg']) {
     const hook = join(root, '.githooks', name);
@@ -103,7 +107,7 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
     await chmod(hook, 0o755);
   }
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
-  // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查。
+  // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查（分派表：根目錄的 .md 是 Cards 的相關測試，沒有測試寫到就跳過）。
   await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
   await writeFile(join(root, 'b.md'), '# B\n');
   await run('git', ['add', '--', 'a.md', 'b.md'], isolated);
@@ -166,27 +170,56 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
 });
 
 // 第二次里程碑檢查 R2：還原分支沒 push 過就合併，Linux 上的失敗合併後才看到。合併進 main 之前，要合併的 commit 的 Check 要綠。
-void test('R2 合併進 main 前查 CI：綠燈才放行；沒紀錄、紅燈、還在跑都擋；gh 不能用時警告放行；只改文件與不在 main 不查', async t => {
+// D-208 第一步 §3：pre-merge-commit 也呼叫分派表（CI 的跑法），只查同一個 head 的 push run；合併不經過 pre-commit，
+// 共用檢查在這裡讀合併的索引，不管合併到哪個分支。
+void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行；沒紀錄、紅燈、還在跑都擋；gh 不能用時警告放行；不在 main 不查 CI；合併索引的違規由共用檢查擋', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-hook-merge-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = join(root, 'repo');
+  const modules = join(repo, 'tools/node_modules');
+  t.after(async () => {
+    await unlink(modules).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  });
   const run = promisify(execFile);
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
-  // 假的 gh：照 FAKE_GH 印出「status conclusion」，fail 就當成 gh 不能用。
+  // 假的 gh：參數記進 gh-args.txt；照 FAKE_GH（「status conclusion」）印出一筆 run 的 JSON，空字串是沒有 run，fail 就當成 gh 不能用。
+  // hook 在 Windows 經過 cmd 找 gh（gh.cmd），其他平台直接執行 gh。
   const bin = join(root, '.bin');
   await mkdir(bin);
-  await writeFile(join(bin, 'gh'), '#!/bin/sh\n[ "$FAKE_GH" = fail ] && exit 1\nprintf \'%s\\n\' "$FAKE_GH"\n');
-  await chmod(join(bin, 'gh'), 0o755);
+  const ghArgs = join(root, 'gh-args.txt');
+  await writeFile(join(bin, 'gh.mjs'), [
+    "import { appendFileSync } from 'node:fs';",
+    `appendFileSync(${JSON.stringify(ghArgs)}, process.argv.slice(2).join(' ') + '\\n');`,
+    "const fake = process.env.FAKE_GH ?? '';",
+    "if (fake === 'fail') process.exit(1);",
+    "const [status, conclusion = ''] = fake.split(' ');",
+    'console.log(JSON.stringify(fake ? [{ status, conclusion }] : []));',
+    '',
+  ].join('\n'));
+  if (process.platform === 'win32') await writeFile(join(bin, 'gh.cmd'), '@node "%~dp0gh.mjs" %*\r\n');
+  else {
+    await writeFile(join(bin, 'gh'), '#!/bin/sh\nexec node "$(dirname "$0")/gh.mjs" "$@"\n');
+    await chmod(join(bin, 'gh'), 0o755);
+  }
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH';
-  env[pathKey] = bin + (process.platform === 'win32' ? ';' : ':') + (env[pathKey] ?? '');
-  const repo = join(root, 'repo');
+  env[pathKey] = bin + delimiter + (env[pathKey] ?? '');
   await mkdir(repo);
   const git = (args: string[], fake = '') => run('git', ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', ...args], { cwd: repo, env: { ...env, FAKE_GH: fake } });
   await git(['init', '-q', '-b', 'main']);
+  // hook 與共用檢查的工具複製進來、不 stage，相依借本 repo 的 tools/node_modules。這裡沒有 skill，兩份 skill 的檢查換成替身。
   await mkdir(join(repo, '.githooks'));
+  await mkdir(join(repo, 'tools'));
   const hook = join(repo, '.githooks/pre-merge-commit');
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-merge-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
+  const checker = await readFile(new URL('../tools/check-docs.ts', import.meta.url), 'utf8');
+  await writeFile(join(repo, 'tools/check-docs.ts'), checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];'));
+  for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-plugin-imports.ts', '.secretlintrc.json']) {
+    await writeFile(join(repo, path), await readFile(new URL('../' + path, import.meta.url), 'utf8'));
+  }
+  await writeFile(join(repo, 'tools/check-skill-mirror.ts'), 'export {};\n');
+  await symlink(fileURLToPath(new URL('../tools/node_modules', import.meta.url)), modules, 'junction');
   await writeFile(join(repo, 'README.md'), '# R\n');
   await git(['add', '--', 'README.md']);
   await git(['commit', '-q', '-m', 'base']);
@@ -196,10 +229,15 @@ void test('R2 合併進 main 前查 CI：綠燈才放行；沒紀錄、紅燈、
   await writeFile(join(repo, 'src/x.ts'), 'export {};\n');
   await git(['add', '--', 'src/x.ts']);
   await git(['commit', '-q', '-m', 'code']);
+  const code = (await git(['rev-parse', 'HEAD'])).stdout.trim();
   await git(['checkout', '-q', '-b', 'docs', 'main']);
   await writeFile(join(repo, 'notes.md'), '# N\n');
   await git(['add', '--', 'notes.md']);
   await git(['commit', '-q', '-m', 'docs']);
+  await git(['checkout', '-q', '-b', 'broken', 'main']);
+  await writeFile(join(repo, 'broken.md'), '# B\n\n[壞](missing.md)\n');
+  await git(['add', '--', 'broken.md']);
+  await git(['commit', '-q', '-m', 'broken link']);
   await git(['checkout', '-q', 'main']);
   const merged = async (branch: string, fake: string) => {
     const { stderr } = await git(['merge', '-q', '--no-ff', '-m', 'merge', branch], fake);
@@ -211,18 +249,28 @@ void test('R2 合併進 main 前查 CI：綠燈才放行；沒紀錄、紅燈、
     await git(['merge', '--abort']);
   };
   assert.doesNotMatch(await merged('code', 'completed success'), /警告/);
-  await blocked('code', '', /已擋下合併進 main.*沒有 CI 紀錄/);
+  // 查的是同一個 head 的 push run（PR 或探針的 run 比的是別的範圍）。
+  assert.match(await readFile(ghArgs, 'utf8'), new RegExp(`^run list --commit ${code} --workflow check\\.yml --event push `, 'm'));
+  await blocked('code', '', /已擋下合併進 main.*沒有 push 的 CI 紀錄/);
   await blocked('code', 'completed failure', /已擋下合併進 main.*CI 沒通過/);
-  await blocked('code', 'in_progress ', /已擋下合併進 main.*CI 還沒跑完/);
+  await blocked('code', 'completed cancelled', /已擋下合併進 main.*CI 沒通過/);
+  await blocked('code', 'in_progress', /已擋下合併進 main.*CI 還沒跑完/);
   assert.match(await merged('code', 'fail'), /警告：查不到 GitHub Actions/);
-  await merged('docs', '');
+  // 只改文件也要 CI：CI 的跑法把 Cards 的相關測試升成完整檢查。
+  await blocked('docs', '', /已擋下合併進 main.*沒有 push 的 CI 紀錄/);
+  // 合併索引裡的違規：共用檢查擋下，不管合併到哪個分支。
+  await blocked('broken', 'completed success', /broken\.md:3 {2}missing\.md {2}找不到檔案/);
   await git(['checkout', '-q', 'docs']);
   await merged('code', '');
-  // 改到程式的路徑和 pre-commit 同一份。
-  const paths = (text: string) => /grep -Eq '([^']+)'/.exec(text)?.[1];
-  const preCommit = await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8');
-  assert.ok(paths(preCommit));
-  assert.equal(paths(await readFile(hook, 'utf8')), paths(preCommit));
+  await blocked('broken', '', /broken\.md:3 {2}missing\.md {2}找不到檔案/);
+});
+
+void test('兩個 hook 都只確認 tools/ 裝過再呼叫 tools/hooks.ts（分派表只有一份，不在 hook 裡各寫一份路徑）', async () => {
+  for (const name of ['pre-commit', 'pre-merge-commit']) {
+    const text = await readFile(new URL('../.githooks/' + name, import.meta.url), 'utf8');
+    assert.match(text, new RegExp(`^exec node tools/hooks\\.ts ${name}$`, 'm'), name);
+    assert.doesNotMatch(text, /grep -E/, name);
+  }
 });
 
 // 外掛架構檢查環節 9 結論第 2 條（Q2）：改到程式時跑同一份 npm run check，只是測試改用 dot reporter。
@@ -238,12 +286,15 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
-  // hook 只看 tools/ 與根目錄的 node_modules 在不在；文件檢查與金鑰掃描換成什麼都不做的替身，不 stage。
+  // hook 只看 tools/ 與根目錄的 node_modules 在不在；邏輯（tools/hooks.ts）與分派表照真的複製，共用檢查換成什麼都不做的替身，不 stage。
   await mkdir(join(root, 'node_modules'));
   await mkdir(join(root, 'tools/node_modules'), { recursive: true });
-  await writeFile(join(root, 'tools/check-docs.ts'), 'export {};\n');
-  await writeFile(join(root, 'tools/secretlint.mjs'), 'export {};\n');
-  await writeFile(join(root, 'tools/check-local-paths.ts'), 'export {};\n');
+  for (const name of ['hooks.ts', 'dispatch.ts']) {
+    await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
+  }
+  for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-plugin-imports.ts']) {
+    await writeFile(join(root, 'tools', name), 'export {};\n');
+  }
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
