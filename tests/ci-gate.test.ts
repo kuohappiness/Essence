@@ -101,6 +101,40 @@ void test('§4 gate：欄位缺、JSON 解析失敗、旗標不是合法值都�
   }
 });
 
+void test('§4 gate：比較端點與理由缺、空或型別錯都不過（L2 R4）；值的型別錯了摘要照樣印得出來', () => {
+  const loose = (n: Needs) => n as Record<string, Record<string, unknown>>;
+  const outputs = (n: Needs) => n.plan.outputs as Record<string, unknown>;
+  const reasons = (value: unknown) => (n: Needs) => { n.plan.outputs!.reasons = JSON.stringify(value); };
+  const full = { cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（…）', mindboard: '完整檢查（改到 plugins/mindboard/a.ts）' };
+  const cases: [string, (n: Needs) => void, RegExp][] = [
+    ['沒有 compare', n => { delete n.plan.outputs!.compare; }, /plan 沒有比較的端點/],
+    ['compare 是空字串', n => { n.plan.outputs!.compare = ''; }, /plan 沒有比較的端點/],
+    ['compare 只有空白', n => { n.plan.outputs!.compare = ' '; }, /plan 沒有比較的端點/],
+    ['compare 不是字串', n => { outputs(n).compare = 5; }, /plan 沒有比較的端點/],
+    ['沒有 reasons', n => { delete n.plan.outputs!.reasons; }, /Cards：plan 沒有寫理由[\s\S]*Capture：plan 沒有寫理由[\s\S]*Mindboard：plan 沒有寫理由/],
+    ['reasons 是空字串', n => { n.plan.outputs!.reasons = ''; }, /Capture：plan 沒有寫理由/],
+    ['reasons 是 {}', reasons({}), /Cards：plan 沒有寫理由[\s\S]*Capture：plan 沒有寫理由[\s\S]*Mindboard：plan 沒有寫理由/],
+    ['reasons 少一個外掛', reasons({ cards: full.cards, capture: full.capture }), /Mindboard：plan 沒有寫理由/],
+    ['reasons 是陣列', reasons([full.cards, full.capture, full.mindboard]), /plan 的理由不是物件/],
+    ['reasons 是 null', reasons(null), /plan 的理由不是物件/],
+    ['理由是空字串', reasons({ ...full, capture: '' }), /Capture：plan 沒有寫理由/],
+    ['理由不是字串', reasons({ ...full, cards: 5 }), /Cards：plan 沒有寫理由/],
+    ['outputs 不是物件', n => { loose(n).plan.outputs = 'x'; }, /plan 的輸出不是物件/],
+    ['job 的結果不是字串', n => { loose(n).cards.result = 5; }, /Cards：job 沒有結果（5）/],
+    ['plan 的結果不是字串', n => { loose(n).plan.result = { ok: true }; }, /plan 沒有成功（\{"ok":true\}）/],
+    ['旗標不是字串', n => { outputs(n).cards = true; }, /Cards：plan 的旗標不合法（true）/],
+  ];
+  for (const [name, change, message] of cases) {
+    const g = gate(needs(change));
+    assert.equal(g.ok, false, name);
+    assert.match(g.problems.join('\n'), message, name);
+    assert.match(summary(g), /^### 分派與把關：沒通過$/m, name);
+  }
+  // 理由缺的那一列標成沒過，表上看得出缺。
+  const missing = gate(needs(reasons({ cards: full.cards, capture: full.capture })));
+  assert.match(summary(missing), /\| Mindboard \| 跑 \| （沒有） \| ✗ success \|/);
+});
+
 void test('§4 gate 的命令：結束碼跟著結論，摘要寫進 GITHUB_STEP_SUMMARY', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'essence-ci-gate-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

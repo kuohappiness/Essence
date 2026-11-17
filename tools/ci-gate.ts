@@ -81,34 +81,61 @@ export type JobResult = 'success' | 'failure' | 'cancelled' | 'skipped';
 export interface GateRow { plugin: string; run: string; reason: string; result: string; ok: boolean }
 export interface Gate { ok: boolean; rows: GateRow[]; problems: string[]; compare: string }
 
-/** needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, cards: { result }, … }。 */
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** 非空的字串才算有值（只有空白也不算）。 */
+const filled = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value : undefined);
+/** 問題裡顯示不合法的值：沒有、字串照原樣、其他型別用 JSON。 */
+const describe = (value: unknown) => (value === undefined ? '沒有' : typeof value === 'string' ? value : JSON.stringify(value));
+
+/**
+ * needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, cards: { result }, … }。
+ * 每個值都先查型別（L2 R4）：缺、空或型別錯的結果、旗標、比較端點與理由都列成問題，摘要不會因為型別錯拋錯。
+ */
 export function gate(needsText: string | undefined): Gate {
   const problems: string[] = [];
-  let needs: Record<string, { result?: string; outputs?: Record<string, string> }>;
+  let needs: Record<string, unknown>;
   try {
-    needs = JSON.parse(needsText ?? '') as typeof needs;
-    if (!needs || typeof needs !== 'object') throw new Error('不是物件');
+    const parsed: unknown = JSON.parse(needsText ?? '');
+    if (!isObject(parsed)) throw new Error('不是物件');
+    needs = parsed;
   } catch (error) {
     return { ok: false, rows: [], problems: [`NEEDS 解析失敗：${(error as Error).message}`], compare: '（不知道）' };
   }
-  const planJob = needs.plan;
-  if (planJob?.result !== 'success') problems.push(`plan 沒有成功（${planJob?.result ?? '沒有結果'}）`);
-  if (needs.shared?.result !== 'success') problems.push(`共用檢查沒有成功（${needs.shared?.result ?? '沒有結果'}）`);
-  const outputs = planJob?.outputs ?? {};
-  let reasons: Record<string, string> = {};
-  try { reasons = JSON.parse(outputs.reasons ?? '{}') as Record<string, string>; } catch { problems.push('plan 的理由解析失敗'); }
+  const job = (name: string) => (isObject(needs[name]) ? needs[name] : {});
+  const planJob = job('plan');
+  const planOk = planJob.result === 'success';
+  if (!planOk) problems.push(`plan 沒有成功（${planJob.result === undefined ? '沒有結果' : describe(planJob.result)}）`);
+  const shared = job('shared').result;
+  if (shared !== 'success') problems.push(`共用檢查沒有成功（${shared === undefined ? '沒有結果' : describe(shared)}）`);
+  if (planJob.outputs !== undefined && !isObject(planJob.outputs)) problems.push(`plan 的輸出不是物件（${describe(planJob.outputs)}）`);
+  const outputs = isObject(planJob.outputs) ? planJob.outputs : {};
+  const compare = filled(outputs.compare);
+  if (!compare) problems.push(`plan 沒有比較的端點（compare：${describe(outputs.compare)}）`);
+  let reasons: Record<string, unknown> = {};
+  if (filled(outputs.reasons)) {
+    try {
+      const parsed: unknown = JSON.parse(outputs.reasons as string);
+      if (isObject(parsed)) reasons = parsed;
+      else problems.push(`plan 的理由不是物件（${describe(parsed)}）`);
+    } catch {
+      problems.push('plan 的理由解析失敗');
+    }
+  }
   const rows: GateRow[] = [];
   for (const plugin of PLUGINS) {
     const flag = outputs[plugin];
-    const result = needs[plugin]?.result;
+    const raw = job(plugin).result;
+    const result = filled(raw);
+    // 跳過一定有理由：每個外掛的理由都要是非空的字串。
+    const reason = filled(reasons[plugin]);
     let ok = true;
-    let run = flag === 'true' ? '跑' : flag === 'false' ? '不跑' : `不合法（${flag ?? '沒有'}）`;
+    let run = flag === 'true' ? '跑' : flag === 'false' ? '不跑' : `不合法（${describe(flag)}）`;
     if (flag !== 'true' && flag !== 'false') {
       ok = false;
-      problems.push(`${NAMES[plugin]}：plan 的旗標不合法（${flag ?? '沒有'}）`);
+      problems.push(`${NAMES[plugin]}：plan 的旗標不合法（${describe(flag)}）`);
     } else if (!result) {
       ok = false;
-      problems.push(`${NAMES[plugin]}：job 沒有結果`);
+      problems.push(`${NAMES[plugin]}：job 沒有結果${raw === undefined ? '' : `（${describe(raw)}）`}`);
     } else if (flag === 'true' && result !== 'success') {
       ok = false;
       problems.push(result === 'skipped' ? `${NAMES[plugin]}：要跑卻跳過` : `${NAMES[plugin]}：要跑，結果是 ${result}`);
@@ -116,13 +143,17 @@ export function gate(needsText: string | undefined): Gate {
       ok = false;
       problems.push(`${NAMES[plugin]}：不該跑卻跑了（${result}）`);
     }
-    if (planJob?.result !== 'success') run += '（plan 沒有成功）';
-    rows.push({ plugin: NAMES[plugin], run, reason: reasons[plugin] ?? '', result: result ?? '沒有結果', ok });
+    if (!reason) {
+      ok = false;
+      problems.push(`${NAMES[plugin]}：plan 沒有寫理由`);
+    }
+    if (!planOk) run += '（plan 沒有成功）';
+    rows.push({ plugin: NAMES[plugin], run, reason: reason ?? '（沒有）', result: result ?? '沒有結果', ok });
   }
-  return { ok: problems.length === 0, rows, problems, compare: outputs.compare ?? '（plan 沒有輸出）' };
+  return { ok: problems.length === 0, rows, problems, compare: compare ?? '（plan 沒有輸出）' };
 }
 
-const cell = (text: string) => text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const cell = (text: string) => String(text).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 export function summary(result: Gate): string {
   const lines = [
