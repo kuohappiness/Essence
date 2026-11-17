@@ -18,7 +18,7 @@ import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, moveItems, planExisting, WHY } from '../core/ai/index.ts';
-import type { ClearItem, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
+import type { AppendWrite, ClearItem, DeepenStop, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 import { createObserver } from './observe.ts';
@@ -328,6 +328,11 @@ export interface State {
   aiRead(path: string): Promise<string | null>;
   /** 這個路徑的上層有系統資料夾不在原位、也沒搬回（R3-4）：aiRead 回 null 也不代表真的沒有。 */
   aiDisplaced(path: string): boolean;
+  /**
+   * 加深寫進那一篇（tasks/ai-cards-deepen.md §3-2 第 4 步）：和補 ID、加入同一條寫入（同一列、同樣的門檻）。plan 拿到這一篇最新的全文，
+   * 回傳要寫的全文或不寫的原因；寫入逾時之後這一篇鎖住（同加入）。
+   */
+  aiAppend(path: string, editor: EditorHandle | null, plan: (text: string) => { text: string } | { why: DeepenStop['why'] }): Promise<AppendWrite>;
   /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次，並確認整個 vault 沒有同名檔（nameFree，R2-4）。 */
   aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /**
@@ -1183,6 +1188,23 @@ export function createState(options: StateOptions): State {
     },
     aiRead: path => writes.readTimed(path),
     aiDisplaced: path => options.displaced?.(path) ?? false,
+    async aiAppend(path, editor, plan) {
+      if (addLocks.has(path)) return { kind: 'timeout' };
+      let why: DeepenStop['why'] | null = null;
+      const prepared = (text: string): Prepared | null => {
+        track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+        const out = plan(text);
+        if ('why' in out) { why = out.why; return null; }
+        why = null;
+        return withNeed({ text: out.text, expect: [], fresh: [], record: null, need: null }, text, version);
+      };
+      const result = await writes.enqueue(() => editor ? writes.edit(editor, prepared, { kind: 'unchanged' }) : writes.fillFile(path, prepared));
+      if (result.kind === 'failed' && result.error instanceof WriteTimeout) { addLocks.add(path); return { kind: 'timeout' }; }
+      if (result.kind === 'failed') return { kind: 'failed', error: result.error };
+      if (result.kind === 'done' || result.kind === 'saved') return { kind: 'written', confirmed: result.kind === 'done' };
+      if (result.kind === 'blocked') return { kind: 'not', why: result.reason === 'phone' || result.reason === 'loading' || result.reason === 'needs-update' ? result.reason : 'blocked', detail: result.reason };
+      return { kind: 'not', why: (why as DeepenStop['why'] | null) ?? 'changed' };
+    },
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
     aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
     aiCreateSnapshot: (path, text, decks, nameFree) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {

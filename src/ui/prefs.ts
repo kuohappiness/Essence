@@ -25,6 +25,7 @@ export function saveTerms(app: App, terms: TermOpen): void { app.saveLocalStorag
 const AI_JOBS = 'essence-cards-ai-jobs';
 const AI_RETIRED = 'essence-cards-ai-retired';
 const AI_LAST = 'essence-cards-ai-last';
+const AI_DEEPEN = 'essence-cards-deepen-jobs';
 export const aiPrefs = {
   /** 原樣讀出來，由 core/ai 的 readJobs 判斷讀不讀得懂。 */
   jobs: (app: App): unknown => app.loadLocalStorage(AI_JOBS),
@@ -46,4 +47,7 @@ export const aiPrefs = {
     return { ...typeof subject === 'string' ? { subject } : {}, ...typeof term === 'string' ? { term } : {} };
   },
   saveLast: (app: App, last: { subject: string; term: string }): void => { app.saveLocalStorage(AI_LAST, last); },
+  /** 加深的工作（tasks/ai-cards-deepen.md §3-2）：和製卡的工作分開存，原樣讀出來，由 core/ai 的 readDeepenJobs 判斷。 */
+  deepenJobs: (app: App): unknown => app.loadLocalStorage(AI_DEEPEN),
+  saveDeepenJobs: (app: App, jobs: unknown[]): void => { app.saveLocalStorage(AI_DEEPEN, jobs); },
 };

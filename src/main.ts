@@ -3,6 +3,7 @@ import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
+import { SNAPSHOT_FOLDER } from './core/ai/index.ts';
 import type { EmbeddedRules } from './core/ai/index.ts';
 import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
@@ -19,6 +20,9 @@ import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
 import { wireIntroButtons, type AddRequest } from './obsidian/intro-add.ts';
 import { createIntroRunner } from './obsidian/intro-run.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
+import { createDeepen, type Deepen } from './obsidian/deepen.ts';
+import { wireDeepen } from './obsidian/deepen-modal.ts';
+import { editorOf } from './obsidian/save.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { activateDeck, changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
@@ -123,6 +127,7 @@ export default class EssenceCardsPlugin extends Plugin {
   private statusBar: HTMLElement | null = null;
   /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
   private ai: AiCards | null = null;
+  private deepen: Deepen | null = null;
   /** 引言框的「加入」按鈕（tasks/ai-cards-add.md §1）：只在電腦；手機是 null。 */
   intro: { refresh(): void } | null = null;
   /** 開發命令攔下按鈕（P5 探針）：設了就交給它，不做加入。 */
@@ -227,6 +232,38 @@ export default class EssenceCardsPlugin extends Plugin {
         onError: error => { this.fail('ai', error); },
       });
       wireAiCards(this, { cards: () => this.unloaded ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+      // 加深這一節（tasks/ai-cards-deepen.md）：寫入走開在編輯模式的分頁（同引言框的加入），否則走檔案。
+      const editingView = (path: string): MarkdownView | null => app.workspace.getLeavesOfType('markdown')
+        .map(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path === path ? leaf.view : null).find(each => each !== null && each.getMode() === 'source') ?? null;
+      const sameText = (a: string, b: string): boolean => a.replace(/\r\n?/g, '\n') === b.replace(/\r\n?/g, '\n');
+      this.deepen = createDeepen({
+        rules: JSON.parse(CARD_RULES) as EmbeddedRules,
+        state: () => this.state,
+        names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
+        named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+        snapshots: async () => {
+          const files = app.vault.getMarkdownFiles().filter(file => file.path.startsWith(`${SNAPSHOT_FOLDER}/`) && !file.path.startsWith(`${SNAPSHOT_FOLDER}/原文/`));
+          const read = await Promise.all(files.map(file => app.vault.cachedRead(file).then(text => ({ path: file.path, text }), () => null)));
+          return read.filter((each): each is { path: string; text: string } => each !== null);
+        },
+        store: { jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); } },
+        editor: path => { const view = editingView(path); return view ? editorOf(view, path) : null; },
+        unsaved: async path => { const view = editingView(path); return !!view?.file && !sameText(view.editor.getValue(), await app.vault.read(view.file)); },
+        clipboard: text => navigator.clipboard.writeText(text),
+        now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
+        onError: error => { this.fail('ai', error); },
+      });
+      wireDeepen(this, {
+        deepen: () => this.unloaded ? null : this.deepen,
+        read: async path => {
+          const view = editingView(path);
+          if (view) return view.editor.getValue();
+          const file = app.vault.getFileByPath(path);
+          return file ? app.vault.read(file) : null;
+        },
+        openNote: path => { this.openNote(path); },
+        notify: message => { new Notice(message); },
+      });
       const runner = this.introRunner = createIntroRunner({
         app: this.app,
         state: () => this.unloaded ? null : this.state,
@@ -585,7 +622,7 @@ export default class EssenceCardsPlugin extends Plugin {
     try {
       this.register(files.watch(path => { if (isSettingsPath(path)) void this.store.reload(); }));
     } catch { /* 見上 */ }
-    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => [...this.ai?.reserved() ?? [], ...this.deepen?.reserved() ?? []], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();

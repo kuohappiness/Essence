@@ -136,7 +136,7 @@ export function activationCounts(text: string, stopped: (target: { id: string; l
 function deckFolder(form: Pick<CardForm, 'term'>, subject: Pick<RuleSubject, 'subject'>): string {
   return subject.subject === null ? 'Essence Cards' : `Essence Cards/學業/${form.term.trim()}/${subject.subject}`;
 }
-const SNAPSHOT_FOLDER = 'Essence Cards/紀錄/AI 輸出';
+export const SNAPSHOT_FOLDER = 'Essence Cards/紀錄/AI 輸出';
 const RAW_FOLDER = SNAPSHOT_FOLDER + '/原文';
 /** 原文的檔（§5）：SHA-256 前 12 碼。 */
 export const rawPath = (sha: string): string => `${RAW_FOLDER}/${sha.slice(0, 12)}.md`;
@@ -176,7 +176,7 @@ function linkOf(id: string, found: { path: string; name: string }): string {
   return `[[${file}#^${id}|${found.name.replace(/[|\]]/g, char => char === '|' ? '｜' : '］')}]]`;
 }
 /** 加進已有的學習目標那一項改成連結（§5）：開頭的 `ID 名稱` 換成連結。 */
-function linked(line: string, id: string, found: { path: string; name: string }): string {
+export function linked(line: string, id: string, found: { path: string; name: string }): string {
   const match = /^(\s{0,3}>\s?\s*(?:[-*+]|\d+[.)])\s+)(\S+)(?:\s+.*)?$/.exec(line);
   if (!match || match[2] !== id) return line;
   return match[1] + linkOf(id, found);

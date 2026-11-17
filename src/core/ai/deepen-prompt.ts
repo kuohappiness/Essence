@@ -1,5 +1,7 @@
 import type { Mastery } from '../study/index.ts';
-import { sha256Hex, studentOf } from './prompt.ts';
+import type { Deck } from '../deck/index.ts';
+import { codeKey, termKey } from '../deck/index.ts';
+import { firstLine, sha256Hex, studentOf } from './prompt.ts';
 import type { CardForm, Prompt, SentPart } from './prompt.ts';
 import type { EmbeddedRule, RuleSubject } from './rules.ts';
 
@@ -21,6 +23,24 @@ export interface DeepenInput {
   map: { whole: string; structure: string } | null;
   /** 以前出過、現在不在這一篇的目標（goneTargets）。 */
   gone: readonly { id: string; name: string }[];
+}
+
+/** 這一篇送出的目標（§2-1）：有 ID、讀得懂的正式目標，照檔裡的順序；同一個 ID 只列一次。 */
+export function deepenTargets(deck: Deck, mastery: ReadonlyMap<string, Mastery>): DeepenTarget[] {
+  const seen = new Set<string>();
+  return deck.targets.filter(t => t.id !== null && t.ok && !seen.has(t.id) && seen.add(t.id)).map(t => {
+    const first = t.prompts.at(0);
+    return { id: t.id!, name: t.name, mastery: mastery.get(t.id!) ?? 'unknown', ...first ? { first: firstLine(first) } : {} };
+  });
+}
+
+/** 同單元的其他篇（D-190 第 4 點）：同科目、同年級學期、同單元編號、不是這一篇、不是轉錄稿的目標。一般知識沒有單元，沒有其他篇。 */
+export function unitSiblings(decks: readonly { path: string; deck: Deck }[], path: string, deck: Deck): { id: string; name: string }[] {
+  const { subject, term, unit } = deck.props;
+  if (subject === null || term === null || unit === null) return [];
+  return decks.filter(each => each.path !== path && !each.deck.props.isTranscript && each.deck.props.subject === subject && each.deck.props.term !== null
+    && termKey(each.deck.props.term) === termKey(term) && each.deck.props.unit !== null && codeKey(each.deck.props.unit.code) === codeKey(unit.code))
+    .flatMap(each => each.deck.targets.flatMap(t => t.id !== null && t.ok ? [{ id: t.id, name: t.name }] : []));
 }
 
 const LABEL: Record<Mastery, string> = { stable: '記穩了', weak: '常錯', unstable: '還沒記穩', unknown: '還沒記穩' };

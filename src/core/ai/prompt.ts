@@ -33,7 +33,7 @@ export interface CardForm {
 export interface ExistingTarget { id: string; name: string; source: string; path: string; first?: string }
 
 /** 第一題的一行：問答寫 `題目 :: 答案`、填空整行；多行答案用「／」接；圖寫「［圖］」。 */
-function firstLine(prompt: DeckPrompt): string {
+export function firstLine(prompt: DeckPrompt): string {
   const image = (text: string): string => text.replace(/!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)/g, '［圖］');
   const flat = (text: string): string => image(text).split('\n').map(line => line.trim()).filter(Boolean).join('／');
   return prompt.kind === 'qa' ? `${flat(prompt.question)} :: ${flat(prompt.answer)}` : flat(prompt.text);
