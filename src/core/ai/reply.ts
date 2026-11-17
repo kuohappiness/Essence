@@ -236,11 +236,11 @@ function pickMixed(result: CheckResult, issue: CheckResult['issues'][number]): s
 }
 
 /** 一篇的檢查（§4〈檢查〉）：check-syntax 算錯誤的擋住、算不符的提示，提醒不列；清單結構跑掉的合成一個錯誤。 */
-export function checkPiece(text: string, rawLine: (line: number) => number, subject: Pick<RuleSubject, 'subject' | 'r3'>, form: CardForm): { errors: ReplyIssue[]; hints: ReplyIssue[]; result: CheckResult } {
+export function checkPiece(text: string, rawLine: (line: number) => number, subject: Pick<RuleSubject, 'subject' | 'r3'>, form: CardForm, skip: ReadonlySet<string> = new Set()): { errors: ReplyIssue[]; hints: ReplyIssue[]; result: CheckResult } {
   const errors: ReplyIssue[] = [], hints: ReplyIssue[] = [], broken: number[] = [];
   const result = check(text, { subject: subject.subject ?? '一般知識', unit: subject.subject === null ? null : unitCode(form.unit) });
   for (const issue of result.issues) {
-    if (issue.level === '提醒' || HANDLED.has(issue.code)) continue;
+    if (issue.level === '提醒' || HANDLED.has(issue.code) || skip.has(issue.code)) continue;
     if (issue.code === 'target-name' && OWN_NAMES.has(subject.subject ?? '')) continue;
     if (issue.code === 'no-source' && SOURCE_OPTIONAL.has(subject.subject ?? '')) continue;
     if (STRUCTURE.has(issue.code)) { broken.push(rawLine(issue.line - 1)); continue; }

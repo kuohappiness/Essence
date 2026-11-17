@@ -141,6 +141,8 @@ export interface ExamScope {
   contains(entry: DeckEntry, target: Target): boolean;
   /** 填了考試期間；生效就表示結束日還沒過。 */
   hasPeriod: boolean;
+  /** 課外層（延伸，tasks/ai-cards-deepen.md §6）：連重學也排在範圍內的目標後面。沒給是都不算。 */
+  outside?(entry: DeckEntry, target: Target): boolean;
 }
 
 export interface TodayInput {

@@ -3,7 +3,7 @@ import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
-import { previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
+import { deepenRemindOff, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
@@ -24,6 +24,8 @@ const REVIEW = {
   revealNote: '一進卡片就是背面。只影響這台裝置。',
   quiz: '小考標記',
   quizNote: '在目錄替單元或某一篇設小考日期，入口最上面會多一列。不改複習的排程。只影響這台裝置的目錄按鈕。',
+  deepen: '這台電腦的加深提醒',
+  deepenNote: '一篇卡組有一半以上的新目標記穩了，入口的提醒一區會問要不要加深。關掉後仍可用命令「加深這一節」。',
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -89,6 +91,8 @@ export interface SettingsHost {
   backupError: () => string | null;
   /** 預覽的開關變了：按鈕與命令立刻跟著，不用重開。 */
   previewChanged: () => void;
+  /** 加深提醒的開關變了（tasks/ai-cards-deepen.md §5-2）：重算提醒一區。 */
+  deepenChanged?: () => void;
   /** 同步的設定（設定檔）。 */
   settings: SettingsStore;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：選學期時記下選的那一天。 */
@@ -212,6 +216,11 @@ class EssenceSettingTab extends PluginSettingTab {
     }));
     new Setting(containerEl).setName(REVIEW.quiz).setDesc(REVIEW.quizNote).addToggle(toggle => toggle.setValue(quizMark.get(this.app)).onChange(on => {
       quizMark.set(this.app, on);
+    }));
+    // 加深只在電腦（D-134）：關掉不取消正在做的、不刪引言框，再打開時保留每篇的「這次不用」（D-194 第 9 點）。
+    if (Platform.isDesktopApp) new Setting(containerEl).setName(REVIEW.deepen).setDesc(REVIEW.deepenNote).addToggle(toggle => toggle.setValue(!deepenRemindOff.get(this.app)).onChange(on => {
+      deepenRemindOff.set(this.app, !on);
+      this.host.deepenChanged?.();
     }));
   }
 

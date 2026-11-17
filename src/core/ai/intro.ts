@@ -1,12 +1,21 @@
-import { frontmatterLines, linesOf, listTree, readProperties, TRAILING_ID } from '../deck/index.ts';
+import { frontmatterLines, linesOf, listTree, outsideSource, parseDeck, readProperties, splitSourceItems, TRAILING_ID } from '../deck/index.ts';
 import { blocksOf, calloutHead } from './check.ts';
 
 // 引言框的「加入」（tasks/ai-cards-add.md §1）：哪些引言框、框裡最上層的每一項、按下去時在最新的文字裡重新找。只讀文字。
 
-/** 引言框的種類：候選卡片、加進已有的學習目標。第 2 批加「加深的學習目標」。 */
-export type BoxKind = 'candidate' | 'existing';
-/** 對象表（§1）：標題 → 怎麼加入。標題的認法和檢查相同（check.ts 的 calloutHead）。 */
-const BOX_TITLES: Readonly<Record<string, BoxKind>> = { 候選卡片: 'candidate', 加進已有的學習目標: 'existing' };
+/** 引言框的種類：候選卡片、加進已有的學習目標、加深的學習目標（tasks/ai-cards-deepen.md §3-1）。 */
+export type BoxKind = 'candidate' | 'existing' | 'deepen';
+/**
+ * 對象表（§1）：標題 → 怎麼加入、是不是加深寫的。標題的認法和檢查相同（check.ts 的 calloutHead）。
+ * 加深那一批的三種框名只有加深會寫（tasks/ai-cards-deepen.md §3-1）：待審核、補題只寫進這一篇都照框名認。
+ */
+const BOX_TITLES: Readonly<Record<string, { kind: BoxKind; deepen: boolean }>> = {
+  候選卡片: { kind: 'candidate', deepen: false },
+  加進已有的學習目標: { kind: 'existing', deepen: false },
+  加深的學習目標: { kind: 'deepen', deepen: true },
+  '加進已有的學習目標（加深）': { kind: 'existing', deepen: true },
+  '候選卡片（加深）': { kind: 'candidate', deepen: true },
+};
 
 /** 框裡最上層的一項。line、end 是檔案的行（從 0 算，end 不含）；original 是那幾行去掉引言框前綴之後的字，用 \n 接。 */
 export interface BoxItem {
@@ -19,6 +28,8 @@ export interface BoxItem {
 }
 export interface IntroBox {
   kind: BoxKind;
+  /** 加深寫的框（框名帶「加深」）。 */
+  deepen: boolean;
   title: string;
   folded: boolean;
   /** 標題行（從 0 算）。 */
@@ -49,8 +60,9 @@ export function introBoxes(text: string): IntroBox[] {
   for (const block of blocksOf(lines.slice(start).map((line, i) => ({ no: start + i, raw: line.raw })))) {
     if (block.kind !== 'callout') continue;
     const head = calloutHead(block.body[0].raw);
-    const kind = head ? BOX_TITLES[head.title] : undefined;
-    if (!head || !kind) continue;
+    const known = head ? BOX_TITLES[head.title] : undefined;
+    if (!head || !known) continue;
+    const { kind, deepen } = known;
     // 同一塊裡的下一個標題行：沒有外部空行的兩個框（blocksOf 讀成同一塊），這一框到它之前為止。
     const next = block.body.findIndex((line, i) => i > 0 && calloutHead(line.raw) !== null);
     const body = next < 0 ? block.body : block.body.slice(0, next);
@@ -59,9 +71,9 @@ export function introBoxes(text: string): IntroBox[] {
     const items = listTree(inner.map(raw => ({ raw, eol: '\n' })), 0).map((root): BoxItem => {
       const original = inner.slice(root.line, root.end).join('\n');
       const head = original.split('\n')[0];
-      return { kind, line: first + root.line, end: first + root.end, original, id: kind === 'candidate' ? TRAILING_ID.exec(head)?.[1] ?? null : existingId(head) };
+      return { kind, line: first + root.line, end: first + root.end, original, id: kind === 'existing' ? existingId(head) : TRAILING_ID.exec(head)?.[1] ?? null };
     });
-    boxes.push({ kind, title: head.title, folded: head.folded, line: block.line, end: block.line + body.length, merged: next >= 0, items });
+    boxes.push({ kind, deepen, title: head.title, folded: head.folded, line: block.line, end: block.line + body.length, merged: next >= 0, items });
   }
   return boxes;
 }
@@ -100,7 +112,7 @@ const linked = (item: BoxItem): boolean => /^\s*(?:[-*+]|\d+[.)])\s+\[\[[^\]]*#\
  * 畫按鈕、確認框、寫入前的核對共用這一份。
  */
 export function boxBatch(box: IntroBox): { items: BoxItem[]; rest: number } {
-  const items = box.items.filter(item => box.kind === 'candidate' ? !suspectOf(item.original) : linked(item));
+  const items = box.items.filter(item => box.kind === 'existing' ? linked(item) : !suspectOf(item.original));
   return { items, rest: box.items.length - items.length };
 }
 /** 那幾項（畫按鈕時的身分與原文）現在在哪個框：第一個在最新文字裡找得到的；都找不到是 null。 */
@@ -113,3 +125,31 @@ export function boxOf(text: string, refs: readonly ItemRef[]): IntroBox | null {
 }
 /** 畫按鈕時記下的身分與原文。 */
 export const refOf = (item: BoxItem): ItemRef => ({ kind: item.kind, id: item.id, original: item.original });
+
+/**
+ * 待審核（tasks/ai-cards-deepen.md §4-3）：這一篇有任何一個加深的框（三種框名，哪一批都算）裡還有項目。只看卡組本身，不看快照；
+ * 空框、框裡只剩家長自己的字（沒有行尾 ID 的清單、沒有題目的補題）、第 1 批與最小版留下的框不算。
+ */
+export const deepenPending = (text: string): boolean => introBoxes(text).some(box => box.deepen && box.items.some(item => box.kind === 'existing'
+  // 補題：底下還有卡組讀得到的題目。新目標、候選：名稱行有行尾 ID。框裡只剩家長自己的字（沒有 ID 的清單、說明）不算（tasks/ai-cards-deepen.md §4-3）。
+  ? hasPrompt(item.original)
+  : item.id !== null));
+/**
+ * 補題那一項底下有沒有題目（L2 R6）：名稱行換成一個假的目標，交給卡組的解析器讀，和出題、加入用同一套題目的邊界
+ * （圍欄、行內程式碼、說明裡的 `::` 都照卡組的讀法）。寫法有問題、讀不出題目的不算。
+ */
+function hasPrompt(original: string): boolean {
+  const [, ...rest] = original.split('\n');
+  // 和加入（existing.ts 的 unitsOf）一樣只看直接的子項目：名稱的接續行、更深的說明不算。兩份文字的行號相同。
+  const kids = new Set(listTree(linesOf(original), 0)[0]?.children.map(child => child.line) ?? []);
+  return parseDeck(['- 補題 ^zzz000', ...rest].join('\n')).targets.some(target => target.prompts.some(prompt => kids.has(prompt.line)));
+}
+
+/** 框裡那一項的出處有 `課外：`（tasks/ai-cards-deepen.md §3-3：加深的補題出處合併還沒涵蓋課外，那一項留給家長）。original 是那一項去掉引言框前綴之後的字。 */
+export function hasOutsideItem(original: string): boolean {
+  const [root] = listTree(linesOf(original), 0);
+  const field = root?.children.find(child => /^出處\s*[：:]/.test(child.text));
+  if (!field) return false;
+  const values = [field.text.replace(/^出處\s*[：:]/, ''), ...field.children.map(child => child.text)];
+  return values.some(value => splitSourceItems(value).some(item => outsideSource(item) !== null));
+}

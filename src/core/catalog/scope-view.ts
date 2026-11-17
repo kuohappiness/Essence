@@ -10,10 +10,13 @@ type Lines = Pick<ScopeFile, 'lines'>;
 type UnitLine = Extract<ScopeLine, { kind: 'unit' }>;
 const unitLines = (file: Lines): UnitLine[] => file.lines.filter((line): line is UnitLine => line.kind === 'unit');
 
-/** 這份範圍裡的目標：自己的單元或出處的單元落在範圍內。對不到卡組的單元也算（§3），所以後來才建卡組只讓提示消失。 */
+/**
+ * 這份範圍裡的目標：自己的單元或出處的單元落在範圍內。對不到卡組的單元也算（§3），所以後來才建卡組只讓提示消失。
+ * 延伸（課外層）不算：不提高保持率、考前排在範圍內的目標後面（D-136 第 4 點、tasks/ai-cards-deepen.md §6）。
+ */
 export function targetsInScope(file: Lines, index: CatalogIndex): Set<string> {
   const ids = new Set<string>();
-  for (const member of index.members) if (member.units.some(unit => unitInScope(file, unit))) ids.add(member.id);
+  for (const member of index.members) if (!member.outside && member.units.some(unit => unitInScope(file, unit))) ids.add(member.id);
   return ids;
 }
 
@@ -156,7 +159,8 @@ export interface ScopeCheck { fromOther: FromOther[]; unsure: Unsure[] }
 export function scopeCheck(file: Lines, index: CatalogIndex): ScopeCheck {
   const fromOther: FromOther[] = [], unsure: Unsure[] = [];
   const lines = unitLines(file);
-  for (const { id, name, path, line, own, sources, subject, units, missed } of index.members) {
+  for (const { id, name, path, line, own, sources, subject, units, missed, outside } of index.members) {
+    if (outside) continue;
     const named = units.filter(unit => unitInScope(file, unit));
     const sure = named.filter(unit => unit.basis !== 'carried');
     if (named.length && !named.some(unit => unit.basis === 'own')) fromOther.push({ id, name, path, line, own });

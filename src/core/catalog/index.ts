@@ -61,6 +61,8 @@ interface ScopeMember {
   units: MemberUnit[];
   /** 出處有疑似漏掉的（§1 的 missed）。 */
   missed: boolean;
+  /** 延伸（出處每一項都是 `課外：`，tasks/ai-cards-deepen.md §6）：不算進考試範圍。 */
+  outside: boolean;
 }
 /** 對到單元的參照，或對不到的（這一批不建目錄節點，D-033；第二批的考試範圍要用，不能當成「沒有關係」）。 */
 interface UnitRef { id: string; path: string; term: string; subject: string | null; code: string }
@@ -86,7 +88,8 @@ export interface CatalogIndex {
 
 const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'active' ? unit.targets : [];
 
-const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
+/** 單元的鍵（年級學期、科目、單元編號照寬鬆的寫法比）：目錄、小考的 refs 都用這一個。 */
+export const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
@@ -183,7 +186,7 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
       if (!known) belongs.set(key, { term: link.term, subject, code: link.unit, basis });
       else if (known.basis === 'carried') known.basis = basis;
     }
-    if (subject !== null) members.push({ id: target.id, name: target.name, path: entry.path, line: target.line, sources: target.fields.sources, subject, own: label ?? fileName(entry.path), units: [...belongs.values()], missed: items.some(item => item.missed) });
+    if (subject !== null) members.push({ id: target.id, name: target.name, path: entry.path, line: target.line, sources: target.fields.sources, subject, own: label ?? fileName(entry.path), units: [...belongs.values()], missed: items.some(item => item.missed), outside: items.length > 0 && items.every(item => item.outside === true) });
     for (const { link } of items) {
       if (link.kind !== 'unit') continue;
       const key = subject !== null ? unitKey(link.term, subject, link.unit) : null;

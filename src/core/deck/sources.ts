@@ -4,7 +4,7 @@
 
 /**
  * 連結的目標：block 是 `#^id`、heading 是舊的段落標題、note 是筆記連結本身（alias 只顯示，不送去開）；
- * unit 是別的單元；text 不做連結（先備，D-087）。
+ * unit 是別的單元；text 不做連結（先備，D-087；課外，tasks/ai-cards-deepen.md §6）。
  */
 export type SourceLink =
   | { kind: 'block'; id: string }
@@ -27,6 +27,8 @@ export interface SourceItem {
   basis?: 'written' | 'carried';
   /** 字面上有單元的線索、但沒有算進歸屬（`小五上 p.15`、`1-3 p.20`、網址裡的編號）。普通標題要比材料才知道，不算。 */
   missed?: true;
+  /** `課外：<來源>` 那一段（D-136 的課外層，tasks/ai-cards-deepen.md §6）：只顯示，不算單元、不連。 */
+  outside?: true;
 }
 /** 這一篇自己的屬性：本科的名稱、本篇的編號（`L3 p.30` 就是這一篇）、自己的學期。 */
 export interface SourceOwner { term: string | null; subject: string | null; unit: { code: string } | null }
@@ -75,6 +77,19 @@ const restore = (text: string, tokens: readonly string[]): string => text.replac
 // 連結外面的私用區字元拿掉，不會拼出不存在的遮罩；連結裡的字不動。
 const MASKED = new RegExp(`[\uE000\uE001]|${LINK.source}`, 'g');
 const mask = (text: string, tokens: string[]): string => text.replace(MASKED, match => { if (match.length === 1) return ''; tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+
+/**
+ * 出處切項：頓號；`課外：` 前面的空白或分隔符號也切，`p.44 課外：…`、`p.44，課外：…` 的課外自成一項（tasks/ai-cards-deepen.md §6）。
+ * 課外那一項到下一個頓號為止。連結裡的字先藏起來再切。
+ */
+const ITEM_SPLIT = /[、﹑]|[\s,，﹐;；﹔/／]+(?=課外\s*[：:])/g;
+/** 出處的一欄切成項（連結裡的頓號不切）；`check` 和卡組的讀法用同一種切法。 */
+export const splitSourceItems = (text: string): string[] => splitOutsideLinks(text, ITEM_SPLIT).map(each => each.trim()).filter(Boolean);
+/** `課外：<來源>` 的來源（去掉前後的空白與標點；空的是 ''）；不是課外的一項是 null。課外與冒號之間可以有空白，冒號全形半形都可以。 */
+export function outsideSource(item: string): string | null {
+  const head = /^課外\s*[：:]/.exec(item);
+  return head ? item.slice(head[0].length).replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '') : null;
+}
 
 /** 連結與「標題」裡的字不算分隔：欄位的 `｜`、值的 `、` 都先藏起來再切（§9-4）。 */
 export function splitOutsideLinks(text: string, separator: RegExp): string[] {
@@ -334,7 +349,7 @@ const SEPARATOR_ALL = new RegExp(SEPARATOR.source, 'g');
 function readSources(sources: readonly string[], own: SourceOwner): { parts: SourcePart[]; items: SourceItem[] } {
   const tokens: string[] = [];
   // 一項一項藏：不同項的字不會接成一個連結。每一項再照頓號切（小頓號 `﹑` 在同一項裡），每個字記得在 sources 第幾項的哪裡。
-  const entries = sources.flatMap((source, index) => tSplit(tReplace(tMask(traced(source), tokens), /[\u200B\u200C\uFEFF]/g, () => ''), /[、﹑]/g)
+  const entries = sources.flatMap((source, index) => tSplit(tReplace(tMask(traced(source), tokens), /[\u200B\u200C\uFEFF]/g, () => ''), ITEM_SPLIT)
     .map(tTrim).filter(each => each.text).map(each => ({ index, t: each })));
   // 這一篇的屬性也去雜訊再比：`八上` 就是 `國二上`，`Ｌ３` 就是 `L3`。
   const ownCode = tidy(own.unit?.code ?? '').trim();
@@ -540,6 +555,12 @@ function readSources(sources: readonly string[], own: SourceOwner): { parts: Sou
   for (const [at, { index, t }] of entries.entries()) {
     const entry = t.text;
     const display = restore(entry.replace(RAW_END, ''), tokens);
+    // 課外那一段只顯示，不改前後的承接（§6：`p.44、課外：…、46` 的 46 仍是頁碼）；後面沒寫來源的不算延伸（當成沒確認的出處）。
+    const outside = outsideSource(entry);
+    if (outside !== null) {
+      readings.push({ entry: index, span: spanOf(t), items: [{ text: display, link: { kind: 'text' }, ...outside ? { outside: true as const } : {} }], follows: null, scope: scopeNow() });
+      continue;
+    }
     if (/^先備 ?[：:]/.test(entry)) {
       forget();
       readings.push({ entry: index, span: spanOf(t), items: [{ text: display, link: { kind: 'text' } }], follows: null, scope: scopeNow() });
@@ -629,3 +650,18 @@ export function splitSource(text: string, own: SourceOwner): SourceSplit {
   const scanned = scan(rest, tokens);
   return { term, short, code, places: scanned.found.map(each => each.link), bad: scanned.bad, left: restore(scanned.left, tokens) };
 }
+
+/**
+ * 延伸（syntax §2-9〈延伸〉、tasks/ai-cards-deepen.md §6）：出處的每一項都是 `課外：`。沒有出處的不算。
+ * 只連到教材以外的筆記也算延伸（D-152 第 3 點），要看連到的筆記有沒有 `來源類型`，這裡拿不到，還沒做（技術債）。
+ */
+export function isOutside(sources: readonly string[], own: SourceOwner): boolean {
+  const items = sourceLinks(sources, own);
+  return items.length > 0 && items.every(item => item.outside === true);
+}
+
+/**
+ * 出處裡有沒有任何一項是有寫來源的 `課外：`（要不要加 `需要版本`，syntax §0-1、D-209）：0.5.0 以前把它讀成這一篇的位置與單元，
+ * 只要有一項就會讀錯，不必每一項都是。
+ */
+export const hasOutside = (sources: readonly string[], own: SourceOwner): boolean => sourceLinks(sources, own).some(item => item.outside === true);

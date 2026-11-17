@@ -133,7 +133,8 @@ export function planToday(input: TodayInput): Today {
     const due = memory && dueAt(memory, retention);
     let lane: Lane;
     if (!memory) lane = inExam ? 'exam-new' : 'new';
-    else if ((memory.last.r === 'miss' || memory.last.r === 'near') && memory.last.src !== 'mistake') lane = 'relearn';
+    // 考試範圍生效時，課外層（延伸）連重學也排在範圍內的目標後面（D-142 第 5 點、tasks/ai-cards-deepen.md §6）：放進一般的到期那一條。
+    else if ((memory.last.r === 'miss' || memory.last.r === 'near') && memory.last.src !== 'mistake') lane = exam?.outside?.(entry, target) ? 'due' : 'relearn';
     else lane = inExam ? 'exam-due' : 'due';
     candidates.set(id, { entry, target, id, memory, retention, inExam, due, recall: memory ? recall(memory, start) : 0, lane });
   }

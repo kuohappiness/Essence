@@ -6,6 +6,15 @@
  */
 export const PICK_NEEDS = '0.4.0';
 
+/**
+ * 第一個讀得懂出處裡 `課外：` 的正式版號（syntax §0-1、D-209）：卡組的正式目標出處有課外那一項時寫進 `需要版本`，舊版整篇擋住、不讀錯。
+ * 規則同 PICK_NEEDS：合併到 main 時定成下一個沒用過的版號，三個版號檔同一個 commit 升到它。
+ */
+export const OUTSIDE_NEEDS = '0.6.0';
+
+/** 兩個正式版號裡較新的一個（兩個都要是正式版號）。 */
+export const laterRelease = (a: string, b: string): string => compareRelease(a, b) >= 0 ? a : b;
+
 /** 正式版號 `主.次.修`：三段十進位的非負整數、不帶前導零（`0` 本身可以）。 */
 const RELEASE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 

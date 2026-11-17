@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { catalogView, entryView, examRow, examSubject, quizButton, quizViews, reminderView } from '../review/index.ts';
-import type { FolderActions } from '../review/index.ts';
+import type { DeepenActions, FolderActions } from '../review/index.ts';
 import type { Catalog, DeckStatusValue, QuizRef, State, StudyPick, UnitView } from '../state/index.ts';
 import { Icon } from './entry-icon.tsx';
 import { ExamScope } from './ExamScope.tsx';
@@ -33,6 +33,8 @@ export interface EntryProps {
   reminders: boolean;
   /** 系統資料夾的防呆：搬錯位置的列在提醒一區（tasks/system-folder-guard.md §2-4）。 */
   folders: FolderActions | null;
+  /** 加深的提醒（tasks/ai-cards-deepen.md §4）：一篇一行，只有電腦。 */
+  deepen: DeepenActions | null;
   terms: { get(): TermOpen; set(terms: TermOpen): void };
   /** 複習畫面蓋在上面：焦點是它的，這裡不搶。 */
   covered: () => boolean;
@@ -103,7 +105,7 @@ function Home(props: EntryProps): React.JSX.Element {
       {ready && view.more && <button type="button" className="ec-en-more" onClick={() => { props.start({ more: true }); }}>再複習一些</button>}
       <ExamRow {...props} />
       <button type="button" className="ec-en-row" onClick={() => { props.store.go('catalog'); }}><span>目錄</span><Icon type="next" size={18} /></button>
-      {props.reminders && <Reminders state={state} folders={props.folders} />}
+      {props.reminders && <Reminders state={state} folders={props.folders} deepen={props.deepen} />}
     </div>
     <p className="ec-en-mark" lang="en">Essence Cards</p>
   </>;
@@ -124,8 +126,8 @@ function ExamRow({ state, store }: EntryProps): React.JSX.Element {
 }
 
 /** 提醒一區（D-163 第 5 點）：只有電腦；沒有提醒時整區消失。說明書還沒寫，先不放連結。 */
-function Reminders({ state, folders }: { state: State | null; folders: FolderActions | null }): React.JSX.Element | null {
-  const view = reminderView(state, folders?.issues());
+function Reminders({ state, folders, deepen }: { state: State | null; folders: FolderActions | null; deepen: DeepenActions | null }): React.JSX.Element | null {
+  const view = reminderView(state, folders?.issues(), deepen?.rows());
   const [open, setOpen] = useState(false);
   /** 正在搬回的那一項：按鈕停用，不重複按。 */
   const [moving, setMoving] = useState<string | null>(null);
@@ -145,6 +147,15 @@ function Reminders({ state, folders }: { state: State | null; folders: FolderAct
         void folders.moveBack(item.issue).finally(() => { setMoving(null); });
       }}>搬回原位</button>}
       {item.action === 'dismiss' && <button type="button" className="ec-rem-act" onClick={() => { folders.dismiss(item.folder); }}>不用了</button>}
+    </div>)}
+    {deepen && view.deepen.map(row => <div key={row.path} className="ec-rem-row">
+      <p className="ec-rem-text">{row.text}{row.kind === 'ready' && <span className="ec-rem-note">依複習紀錄判斷；目錄的顏色另外受到期與考試影響</span>}</p>
+      {row.kind === 'ready' && <>
+        <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'deepen'); }}>加深</button>
+        <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'skip'); }}>這次不用</button>
+      </>}
+      {(row.kind === 'waiting' || row.kind === 'pending') && <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'open'); }}>打開</button>}
+      {row.kind === 'waiting' && <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'cancel'); }}>取消</button>}
     </div>)}
   </section>;
 }

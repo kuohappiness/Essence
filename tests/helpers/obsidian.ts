@@ -10,7 +10,7 @@ const nodeRequire = createRequire(import.meta.url);
  * 實機的證據在開發命令與 Windows 版 Obsidian 的截圖。
  */
 class TAbstractFile { path: string; constructor(path: string) { this.path = path; } }
-class TFile extends TAbstractFile {}
+class TFile extends TAbstractFile { get basename(): string { return this.path.slice(this.path.lastIndexOf('/') + 1).replace(/\.[^.]*$/, ''); } }
 class TFolder extends TAbstractFile { children: TAbstractFile[] = []; }
 
 /** Modal 與設定分頁用的最小元素：empty、createDiv、createEl、setText、click、照標籤找的 querySelectorAll、disabled。 */
@@ -238,6 +238,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     getAbstractFileByPath: (path: string) => { count(); return texts.has(path) ? node(path) : null; },
     getFileByPath: (path: string) => texts.has(path) ? node(path) : null,
     getFiles: () => { count(); return [...texts.keys()].map(node); },
+    getMarkdownFiles: () => [...texts.keys()].filter(path => path.endsWith('.md')).map(node),
     read: (file: TFile) => { count(); return options.failRead?.(file.path) ? Promise.reject(Error('讀不到：' + file.path)) : Promise.resolve(texts.get(file.path) ?? ''); },
     cachedRead: (file: TFile) => Promise.resolve(texts.get(file.path) ?? ''),
     // 和 Obsidian 一樣，已經有這個檔時丟錯，不覆寫。

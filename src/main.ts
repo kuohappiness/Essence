@@ -1,9 +1,10 @@
-import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin } from 'obsidian';
+import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin, TFile, TFolder } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
-import type { EmbeddedRules } from './core/ai/index.ts';
+import { SNAPSHOT_FOLDER } from './core/ai/index.ts';
+import type { DeepenRow, EmbeddedRules } from './core/ai/index.ts';
 import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
@@ -19,6 +20,10 @@ import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
 import { wireIntroButtons, type AddRequest } from './obsidian/intro-add.ts';
 import { createIntroRunner } from './obsidian/intro-run.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
+import { createDeepen, type Deepen } from './obsidian/deepen.ts';
+import { retargetSnapshots, type SnapshotLinkIo } from './obsidian/deepen-links.ts';
+import { wireDeepen } from './obsidian/deepen-modal.ts';
+import { editorOf } from './obsidian/save.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { activateDeck, changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
@@ -36,7 +41,7 @@ import { createState, type ErrorSource, type State, type StudyPick } from './sta
 import { reminderView, type Session } from './review/index.ts';
 import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
-import { aiPrefs } from './ui/prefs.ts';
+import { aiPrefs, deepenRemindOff } from './ui/prefs.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -123,6 +128,10 @@ export default class EssenceCardsPlugin extends Plugin {
   private statusBar: HTMLElement | null = null;
   /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
   private ai: AiCards | null = null;
+  private deepen: Deepen | null = null;
+  /** 打開「加深這一節」的視窗（命令與提醒一區共用）。 */
+  private openDeepen: ((path: string) => void) | null = null;
+  private deepenTimer: number | null = null;
   /** 引言框的「加入」按鈕（tasks/ai-cards-add.md §1）：只在電腦；手機是 null。 */
   intro: { refresh(): void } | null = null;
   /** 開發命令攔下按鈕（P5 探針）：設了就交給它，不做加入。 */
@@ -189,7 +198,7 @@ export default class EssenceCardsPlugin extends Plugin {
     if (Platform.isDesktopApp) this.ids = this.wireIds();
     // 設定分頁（D-104、D-156 依功能分區）：備份一區在 iPhone 上只寫「備份在電腦上做」。
     this.settingTab = wireSettings({
-      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
+      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); }, deepenChanged: () => { this.refreshDeepen(0); },
       settings: this.store, today: todayText,
       settingsMissing: () => this.settingsFile?.missing() ?? false,
       recreateSettings: () => this.settingsFile ? this.settingsFile.recreate(this.store) : Promise.resolve('unreadable'),
@@ -227,6 +236,75 @@ export default class EssenceCardsPlugin extends Plugin {
         onError: error => { this.fail('ai', error); },
       });
       wireAiCards(this, { cards: () => this.unloaded ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+      // 加深這一節（tasks/ai-cards-deepen.md）：寫入走開在編輯模式的分頁（同引言框的加入），否則走檔案。
+      const editingView = (path: string): MarkdownView | null => app.workspace.getLeavesOfType('markdown')
+        .map(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path === path ? leaf.view : null).find(each => each !== null && each.getMode() === 'source') ?? null;
+      const sameText = (a: string, b: string): boolean => a.replace(/\r\n?/g, '\n') === b.replace(/\r\n?/g, '\n');
+      this.deepen = createDeepen({
+        rules: JSON.parse(CARD_RULES) as EmbeddedRules,
+        state: () => this.state,
+        names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
+        named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+        snapshots: () => this.deepenSnapshots(),
+        store: {
+          jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); },
+          skips: () => aiPrefs.deepenSkips(app), saveSkips: value => { aiPrefs.saveDeepenSkips(app, value); },
+          remindOff: () => deepenRemindOff.get(app),
+        },
+        read: async path => {
+          const view = editingView(path);
+          if (view) return view.editor.getValue();
+          const file = app.vault.getFileByPath(path);
+          return file ? app.vault.cachedRead(file) : null;
+        },
+        editor: path => { const view = editingView(path); return view ? editorOf(view, path) : null; },
+        unsaved: async path => { const view = editingView(path); return !!view?.file && !sameText(view.editor.getValue(), await app.vault.read(view.file)); },
+        clipboard: text => navigator.clipboard.writeText(text),
+        now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
+        onError: error => { this.fail('ai', error); },
+      });
+      this.openDeepen = wireDeepen(this, {
+        deepen: () => this.unloaded ? null : this.deepen,
+        read: async path => {
+          const view = editingView(path);
+          if (view) return view.editor.getValue();
+          const file = app.vault.getFileByPath(path);
+          return file ? app.vault.read(file) : null;
+        },
+        openNote: path => { this.openNote(path); },
+        notify: message => { new Notice(message); },
+      }).open;
+      // 提醒一區的加深列（§4）：算好、有變才更新狀態列與入口。改名、搬移、刪除時「這次不用」跟著走（§5-1）。
+      this.deepen.onRows(() => { this.updateReminders(); this.entry?.refresh(); });
+      // 監看不了時 state 建立時也會失敗、照常記錄與提示（D-155 補充）；這幾個監聽只讓提醒更即時，失敗了不擋外掛載入。
+      try {
+        // 快照的 `對象` 跟著改名走（L2 R7）：搬資料夾時裡面每一篇都算；之後 Obsidian 對個別檔案再送的 rename 找不到舊連結，不會重寫。
+        const links: SnapshotLinkIo = {
+          autoUpdate: () => (app.vault as unknown as { getConfig(key: string): unknown }).getConfig('alwaysUpdateLinks') === true,
+          // state 還沒建立、外掛停用中都當成擋著（L2 R11）。
+          blocked: () => this.unloaded || !this.state || this.state.writeBlock() !== null,
+          // 讀磁碟上最新的：前一次改名剛改過的快照，快取可能還是舊的（L2 R11）。
+          snapshots: () => this.deepenSnapshots(true),
+          named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+          process: async (path, change) => { const file = app.vault.getFileByPath(path); if (file) await app.vault.process(file, change); },
+        };
+        let renames: Promise<void> = Promise.resolve();
+        const moves = (file: TFile | TFolder, old: string): [string, string][] => file instanceof TFolder
+          ? app.vault.getMarkdownFiles().filter(each => each.path.startsWith(file.path + '/')).map(each => [old + each.path.slice(file.path.length), each.path])
+          : file.path.endsWith('.md') ? [[old, file.path]] : [];
+        this.registerEvent(app.vault.on('rename', (file, old) => {
+          aiPrefs.moveDeepenSkip(app, old, file.path);
+          const pairs = file instanceof TFile || file instanceof TFolder ? moves(file, old) : [];
+          // 照收到的順序一次做一個（L2 R11）：A→B 還沒寫完時又改成 C，B→C 要看到 A→B 寫好的快照。
+          renames = renames.then(async () => {
+            for (const [from, to] of pairs) await retargetSnapshots(links, from, to);
+          }).catch((error: unknown) => { this.fail('ai', error); }).finally(() => { this.refreshDeepen(); });
+        }));
+        this.registerEvent(app.vault.on('delete', file => { aiPrefs.moveDeepenSkip(app, file.path, null); this.refreshDeepen(); }));
+        this.registerEvent(app.vault.on('modify', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
+        this.registerEvent(app.vault.on('create', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
+      } catch { /* 見上 */ }
+      this.register(() => { if (this.deepenTimer !== null) window.clearTimeout(this.deepenTimer); });
       const runner = this.introRunner = createIntroRunner({
         app: this.app,
         state: () => this.unloaded ? null : this.state,
@@ -330,6 +408,7 @@ export default class EssenceCardsPlugin extends Plugin {
         moveBack: issue => this.guard?.moveBack(issue) ?? Promise.resolve(false),
         dismiss: folder => { this.guard?.dismiss(folder); },
       },
+      deepen: this.deepen ? { rows: () => this.deepen?.rows() ?? [], act: (row, action) => { void this.deepenAct(row, action); } } : null,
       covered: () => this.review !== null,
       notify: message => { new Notice(message); },
       setDeckStatus: Platform.isDesktopApp ? (path, value) => this.state ? changeDeckStatus(this.app, this.state, path, value, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
@@ -353,10 +432,47 @@ export default class EssenceCardsPlugin extends Plugin {
     setting?.openTabById(this.manifest.id);
   }
 
+  /** 加深的提醒晚一點重算（tasks/ai-cards-deepen.md §4）：作答、存檔會連續觸發，合成一次。 */
+  private refreshDeepen(delay = 1500): void {
+    if (!this.deepen) return;
+    if (this.deepenTimer !== null) window.clearTimeout(this.deepenTimer);
+    this.deepenTimer = window.setTimeout(() => { this.deepenTimer = null; void this.deepen?.refresh(); }, delay);
+  }
+
+  /** AI 輸出資料夾裡的快照（不含 `原文/`）：加深讀基準、改名時改連結共用；fresh 讀磁碟、不用快取。 */
+  private async deepenSnapshots(fresh = false): Promise<{ path: string; text: string }[]> {
+    const { vault } = this.app;
+    const files = vault.getMarkdownFiles().filter(file => file.path.startsWith(`${SNAPSHOT_FOLDER}/`) && !file.path.startsWith(`${SNAPSHOT_FOLDER}/原文/`));
+    const read = await Promise.all(files.map(file => (fresh ? vault.read(file) : vault.cachedRead(file)).then(text => ({ path: file.path, text }), () => null)));
+    return read.filter((each): each is { path: string; text: string } => each !== null);
+  }
+
+  /** 提醒一區的加深列按下去（§4-2 最後一點）：先重算，那一篇的情況變了就通知、重畫，不照舊的列做。 */
+  private async deepenAct(row: DeepenRow, action: 'deepen' | 'skip' | 'open' | 'cancel'): Promise<void> {
+    const deepen = this.deepen;
+    if (!deepen) return;
+    // 重算最多等一段時間（L2 R18）：讀取一直不回來時請家長等一下再按，不照舊的列做。
+    if (!await deepen.refreshForClick()) { new Notice('還在讀取筆記（可能正在從 iCloud 下載）；等一下再按'); return; }
+    const now = deepen.rows().find(each => each.path === row.path);
+    if (!now || now.kind !== row.kind) { new Notice('這一篇的情況已經變了，已經重新整理'); this.entry?.refresh(); return; }
+    if (action === 'skip') { await deepen.skip(row.path); return; }
+    if (action === 'cancel') {
+      const job = deepen.jobOf(row.path);
+      // 照取消的結果通知：正在寫的那一份取消不了（L2 R9）。
+      const result = job ? await deepen.cancel(job) : null;
+      new Notice(result?.kind === 'stop' ? result.message : '已取消這次加深');
+      this.entry?.refresh();
+      return;
+    }
+    if (action === 'open' && row.kind === 'pending') { this.openNote(row.path); return; }
+    this.entry?.close();
+    this.openDeepen?.(row.path);
+  }
+
   /** 狀態列（D-163 第 5 點）：只有電腦，內容只放在入口，這裡只是提示；沒有提醒時不顯示。 */
   private updateReminders(): void {
     if (!this.statusBar) return;
-    const { count } = reminderView(this.state, this.guard?.issues());
+    const { count } = reminderView(this.state, this.guard?.issues(), this.deepen?.rows());
     this.statusBar.style.display = count ? '' : 'none';
     this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
@@ -585,18 +701,18 @@ export default class EssenceCardsPlugin extends Plugin {
     try {
       this.register(files.watch(path => { if (isSettingsPath(path)) void this.store.reload(); }));
     } catch { /* 見上 */ }
-    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => [...this.ai?.reserved() ?? [], ...this.deepen?.reserved() ?? []], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); this.refreshDeepen(); });
     // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
-    this.state.onUnread(() => { this.updateReminders(); });
+    this.state.onUnread(() => { this.updateReminders(); this.refreshDeepen(); });
     this.entry?.refresh();
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，
     // tasks/error-log.md §2-3），停用不是故障，所以這裡只接住。
-    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.intro?.refresh(); this.updateReminders(); this.warnUpdate(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.intro?.refresh(); this.updateReminders(); this.warnUpdate(); this.refreshDeepen(0); }, () => {});
   }
 }

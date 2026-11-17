@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import { createRoot } from 'react-dom/client';
-import type { FolderActions } from '../review/index.ts';
+import type { DeepenActions, FolderActions } from '../review/index.ts';
 import type { DeckStatusValue, State, StudyPick } from '../state/index.ts';
 import { Entry, type EntryScreen } from './Entry.tsx';
 import { openFullscreen } from './fullscreen.ts';
@@ -19,6 +19,8 @@ export interface EntryOptions {
   reminders: boolean;
   /** 系統資料夾的防呆（tasks/system-folder-guard.md §2-4）：提醒一區列出搬錯位置的。 */
   folders?: FolderActions | null;
+  /** 加深的提醒（tasks/ai-cards-deepen.md §4）：只有電腦。 */
+  deepen?: DeepenActions | null;
   covered: () => boolean;
   /** 短暫的通知（Obsidian 的 Notice）。 */
   notify: (message: string) => void;
@@ -106,7 +108,7 @@ export function openEntry(options: EntryOptions): EntryHandle {
       from: () => origin,
     }}
     state={options.state} start={options.start} openNote={options.openNote} openSettings={options.openSettings}
-    close={() => { handle.close(); }} reminders={options.reminders} folders={options.folders ?? null} covered={options.covered} notify={options.notify} setDeckStatus={options.setDeckStatus}
+    close={() => { handle.close(); }} reminders={options.reminders} folders={options.folders ?? null} deepen={options.deepen ?? null} covered={options.covered} notify={options.notify} setDeckStatus={options.setDeckStatus}
     terms={{ get: () => loadTerms(options.app), set: terms => { saveTerms(options.app, terms); } }}
     quizMark={() => quizMark.get(options.app)}
   />);
