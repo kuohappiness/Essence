@@ -141,9 +141,10 @@ const INPUT: DeepenInput = {
   siblings: [{ id: 'abc555', name: '別篇的目標' }],
   map: { whole: '全貌原文', structure: '架構原文' },
   gone: [{ id: 'abc666', name: '沒採用的' }],
+  words: null,
 };
 
-void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其他篇、以前出過的、地圖原文；版號 加深 v1', () => {
+void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其他篇、以前出過的、地圖原文；版號 加深 v2', () => {
   const task = deepenTask(INPUT);
   for (const line of ['  - abc222 能說明溶解｜記穩了｜第一題：Q :: A', '  - abc333 能比較｜常錯', '  - abc444 能算｜還沒記穩', '  - abc555 別篇的目標', '  - abc666 沒採用的', '- 家長調整：這次不要課外', '<<<全貌>>>', '全貌原文', '架構原文']) {
     assert.ok(task.split('\n').includes(line), line);
@@ -154,7 +155,18 @@ void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其
   const none = deepenTask({ ...INPUT, map: null, siblings: [], gone: [] });
   assert.match(none, /最新的學習地圖：無。請先依教材補一份全貌與架構/);
   const prompt = buildDeepenPrompt(INPUT, []);
-  assert.equal(prompt.parts.at(-1)?.version, '加深 v1');
+  assert.equal(prompt.parts.at(-1)?.version, '加深 v2');
+});
+
+void test('D-210 第 3 點：加深也帶點選填空的勾選與英文的已有單字', () => {
+  const on = deepenTask({ ...INPUT, form: { ...INPUT.form, pick: true }, words: ['borrow', 'light'] }).split('\n');
+  assert.equal(on[on.indexOf('- 家長調整：這次不要課外') - 1], '- 點選填空：要');
+  assert.equal(on[on.indexOf('  - abc666 沒採用的') + 1], '- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：borrow、light');
+  assert.ok(on.some(line => line.startsWith('- 家長勾了點選填空：')));
+  const off = deepenTask(INPUT).split('\n');
+  assert.ok(off.includes('- 點選填空：不要'));
+  assert.ok(off.some(line => line.startsWith('- 家長沒勾點選填空：')));
+  assert.ok(!off.some(line => line.includes('英文單字')));
 });
 
 const m = (entries: [string, Mastery][]): Map<string, Mastery> => new Map(entries);

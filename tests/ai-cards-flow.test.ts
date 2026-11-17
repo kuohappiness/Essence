@@ -23,7 +23,7 @@ const WORD = 'Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md
 
 /** 這台電腦的存放（localStorage 的替身）與一次載入（state＋製卡流程）；reload 是重開 Obsidian。 */
 function machine() {
-  const saved: { jobs: unknown; retired: string[]; last: { subject?: string; term?: string } } = { jobs: null, retired: [], last: {} };
+  const saved: { jobs: unknown; retired: string[]; last: { subject?: string; term?: string }; picks: Record<string, boolean> } = { jobs: null, retired: [], last: {}, picks: {} };
   const store = {
     jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
     saveJobs(jobs: CardJob[]) { saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
@@ -31,6 +31,8 @@ function machine() {
     retire(ids: readonly string[]) { saved.retired = [...new Set([...saved.retired, ...ids])]; },
     last: () => saved.last,
     saveLast(last: { subject: string; term: string }) { saved.last = last; },
+    picks: () => saved.picks,
+    savePick(key: string, pick: boolean) { saved.picks = { ...saved.picks, [key]: pick }; },
   };
   return { saved, store };
 }
@@ -65,6 +67,10 @@ void test('§2～§5 複製 → 貼回 → 存成草稿：提示照存下的、�
   assert.equal(clipboard[0], copied.job.parts.map(part => part.text).join('\n\n'));
   assert.ok(clipboard[0].includes('  - k3m9qa hello 英翻中｜國二上 L1 p.10'));
   assert.deepEqual(box.saved.last, { subject: 'english', term: '國二上' });
+  // D-210：英文送已有的單字；表單沒有 pick（舊的寫法）當成沒勾，複製成功才記住。
+  assert.ok(clipboard[0].includes('- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：hello'));
+  assert.ok(clipboard[0].includes('- 點選填空：不要'));
+  assert.deepEqual(box.saved.picks, { english: false });
   assert.equal(cards.jobs().length, 1);
   const inspection = cards.inspect(copied.job, reply());
   assert.ok(!('error' in inspection));
@@ -628,4 +634,22 @@ void test('§5 寫到一半失敗 → 重新載入：預留的 ID 補 ID 與另�
   assert.deepEqual(second.cards.jobs(), []);
   // 不再配出：清單裡的 ID 照樣是預留。
   assert.deepEqual(second.cards.reserved(), box.saved.retired);
+});
+
+void test('§2-1 點選填空：沒記過照規則表的預設，複製成功才記；別科不受影響', async t => {
+  const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const box = machine();
+  const { cards, clipboard } = await load(t, memory, box, Math.random);
+  assert.deepEqual(['chinese', 'english', 'science', 'general', 'social'].map(key => cards.pick(key)), [true, true, false, false, false]);
+  const copied = await cards.copy({ ...form, pick: false });
+  assert.ok('job' in copied);
+  assert.ok(clipboard[0].includes('- 點選填空：不要'));
+  assert.deepEqual([cards.pick('english'), cards.pick('chinese')], [false, true]);
+  // 沒有規則的科目複製失敗，不記。
+  assert.ok('error' in await cards.copy({ ...form, subject: 'science', pick: true }));
+  assert.deepEqual(box.saved.picks, { english: false });
+  const again = await cards.copy({ ...form, pick: true });
+  assert.ok('job' in again);
+  assert.ok(clipboard[1].includes('- 家長勾了點選填空：'));
+  assert.equal(cards.pick('english'), true);
 });

@@ -2,7 +2,7 @@ import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
 import { freeName, groupHints, issueText, PURPOSES } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
-import { SERVICES } from './ai-cards.ts';
+import { PICK_NOTE, SERVICES } from './ai-cards.ts';
 import type { AiCards, Outcome } from './ai-cards.ts';
 
 // AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：電腦才有（D-039：手機上不製卡），入口與目錄不放（D-100）。
@@ -100,7 +100,7 @@ class AiCardsModal extends Modal {
     if (!cards) { this.close(); return; }
     const last = cards.last();
     const first = cards.subjects.find(each => each.key === last.subject) ?? cards.subjects[0];
-    const form: CardForm = this.form ?? { subject: first.key, term: last.term ?? cards.terms(first.key)[0], unit: '', purpose: '準備段考', supplement: first.supplement, adjust: '', material: '' };
+    const form: CardForm = this.form ?? { subject: first.key, term: last.term ?? cards.terms(first.key)[0], unit: '', purpose: '準備段考', supplement: first.supplement, pick: cards.pick(first.key), adjust: '', material: '' };
     this.form = form;
     const el = this.reset();
     const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
@@ -122,6 +122,11 @@ class AiCardsModal extends Modal {
     purpose.value = form.purpose;
     const supplement = field('允許 AI 補充').createEl('input', { type: 'checkbox' });
     supplement.checked = form.supplement;
+    // 點選填空（D-182、D-210）：勾選旁邊附一句說明。
+    const pickCell = field('點選填空');
+    const pick = pickCell.createEl('input', { type: 'checkbox' });
+    pick.checked = form.pick === true;
+    pickCell.createSpan({ text: PICK_NOTE, cls: 'essence-cards-ai-pick-note' });
     const adjust = field('這次的調整').createEl('input', { type: 'text', placeholder: '選填，例如「這次最多 8 個目標」' });
     adjust.value = form.adjust;
     const material = field('教材').createEl('input', { type: 'text', placeholder: '選填，例如「課本 p.40～51 的照片」' });
@@ -144,6 +149,8 @@ class AiCardsModal extends Modal {
       form.subject = subject.value;
       form.supplement = cards.subjects.find(each => each.key === form.subject)?.supplement ?? false;
       supplement.checked = form.supplement;
+      form.pick = cards.pick(form.subject);
+      pick.checked = form.pick;
       fillTerms();
       refresh();
     });
@@ -151,6 +158,7 @@ class AiCardsModal extends Modal {
     unit.addEventListener('input', () => { form.unit = unit.value; refresh(); });
     purpose.addEventListener('change', () => { form.purpose = purpose.value as Purpose; });
     supplement.addEventListener('change', () => { form.supplement = supplement.checked; });
+    pick.addEventListener('change', () => { form.pick = pick.checked; });
     adjust.addEventListener('input', () => { form.adjust = adjust.value; });
     material.addEventListener('input', () => { form.material = material.value; });
     copy.addEventListener('click', () => {

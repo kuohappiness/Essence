@@ -1101,7 +1101,7 @@ async function aiCards(f: Fake, guard: FolderGuard, t: TestContext, box = { jobs
     store: {
       jobs: () => box.jobs,
       saveJobs(next: CardJob[]) { if (box.failDrop && !next.some(each => each.save)) throw Error('存不進去'); box.jobs = JSON.parse(JSON.stringify(next)) as unknown; },
-      retired: () => [], retire() {}, last: () => ({}), saveLast() {},
+      retired: () => [], retire() {}, last: () => ({}), saveLast() {}, picks: () => ({}), savePick() {},
     },
     clipboard: () => Promise.resolve(),
     now: () => ({ ms: Date.parse('2026-11-07T10:02:11+08:00'), offset: 480 }),

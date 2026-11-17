@@ -1,4 +1,4 @@
-import { mentions } from './question-types.ts';
+import { mentions, unbold } from './question-types.ts';
 import type { Target } from './types.ts';
 
 /**
@@ -7,8 +7,20 @@ import type { Target } from './types.ts';
  */
 export function baseForm(target: Target): string | null {
   if (target.direction !== 'zh-en' || target.pairKey === null) return null;
-  const name = target.pairKey;
-  return name.replace(/\s*（[^（）]*）\s*$/, '').trim() || null;
+  return withoutMeaning(target.pairKey);
+}
+
+/** 去掉最後一組全形括號與它前後的空白（D-125 的第二個意思）；名稱中間的全形括號不動。剩下空的是 null。 */
+const withoutMeaning = (name: string): string | null => name.replace(/\s*（[^（）]*）\s*$/, '').trim() || null;
+
+/**
+ * 已學過的字（D-125、D-210 第 4 點、tasks/ai-cards-materials.md §1-1）：英翻中、中翻英是名稱去掉方向、再去掉最後一組全形括號（同 baseForm）；
+ * 不規則變化是變化的字（`lie（躺） 過去式` → lie）。文法、排序、比較與其他目標是 null。
+ * 先去掉成對的粗體與螢光筆再去義項（L2 第一輪 R3：`**light（輕的）** 英翻中` → light，只剩義項的是 null）；baseForm 不動。
+ */
+export function learnedWord(target: Target): string | null {
+  if (target.direction !== null && target.pairKey !== null) return withoutMeaning(unbold(target.pairKey));
+  return target.typing?.kind === 'inflection' ? target.typing.hint : null;
 }
 
 /**

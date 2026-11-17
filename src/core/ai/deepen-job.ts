@@ -66,7 +66,7 @@ export function isDeepenJob(value: unknown): value is DeepenJob {
   if (!isObject(value) || value.kind !== 'deepen') return false;
   const form = value.form, subject = value.subject;
   return isString(value.id) && isString(value.copiedAt) && typeof value.copiedMs === 'number' && Number.isFinite(value.copiedMs) && isString(value.deck) && strings(value.ids) && isString(value.baseSha)
-    && isObject(form) && isString(form.subject) && isString(form.term) && isString(form.unit) && PURPOSES.includes(form.purpose as CardForm['purpose']) && typeof form.supplement === 'boolean' && isString(form.adjust) && isString(form.material)
+    && isObject(form) && isString(form.subject) && isString(form.term) && isString(form.unit) && PURPOSES.includes(form.purpose as CardForm['purpose']) && typeof form.supplement === 'boolean' && (form.pick === undefined || typeof form.pick === 'boolean') && isString(form.adjust) && isString(form.material)
     && isObject(subject) && isString(subject.key) && isString(subject.label) && (subject.subject === null || isString(subject.subject)) && isBool(subject.r3)
     && Array.isArray(value.parts) && value.parts.length > 0 && value.parts.every(part => isObject(part) && isString(part.name) && isString(part.version) && isString(part.text) && isString(part.sha256))
     && isString(value.promptSha) && strings(value.stable) && typeof value.sent === 'number' && (value.save === null || isSave(value.save));

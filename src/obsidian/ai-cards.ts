@@ -7,6 +7,8 @@ import type { State, WriteBlock } from '../state/index.ts';
 
 /** 目錄認得的年級學期（syntax §2-1）：小一上～高三下。 */
 const TERMS: readonly string[] = ['小', '國', '高'].flatMap((stage, s) => (s === 0 ? '一二三四五六' : '一二三').split('').flatMap(grade => [`${stage}${grade}上`, `${stage}${grade}下`]));
+/** 點選填空勾選旁邊的一句說明（D-182 第 1 點）：製卡與加深的畫面共用。 */
+export const PICK_NOTE = '容易混淆的字或觀念，出成看整組、點一個填進句子的比較題';
 export const SERVICES = ['ChatGPT', 'Claude', 'Gemini', '其他'] as const;
 
 export interface AiCardsDeps {
@@ -18,7 +20,9 @@ export interface AiCardsDeps {
   /** 整個 vault 裡叫這個檔名（小寫、不含 .md）的 Markdown 路徑。 */
   named: (name: string) => string[];
   /** 這台電腦的存放（ui/prefs.ts 的 aiPrefs）。saveJobs 存不進去時丟錯。 */
-  store: { jobs(): unknown; saveJobs(jobs: CardJob[]): void; retired(): string[]; retire(ids: readonly string[]): void; last(): { subject?: string; term?: string }; saveLast(last: { subject: string; term: string }): void };
+  store: { jobs(): unknown; saveJobs(jobs: CardJob[]): void; retired(): string[]; retire(ids: readonly string[]): void; last(): { subject?: string; term?: string }; saveLast(last: { subject: string; term: string }): void;
+    /** 點選填空每一科上次的選擇（D-210 第 2 點）。 */
+    picks(): Record<string, boolean>; savePick(key: string, pick: boolean): void };
   clipboard: (text: string) => Promise<void>;
   now: () => { ms: number; offset: number };
   random?: () => number;
@@ -134,6 +138,8 @@ export function createAiCards(deps: AiCardsDeps) {
     /** 這台電腦預留、不能配出的 ID（§5〈ID 的預留〉）：state 每次配號時問。 */
     reserved: (): string[] => [...reservedIds(jobs), ...deps.store.retired()],
     last: () => deps.store.last(),
+    /** 這一科點選填空的預設：這台電腦上次複製時的選擇，沒有記過照規則表（D-210 第 2 點）。 */
+    pick: (key: string): boolean => deps.store.picks()[key] ?? RULE_SUBJECTS.find(each => each.key === key)?.pick ?? false,
     /** 年級學期的選項：這一科已有卡組的排前面（§2）。 */
     terms(key: string): string[] {
       const subject = subjects.find(each => each.key === key)?.subject;
@@ -163,7 +169,8 @@ export function createAiCards(deps: AiCardsDeps) {
       if (!state || state.writeBlock() === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
-      const prompt = buildPrompt(form, subject, deps.rules[subject.key], existing);
+      const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
+      const prompt = buildPrompt(form, subject, deps.rules[subject.key], existing, words);
       const at = deps.now();
       const job: CardJob = {
         id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }),
@@ -172,6 +179,7 @@ export function createAiCards(deps: AiCardsDeps) {
       };
       try { put(job); } catch (error) { deps.onError(error); return { error: '存不進這台電腦，這次沒有複製；請再按一次' }; }
       deps.store.saveLast({ subject: subject.key, term: form.term });
+      deps.store.savePick(subject.key, form.pick === true);
       try { await deps.clipboard(prompt.text); } catch (error) { deps.onError(error); return { error: '放不進剪貼簿；請再按一次' }; }
       return { job, chars: prompt.text.length };
     },

@@ -1,7 +1,7 @@
 export { fieldStart, frontmatterLines, parseDeck, readProperties } from './parse.ts';
-export { blanksIn, pickWord } from './question-types.ts';
+export { blanksIn, pickKey, pickWord } from './question-types.ts';
 export { markNeed } from './need.ts';
-export { baseForm, typedHint } from './base-form.ts';
+export { baseForm, learnedWord, typedHint } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';
 export { setTargetId, blockIds } from './ids.ts';
 export { setDeckStatus } from './status.ts';

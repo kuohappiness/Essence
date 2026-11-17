@@ -30,7 +30,7 @@ export function typedAnswer(answer: string, label = '中翻英'): TypedAnswer {
 const foldWidth = (text: string): string => text.replace(/[！-～]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xFEE0));
 
 /** 比對答案、組員與組的身分用的寫法：去掉成對的 `**`、`==` 與前後空白，連續空白（含全形）當一個，英文不分大小寫。字鍵照括號裡寫的顯示。 */
-function pickKey(text: string): string {
+export function pickKey(text: string): string {
   const bare = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
   return foldWidth(bare).replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -172,7 +172,7 @@ const INFLECTIONS: ReadonlySet<string> = new Set(['過去式', '過去分詞', '
 /**
  * 去掉成對的 `**` 與 `==`（名稱的粗體、螢光筆，§1-1：只為了認結尾與拆字義，名稱本身不改）。變化與英翻中都先做這一步再拆括號（L2 R7）。
  */
-const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
+export const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
 
 /** 最後一組成對的括號（全半形都算，左右可以不同）與它前面的字；沒有是 null。 */
 function lastBracket(text: string): { before: string; inner: string } | null {

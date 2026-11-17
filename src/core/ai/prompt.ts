@@ -1,15 +1,15 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { compareCode, compareTerm } from '../catalog/index.ts';
-import type { Deck, Prompt as DeckPrompt } from '../deck/index.ts';
-import { termKey, termRank } from '../deck/index.ts';
+import type { Deck, Prompt as DeckPrompt, Target } from '../deck/index.ts';
+import { learnedWord, pickKey, termKey, termRank } from '../deck/index.ts';
 import { formatTime } from '../study/index.ts';
 import type { EmbeddedRule, RuleSubject } from './rules.ts';
 
 // 提示的組成（tasks/ai-cards-mvp.md §3）：規則組的每一份 → 任務段，照順序、中間空一行接起來；每一部分與整份提示各算 SHA-256。
 
 /** §3 的任務段與附加說明的版號：改字就加一（§1〈提示模板的版本〉）。 */
-const PROMPT_VERSION = '提示 v3';
+const PROMPT_VERSION = '提示 v4';
 export const PURPOSES = ['準備段考', '準備小考', '平常複習'] as const;
 export type Purpose = (typeof PURPOSES)[number];
 
@@ -20,6 +20,11 @@ export interface CardForm {
   unit: string;
   purpose: Purpose;
   supplement: boolean;
+  /**
+   * 點選填空（D-182、D-192、D-210）：要不要把容易混淆的比較題寫成點選填空。`提示 v4` 之前存的工作沒有這一欄（tasks/ai-cards-materials.md §2-3），
+   * 複製之後就用不到。
+   */
+  pick?: boolean;
   /** 這次的調整：寫進任務資料的「家長調整」；空的寫「無」。 */
   adjust: string;
   /** 教材：家長自己的說明，寫進任務資料與快照；程式沒有看過教材。 */
@@ -72,6 +77,15 @@ export function titlePrefix(form: Pick<CardForm, 'term' | 'unit'>, subject: Pick
  * 一般知識（subject 是 null）：不是學業卡組的卡組裡的目標。
  */
 export function existingTargets(decks: readonly { path: string; deck: Deck }[], subject: string | null, term: string, skip: ReadonlySet<string> = new Set()): ExistingTarget[] {
+  return existingDecks(decks, subject, term).flatMap(({ path, deck: { props, targets } }) => usable(targets, skip).map(t => {
+    const where = [props.term, props.unit?.code, t.fields.sources.join('、')].filter(Boolean).join(' ');
+    const first = t.prompts.at(0);
+    return { id: t.id!, name: t.name, source: where, path, ...first ? { first: firstLine(first) } : {} };
+  }));
+}
+
+/** existingTargets 與 learnedWords 共用的卡組篩選與排序（tasks/ai-cards-materials.md §1-2）。 */
+function existingDecks<T extends { path: string; deck: Deck }>(decks: readonly T[], subject: string | null, term: string): T[] {
   const mine = termKey(term.trim()), rank = termRank(mine);
   const before = (other: string): boolean => {
     const key = termKey(other.trim()), at = termRank(key);
@@ -80,13 +94,27 @@ export function existingTargets(decks: readonly { path: string; deck: Deck }[], 
   const chosen = decks.filter(({ deck: { props } }) => props.status !== 'draft' && !props.isTranscript && (subject === null
     ? props.subject === null && props.term === null
     : props.subject?.trim() === subject && props.term !== null && before(props.term)));
-  const sorted = [...chosen].sort((a, b) => compareTerm(a.deck.props.term ?? '', b.deck.props.term ?? '')
+  return [...chosen].sort((a, b) => compareTerm(a.deck.props.term ?? '', b.deck.props.term ?? '')
     || compareCode(a.deck.props.unit?.code ?? '', b.deck.props.unit?.code ?? '') || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return sorted.flatMap(({ path, deck: { props, targets } }) => targets.filter(t => t.id !== null && t.ok && !skip.has(t.id)).map(t => {
-    const where = [props.term, props.unit?.code, t.fields.sources.join('、')].filter(Boolean).join(' ');
-    const first = t.prompts.at(0);
-    return { id: t.id!, name: t.name, source: where, path, ...first ? { first: firstLine(first) } : {} };
-  }));
+}
+/** 會送出的目標：有 ID、讀得懂、不是不能用的 ID。 */
+const usable = (targets: readonly Target[], skip: ReadonlySet<string>): Target[] => targets.filter(t => t.id !== null && t.ok && !skip.has(t.id));
+
+/**
+ * 孩子已有的英文單字（D-193 第 10 點、D-210 第 4 點、tasks/ai-cards-materials.md §1）：和 existingTargets 同一批目標，取 learnedWord；
+ * 同一個字（pickKey：大小寫、全半形、連續空白不分）只列一次，照第一次出現的寫法與位置。
+ */
+export function learnedWords(decks: readonly { path: string; deck: Deck }[], subject: string, term: string, skip: ReadonlySet<string> = new Set()): string[] {
+  const seen = new Set<string>(), words: string[] = [];
+  for (const { deck } of existingDecks(decks, subject, term)) {
+    for (const target of usable(deck.targets, skip)) {
+      const word = learnedWord(target);
+      if (word === null || seen.has(pickKey(word))) continue;
+      seen.add(pickKey(word));
+      words.push(word);
+    }
+  }
+  return words;
 }
 
 /**
@@ -118,8 +146,34 @@ function existingRules(r3: boolean): string[] {
   ];
 }
 
-/** 任務段（§3）：`## 這一次的任務`、任務資料、附加說明。 */
-export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, existing: readonly ExistingTarget[]): string {
+/** 任務資料裡點選填空那一行（D-210 第 1 點）：沒有這一欄當成沒勾。 */
+export const pickLine = (pick: boolean | undefined): string => `- 點選填空：${pick === true ? '要' : '不要'}`;
+
+/** 英文的已有單字那一行（D-210 第 4 點、tasks/ai-cards-materials.md §1-3）；不是英文是 null。 */
+export function wordsLine(words: readonly string[] | null): string[] {
+  if (words === null) return [];
+  return [`- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：${words.length ? words.join('、') : '無'}`];
+}
+
+/** 點選填空的規則（D-210 第 1 點、tasks/ai-cards-materials.md §3）：製卡與加深共用，寫在「另外」底下。 */
+export function pickRules(pick: boolean | undefined): string[] {
+  if (pick !== true) {
+    return [
+      // L2 第一輪 R1：名稱結尾單獨寫「比較」「相似字」又沒有括號的組，貼回時會被當成沒寫好的點選填空擋下。R2：排序照 D-187 第 8 點不做。
+      '- 家長沒勾點選填空：比較題寫成一般的問答題，名稱不要寫括號的組，最後也不要單獨寫「比較」或「相似字」（程式會當成沒寫好的點選填空，擋下存檔），例如 `質量和重量的差別`、`寨 辨字`。排序的題型（例如英文的排序、國語的全詩順序卡）不做。',
+    ];
+  }
+  return [
+    '- 家長勾了點選填空：容易混淆的一組字、詞或觀念（說得出這一課容易錯在哪），寫成點選填空的比較：',
+    '  - 組裡每一個一個學習目標，名稱寫 `<這一個>（<整組，用頓號隔開>） 比較`，例如 `borrow（borrow、lend） 比較`、`質量（質量、重量） 比較`；國語的相似字結尾寫「相似字」。',
+    '  - 題目是一句話，要考的那一個寫成 ＿＿，答案只有組裡的那一個；每一個至少兩句，只有兩個的組至少三句。試填組裡的每一個，有兩個說得通就改句子。',
+    '  - 每一個都寫分辨的線索，放在自己目標底下的記憶錨點。',
+    '  - 規則寫得更細的（例如英文介系詞的組用整個片語當名稱）照規則。',
+  ];
+}
+
+/** 任務段（§3）：`## 這一次的任務`、任務資料、附加說明。words：英文的已有單字（learnedWords），其他科是 null。 */
+export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, existing: readonly ExistingTarget[], words: readonly string[] | null = null): string {
   const prefix = titlePrefix(form, subject);
   const lines = [
     '## 這一次的任務',
@@ -129,14 +183,17 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
     `- 單元：${form.unit.trim()}`,
     `- 學習目的：${form.purpose}`,
     `- 允許 AI 補充：${form.supplement ? '是' : '否'}`,
+    pickLine(form.pick),
     `- 家長調整：${form.adjust.trim() || '無'}`,
     `- 教材：${form.material.trim() ? `附件（${form.material.trim()}）` : '附件的課本頁面'}`,
     existing.length ? '- 學生已有的學習目標：' : '- 學生已有的學習目標：無',
     ...existing.map(each => `  - ${each.id} ${each.name}｜${each.source}${each.first === undefined ? '' : `｜第一題：${each.first}`}`),
+    ...wordsLine(words),
     '',
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
+    ...pickRules(form.pick),
     ...existing.length ? existingRules(subject.r3) : [],
     ...prefix === null ? [] : [`- 一課分成幾篇時，篇名照 \`${prefix} <篇名>\` 寫${subject.subject === '英文' ? `，例如 \`${prefix} 單字\`` : ''}，單獨一行、前面不加 \`#\`。`],
     '- 不要寫學習目標 ID 與屬性區，程式會加。',
@@ -149,8 +206,8 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
 }
 
 /** 整份提示：規則組照順序，最後是任務段；部分之間空一行。 */
-export function buildPrompt(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, rules: readonly EmbeddedRule[], existing: readonly ExistingTarget[]): Prompt {
-  const task = taskSection(form, subject, existing);
+export function buildPrompt(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, rules: readonly EmbeddedRule[], existing: readonly ExistingTarget[], words: readonly string[] | null = null): Prompt {
+  const task = taskSection(form, subject, existing, words);
   const parts: SentPart[] = [
     ...rules.map(rule => ({ name: rule.name, version: rule.version, text: rule.text, sha256: rule.sha256 })),
     { name: '任務段', version: PROMPT_VERSION, text: task, sha256: sha256Hex(task) },

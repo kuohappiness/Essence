@@ -1,20 +1,20 @@
 import type { Mastery } from '../study/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { codeKey, termKey } from '../deck/index.ts';
-import { firstLine, sha256Hex, studentOf } from './prompt.ts';
+import { firstLine, pickLine, pickRules, sha256Hex, studentOf, wordsLine } from './prompt.ts';
 import type { CardForm, Prompt, SentPart } from './prompt.ts';
 import type { EmbeddedRule, RuleSubject } from './rules.ts';
 
-// 加深的任務段（tasks/ai-cards-deepen.md §2-2）：版號 `加深 v1`，和製卡的 `提示 v3` 分開記。規則組照這一篇的科目送（同最小版）。
+// 加深的任務段（tasks/ai-cards-deepen.md §2-2）：版號 `加深 v2`（第 3 批加點選填空與英文單字，D-210），和製卡的 `提示 v3` 分開記。規則組照這一篇的科目送（同最小版）。
 
 /** 任務段的版號：改字就加一。 */
-const DEEPEN_VERSION = '加深 v1';
+const DEEPEN_VERSION = '加深 v2';
 
 /** 這一篇的一個學習目標：ID、名稱、記穩了的判斷（§2-1）與第一題（寫法同 `提示 v3`）。 */
 interface DeepenTarget { id: string; name: string; mastery: Mastery; first?: string }
 
 export interface DeepenInput {
-  form: Pick<CardForm, 'term' | 'unit' | 'purpose' | 'adjust' | 'material'>;
+  form: Pick<CardForm, 'term' | 'unit' | 'purpose' | 'adjust' | 'material' | 'pick'>;
   subject: Pick<RuleSubject, 'subject' | 'r3'>;
   targets: readonly DeepenTarget[];
   /** 同單元的其他篇的目標（D-190 第 4 點）：只用來去重。 */
@@ -23,6 +23,8 @@ export interface DeepenInput {
   map: { whole: string; structure: string } | null;
   /** 以前出過、現在不在這一篇的目標（goneTargets）。 */
   gone: readonly { id: string; name: string }[];
+  /** 英文的已有單字（D-210 第 3、4 點）；其他科是 null。 */
+  words: readonly string[] | null;
 }
 
 /** 這一篇送出的目標（§2-1）：有 ID、讀得懂的正式目標，照檔裡的順序；同一個 ID 只列一次。 */
@@ -78,6 +80,7 @@ export function deepenTask(input: DeepenInput): string {
     `- 科目：${subject.subject ?? '一般知識'}`,
     `- 單元：${form.unit.trim()}`,
     `- 學習目的：${form.purpose}`,
+    pickLine(form.pick),
     `- 家長調整：${form.adjust.trim() || '無'}`,
     `- 教材：${form.material.trim() ? `附件（${form.material.trim()}）` : '附件的課本頁面'}`,
     '- 這一篇的學習目標（`ID 名稱｜記穩了／常錯／還沒記穩｜第一題`）：',
@@ -86,6 +89,7 @@ export function deepenTask(input: DeepenInput): string {
     ...input.siblings.map(each => `  - ${each.id} ${each.name}`),
     input.gone.length ? '- 以前出過、現在不在這一篇（家長沒採用、刪掉或搬走），不要再出：' : '- 以前出過、現在不在這一篇的：無',
     ...input.gone.map(each => `  - ${each.id} ${each.name}`),
+    ...wordsLine(input.words),
     '',
     ...input.map
       ? ['最新的學習地圖（上一次的全貌與架構，照原文）：', '', '<<<全貌>>>', input.map.whole, '', '<<<架構>>>', input.map.structure, '']
@@ -94,6 +98,7 @@ export function deepenTask(input: DeepenInput): string {
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
+    ...pickRules(form.pick),
     '- 提到已有的學習目標一律用上面清單的 ID，不要自己編；不要寫新的學習目標 ID 與屬性區，程式會加。',
     ...subject.r3 ? ['- 照規則交三段，標記照抄（`<<<全貌>>>`、`<<<架構>>>`、`<<<卡組>>>`）；卡組段沒有新的內容時可以只寫給家長的備註。'] : [],
     '- 回覆的最後單獨一行寫 `<<<完>>>`。',

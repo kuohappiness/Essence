@@ -27,6 +27,8 @@ export interface DeepenDeps {
     skips(): unknown; saveSkips(value: Record<string, { ids: string[]; at: string }>): void;
     /** 總開關（§5-2）：關掉時提醒一區不出現加深的列。 */
     remindOff(): boolean;
+    /** 點選填空每一科上次的選擇（D-210 第 2、3 點）：和製卡共用同一份。 */
+    picks(): Record<string, boolean>; savePick(key: string, pick: boolean): void;
   };
   /** 這一篇最新的全文（待審核用，§4-3）；讀不到是 null。 */
   read: (path: string) => Promise<string | null>;
@@ -155,6 +157,9 @@ export function createDeepen(deps: DeepenDeps) {
     return ownSnapshots(list, path, new Set(deck.targets.flatMap(t => t.id ?? [])), resolve);
   }
 
+  /** 這一科點選填空的預設（D-210 第 3 點）：這台電腦上次的選擇，沒有記過照規則表。 */
+  const pickFor = (key: string): boolean => deps.store.picks()[key] ?? RULE_SUBJECTS.find(each => each.key === key)?.pick ?? false;
+
   /**
    * 學習目的（§2-2、L2 R8）：這一篇或它的單元有今天以後的小考是準備小考；在生效的考試範圍裡是準備段考；其餘平常複習。
    * 兩個都有時寫小考：日期通常比較近、範圍比較窄。沿用小考與考試範圍的讀取結果，不另存日期。
@@ -172,13 +177,14 @@ export function createDeepen(deps: DeepenDeps) {
     return exam.path !== null && exam.usable && exam.file !== null && deckInScope(exam.file, deck) ? '準備段考' : '平常複習';
   }
 
-  function formOf(deck: Deck, path: string, direction: string, material: string): { form: CardForm; key: string } | null {
+
+  function formOf(deck: Deck, path: string, direction: string, material: string, pick: boolean | undefined): { form: CardForm; key: string } | null {
     const subject = RULE_SUBJECTS.find(each => each.subject === deck.props.subject && deps.rules[each.key]?.length);
     if (!subject) return null;
     const { term, unit } = deck.props;
     return {
       key: subject.key,
-      form: { subject: subject.key, term: term ?? '', unit: unit ? `${unit.code} ${unit.name}`.trim() : fileName(path), purpose: purposeOf(path, deck), supplement: subject.supplement, adjust: direction.trim(), material: material.trim() },
+      form: { subject: subject.key, term: term ?? '', unit: unit ? `${unit.code} ${unit.name}`.trim() : fileName(path), purpose: purposeOf(path, deck), supplement: subject.supplement, pick: pick ?? pickFor(subject.key), adjust: direction.trim(), material: material.trim() },
     };
   }
 
@@ -309,11 +315,18 @@ export function createDeepen(deps: DeepenDeps) {
     /** 貼回後配好、還沒寫完的 ID：state 配號時避開（同製卡的預留）。 */
     reserved: (): string[] => jobs.flatMap(job => job.save?.ids ?? []),
     /** 複製提示（§1 第 2 點）：組提示、存成待貼回的工作（同一篇舊的那份換掉），再放進剪貼簿。 */
-    async copy(path: string, direction: string, material: string): Promise<{ job: DeepenJob; chars: number } | { error: string }> {
+    /** 加深畫面的點選填空預設勾不勾（D-210 第 3 點）；這一科沒有規則時是 false。 */
+    pick(path: string): boolean {
+      const deck = deps.state()?.decks().find(each => each.path === path)?.deck;
+      const subject = deck && RULE_SUBJECTS.find(each => each.subject === deck.props.subject && deps.rules[each.key]?.length);
+      return subject ? pickFor(subject.key) : false;
+    },
+    /** pick：這次勾不勾點選填空；沒給照 pick(path)。 */
+    async copy(path: string, direction: string, material: string, pick?: boolean): Promise<{ job: DeepenJob; chars: number } | { error: string }> {
       const now = ready(path);
       if (!now.ok) return { error: now.why };
       const state = deps.state()!;
-      const made = formOf(now.deck, path, direction, material);
+      const made = formOf(now.deck, path, direction, material, pick);
       if (!made) return { error: '這一科還沒有規則，不能加深' };
       const subject = RULE_SUBJECTS.find(each => each.key === made.key)!;
       let text: string | null;
@@ -325,13 +338,15 @@ export function createDeepen(deps: DeepenDeps) {
       const ids = new Set(now.deck.targets.flatMap(t => t.id ?? []));
       const map = latestMap(snapshots, at.ms)?.map ?? null;
       const targets = deepenTargets(now.deck, now.mastery);
-      const prompt = buildDeepenPrompt({ form: made.form, subject, targets, siblings: unitSiblings(state.decks(), path, now.deck), map, gone: goneTargets(snapshots, ids) }, deps.rules[made.key]);
+      const prompt = buildDeepenPrompt({ form: made.form, subject, targets, siblings: unitSiblings(state.decks(), path, now.deck), map, gone: goneTargets(snapshots, ids),
+        words: subject.subject === '英文' ? state.aiWords(subject.subject, made.form.term) : null }, deps.rules[made.key]);
       const job: DeepenJob = {
         kind: 'deepen', id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }), copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms,
         deck: path, ids: [...ids], baseSha: sha256Hex(text), form: made.form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
         parts: prompt.parts, promptSha: prompt.sha256, stable: targets.filter(t => t.mastery === 'stable').map(t => t.id).sort(), sent: targets.length, save: null,
       };
       try { put(job); } catch (error) { deps.onError(error); return { error: '存不進這台電腦，這次沒有複製；請再按一次' }; }
+      deps.store.savePick(subject.key, made.form.pick === true);
       try { await deps.clipboard(prompt.text); } catch (error) { deps.onError(error); return { error: '放不進剪貼簿；請再按一次' }; }
       return { job, chars: prompt.text.length };
     },

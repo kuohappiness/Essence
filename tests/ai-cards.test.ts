@@ -17,12 +17,12 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
   const rules = [rule('通用', 'v0.15', '# 通用'), rule('英文', 'v0.14', '# 英文')];
   const english = subject('english');
   const existing: ExistingTarget[] = [{ id: 'k3m9qa', name: 'borrow 英翻中', source: '國二上 L1 p.12', path: 'Essence Cards/學業/國二上/英文/L1.md', first: 'borrow :: 借入' }];
-  const a =buildPrompt(form({ subject: 'english', unit: 'L3 Sports' }), english, rules, existing);
-  const b = buildPrompt(form({ subject: 'english', unit: 'L3 Sports' }), english, rules, existing);
+  const a =buildPrompt(form({ subject: 'english', unit: 'L3 Sports', pick: true }), english, rules, existing, ['borrow']);
+  const b = buildPrompt(form({ subject: 'english', unit: 'L3 Sports', pick: true }), english, rules, existing, ['borrow']);
   assert.equal(a.text, b.text);
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.sha256, sha256Hex(a.text));
-  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v3']);
+  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v4']);
   assert.equal(a.text, ['# 通用', '# 英文', a.parts[2].text].join('\n\n'));
   assert.equal(a.parts[2].text, [
     '## 這一次的任務',
@@ -32,14 +32,21 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
     '- 單元：L3 Sports',
     '- 學習目的：準備段考',
     '- 允許 AI 補充：是',
+    '- 點選填空：要',
     '- 家長調整：無',
     '- 教材：附件的課本頁面',
     '- 學生已有的學習目標：',
     '  - k3m9qa borrow 英翻中｜國二上 L1 p.12｜第一題：borrow :: 借入',
+    '- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：borrow',
     '',
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
+    '- 家長勾了點選填空：容易混淆的一組字、詞或觀念（說得出這一課容易錯在哪），寫成點選填空的比較：',
+    '  - 組裡每一個一個學習目標，名稱寫 `<這一個>（<整組，用頓號隔開>） 比較`，例如 `borrow（borrow、lend） 比較`、`質量（質量、重量） 比較`；國語的相似字結尾寫「相似字」。',
+    '  - 題目是一句話，要考的那一個寫成 ＿＿，答案只有組裡的那一個；每一個至少兩句，只有兩個的組至少三句。試填組裡的每一個，有兩個說得通就改句子。',
+    '  - 每一個都寫分辨的線索，放在自己目標底下的記憶錨點。',
+    '  - 規則寫得更細的（例如英文介系詞的組用整個片語當名稱）照規則。',
     '- 「學生已有的學習目標」每一項寫 `ID 名稱｜出處｜第一題`，第一題是那個目標現在的第一題。這次的內容和它們比對：',
     '  - 換了情境，答題靠的還是同一個判準：加題，寫在「加進已有的學習目標」。例如兩題都要用「地勢平坦、交通方便」解釋人口分布，換了地點也是加題。',
     '  - 要用新的機制才答得對：另立新的學習目標。例如新題要用「工作機會吸引人口」才答得對，就另立。',
