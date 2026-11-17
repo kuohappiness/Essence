@@ -74,13 +74,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      # 鎖檔沒有相依時跳過安裝（npm ci 在沒有相依時也會成功，但多花時間）；建置與 audit 等外掛有程式的第一個任務再加。
-      - run: |
-          if node -e "process.exit(Object.keys(require('./package-lock.json').packages ?? {}).length > 1 ? 0 : 1)"; then
-            npm ci
-          else
-            echo '沒有相依，跳過安裝'
-          fi
+      # 直接 npm ci：鎖檔不存在、壞了或和 package.json 不同步都由 npm 擋下，不自己判斷「沒有相依」（L2 R5）。
+      # 建置與 audit 等外掛有程式的第一個任務再加。
+      - run: npm ci
       - run: npm run check
 
   mindboard:
@@ -95,12 +91,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: |
-          if node -e "process.exit(Object.keys(require('./package-lock.json').packages ?? {}).length > 1 ? 0 : 1)"; then
-            npm ci
-          else
-            echo '沒有相依，跳過安裝'
-          fi
+      - run: npm ci
       - run: npm run check
 
   # 要跑的 job 被跳過時，其他 job 都是綠的，只有這裡擋得到。main 之後要設必過檢查時只設這個 job（2026-11-17 查過，現在沒設）。
