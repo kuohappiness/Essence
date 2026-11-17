@@ -1,4 +1,4 @@
-import { frontmatterLines, linesOf, listTree, outsideSource, readProperties, splitSourceItems, TRAILING_ID } from '../deck/index.ts';
+import { frontmatterLines, linesOf, listTree, outsideSource, parseDeck, readProperties, splitSourceItems, TRAILING_ID } from '../deck/index.ts';
 import { blocksOf, calloutHead } from './check.ts';
 
 // 引言框的「加入」（tasks/ai-cards-add.md §1）：哪些引言框、框裡最上層的每一項、按下去時在最新的文字裡重新找。只讀文字。
@@ -131,9 +131,19 @@ export const refOf = (item: BoxItem): ItemRef => ({ kind: item.kind, id: item.id
  * 空框、框裡只剩家長自己的字（沒有行尾 ID 的清單、沒有題目的補題）、第 1 批與最小版留下的框不算。
  */
 export const deepenPending = (text: string): boolean => introBoxes(text).some(box => box.deepen && box.items.some(item => box.kind === 'existing'
-  // 補題：底下還有題目行。新目標、候選：名稱行有行尾 ID。框裡只剩家長自己的字（沒有 ID 的清單、說明）不算（tasks/ai-cards-deepen.md §4-3）。
-  ? item.original.split('\n').slice(1).some(line => /::|==[^=\n]+==/.test(line))
+  // 補題：底下還有卡組讀得到的題目。新目標、候選：名稱行有行尾 ID。框裡只剩家長自己的字（沒有 ID 的清單、說明）不算（tasks/ai-cards-deepen.md §4-3）。
+  ? hasPrompt(item.original)
   : item.id !== null));
+/**
+ * 補題那一項底下有沒有題目（L2 R6）：名稱行換成一個假的目標，交給卡組的解析器讀，和出題、加入用同一套題目的邊界
+ * （圍欄、行內程式碼、說明裡的 `::` 都照卡組的讀法）。寫法有問題、讀不出題目的不算。
+ */
+function hasPrompt(original: string): boolean {
+  const [, ...rest] = original.split('\n');
+  // 和加入（existing.ts 的 unitsOf）一樣只看直接的子項目：名稱的接續行、更深的說明不算。兩份文字的行號相同。
+  const kids = new Set(listTree(linesOf(original), 0)[0]?.children.map(child => child.line) ?? []);
+  return parseDeck(['- 補題 ^zzz000', ...rest].join('\n')).targets.some(target => target.prompts.some(prompt => kids.has(prompt.line)));
+}
 
 /** 框裡那一項的出處有 `課外：`（tasks/ai-cards-deepen.md §3-3：加深的補題出處合併還沒涵蓋課外，那一項留給家長）。original 是那一項去掉引言框前綴之後的字。 */
 export function hasOutsideItem(original: string): boolean {

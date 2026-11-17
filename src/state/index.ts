@@ -905,8 +905,12 @@ export function createState(options: StateOptions): State {
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       if ((parseDeck(text).props.status === 'draft') !== activate) return null;
       const next = setStatusLine(text, value);
-      if (next === null) unwritable = true;
-      return next === null ? null : { text: next, expect: [], fresh: [], record: null, need: null, status: parseDeck(next).props.status };
+      if (next === null) { unwritable = true; return null; }
+      // 啟用的那一刻目標才開始排程：草稿裡手寫或 AI 寫的 `課外：`、比較卡要的 `需要版本` 和狀態一起寫（D-209 第 2 點、L2 R1）。
+      // 加不上時 withNeed 回原文：狀態也不改，當成寫不進去。
+      const prepared = withNeed({ text: next, expect: [], fresh: [], record: null, need: null }, text, version);
+      if (prepared.text === text && next !== text) { unwritable = true; return null; }
+      return { ...prepared, status: parseDeck(prepared.text).props.status };
     };
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
     if (unwritable) return { kind: 'unwritable' };
@@ -1189,17 +1193,38 @@ export function createState(options: StateOptions): State {
     aiRead: path => writes.readTimed(path),
     aiDisplaced: path => options.displaced?.(path) ?? false,
     async aiAppend(path, editor, plan) {
-      if (addLocks.has(path)) return { kind: 'timeout' };
+      // 前一筆寫入逾時、結果不明的那一篇（加入或加深）：這一筆確定沒寫，不是結果不明（L2 R2）。排隊之前、輪到時、改字之前都看。
+      if (addLocks.has(path)) return { kind: 'not', why: 'locked' };
       let why: DeepenStop['why'] | null = null;
+      // 編輯器的字和磁碟（state 最後讀到或寫進去的）不同：家長還有沒存的字，先不寫（§3-2、L2 R3）。在寫入那一列裡比，不在排隊之前。
+      const unsaved = (text: string): boolean => { const disk = tracker.text(path); return disk === undefined || disk.replace(/\r\n?/g, '\n') !== text.replace(/\r\n?/g, '\n'); };
       const prepared = (text: string): Prepared | null => {
+        if (addLocks.has(path)) { why = 'locked'; return null; }
+        if (editor && unsaved(text)) { why = 'unsaved'; return null; }
         track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
         const out = plan(text);
         if ('why' in out) { why = out.why; return null; }
         why = null;
         return withNeed({ text: out.text, expect: [], fresh: [], record: null, need: null }, text, version);
       };
-      const result = await writes.enqueue(() => editor ? writes.edit(editor, prepared, { kind: 'unchanged' }) : writes.fillFile(path, prepared));
-      if (result.kind === 'failed' && result.error instanceof WriteTimeout) { addLocks.add(path); return { kind: 'timeout' }; }
+      const result = await writes.enqueue(async () => {
+        if (addLocks.has(path)) { why = 'locked'; return { kind: 'unchanged' } as const; }
+        let done: WriteResult;
+        if (!editor) done = await writes.fillFile(path, prepared);
+        else {
+          // edit 的 plan 回 null 時仍會存一次編輯器：已知有沒存的字就在進 edit 之前停下（edit 裡面再比一次，擋排隊中才打的字）。
+          const now = editor.text();
+          if (now !== null && unsaved(now)) { why = 'unsaved'; return { kind: 'unchanged' } as const; }
+          done = await writes.edit(editor, prepared, { kind: 'unchanged' });
+        }
+        // 鎖在這一列裡設：排在後面的寫入輪到時一定看得到（L2 R2）。
+        if (done.kind === 'failed' && done.error instanceof WriteTimeout) addLocks.add(path);
+        return done;
+      });
+      if (result.kind === 'failed' && result.error instanceof WriteTimeout) {
+        // 這一筆自己逾時才是結果不明；之後同一篇的寫入在上面停下。
+        return { kind: 'timeout' };
+      }
       if (result.kind === 'failed') return { kind: 'failed', error: result.error };
       if (result.kind === 'done' || result.kind === 'saved') return { kind: 'written', confirmed: result.kind === 'done' };
       if (result.kind === 'blocked') return { kind: 'not', why: result.reason === 'phone' || result.reason === 'loading' || result.reason === 'needs-update' ? result.reason : 'blocked', detail: result.reason };

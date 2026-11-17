@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { introBoxes, sha256Hex } from '../src/core/ai/index.ts';
 import type { DeepenJob, EmbeddedRules } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { encodeEntry } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import { createDeepen } from '../src/obsidian/deepen.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
@@ -41,6 +42,8 @@ function machine() {
 async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>, box: ReturnType<typeof machine>) {
   const clipboard: string[] = [];
   const errors: unknown[] = [];
+  /** 只有加深的 read 讀不到的篇（state 照常讀得到）。 */
+  const broken = new Set<string>();
   // eslint-disable-next-line prefer-const -- state 與流程互相參照
   let state: ReturnType<typeof createState>;
   const md = () => [...memory.texts.keys()].filter(path => path.endsWith('.md'));
@@ -49,7 +52,7 @@ async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>
     names: () => new Set(md().map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
     named: name => md().filter(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
     snapshots: () => Promise.resolve(md().filter(path => path.startsWith('Essence Cards/紀錄/AI 輸出/') && !path.includes('/原文/')).map(path => ({ path, text: memory.texts.get(path)! }))),
-    read: path => Promise.resolve(memory.texts.get(path) ?? null),
+    read: path => broken.has(path) ? Promise.reject(Error('讀不到')) : Promise.resolve(memory.texts.get(path) ?? null),
     editor: () => null,
     unsaved: () => Promise.resolve(false),
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
@@ -59,7 +62,7 @@ async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>
   state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random: Math.random, reserved: () => deepen.reserved(), now: () => NOW, offset: () => 480, onError() {} });
   t.after(() => state.close());
   await state.ready();
-  return { deepen, state, clipboard, errors };
+  return { deepen, state, clipboard, errors, broken };
 }
 
 void test('§1～§3 加深：提示帶這一篇的目標、同單元其他篇、地圖與以前出過的；貼回寫進檔尾的加深框，快照與原文都在，工作清掉', async t => {
@@ -174,4 +177,110 @@ void test('§2-3 快照只寫檔名、同檔名的卡組有兩篇：不歸屬，
   assert.ok('job' in copied);
   assert.match(clipboard[0], /最新的學習地圖：無/);
   assert.doesNotMatch(clipboard[0], /溫度的全貌/);
+});
+
+// L2 第一輪（Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md）：提醒與手動流程用同一份啟用目標與紀錄。
+const THREE = 'Essence Cards/學業/國二上/自然/國二上自然 2-2 熱.md';
+const THREE_TEXT = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 熱\n狀態: 啟用\n---\n\n'
+  + '- 甲 ^aaa234\n    - 出處：p.50\n    - 甲？ :: 甲\n- 乙 ^bbb234\n    - 出處：p.51\n    - 乙？ :: 乙\n- 丙 ^ccc234\n    - 出處：p.52\n    - 丙？ :: 丙\n- 丁 ^ddd234\n    - 出處：p.53\n    - 丁？ :: 丁\n';
+const LOG = 'Essence Cards/紀錄/2026-11 PC-old.jsonl';
+function stableLog(text: string, ids: readonly string[]): string {
+  const deck = parseDeck(text);
+  const fp = (id: string): string => deck.targets.find(target => target.id === id)!.prompts[0].fingerprint;
+  return ids.flatMap((id, i) => [
+    encodeEntry(`2026-11-01T10:0${String(i)}:00.000+08:00`, { lt: id, r: 'good', v: fp(id) }),
+    encodeEntry(`2026-11-02T10:0${String(i)}:00.000+08:00`, { lt: id, r: 'good', v: fp(id) }),
+  ]).join('\n') + '\n';
+}
+
+void test('L2 R4 紀錄讀不到：不出可以按的列、手動加深也先擋；讀回來後照常', async t => {
+  const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
+  const box = machine();
+  const { deepen, state } = await load(t, memory, box);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
+  memory.failing.add(LOG);
+  memory.notify(LOG);
+  for (let i = 0; i < 50 && state.writeBlock() !== 'unread'; i++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(state.writeBlock(), 'unread');
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows(), []);
+  assert.ok(!deepen.ready(THREE).ok);
+  memory.failing.delete(LOG);
+  memory.notify(LOG);
+  for (let i = 0; i < 400 && state.writeBlock() === 'unread'; i++) await new Promise(resolve => setTimeout(resolve, 5));
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['ready']);
+});
+
+void test('L2 R4 一篇讀不到只略過那一篇，不留舊的列、不擋別篇', async t => {
+  const memory = createMemoryFiles({ [THREE]: THREE_TEXT, [DECK]: DECK_TEXT, [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']) });
+  const box = machine();
+  const { deepen, broken } = await load(t, memory, box);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.path), [THREE]);
+  broken.add(THREE);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows(), []);
+  broken.delete(THREE);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.path), [THREE]);
+});
+
+void test('L2 R5 重複 ID、暫停的目標：記穩了也不算、不進快照的記穩目標；提醒與手動的數字相同', async t => {
+  const twin = 'Essence Cards/學業/國二上/自然/另一篇.md';
+  const paused = THREE_TEXT.replace('    - 甲？ :: 甲\n', '    - 狀態：暫停\n    - 甲？ :: 甲\n');
+  const memory = createMemoryFiles({
+    [THREE]: paused, [twin]: DECK_TEXT.replace('^abc234', '^bbb234'),
+    [LOG]: stableLog(THREE_TEXT, ['aaa234', 'bbb234', 'ccc234']),
+  });
+  const box = machine();
+  const { deepen, state } = await load(t, memory, box);
+  assert.deepEqual([...state.deckTargets(THREE)].sort(), ['ccc234', 'ddd234']);
+  const ready = deepen.ready(THREE);
+  assert.ok(ready.ok);
+  assert.equal(ready.counts.stable, 1);
+  const copied = await deepen.copy(THREE, '', '');
+  assert.ok('job' in copied);
+  assert.deepEqual(copied.job.stable, ['ccc234']);
+});
+
+void test('L2 R8 學習目的：今天以後有這個單元的小考是準備小考；在生效的考試範圍裡是準備段考；都有時寫小考', async t => {
+  const exam = 'Essence Cards/考試範圍/段考.md';
+  const quiz = 'Essence Cards/考試範圍/小考/熱.md';
+  const examText = '---\n識別碼: x7f3k2\n考試開始: 2026-11-25\n考試結束: 2026-11-26\n---\n- 國二上 自然 2\n';
+  const quizText = '---\n識別碼: q4m8t2\n小考日期: 2026-11-20\n---\n- 國二上 自然 2-2\n';
+  const purpose = async (files: Record<string, string>): Promise<string> => {
+    const memory = createMemoryFiles({ [THREE]: THREE_TEXT, ...files });
+    const { deepen, clipboard } = await load(t, memory, machine());
+    const copied = await deepen.copy(THREE, '', '');
+    assert.ok('job' in copied);
+    return /- 學習目的：(.+)/.exec(clipboard[0])![1];
+  };
+  assert.equal(await purpose({}), '平常複習');
+  assert.equal(await purpose({ [exam]: examText }), '準備段考');
+  assert.equal(await purpose({ [quiz]: quizText }), '準備小考');
+  assert.equal(await purpose({ [exam]: examText, [quiz]: quizText }), '準備小考');
+  // 已經考過的小考不算。
+  assert.equal(await purpose({ [quiz]: quizText.replace('2026-11-20', '2026-11-10') }), '平常複習');
+});
+
+void test('L2 R9 寫入中按取消：取消不了、工作照常寫完；列是「正在寫」', async t => {
+  const memory = createMemoryFiles({ [DECK]: DECK_TEXT });
+  const box = machine();
+  const { deepen } = await load(t, memory, box);
+  const copied = await deepen.copy(DECK, '', '');
+  assert.ok('job' in copied);
+  const held = memory.holdModify(DECK);
+  const saving = deepen.save(copied.job, REPLY, null);
+  // 等寫入進了 modify。
+  for (let i = 0; i < 50 && !memory.texts.get(DECK)!.includes('加深的學習目標'); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['writing']);
+  const cancel = await deepen.cancel(copied.job);
+  assert.equal(cancel.kind, 'stop');
+  held.release();
+  const done = await saving;
+  assert.equal(done.kind, 'done');
+  assert.match(memory.texts.get(DECK)!, /加深的學習目標/);
 });

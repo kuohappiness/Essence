@@ -154,7 +154,7 @@ function Reminders({ state, folders, deepen }: { state: State | null; folders: F
         <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'deepen'); }}>加深</button>
         <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'skip'); }}>這次不用</button>
       </>}
-      {row.kind !== 'ready' && <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'open'); }}>打開</button>}
+      {(row.kind === 'waiting' || row.kind === 'pending') && <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'open'); }}>打開</button>}
       {row.kind === 'waiting' && <button type="button" className="ec-rem-act" onClick={() => { deepen.act(row, 'cancel'); }}>取消</button>}
     </div>)}
   </section>;

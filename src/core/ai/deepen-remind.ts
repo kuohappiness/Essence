@@ -65,8 +65,10 @@ export const skipFor = (skip: { ids: string[]; at: number } | undefined, deckIds
   skip && (!skip.ids.length || skip.ids.some(id => deckIds.has(id))) ? skip : null;
 
 /** 提醒一區的一行（§4-2、§4-3）：等待貼回、待審核、可以加深。name 是篇名（D-189 第 3 點：檔名）。 */
-export interface DeepenRow { path: string; kind: 'waiting' | 'pending' | 'ready'; text: string }
-export function deepenRow(path: string, name: string, state: { waiting: boolean; pending: boolean; remind: RemindResult | null }): DeepenRow | null {
+export interface DeepenRow { path: string; kind: 'writing' | 'waiting' | 'pending' | 'ready'; text: string }
+export function deepenRow(path: string, name: string, state: { waiting: boolean; writing?: boolean; pending: boolean; remind: RemindResult | null }): DeepenRow | null {
+  // 正在寫進卡組（L2 R9）：不能取消，等寫完。
+  if (state.waiting && state.writing) return { path, kind: 'writing', text: `${name}：加深正在寫進卡組` };
   if (state.waiting) return { path, kind: 'waiting', text: `${name}：加深的提示已複製，等你貼回` };
   if (state.pending) return { path, kind: 'pending', text: `${name}：上一次加深的結果還沒審完` };
   const remind = state.remind;
