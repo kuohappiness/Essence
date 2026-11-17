@@ -26,7 +26,8 @@ export { baselineOf, goneTargets, latestMap, ownSnapshots, readSnapshot } from '
 export type { SnapshotInfo } from './deepen-snapshot.ts';
 export { buildDeepenPrompt, deepenTargets, deepenTask, unitSiblings } from './deepen-prompt.ts';
 export type { DeepenInput } from './deepen-prompt.ts';
-export { chooseBase, remindOf } from './deepen-remind.ts';
+export { chooseBase, deepenRow, readSkips, remindOf, skipFor } from './deepen-remind.ts';
+export type { DeepenRow } from './deepen-remind.ts';
 export { appendBatch, composeBatch, idsInDeepenBoxes, inspectDeepen, unclosedFence, verifyAppend } from './deepen-write.ts';
 export type { DeepenInspection } from './deepen-write.ts';
 export { beginDeepen, isDeepenJob, planAppend, readDeepenJobs, runDeepen, settleUnclear } from './deepen-job.ts';

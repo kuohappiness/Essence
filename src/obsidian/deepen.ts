@@ -1,10 +1,10 @@
 import {
-  beginDeepen, buildDeepenPrompt, composeBatch, deepenTargets, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSnapshot, RULE_SUBJECTS, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
+  baselineOf, beginDeepen, buildDeepenPrompt, chooseBase, composeBatch, deepenPending, deepenRow, deepenTargets, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSkips, readSnapshot, remindOf, RULE_SUBJECTS, skipFor, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
 } from '../core/ai/index.ts';
-import type { CardForm, DeepenInspection, DeepenJob, DeepenResult, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
+import type { CardForm, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
 import { blockIds, isDeckPath, newId } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { masteryOf } from '../core/study/index.ts';
+import { masteryOf, parseTime } from '../core/study/index.ts';
 import type { Mastery } from '../core/study/index.ts';
 import type { EditorHandle, State } from '../state/index.ts';
 
@@ -20,7 +20,15 @@ export interface DeepenDeps {
   /** 快照資料夾裡的筆記（原文不算）：路徑與全文；讀不到的略過。 */
   snapshots: () => Promise<{ path: string; text: string }[]>;
   /** 這台電腦的存放（ui/prefs.ts）：saveJobs 存不進去時丟錯；retire 是製卡共用的「不再配出」清單。 */
-  store: { jobs(): unknown; saveJobs(jobs: DeepenJob[]): void; retire(ids: readonly string[]): void };
+  store: {
+    jobs(): unknown; saveJobs(jobs: DeepenJob[]): void; retire(ids: readonly string[]): void;
+    /** 「這次不用」（§5-1）：原樣讀出來；save 存整份。 */
+    skips(): unknown; saveSkips(value: Record<string, { ids: string[]; at: string }>): void;
+    /** 總開關（§5-2）：關掉時提醒一區不出現加深的列。 */
+    remindOff(): boolean;
+  };
+  /** 這一篇最新的全文（待審核用，§4-3）；讀不到是 null。 */
+  read: (path: string) => Promise<string | null>;
   /** 開著這一篇的編輯器（寫入走編輯器）；editor 的字還沒存進檔時 unsaved 是 true。 */
   editor: (path: string) => EditorHandle | null;
   unsaved: (path: string) => Promise<boolean>;
@@ -63,7 +71,10 @@ export function createDeepen(deps: DeepenDeps) {
     const kept = readDeepenJobs(next, deps.now().ms).jobs;
     deps.store.saveJobs(kept);
     jobs = kept;
+    void refreshLater();
   }
+  // 等待貼回的列跟著工作變（§4-3）：rows 的計算在下面定義，這裡晚一拍叫。
+  const refreshLater = (): Promise<void> => Promise.resolve().then(() => refresh());
   const put = (job: DeepenJob): void => { persist([job, ...jobs.filter(each => each.id !== job.id && each.deck !== job.deck)]); };
   const drop = (job: DeepenJob): void => { persist(jobs.filter(each => each.id !== job.id)); };
   const current = (job: DeepenJob): DeepenJob | undefined => jobs.find(each => each.id === job.id);
@@ -149,8 +160,76 @@ export function createDeepen(deps: DeepenDeps) {
     }
   }
 
+  /** 提醒一區的列（§4）：背景算好放著，畫面同步拿；算好、和上一次不同才通知。 */
+  let rows: DeepenRow[] = [];
+  const listeners = new Set<() => void>();
+  let computing: Promise<void> | null = null;
+  let again = false;
+  async function compute(): Promise<DeepenRow[]> {
+    const state = deps.state();
+    if (!state || state.writeBlock() === 'loading' || deps.store.remindOff()) return [];
+    const now = deps.now().ms;
+    const infos = (await deps.snapshots()).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
+    const skips = readSkips(deps.store.skips(), text => parseTime(text)?.at ?? null);
+    const history = state.history();
+    const found: DeepenRow[] = [];
+    for (const entry of state.decks()) {
+      const { props } = entry.deck;
+      if (props.isTranscript || props.status !== 'active' || !isDeckPath(entry.path) || state.deckStatus(entry.path).needsUpdate) continue;
+      const name = fileName(entry.path);
+      const waiting = jobs.some(job => job.deck === entry.path);
+      let pending = false;
+      if (!waiting) {
+        const text = await deps.read(entry.path);
+        pending = text !== null && deepenPending(text);
+      }
+      let remind = null;
+      if (!waiting && !pending) {
+        const active = state.deckTargets(entry.path);
+        const deckIds = new Set(entry.deck.targets.flatMap(t => t.id ?? []));
+        const base = baselineOf(ownSnapshots(infos, entry.path, deckIds, resolve), now);
+        const skip = skipFor(skips.get(entry.path), deckIds);
+        const mastery = masteryOf(active, history.reviews, id => history.incomplete || history.held.includes(id));
+        remind = remindOf(active, mastery, chooseBase(base && base.at !== null ? { at: base.at, stable: base.stable ?? [], first: base.kind !== 'deepen' } : null, skip));
+      }
+      const row = deepenRow(entry.path, name, { waiting, pending, remind });
+      if (row) found.push(row);
+    }
+    return found;
+  }
+  /** 重算一次（同時只跑一份，中間又被叫就再跑一次）；回傳時已經算好。 */
+  function refresh(): Promise<void> {
+    if (computing) { again = true; return computing; }
+    computing = (async () => {
+      do {
+        again = false;
+        let next: DeepenRow[];
+        try { next = await compute(); } catch (error) { deps.onError(error); next = rows; }
+        if (JSON.stringify(next) !== JSON.stringify(rows)) { rows = next; for (const listener of listeners) listener(); }
+      } while (again);
+    })().finally(() => { computing = null; });
+    return computing;
+  }
+
   return {
     ready,
+    rows: (): readonly DeepenRow[] => rows,
+    refresh,
+    onRows(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    /** 「這次不用」（§5-1）：記下這一篇現在記穩了的目標與時間；之後的門檻從這裡算。 */
+    async skip(path: string): Promise<void> {
+      const now = ready(path);
+      if (!now.ok) return;
+      const state = deps.state()!;
+      const active = new Set(state.deckTargets(path));
+      const ids = [...now.mastery].filter(([id, each]) => each === 'stable' && active.has(id)).map(([id]) => id).sort();
+      const raw = deps.store.skips();
+      const kept = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? { ...raw as Record<string, { ids: string[]; at: string }> } : {};
+      const at = deps.now();
+      kept[path] = { ids, at: stamp(at.ms, at.offset) };
+      deps.store.saveSkips(kept);
+      await refresh();
+    },
     /** 這一篇還沒完成的加深工作（防重，§1 第 3 點）。 */
     jobOf: (path: string): DeepenJob | null => jobs.find(each => each.deck === path) ?? null,
     jobs: (): readonly DeepenJob[] => jobs,

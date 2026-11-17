@@ -4,7 +4,7 @@ import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
 import { SNAPSHOT_FOLDER } from './core/ai/index.ts';
-import type { EmbeddedRules } from './core/ai/index.ts';
+import type { DeepenRow, EmbeddedRules } from './core/ai/index.ts';
 import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
@@ -40,7 +40,7 @@ import { createState, type ErrorSource, type State, type StudyPick } from './sta
 import { reminderView, type Session } from './review/index.ts';
 import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
-import { aiPrefs } from './ui/prefs.ts';
+import { aiPrefs, deepenRemindOff } from './ui/prefs.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -128,6 +128,9 @@ export default class EssenceCardsPlugin extends Plugin {
   /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
   private ai: AiCards | null = null;
   private deepen: Deepen | null = null;
+  /** 打開「加深這一節」的視窗（命令與提醒一區共用）。 */
+  private openDeepen: ((path: string) => void) | null = null;
+  private deepenTimer: number | null = null;
   /** 引言框的「加入」按鈕（tasks/ai-cards-add.md §1）：只在電腦；手機是 null。 */
   intro: { refresh(): void } | null = null;
   /** 開發命令攔下按鈕（P5 探針）：設了就交給它，不做加入。 */
@@ -194,7 +197,7 @@ export default class EssenceCardsPlugin extends Plugin {
     if (Platform.isDesktopApp) this.ids = this.wireIds();
     // 設定分頁（D-104、D-156 依功能分區）：備份一區在 iPhone 上只寫「備份在電腦上做」。
     this.settingTab = wireSettings({
-      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
+      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); }, deepenChanged: () => { this.refreshDeepen(0); },
       settings: this.store, today: todayText,
       settingsMissing: () => this.settingsFile?.missing() ?? false,
       recreateSettings: () => this.settingsFile ? this.settingsFile.recreate(this.store) : Promise.resolve('unreadable'),
@@ -246,14 +249,24 @@ export default class EssenceCardsPlugin extends Plugin {
           const read = await Promise.all(files.map(file => app.vault.cachedRead(file).then(text => ({ path: file.path, text }), () => null)));
           return read.filter((each): each is { path: string; text: string } => each !== null);
         },
-        store: { jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); } },
+        store: {
+          jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); },
+          skips: () => aiPrefs.deepenSkips(app), saveSkips: value => { aiPrefs.saveDeepenSkips(app, value); },
+          remindOff: () => deepenRemindOff.get(app),
+        },
+        read: async path => {
+          const view = editingView(path);
+          if (view) return view.editor.getValue();
+          const file = app.vault.getFileByPath(path);
+          return file ? app.vault.cachedRead(file) : null;
+        },
         editor: path => { const view = editingView(path); return view ? editorOf(view, path) : null; },
         unsaved: async path => { const view = editingView(path); return !!view?.file && !sameText(view.editor.getValue(), await app.vault.read(view.file)); },
         clipboard: text => navigator.clipboard.writeText(text),
         now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
         onError: error => { this.fail('ai', error); },
       });
-      wireDeepen(this, {
+      this.openDeepen = wireDeepen(this, {
         deepen: () => this.unloaded ? null : this.deepen,
         read: async path => {
           const view = editingView(path);
@@ -263,7 +276,17 @@ export default class EssenceCardsPlugin extends Plugin {
         },
         openNote: path => { this.openNote(path); },
         notify: message => { new Notice(message); },
-      });
+      }).open;
+      // 提醒一區的加深列（§4）：算好、有變才更新狀態列與入口。改名、搬移、刪除時「這次不用」跟著走（§5-1）。
+      this.deepen.onRows(() => { this.updateReminders(); this.entry?.refresh(); });
+      // 監看不了時 state 建立時也會失敗、照常記錄與提示（D-155 補充）；這幾個監聽只讓提醒更即時，失敗了不擋外掛載入。
+      try {
+        this.registerEvent(app.vault.on('rename', (file, old) => { aiPrefs.moveDeepenSkip(app, old, file.path); this.refreshDeepen(); }));
+        this.registerEvent(app.vault.on('delete', file => { aiPrefs.moveDeepenSkip(app, file.path, null); this.refreshDeepen(); }));
+        this.registerEvent(app.vault.on('modify', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
+        this.registerEvent(app.vault.on('create', file => { if (file.path.startsWith(`${SNAPSHOT_FOLDER}/`)) this.refreshDeepen(); }));
+      } catch { /* 見上 */ }
+      this.register(() => { if (this.deepenTimer !== null) window.clearTimeout(this.deepenTimer); });
       const runner = this.introRunner = createIntroRunner({
         app: this.app,
         state: () => this.unloaded ? null : this.state,
@@ -367,6 +390,7 @@ export default class EssenceCardsPlugin extends Plugin {
         moveBack: issue => this.guard?.moveBack(issue) ?? Promise.resolve(false),
         dismiss: folder => { this.guard?.dismiss(folder); },
       },
+      deepen: this.deepen ? { rows: () => this.deepen?.rows() ?? [], act: (row, action) => { void this.deepenAct(row, action); } } : null,
       covered: () => this.review !== null,
       notify: message => { new Notice(message); },
       setDeckStatus: Platform.isDesktopApp ? (path, value) => this.state ? changeDeckStatus(this.app, this.state, path, value, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
@@ -390,10 +414,36 @@ export default class EssenceCardsPlugin extends Plugin {
     setting?.openTabById(this.manifest.id);
   }
 
+  /** 加深的提醒晚一點重算（tasks/ai-cards-deepen.md §4）：作答、存檔會連續觸發，合成一次。 */
+  private refreshDeepen(delay = 1500): void {
+    if (!this.deepen) return;
+    if (this.deepenTimer !== null) window.clearTimeout(this.deepenTimer);
+    this.deepenTimer = window.setTimeout(() => { this.deepenTimer = null; void this.deepen?.refresh(); }, delay);
+  }
+
+  /** 提醒一區的加深列按下去（§4-2 最後一點）：先重算，那一篇的情況變了就通知、重畫，不照舊的列做。 */
+  private async deepenAct(row: DeepenRow, action: 'deepen' | 'skip' | 'open' | 'cancel'): Promise<void> {
+    const deepen = this.deepen;
+    if (!deepen) return;
+    await deepen.refresh();
+    const now = deepen.rows().find(each => each.path === row.path);
+    if (!now || now.kind !== row.kind) { new Notice('這一篇的情況已經變了，已經重新整理'); this.entry?.refresh(); return; }
+    if (action === 'skip') { await deepen.skip(row.path); return; }
+    if (action === 'cancel') {
+      const job = deepen.jobOf(row.path);
+      if (job) await deepen.cancel(job);
+      new Notice('已取消這次加深');
+      return;
+    }
+    if (action === 'open' && row.kind === 'pending') { this.openNote(row.path); return; }
+    this.entry?.close();
+    this.openDeepen?.(row.path);
+  }
+
   /** 狀態列（D-163 第 5 點）：只有電腦，內容只放在入口，這裡只是提示；沒有提醒時不顯示。 */
   private updateReminders(): void {
     if (!this.statusBar) return;
-    const { count } = reminderView(this.state, this.guard?.issues());
+    const { count } = reminderView(this.state, this.guard?.issues(), this.deepen?.rows());
     this.statusBar.style.display = count ? '' : 'none';
     this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
@@ -627,13 +677,13 @@ export default class EssenceCardsPlugin extends Plugin {
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); this.refreshDeepen(); });
     // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
     this.state.onUnread(() => { this.updateReminders(); });
     this.entry?.refresh();
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，
     // tasks/error-log.md §2-3），停用不是故障，所以這裡只接住。
-    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.intro?.refresh(); this.updateReminders(); this.warnUpdate(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.intro?.refresh(); this.updateReminders(); this.warnUpdate(); this.refreshDeepen(0); }, () => {});
   }
 }

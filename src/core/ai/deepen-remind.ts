@@ -39,3 +39,37 @@ export function chooseBase(snapshot: { at: number; stable: readonly string[]; fi
   if (skip && (!snapshot || skip.at > snapshot.at)) return { stable: skip.ids, first };
   return snapshot ? { stable: snapshot.stable, first } : null;
 }
+
+const ID = /^[A-Za-z0-9-]+$/;
+
+/**
+ * 這台電腦的「這次不用」（§5-1）：`{ [卡組路徑]: { ids, at } }`。外層不是物件就整份當沒有；某一篇的值壞了（ids 不是 ID 字串陣列、at 不是合法時刻）只略過那一篇。
+ * at 照快照的 `時間` 寫法，讀法由呼叫端給（parseTime）。
+ */
+export function readSkips(value: unknown, timeOf: (text: string) => number | null): Map<string, { ids: string[]; at: number }> {
+  const found = new Map<string, { ids: string[]; at: number }>();
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return found;
+  for (const [path, each] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof each !== 'object' || each === null || Array.isArray(each)) continue;
+    const { ids, at } = each as Record<string, unknown>;
+    if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && ID.test(id)) || typeof at !== 'string') continue;
+    const ms = timeOf(at);
+    if (ms === null) continue;
+    found.set(path, { ids: [...new Set(ids as string[])].sort(), at: ms });
+  }
+  return found;
+}
+
+/** 路徑重用（§5-1）：存下的 ids 和這一篇現在的目標一個都對不上就當沒有；ids 是空的照路徑用。 */
+export const skipFor = (skip: { ids: string[]; at: number } | undefined, deckIds: ReadonlySet<string>): { ids: string[]; at: number } | null =>
+  skip && (!skip.ids.length || skip.ids.some(id => deckIds.has(id))) ? skip : null;
+
+/** 提醒一區的一行（§4-2、§4-3）：等待貼回、待審核、可以加深。name 是篇名（D-189 第 3 點：檔名）。 */
+export interface DeepenRow { path: string; kind: 'waiting' | 'pending' | 'ready'; text: string }
+export function deepenRow(path: string, name: string, state: { waiting: boolean; pending: boolean; remind: RemindResult | null }): DeepenRow | null {
+  if (state.waiting) return { path, kind: 'waiting', text: `${name}：加深的提示已複製，等你貼回` };
+  if (state.pending) return { path, kind: 'pending', text: `${name}：上一次加深的結果還沒審完` };
+  const remind = state.remind;
+  if (!remind?.show) return null;
+  return { path, kind: 'ready', text: `${name}：${remind.first ? '有' : '又有'} ${String(remind.fresh)} 個記穩了，要加深嗎？` };
+}

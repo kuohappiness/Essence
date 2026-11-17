@@ -25,13 +25,16 @@ const REPLY = [
 const NOW = Date.parse('2026-11-17T10:00:00+08:00');
 
 function machine() {
-  const saved: { jobs: unknown; retired: string[] } = { jobs: null, retired: [] };
+  const saved: { jobs: unknown; retired: string[]; skips: unknown; off: boolean } = { jobs: null, retired: [], skips: null, off: false };
   return {
     saved,
     store: {
       jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
       saveJobs(jobs: DeepenJob[]) { saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
       retire(ids: readonly string[]) { saved.retired = [...new Set([...saved.retired, ...ids])]; },
+      skips: () => saved.skips,
+      saveSkips(value: Record<string, { ids: string[]; at: string }>) { saved.skips = JSON.parse(JSON.stringify(value)) as unknown; },
+      remindOff: () => saved.off,
     },
   };
 }
@@ -46,6 +49,7 @@ async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>
     names: () => new Set(md().map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
     named: name => md().filter(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
     snapshots: () => Promise.resolve(md().filter(path => path.startsWith('Essence Cards/紀錄/AI 輸出/') && !path.includes('/原文/')).map(path => ({ path, text: memory.texts.get(path)! }))),
+    read: path => Promise.resolve(memory.texts.get(path) ?? null),
     editor: () => null,
     unsaved: () => Promise.resolve(false),
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
@@ -124,4 +128,24 @@ void test('§3-2 複製之後家長刪了目標：不寫、可以取消；取消
   assert.deepEqual(await deepen.cancel(copied.job), { kind: 'done', wrote: false, path: DECK });
   assert.equal(deepen.jobOf(DECK), null);
   assert.deepEqual(box.saved.retired, []);
+});
+
+void test('§4 提醒一區：複製後是等待貼回，寫好後是待審核；總開關關掉時不出現；「這次不用」記下現在記穩了的', async t => {
+  const memory = createMemoryFiles({ [DECK]: DECK_TEXT });
+  const box = machine();
+  const { deepen } = await load(t, memory, box);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows(), []);
+  const copied = await deepen.copy(DECK, '', '');
+  assert.ok('job' in copied);
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows().map(row => row.kind), ['waiting']);
+  assert.deepEqual(await deepen.save(copied.job, REPLY, null), { kind: 'done', wrote: true, path: DECK });
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows(), [{ path: DECK, kind: 'pending', text: '國二上自然 2-1 溫度：上一次加深的結果還沒審完' }]);
+  box.saved.off = true;
+  await deepen.refresh();
+  assert.deepEqual(deepen.rows(), []);
+  await deepen.skip(DECK);
+  assert.deepEqual(box.saved.skips, { [DECK]: { ids: [], at: '2026-11-17T10:00:00+08:00' } });
 });

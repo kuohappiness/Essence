@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  baselineOf, buildDeepenPrompt, chooseBase, deepenPending, deepenTask, goneTargets, hasOutsideItem, introBoxes, latestMap, moveDeepen, moveItems, ownSnapshots, readSnapshot, refOf, remindOf,
+  baselineOf, buildDeepenPrompt, chooseBase, deepenPending, deepenRow, deepenTask, goneTargets, readSkips, skipFor, hasOutsideItem, introBoxes, latestMap, moveDeepen, moveItems, ownSnapshots, readSnapshot, refOf, remindOf,
 } from '../src/core/ai/index.ts';
 import type { DeepenInput, SnapshotInfo } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
@@ -187,4 +187,33 @@ void test('加深的補題：出處有課外：的認得出來（那一項留給
   assert.equal(hasOutsideItem('- abc222 能說明溶解\n    - 出處：\n        - p.44\n        - 課外：高中課本\n    - Q :: A'), true);
   assert.equal(hasOutsideItem('- abc222 能說明溶解\n    - 出處：p.44\n    - 課外：這是題目 :: A'), false);
   assert.equal(hasOutsideItem('- abc222 能說明溶解\n    - Q :: A'), false);
+});
+
+void test('§5-1 這次不用：外層壞了整份當沒有，某一篇壞了只略過那一篇；路徑重用的鍵當沒有，ids 空的照路徑用', () => {
+  const timeOf = (text: string): number | null => { const ms = Date.parse(text); return Number.isNaN(ms) ? null : ms; };
+  assert.equal(readSkips([], timeOf).size, 0);
+  assert.equal(readSkips('x', timeOf).size, 0);
+  const skips = readSkips({
+    'a.md': { ids: ['abc333', 'abc222', 'abc222'], at: '2026-11-10T10:00:00+08:00' },
+    'b.md': { ids: ['不是 ID'], at: '2026-11-10T10:00:00+08:00' },
+    'c.md': { ids: [], at: '不是時間' },
+    'd.md': { ids: [], at: '2026-11-10T10:00:00+08:00' },
+    'e.md': 'x',
+  }, timeOf);
+  assert.deepEqual([...skips.keys()], ['a.md', 'd.md']);
+  assert.deepEqual(skips.get('a.md')!.ids, ['abc222', 'abc333']);
+  assert.equal(skipFor(skips.get('a.md'), new Set(['abc222', 'zzz999'])), skips.get('a.md'));
+  assert.equal(skipFor(skips.get('a.md'), new Set(['zzz999'])), null);
+  assert.equal(skipFor(skips.get('d.md'), new Set(['zzz999'])), skips.get('d.md'));
+  assert.equal(skipFor(undefined, new Set()), null);
+});
+
+void test('§4-2、§4-3 提醒一區的一行：等待貼回優先、再來待審核；第一次說「有」，之後說「又有」；沒到門檻不出現', () => {
+  const ready = { show: true, first: true, fresh: 6, pool: 10, need: 5 };
+  assert.deepEqual(deepenRow('a.md', 'L3 單字', { waiting: true, pending: true, remind: ready }), { path: 'a.md', kind: 'waiting', text: 'L3 單字：加深的提示已複製，等你貼回' });
+  assert.deepEqual(deepenRow('a.md', 'L3 單字', { waiting: false, pending: true, remind: ready })?.text, 'L3 單字：上一次加深的結果還沒審完');
+  assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: ready })?.text, 'L3 單字：有 6 個記穩了，要加深嗎？');
+  assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: { ...ready, first: false } })?.text, 'L3 單字：又有 6 個記穩了，要加深嗎？');
+  assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: { ...ready, show: false } }), null);
+  assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: null }), null);
 });

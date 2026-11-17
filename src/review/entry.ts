@@ -1,3 +1,4 @@
+import type { DeepenRow } from '../core/ai/index.ts';
 import { scopeAfter, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeStartDate } from '../core/catalog/index.ts';
 import { folderLabel } from '../core/deck/index.ts';
 import type { FolderIssue } from '../core/deck/index.ts';
@@ -88,18 +89,26 @@ export interface FolderActions {
   /** 「不用了」。 */
   dismiss(folder: string): void;
 }
+/**
+ * 提醒一區的加深那幾行（tasks/ai-cards-deepen.md §4）：rows 是背景算好的；act 交給主程式，點下去時重新算一次，條件不成立就通知並重畫。
+ */
+export interface DeepenActions {
+  rows(): readonly DeepenRow[];
+  act(row: DeepenRow, action: 'deepen' | 'skip' | 'open' | 'cancel'): void;
+}
 /** 搬錯位置的系統資料夾（tasks/system-folder-guard.md §2-4）一項：action 是那一項的按鈕（搬回原位、不用了），沒有按鈕是 null。 */
 interface FolderReminder { folder: string; text: string; action: 'move' | 'dismiss' | null; issue: FolderIssue }
 /** 提醒一區（D-163 第 5 點）：讀不到、需要新版、搬錯位置的系統資料夾；count 是幾項（狀態列寫「2 項提醒」）。 */
-export interface ReminderView { unread: readonly string[]; needsUpdate: boolean; folders: FolderReminder[]; count: number }
+export interface ReminderView { unread: readonly string[]; needsUpdate: boolean; folders: FolderReminder[]; deepen: readonly DeepenRow[]; count: number }
 
-export function reminderView(state: State | null, issues: readonly FolderIssue[] = []): ReminderView {
+/** deepen：加深的列（只有電腦），每篇算一項（§4-2）。 */
+export function reminderView(state: State | null, issues: readonly FolderIssue[] = [], deepen: readonly DeepenRow[] = []): ReminderView {
   const folders = issues.map(folderReminder);
-  if (!state) return { unread: [], needsUpdate: false, folders, count: folders.length };
+  if (!state) return { unread: [], needsUpdate: false, folders, deepen: [], count: folders.length };
   const unread = state.unread();
   const blocked = state.blocked();
   const needsUpdate = blocked.decks.length > 0 || blocked.targets.length > 0 || blocked.all;
-  return { unread, needsUpdate, folders, count: (unread.length ? 1 : 0) + (needsUpdate ? 1 : 0) + folders.length };
+  return { unread, needsUpdate, folders, deepen, count: (unread.length ? 1 : 0) + (needsUpdate ? 1 : 0) + folders.length + deepen.length };
 }
 
 /** 搬回去之後會怎樣：照資料夾說，沒有列的寫「外掛就讀得到」。 */

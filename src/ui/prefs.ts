@@ -11,6 +11,8 @@ export const noRemind = flag('essence-cards-full-deck-no-remind');
 export const previewButton = flag('essence-cards-preview-button');
 export const previewReveal = flag('essence-cards-preview-reveal');
 export const quizMark = flag('essence-cards-quiz-mark');
+/** 這台電腦的加深提醒（tasks/ai-cards-deepen.md §5-2）：存的是 true 才算關，缺值或壞值是開。 */
+export const deepenRemindOff = flag('essence-cards-deepen-remind-off');
 
 const TERMS = 'essence-cards-catalog-terms';
 /** 學期收合：只記使用者動過的；沒有記的照預設（最新的學期展開）。 */
@@ -26,6 +28,7 @@ const AI_JOBS = 'essence-cards-ai-jobs';
 const AI_RETIRED = 'essence-cards-ai-retired';
 const AI_LAST = 'essence-cards-ai-last';
 const AI_DEEPEN = 'essence-cards-deepen-jobs';
+const DEEPEN_SKIPS = 'essence-cards-deepen-skips';
 export const aiPrefs = {
   /** 原樣讀出來，由 core/ai 的 readJobs 判斷讀不讀得懂。 */
   jobs: (app: App): unknown => app.loadLocalStorage(AI_JOBS),
@@ -50,4 +53,16 @@ export const aiPrefs = {
   /** 加深的工作（tasks/ai-cards-deepen.md §3-2）：和製卡的工作分開存，原樣讀出來，由 core/ai 的 readDeepenJobs 判斷。 */
   deepenJobs: (app: App): unknown => app.loadLocalStorage(AI_DEEPEN),
   saveDeepenJobs: (app: App, jobs: unknown[]): void => { app.saveLocalStorage(AI_DEEPEN, jobs); },
+  /** 「這次不用」（§5-1）：原樣讀出來，由 core/ai 的 readSkips 判斷。 */
+  deepenSkips: (app: App): unknown => app.loadLocalStorage(DEEPEN_SKIPS),
+  saveDeepenSkips: (app: App, value: Record<string, unknown>): void => { app.saveLocalStorage(DEEPEN_SKIPS, value); },
+  /** 卡組改名、搬移：鍵換成新路徑（目的地已經有舊值時蓋掉）；刪除：拿掉那一鍵（to 是 null）。 */
+  moveDeepenSkip(app: App, from: string, to: string | null): void {
+    const value: unknown = app.loadLocalStorage(DEEPEN_SKIPS);
+    if (typeof value !== 'object' || value === null || Array.isArray(value) || !(from in value)) return;
+    const next = { ...value as Record<string, unknown> };
+    if (to !== null) next[to] = next[from];
+    delete next[from];
+    app.saveLocalStorage(DEEPEN_SKIPS, next);
+  },
 };
