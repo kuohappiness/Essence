@@ -455,4 +455,4 @@ Essence/                         repo 與本機資料夾改名（另排時段，
 - 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查。
 - 改到共用的工具、hook、CI，或判斷不了的路徑，三個外掛都檢查。
 
-文件、金鑰、本機路徑、skill 一致、外掛之間不 import 與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。
+文件、金鑰、本機路徑、skill 一致、外掛之間不 import 與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。commit 時外掛的檢查在只有暫存內容的副本跑，讀到的就是要 commit 的內容。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。

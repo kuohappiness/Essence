@@ -2,7 +2,8 @@
 // 用法：node tools/hooks.ts pre-commit | pre-merge-commit
 // 不用 npm 套件。子程序的參數全程用陣列傳，不經過 sh 拆字。
 import { execFileSync, spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NAMES, PLUGINS, dispatch, readChanges, shown, type Dispatch, type Plugin } from './dispatch.ts';
@@ -45,21 +46,66 @@ function needsInstall(dir: string): boolean {
   return ['dependencies', 'devDependencies', 'optionalDependencies'].some(field => Object.keys(pkg[field] ?? {}).length > 0);
 }
 
+/**
+ * 只有暫存內容的副本（tasks/one-repo-step-1.md §10）：外掛的檢查在這裡跑，讀到的就是這次要 commit 的內容；
+ * 工作樹裡還沒 stage 的修改（自己的或別的 session 的）不會讓檢查通過或擋下，檢查跑的時候也可以繼續改檔。
+ * - 在 hook 原本的環境取出（git commit <路徑>、-a 用的是暫時的索引）；core.autocrlf 關掉，和 CI 一樣是 LF。
+ * - .git 檔指向這個工作樹的 git 資料夾：要讀 tag 或歷史的測試照常跑。子程序的 git 讀的是預設的索引，git commit <路徑>、
+ *   -a 時和副本的內容可能不同（原本讀工作樹時也一樣）。
+ * - node_modules 用連結借工作樹的（Windows 用 junction）；清理時先拆連結再刪，不會刪到工作樹的相依。
+ */
+function stagedCopy(root: string): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'essence-staged-'));
+  const links: string[] = [];
+  const cleanup = () => {
+    for (const link of links) {
+      try {
+        unlinkSync(link);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        console.error(`警告：拆不掉連結 ${link}，副本 ${dir} 沒有刪；先拆掉連結再刪。`);
+        return;
+      }
+    }
+    // 防毒軟體短暫鎖住檔案時重試；還是刪不掉只警告，不讓已經通過的檢查變成失敗。
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+    } catch (error) {
+      console.error(`警告：副本 ${dir} 沒刪乾淨（${(error as Error).message}），可以手動刪。`);
+    }
+  };
+  try {
+    git(root, ['-c', 'core.autocrlf=false', 'checkout-index', '--all', `--prefix=${dir.replaceAll('\\', '/')}/`]);
+    writeFileSync(join(dir, '.git'), `gitdir: ${git(root, ['rev-parse', '--absolute-git-dir'])}\n`);
+    for (const sub of ['tools', ...PLUGINS.map(folder)]) {
+      const from = join(root, sub, 'node_modules');
+      if (!existsSync(from) || !existsSync(join(dir, sub))) continue;
+      const to = join(dir, sub, 'node_modules');
+      symlinkSync(from, to, 'junction');
+      links.push(to);
+    }
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+  return { dir, cleanup };
+}
+
 /** npm 在 Windows 是 npm.cmd，要經過 shell 才找得到；參數都是固定的字，沒有使用者輸入。 */
 const npm = (args: string[], options: SpawnSyncOptions) => spawnSync(['npm', ...args].join(' '), { ...options, shell: true });
 
-/** 照分派表跑一個外掛；回傳這個外掛在最後那行的寫法，失敗時回傳 undefined（已經印出原因）。 */
-function runPlugin(root: string, plugin: Plugin, result: Dispatch, env: NodeJS.ProcessEnv): string | undefined {
+/** 照分派表跑一個外掛（在暫存內容的副本 copy 裡跑）；回傳這個外掛在最後那行的寫法，失敗時回傳 undefined（已經印出原因）。 */
+function runPlugin(root: string, copy: string, plugin: Plugin, result: Dispatch, env: NodeJS.ProcessEnv): string | undefined {
   const { run, tests, why } = result.plugins[plugin];
   const name = NAMES[plugin];
   if (run === 'skip') return `${name}：${why}`;
-  const dir = join(root, folder(plugin));
+  const dir = join(copy, folder(plugin));
   const where = plugin === 'cards' ? '根目錄' : `${folder(plugin)}/`;
   if (!existsSync(join(dir, 'package.json'))) {
     console.error(`${name}：${where}沒有 package.json，跑不了檢查。`);
     return undefined;
   }
-  if (needsInstall(dir) && !existsSync(join(dir, 'node_modules'))) {
+  if (needsInstall(dir) && !existsSync(join(root, folder(plugin), 'node_modules'))) {
     console.error(`${name} 要檢查，先在${where}執行 npm ci。`);
     return undefined;
   }
@@ -95,10 +141,28 @@ export function preCommit(root: string): number {
   if (!runShared(root)) return 1;
   const env = cleanEnv(root);
   const parts = ['共用檢查通過'];
-  for (const plugin of PLUGINS) {
-    const part = runPlugin(root, plugin, result, env);
-    if (part === undefined) return 1;
-    parts.push(part);
+  // 有外掛要跑才取出副本（照表全部跳過的 commit 不多花時間）。
+  let copy: ReturnType<typeof stagedCopy> | undefined;
+  if (PLUGINS.some(plugin => result.plugins[plugin].run !== 'skip')) {
+    try {
+      copy = stagedCopy(root);
+    } catch (error) {
+      console.error(`取不出暫存區的副本，跑不了外掛的檢查：${(error as Error).message}`);
+      return 1;
+    }
+  }
+  // Ctrl+C 會連子程序一起停；這裡不跟著直接結束，等子程序停下、走到 finally 拆掉副本的連結。
+  const ignore = () => undefined;
+  process.on('SIGINT', ignore);
+  try {
+    for (const plugin of PLUGINS) {
+      const part = runPlugin(root, copy?.dir ?? root, plugin, result, env);
+      if (part === undefined) return 1;
+      parts.push(part);
+    }
+  } finally {
+    copy?.cleanup();
+    process.off('SIGINT', ignore);
   }
   console.log(`分派表：${parts.join('；')}`);
   return 0;

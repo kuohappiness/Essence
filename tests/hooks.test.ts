@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { access, appendFile, copyFile, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,10 +29,12 @@ const COPIED = [
 ];
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
-const MARK = `import { appendFileSync } from 'node:fs';
+// 外掛的資料夾裡有 flag.txt 時連內容一起記，內容是 bad 就失敗：看得出檢查讀的是暫存區還是工作樹（§10）。
+const MARK = `import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 const [name] = process.argv.slice(2);
-appendFileSync(String(process.env.ESSENCE_MARKS), name + '\\n');
-if (process.env.ESSENCE_FAIL === name) {
+const flag = existsSync('flag.txt') ? ':' + readFileSync('flag.txt', 'utf8').trim() : '';
+appendFileSync(String(process.env.ESSENCE_MARKS), name + flag + '\\n');
+if (process.env.ESSENCE_FAIL === name || flag === ':bad') {
   console.error(name + ' 的替身照設定失敗');
   process.exit(1);
 }
@@ -45,12 +47,15 @@ async function clone(t: test.TestContext) {
   const repo = join(root, 'repo');
   const linked = join(root, 'linked');
   const marks = join(root, 'marks.txt');
+  // hook 的暫存資料夾（暫存內容的副本放這裡，§10）：每次 commit 後要清空。
+  const temp = join(root, 'temp');
+  await mkdir(temp);
   const links: string[] = [];
   t.after(async () => {
     for (const link of links) await unlink(link).catch(() => undefined);
     await rm(root, { recursive: true, force: true });
   });
-  const env: NodeJS.ProcessEnv = { ...process.env, ESSENCE_MARKS: marks };
+  const env: NodeJS.ProcessEnv = { ...process.env, ESSENCE_MARKS: marks, TEMP: temp, TMP: temp, TMPDIR: temp };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   // 本檔由 node --test 執行時帶著這兩個：hook 裡再跑的 node --test 會當自己是子程序（失敗也回 0），dot reporter 也會重複加。
   delete env.NODE_TEST_CONTEXT;
@@ -111,6 +116,9 @@ async function clone(t: test.TestContext) {
       ok = false;
       out = (e.stdout ?? '') + (e.stderr ?? '');
     }
+    // 副本清掉了，借來的相依還在（清理沒有順著連結刪進去）。
+    assert.deepEqual((await readdir(temp)).filter(name => name.startsWith('essence-staged-')), [], out);
+    await access(join(TOOLS_MODULES, 'markdown-it'));
     return { ok, out, marks: (await readFile(marks, 'utf8')).split('\n').filter(Boolean).sort() };
   };
   const put = async (path: string, text: string, at = repo) => {
@@ -146,9 +154,11 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   assert.match(r.out, /Cards 要檢查，先在根目錄執行 npm ci/);
   assert.deepEqual(r.marks, []);
   await mkdir(join(repo, 'node_modules'));
+  await writeFile(join(repo, 'node_modules/keep.txt'), '副本借用時不能被刪\n');
   r = await commit(['-m', 'cards only']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['cards']);
+  await access(join(repo, 'node_modules/keep.txt'));
   assert.match(lastLine(r.out), /Capture：照分派表跳過（這次改的路徑都不是它的：src\/hook-probe\.ts）；Mindboard：照分派表跳過（/);
 
   // 3. 改轉錄稿格式：Cards 跑讀到它的測試，Capture 完整檢查。
@@ -194,22 +204,38 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
 
-  // git commit -- <路徑>：Capture 已經 stage 了，只照這次 commit 的路徑分派。
+  // §10：外掛的檢查在只有暫存內容的副本跑。工作樹裡沒 stage 的改動，不會讓檢查通過，也不會讓它擋下。
+  await put('plugins/mindboard/flag.txt', 'bad\n');
+  await git(repo, 'add', '--', 'plugins/mindboard/flag.txt');
+  await put('plugins/mindboard/flag.txt', 'good\n');
+  r = await commit(['-m', 'staged bad']);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.marks, ['mindboard:bad']);
+  await put('plugins/mindboard/flag.txt', 'staged\n');
+  await git(repo, 'add', '--', 'plugins/mindboard/flag.txt');
+  await put('plugins/mindboard/flag.txt', 'bad\n');
+  r = await commit(['-m', 'staged good']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['mindboard:staged']);
+
+  // git commit -- <路徑>：Capture 已經 stage 了，只照這次 commit 的路徑分派。副本照這次 commit 用的暫時索引取出：
+  // flag.txt 是 HEAD 的 staged，不是工作樹的 bad。
   await put('plugins/capture/src/d.ts', 'export const d = 1;\n');
   await git(repo, 'add', '--', 'plugins/capture/src/d.ts');
   await put('plugins/mindboard/src/c.ts', 'export const c = 2;\n');
   r = await commit(['-m', 'only path', '--', 'plugins/mindboard/src/c.ts']);
   assert.ok(r.ok, r.out);
-  assert.deepEqual(r.marks, ['mindboard']);
+  assert.deepEqual(r.marks, ['mindboard:staged']);
   r = await commit(['-m', 'pre-staged capture']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture']);
 
-  // git commit -a：沒 stage 的改動也照分派表。
+  // git commit -a：沒 stage 的改動也照分派表，副本也有它們。
   await put('plugins/capture/src/d.ts', 'export const d = 2;\n');
+  await put('plugins/mindboard/flag.txt', 'all\n');
   r = await commit(['-a', '-m', 'all']);
   assert.ok(r.ok, r.out);
-  assert.deepEqual(r.marks, ['capture']);
+  assert.deepEqual(r.marks, ['capture', 'mindboard:all']);
 
   // 只 stage 一份 skill、工作樹的兩份剛好一致：共用檢查讀暫存區，擋下。
   for (const copy of SKILL_COPIES) await appendFile(join(repo, copy, SKILL), '\n補一行。\n');

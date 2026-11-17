@@ -300,19 +300,21 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
-  const check = 'node -e "console.log(\'NODE_OPTIONS=\' + process.env.NODE_OPTIONS)" && node --test probe.test.mjs';
+  // Cards 的檢查在暫存內容的副本跑（§10）：package.json 與測試檔要 stage；都在分派表的 Cards 範圍（根目錄的 package.json、tests/）。
+  const check = 'node -e "console.log(\'NODE_OPTIONS=\' + process.env.NODE_OPTIONS)" && node --test tests/probe.test.mjs';
   await writeFile(join(root, 'package.json'), JSON.stringify({ private: true, scripts: { check } }));
   const probe = "import test from 'node:test';\nvoid test('probe-pass', () => {});\n";
-  await writeFile(join(root, 'probe.test.mjs'), probe);
+  await mkdir(join(root, 'tests'));
+  await writeFile(join(root, 'tests/probe.test.mjs'), probe);
   await mkdir(join(root, 'src'));
   await writeFile(join(root, 'src/probe.ts'), 'export {};\n');
-  await run('git', ['add', '--', 'src/probe.ts'], isolated);
+  await run('git', ['add', '--', 'package.json', 'tests/probe.test.mjs', 'src/probe.ts'], isolated);
   const passed = await run('git', commit, isolated);
   assert.match(passed.stdout + passed.stderr, /NODE_OPTIONS=--max-old-space-size=1024 --test-reporter=dot\n/);
   assert.doesNotMatch(passed.stdout + passed.stderr, /probe-pass/);
-  await writeFile(join(root, 'probe.test.mjs'), probe + "void test('probe-fail', () => { throw new Error('probe failure message'); });\n");
+  await writeFile(join(root, 'tests/probe.test.mjs'), probe + "void test('probe-fail', () => { throw new Error('probe failure message'); });\n");
   await writeFile(join(root, 'src/probe.ts'), 'export const changed = 1;\n');
-  await run('git', ['add', '--', 'src/probe.ts'], isolated);
+  await run('git', ['add', '--', 'tests/probe.test.mjs', 'src/probe.ts'], isolated);
   await assert.rejects(run('git', commit, isolated), (error: unknown) => {
     const { code, stdout, stderr } = error as { code: unknown; stdout: string; stderr: string };
     assert.equal(code, 1);
