@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深這一節與主動提示）的 L2 審查請求（給 Codex）
 
-狀態：待審（2026-11-17，第一輪）
+狀態：第二輪待審（2026-11-17）；第一輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -70,3 +70,17 @@
 ## 回報
 
 只審查，不改產品程式；可以在隔離環境重現。寫在 `Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md`，標題〈第一輪〉；格式照 code-quality 的 `review.md`〈回報格式〉：每項寫軸、觸發條件、預期／實際、影響、真實路徑會不會發生與發生機率、位置、證據（已重現／靜態推斷／待驗證）、建議處理；最後一行寫沒測的項目與原因。
+
+## 第二輪
+
+- 待審 commit：`1c780ff82a82de97c205b13b2827441373309b23`；只查第一輪修正的差異與受影響的路徑（`d5378bb..1c780ff`）。請**新開一個 session**，推理等級高。
+- 先讀 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)最後的〈Claude 核對與修正（第一輪）〉：每一項的修法、收窄在哪、回歸測試。
+- 請特別看：
+  - R2：`aiAppend` 新增的 `locked`（前一筆不明、這一筆確定沒寫）與 `timeout`（這一筆自己不明）的分界；鎖改在寫入那一列裡設之後，第 1 批的加入、補題與加深互相排隊的順序。
+  - R3：`aiAppend` 用 state 最後讀到或寫進的文字當磁碟；plan 裡才發現有沒存的字時 `edit` 仍會存一次編輯器（存的是家長自己的字）。這個剩下的窗口要不要再收，請附真實路徑的判斷。
+  - R1：`changeStatus` 對所有狀態變更都套 `withNeed`（暫停、恢復也會補上缺的標記）；加不上時回 `unwritable`。
+  - R5：暫停的卡組手動加深時，啟用目標的挑法和 `deckTargets` 是否一致。
+  - R7 的分類（同路徑捨棄改列「交使用者選」）與理由，請判斷是否同意。
+- 第一輪〈驗證〉第 3 點：不可破壞的性質「原本的字一個都不動」有兩個任務說明寫明的例外：檔尾的空白行清掉、給家長的備註併進原有的頂層備註框（§3-1）。
+- 驗證：`node --test --test-timeout=300000 tests/ai-deepen.test.ts tests/ai-deepen-write.test.ts tests/ai-deepen-flow.test.ts tests/ai-deepen-mastery.test.ts tests/ai-deepen-state.test.ts tests/main-wiring.test.ts`；完整的 `npm run check` 照第一輪。修正沒有重跑 Windows 實機。
+- 回報接在同一份討論稿最後，標題〈第二輪〉；延續第一輪的標「延續 Rx」，修正帶出的標「Rx 修正引入」。
