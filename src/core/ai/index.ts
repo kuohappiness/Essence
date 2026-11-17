@@ -22,7 +22,7 @@ export { isJob, readJobs, reservedIds } from './job.ts';
 export type { CardJob, SavedDeck } from './job.ts';
 export { abandonJob, beginSave, publish, publishedElsewhere, rebuildDeck, skipDeck } from './publish.ts';
 export type { CreateResult, DeckStop, PublishIo, PublishResult } from './publish.ts';
-export { baselineOf, goneTargets, latestMap, ownSnapshots, readSnapshot } from './deepen-snapshot.ts';
+export { baselineOf, goneTargets, latestMap, ownSnapshots, readSnapshot, retargetSnapshot } from './deepen-snapshot.ts';
 export type { SnapshotInfo } from './deepen-snapshot.ts';
 export { buildDeepenPrompt, deepenTargets, deepenTask, unitSiblings } from './deepen-prompt.ts';
 export type { DeepenInput } from './deepen-prompt.ts';

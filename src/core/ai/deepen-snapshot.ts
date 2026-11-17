@@ -23,6 +23,8 @@ export interface SnapshotInfo {
   map: { whole: string; structure: string } | null;
   /** 卡組段裡名稱行行尾有 ID 的（新目標、候選；加進已有的原文沒有行尾 ID）：ID 與名稱。 */
   named: { id: string; name: string }[];
+  /** 加深的 `原有目標`：複製時這一篇的目標 ID（L2 R7）；沒寫、或清單裡有不是 ID 的字是空的。 */
+  original: string[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -77,17 +79,20 @@ export function readSnapshot(path: string, text: string): SnapshotInfo | null {
   const whole = found.get('全貌') ?? '', structure = found.get('架構') ?? '';
   const deck = found.has('卡組') ? found.get('卡組')! : found.size ? '' : body;
   const named = deck.split('\n').flatMap(line => { const m = TRAILING_ID.exec(line); return m ? [{ id: m[1], name: nameOf(line) }] : []; });
-  return { path, at: time?.at ?? null, id, ...kindOf(props['工作'], props['記穩目標']), links, map: whole && structure ? { whole, structure } : null, named };
+  const listed = props['原有目標'];
+  const original = Array.isArray(listed) && listed.every(each => typeof each === 'string' && ID.test(each)) ? [...new Set(listed as string[])] : [];
+  return { path, at: time?.at ?? null, id, ...kindOf(props['工作'], props['記穩目標']), links, map: whole && structure ? { whole, structure } : null, named, original };
 }
 
 /**
  * 歸屬這一篇的快照（§2-3）：`對象` 有一項解析到這一篇（resolve 回傳那個連結指到的卡組路徑；解析不到、有歧義是 null），
- * 而且不是「同一路徑換了一篇」：快照裡的 ID（卡組段與 `記穩目標`）有、卻一個都不在這一篇時不算。
+ * 而且不是「同一路徑換了一篇」：快照裡的 ID（卡組段、`記穩目標` 與 `原有目標`）有、卻一個都不在這一篇時不算。
+ * `原有目標` 只在連結已經指到這一篇時幫忙認回（新目標全部捨棄的同一篇，L2 R7），不拿來跨篇找。
  */
 export function ownSnapshots(list: readonly SnapshotInfo[], deckPath: string, deckIds: ReadonlySet<string>, resolve: (link: string) => string | null): SnapshotInfo[] {
   return list.filter(each => {
     if (!each.links.some(link => resolve(link) === deckPath)) return false;
-    const ids = [...each.named.map(target => target.id), ...each.stable ?? []];
+    const ids = [...each.named.map(target => target.id), ...each.stable ?? [], ...each.original];
     return !ids.length || ids.some(id => deckIds.has(id));
   });
 }
@@ -113,4 +118,77 @@ export function goneTargets(owned: readonly SnapshotInfo[], deckIds: ReadonlySet
     for (const target of each.named) if (!deckIds.has(target.id) && !seen.has(target.id)) seen.set(target.id, target.name);
   }
   return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+const LINK = /\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
+/** `對象` 裡外掛會改的寫法（L2 R12）：一項一行的清單或同一行的值，整個值是一對雙引號（外掛自己寫的樣子）；其他寫法（單引號、沒有引號、flow 清單、後面有註解）不改。 */
+const QUOTED = /^(\s*-\s+|對象\s*:\s*)"([^"\\]*)"(\s*)$/;
+/** 連結的目的地放不下的字：Obsidian 拿 `#`、`^`、`|`、`[`、`]` 當連結語法（L2 R12）。 */
+const UNLINKABLE = /[#^|[\]]/;
+
+/**
+ * 卡組改名或搬走之後，把快照 `對象` 裡指向舊位置的連結改到新位置（L2 R7）：只改屬性區 `對象` 那幾行裡雙引號包著的值，其他字一個都不動。
+ * 寫完整路徑的照路徑比（和加深解析連結相同：補上 `.md` 後完全相同）。只寫檔名的：檔名相同（不分大小寫），而且現在已經沒有
+ * 同檔名的卡組（left 回 0）才是那一篇，改成完整路徑（新位置的檔名不一定只有一篇）。顯示的名稱是舊檔名的跟著換。
+ * 新路徑有連結放不下的字、沒有要改的、改完重讀不是「只有那幾個連結換了」（L2 R12）都回 null。
+ */
+export function retargetSnapshot(text: string, old: string, next: string, left: (name: string) => number): string | null {
+  if (UNLINKABLE.test(next)) return null;
+  const lines = text.split(/(?<=\n)/);
+  const start = lines[0]?.replace(BOM, '').trim() === '---' ? 1 : -1;
+  if (start < 0) return null;
+  const close = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
+  if (close < 0) return null;
+  const key = lines.findIndex((line, i) => i >= start && i < close && /^對象\s*:/.test(line));
+  if (key < 0) return null;
+  let end = key + 1;
+  while (end < close && /^(?:[ \t-]|\r?\n$)/.test(lines[end])) end++;
+  const oldName = baseName(old), nextName = baseName(next);
+  /** 一個值裡的連結換成新位置；沒有指到舊位置的原樣。 */
+  const swap = (value: string): string => value.replace(LINK, (whole, raw: string, hash: string | undefined, alias: string | undefined) => {
+    const target = raw.trim();
+    const shown = alias === undefined || alias.trim() === oldName ? nextName : alias;
+    if (target.includes('/')) {
+      if ((target.endsWith('.md') ? target : `${target}.md`) !== old) return whole;
+      return `[[${target.endsWith('.md') ? next : next.replace(/\.md$/, '')}${hash ?? ''}|${shown}]]`;
+    }
+    if (target.toLowerCase() !== oldName.toLowerCase() || left(target.toLowerCase()) !== 0) return whole;
+    return `[[${next.replace(/\.md$/, '')}${hash ?? ''}|${shown}]]`;
+  });
+  let changed = false;
+  for (let i = key; i < end; i++) {
+    const eol = /\r?\n$/.exec(lines[i])?.[0] ?? '';
+    const body = lines[i].slice(0, lines[i].length - eol.length);
+    const m = QUOTED.exec(body);
+    if (!m) continue;
+    const value = swap(m[2]);
+    if (value === m[2]) continue;
+    lines[i] = `${m[1]}"${value}"${m[3]}${eol}`;
+    changed = true;
+  }
+  if (!changed) return null;
+  const result = lines.join('');
+  // 重讀核對（L2 R12）：其他屬性一樣；`對象` 每一項是原本的值換過連結的樣子；本文一樣。
+  const before = split(text), after = split(result);
+  if (!before || !after || before.body !== after.body) return null;
+  const keys = new Set([...Object.keys(before.props), ...Object.keys(after.props)]);
+  for (const name of keys) {
+    if (name === '對象') continue;
+    if (JSON.stringify(before.props[name]) !== JSON.stringify(after.props[name])) return null;
+  }
+  const was = before.props['對象'], now = after.props['對象'];
+  const expected = Array.isArray(was) ? (was as unknown[]).map((each: unknown) => typeof each === 'string' ? swap(each) : each) : typeof was === 'string' ? swap(was) : was;
+  return JSON.stringify(expected) === JSON.stringify(now) ? result : null;
+}
+
+/**
+ * 兩份快照除了 `對象` 都一樣（L2 R13）：屬性（`對象` 以外）讀出來相同、本文相同。改名時外掛或 Obsidian 只改 `對象`，
+ * Obsidian 改的時候會重排整個屬性區，所以比讀出來的值，不比字。任一份讀不懂是 false。
+ */
+export function sameButTargets(a: string, b: string): boolean {
+  const x = split(a), y = split(b);
+  if (!x || !y || x.body.replace(/\r\n?/g, '\n') !== y.body.replace(/\r\n?/g, '\n')) return false;
+  const rest = (props: Record<string, unknown>): string => JSON.stringify(Object.entries(props).filter(([name]) => name !== '對象').sort(([p], [q]) => p < q ? -1 : p > q ? 1 : 0));
+  return rest(x.props) === rest(y.props);
 }

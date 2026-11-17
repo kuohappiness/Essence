@@ -1,6 +1,7 @@
 import { stringify } from 'yaml';
 import { parseDeck } from '../deck/index.ts';
 import { freeName, rawPath, SNAPSHOT_FOLDER } from './draft.ts';
+import { readSnapshot, sameButTargets } from './deepen-snapshot.ts';
 import { appendBatch, idsInDeepenBoxes, unclosedFence, verifyAppend } from './deepen-write.ts';
 import type { CardForm, SentPart } from './prompt.ts';
 import { PURPOSES, sha256Hex } from './prompt.ts';
@@ -101,6 +102,8 @@ function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'ser
     已有目標: job.sent,
     記穩目標: job.stable.length ? [...new Set(job.stable)].sort() : '無',
   };
+  // 複製時這一篇的目標（L2 R7）：同一路徑的快照靠它認回，這次的新目標全部捨棄、又一個都沒記穩時也不會當成換了一篇。
+  if (job.ids.length) fields['原有目標'] = [...new Set(job.ids)].sort();
   if (job.form.material.trim()) fields['教材說明'] = job.form.material.trim();
   fields['接法'] = '複製貼上';
   if (save.service) fields['服務'] = save.service;
@@ -184,12 +187,16 @@ export async function runDeepen(start: DeepenJob, io: DeepenIo): Promise<DeepenR
     try { text = await io.read(path); } catch { return { kind: 'stop', why: 'unreadable', detail: path }; }
     return text === null && io.displaced(path) ? { kind: 'stop', why: 'displaced' } : { text };
   };
+  /** 那個位置的快照就是這一份：內容相同，或改名時只改了 `對象`（外掛或 Obsidian 改連結，L2 R13）。 */
+  const published = (text: string): boolean => sha256Hex(text) === save().snapshotSha || sameButTargets(text, save().snapshot);
+  /** 同一個識別碼、卻有 `對象` 以外的不同：不當成一般的撞名往後加（會重發同一個識別碼），停下來（L2 R13）。 */
+  const sameId = (text: string): boolean => readSnapshot('', text)?.id === job.id;
   const finish = (): DeepenResult => { io.remove(job); return { kind: 'done', wrote: save().boxes.length > 0 || save().noteItems.length > 0 }; };
 
   // 第 3 步：先認快照。同一個位置、內容相同就是做完了，不動卡組。
   const snap = await read(save().snapshotPath);
   if ('kind' in snap) return snap;
-  if (snap.text !== null && sha256Hex(snap.text) === save().snapshotSha) return finish();
+  if (snap.text !== null && published(snap.text)) return finish();
 
   if (!save().written) {
     if (save().unclear) return { kind: 'stop', why: 'unclear' };
@@ -245,7 +252,8 @@ export async function runDeepen(start: DeepenJob, io: DeepenIo): Promise<DeepenR
     if (created.kind !== 'exists') return createStop(created, save().snapshotPath);
     const found = await read(save().snapshotPath);
     if ('kind' in found) return found;
-    if (found.text !== null && sha256Hex(found.text) === save().snapshotSha) return finish();
+    if (found.text !== null && published(found.text)) return finish();
+    if (found.text !== null && sameId(found.text)) return { kind: 'stop', why: 'conflict', detail: save().snapshotPath };
     const names = io.names();
     names.add(fileName(save().snapshotPath).toLowerCase());
     keep({ snapshotPath: `${folderOf(save().snapshotPath)}/${freeName(save().snapshotBase, names)}.md` });

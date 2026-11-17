@@ -14,7 +14,7 @@ export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads, refuseIncomplete } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
-import { createWrites, WriteTimeout } from './writes.ts';
+import { createWrites, REFUSE, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, learnedWords, moveItems, planExisting, WHY } from '../core/ai/index.ts';
@@ -926,11 +926,12 @@ export function createState(options: StateOptions): State {
     if (addLocks.has(path)) return { kind: 'timeout' };
     const last: { plan: MovePlan | null; changed: boolean; locked: boolean } = { plan: null, changed: false, locked: false };
     const elsewhere = (id: string): boolean => gatedIds.has(id) || (tracker.where([id]).get(id) ?? []).some(each => each !== path);
-    const plan = (text: string): Prepared | null => {
-      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+    const plan = (text: string): Prepared | null | typeof REFUSE => {
       last.plan = null;
       last.locked = addLocks.has(path);
-      if (last.locked) return null;
+      // 前一筆逾時鎖著：編輯器的字可能比磁碟舊，不讀進來、不存回去（第 2 批 L2 R10、R16）。
+      if (last.locked) return REFUSE;
+      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       last.changed = !still(text);
       if (last.changed) return null;
       last.plan = moveItems(text, refs, { elsewhere });
@@ -1017,13 +1018,13 @@ export function createState(options: StateOptions): State {
       if (blocked) { for (const each of items) left.push({ ref: each.ref, why: EXISTING_WHY.notNow }); continue; }
       const planned = new Map<ItemRef, string>();
       let moved = false, lockedNow = false;
-      const plan = (now: string): Prepared | null => {
-        track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
+      const plan = (now: string): Prepared | null | typeof REFUSE => {
         planned.clear();
         moved = false;
-        // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）。
+        // 分組之後才逾時的（同一刻按的另一批）：排著的寫入輪到時再查一次（L2 R3）。鎖最先看：鎖著時編輯器的字不讀進來、不存回去（第 2 批 L2 R10、R16）。
         lockedNow = addLocks.has(dest);
-        if (lockedNow) return null;
+        if (lockedNow) return REFUSE;
+        track(dest, () => { if (tracker.text(dest) !== now) tracker.observe([{ path: dest, text: now, deck: parseDeck(now) }], true); });
         if (request.destStill && !request.destStill(dest, now)) { moved = true; return null; }
         let next = now;
         for (const each of items) {
@@ -1074,14 +1075,16 @@ export function createState(options: StateOptions): State {
     // 第 4 步：從來源拿掉，同一個回呼裡重新確認每一項。
     let last: { done: ItemRef[]; left: Left[]; text: string | null } = { done: [], left: [], text: null };
     let ownMoved = false;
-    const plan = (now: string): Prepared | null => {
+    const plan = (now: string): Prepared | null | typeof REFUSE => {
+      // 鎖最先看（第 2 批 L2 R10、R16）：鎖著時編輯器的字不讀進來、不存回去，其他拒絕的理由都排在後面。
+      ownMoved = false;
+      if (addLocks.has(source)) {
+        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
+        return REFUSE;
+      }
       track(source, () => { if (tracker.text(source) !== now) tracker.observe([{ path: source, text: now, deck: parseDeck(now) }], true); });
       ownMoved = own.length > 0 && !!request.destStill && !request.destStill(source, now);
       if (ownMoved) { last = { done: [], left: [], text: null }; return null; }
-      if (addLocks.has(source)) {
-        last = { done: [], left: [...confirmedItems, ...own].map(each => ({ ref: each.ref, why: EXISTING_WHY.locked(source) })), text: null };
-        return null;
-      }
       const items: ClearItem[] = [];
       const stale: Left[] = [];
       for (const each of confirmedItems) {
@@ -1204,9 +1207,10 @@ export function createState(options: StateOptions): State {
       let why: DeepenStop['why'] | null = null;
       // 編輯器的字和磁碟（state 最後讀到或寫進去的）不同：家長還有沒存的字，先不寫（§3-2、L2 R3）。在寫入那一列裡比，不在排隊之前。
       const unsaved = (text: string): boolean => { const disk = tracker.text(path); return disk === undefined || disk.replace(/\r\n?/g, '\n') !== text.replace(/\r\n?/g, '\n'); };
-      const prepared = (text: string): Prepared | null => {
-        if (addLocks.has(path)) { why = 'locked'; return null; }
-        if (editor && unsaved(text)) { why = 'unsaved'; return null; }
+      const prepared = (text: string): Prepared | null | typeof REFUSE => {
+        // 鎖著、有沒存的字：明確拒寫，edit 不改也不存編輯器（L2 R10）。
+        if (addLocks.has(path)) { why = 'locked'; return REFUSE; }
+        if (editor && unsaved(text)) { why = 'unsaved'; return REFUSE; }
         track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
         const out = plan(text);
         if ('why' in out) { why = out.why; return null; }
@@ -1218,7 +1222,7 @@ export function createState(options: StateOptions): State {
         let done: WriteResult;
         if (!editor) done = await writes.fillFile(path, prepared);
         else {
-          // edit 的 plan 回 null 時仍會存一次編輯器：已知有沒存的字就在進 edit 之前停下（edit 裡面再比一次，擋排隊中才打的字）。
+          // 已知有沒存的字就在進 edit 之前停下；edit 裡面再比一次（排隊中才打的、或磁碟在排隊中變了），回 REFUSE。
           const now = editor.text();
           if (now !== null && unsaved(now)) { why = 'unsaved'; return { kind: 'unchanged' } as const; }
           done = await writes.edit(editor, prepared, { kind: 'unchanged' });

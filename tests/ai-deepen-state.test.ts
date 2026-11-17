@@ -108,3 +108,33 @@ void test('R3 編輯器和磁碟相同：照常經過編輯器寫', async t => {
   assert.equal(result.kind, 'written');
   assert.ok(memory.texts.get(DECK)!.endsWith('\nB\n'));
 });
+
+void test('L2 R10 進 edit 之前的比對過了，接著另一台的新版同步進磁碟、分頁還是舊的：回 unsaved，編輯器不存，同步來的字留著', async t => {
+  const { memory, state } = await load(t, { [DECK]: TEXT }, { writeTimeout: 1000 });
+  const editor = editorFor(memory, TEXT);
+  const synced = TEXT + '\n另一台同步來的字\n';
+  // 寫入那一列先讀一次編輯器（進 edit 之前的比對），這一刻之後才同步進來：edit 裡讀完才發現。
+  const text = editor.text.bind(editor);
+  let first = true;
+  editor.text = () => { const now = text(); if (first) { first = false; memory.write(DECK, synced); } return now; };
+  assert.deepEqual(await state.aiAppend(DECK, editor, tail('\nB\n')), { kind: 'not', why: 'unsaved' });
+  assert.equal(editor.saved, 0);
+  assert.equal(editor.value, TEXT);
+  assert.equal(memory.texts.get(DECK), synced);
+});
+
+void test('L2 R10 加深逾時（其實已寫進磁碟）之後排進來的加入：回 timeout，舊分頁不存回去、加深的字留著', async t => {
+  const src = TEXT + '\n> [!note]- 候選卡片\n> - 新的目標 ^ghj234\n>     - 出處：p.41\n>     - 問 :: 答\n';
+  const { memory, state } = await load(t, { [DECK]: src }, { writeTimeout: 30 });
+  const editor = editorFor(memory, src);
+  const { introBoxes, refOf } = await import('../src/core/ai/index.ts');
+  const refs = introBoxes(src).flatMap(box => box.items.map(refOf));
+  const held = memory.holdModify(DECK);
+  const deepen = state.aiAppend(DECK, null, tail('\nA\n'));
+  const added = state.addCandidates(DECK, refs, editor, () => true);
+  assert.deepEqual(await deepen, { kind: 'timeout' });
+  held.release();
+  assert.equal((await added).kind, 'timeout');
+  assert.equal(editor.saved, 0);
+  assert.ok(memory.texts.get(DECK)!.endsWith('\nA\n'));
+});
