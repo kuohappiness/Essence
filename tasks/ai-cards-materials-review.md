@@ -1,6 +1,6 @@
 # AI 製卡第 3 批（送給 AI 的材料）的 L2 審查請求（給 Codex）
 
-狀態：第二輪審完、發現已修（2026-11-17）；第一輪的報告與回應在 [討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-materials-l2.md>)
+狀態：已完成（2026-11-17，第二輪審完、發現已修，使用者不做第三輪）；第一輪的報告與回應在 [討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-materials-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
