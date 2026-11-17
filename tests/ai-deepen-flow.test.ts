@@ -25,7 +25,7 @@ const REPLY = [
 const NOW = Date.parse('2026-11-17T10:00:00+08:00');
 
 function machine() {
-  const saved: { jobs: unknown; retired: string[]; skips: unknown; off: boolean } = { jobs: null, retired: [], skips: null, off: false };
+  const saved: { jobs: unknown; retired: string[]; skips: unknown; off: boolean; picks: Record<string, boolean> } = { jobs: null, retired: [], skips: null, off: false, picks: {} };
   return {
     saved,
     store: {
@@ -35,6 +35,8 @@ function machine() {
       skips: () => saved.skips,
       saveSkips(value: Record<string, { ids: string[]; at: string }>) { saved.skips = JSON.parse(JSON.stringify(value)) as unknown; },
       remindOff: () => saved.off,
+      picks: () => saved.picks,
+      savePick(key: string, pick: boolean) { saved.picks = { ...saved.picks, [key]: pick }; },
     },
   };
 }
@@ -77,6 +79,10 @@ void test('§1～§3 加深：提示帶這一篇的目標、同單元其他篇�
   assert.match(prompt, /<<<全貌>>>\n溫度的全貌/);
   assert.match(prompt, /- ghj234 被刪掉的目標/);
   assert.match(prompt, /- 家長調整：這次不要課外/);
+  // D-210 第 3 點：自然沒記過照預設不勾，複製成功才記；自然不送英文單字。
+  assert.ok(prompt.includes('- 點選填空：不要'));
+  assert.ok(!prompt.includes('英文單字'));
+  assert.deepEqual(box.saved.picks, { science: false });
   assert.equal(deepen.jobOf(DECK)?.id, copied.job.id);
 
   const inspection = deepen.inspect(copied.job, REPLY);

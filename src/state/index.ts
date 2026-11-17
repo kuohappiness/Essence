@@ -17,7 +17,7 @@ import type { Life, Texts } from './reads.ts';
 import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, moveItems, planExisting, WHY } from '../core/ai/index.ts';
+import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, learnedWords, moveItems, planExisting, WHY } from '../core/ai/index.ts';
 import type { AppendWrite, ClearItem, DeepenStop, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
@@ -312,6 +312,8 @@ export interface State {
   addLocked(path: string): boolean;
   /** AI 製卡（tasks/ai-cards-mvp.md §2）：會一起送出的已有學習目標，照 core/ai 的 existingTargets；ID 重複的不送。還沒 ready 是空的。 */
   aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
+  /** 英文的已有單字（D-210 第 4 點）：和 aiExisting 同一批目標、同樣跳過不能用的 ID。 */
+  aiWords(subject: string, term: string): readonly string[];
   /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
   aiTarget(id: string): ExistingNow;
   /** 這一篇的目標會不會被正式排程停出（§7 啟用確認的計數，R2-8）：待處理的行、重複的 ID、和需要新版的卡組同 ID、紀錄讀不懂或不完整。 */
@@ -1167,6 +1169,10 @@ export function createState(options: StateOptions): State {
     aiExisting(subject, term) {
       if (!life.loaded) return [];
       return existingTargets(deckList, subject, term, new Set([...tracker.duplicates().map(each => each.id), ...gatedIds]));
+    },
+    aiWords(subject, term) {
+      if (!life.loaded) return [];
+      return learnedWords(deckList, subject, term, new Set([...tracker.duplicates().map(each => each.id), ...gatedIds]));
     },
     aiTarget(id) {
       if (!life.loaded || tracker.isDuplicate(id) || gatedIds.has(id)) return { kind: 'unusable' };

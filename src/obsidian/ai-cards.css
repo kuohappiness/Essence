@@ -12,6 +12,11 @@
 .essence-cards-ai-form input[type="text"] {
   width: 100%;
 }
+.essence-cards-ai-pick-note {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
 .essence-cards-ai-paste {
   width: 100%;
   min-height: 14em;

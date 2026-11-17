@@ -229,6 +229,7 @@ export default class EssenceCardsPlugin extends Plugin {
           jobs: () => aiPrefs.jobs(app), saveJobs: jobs => { aiPrefs.saveJobs(app, jobs); },
           retired: () => aiPrefs.retired(app), retire: ids => { aiPrefs.retire(app, ids); },
           last: () => aiPrefs.last(app), saveLast: last => { aiPrefs.saveLast(app, last); },
+          picks: () => aiPrefs.picks(app), savePick: (key, pick) => { aiPrefs.savePick(app, key, pick); },
         },
         clipboard: text => navigator.clipboard.writeText(text),
         now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
@@ -253,6 +254,7 @@ export default class EssenceCardsPlugin extends Plugin {
           jobs: () => aiPrefs.deepenJobs(app), saveJobs: jobs => { aiPrefs.saveDeepenJobs(app, jobs); }, retire: ids => { aiPrefs.retire(app, ids); },
           skips: () => aiPrefs.deepenSkips(app), saveSkips: value => { aiPrefs.saveDeepenSkips(app, value); },
           remindOff: () => deepenRemindOff.get(app),
+          picks: () => aiPrefs.picks(app), savePick: (key, pick) => { aiPrefs.savePick(app, key, pick); },
         },
         read: async path => {
           const view = editingView(path);

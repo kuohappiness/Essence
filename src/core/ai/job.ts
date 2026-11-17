@@ -58,7 +58,7 @@ function isPart(value: unknown): value is SentPart {
 }
 function isForm(value: unknown): value is CardForm {
   return isObject(value) && isString(value.subject) && isString(value.term) && isString(value.unit) && PURPOSES.includes(value.purpose as CardForm['purpose'])
-    && typeof value.supplement === 'boolean' && isString(value.adjust) && isString(value.material);
+    && typeof value.supplement === 'boolean' && (value.pick === undefined || typeof value.pick === 'boolean') && isString(value.adjust) && isString(value.material);
 }
 function isExisting(value: unknown): value is ExistingTarget {
   return isObject(value) && isString(value.id) && isString(value.name) && isString(value.source) && isString(value.path) && (value.first === undefined || isString(value.first));

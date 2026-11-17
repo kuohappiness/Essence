@@ -13,7 +13,7 @@ export { CLEAR_WHY, clearExisting } from './existing-clear.ts';
 export type { ClearItem } from './existing-clear.ts';
 export { planSources, SOURCE_WHY } from './existing-sources.ts';
 export type { SourceOwner as SourceProps } from './existing-sources.ts';
-export { buildPrompt, existingTargets, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
+export { buildPrompt, existingTargets, learnedWords, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { groupHints, issueText, normalizeReply } from './reply.ts';
 export { activationCounts, freeName, inspectReply, planDraft, rawPath, SNAPSHOT_FOLDER } from './draft.ts';

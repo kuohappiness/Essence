@@ -30,7 +30,7 @@ export function typedAnswer(answer: string, label = '中翻英'): TypedAnswer {
 const foldWidth = (text: string): string => text.replace(/[！-～]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xFEE0));
 
 /** 比對答案、組員與組的身分用的寫法：去掉成對的 `**`、`==` 與前後空白，連續空白（含全形）當一個，英文不分大小寫。字鍵照括號裡寫的顯示。 */
-function pickKey(text: string): string {
+export function pickKey(text: string): string {
   const bare = text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
   return foldWidth(bare).replace(/\s+/g, ' ').trim().toLowerCase();
 }

@@ -27,6 +27,7 @@ export function saveTerms(app: App, terms: TermOpen): void { app.saveLocalStorag
 const AI_JOBS = 'essence-cards-ai-jobs';
 const AI_RETIRED = 'essence-cards-ai-retired';
 const AI_LAST = 'essence-cards-ai-last';
+const AI_PICK = 'essence-cards-ai-pick';
 const AI_DEEPEN = 'essence-cards-deepen-jobs';
 const DEEPEN_SKIPS = 'essence-cards-deepen-skips';
 export const aiPrefs = {
@@ -50,6 +51,13 @@ export const aiPrefs = {
     return { ...typeof subject === 'string' ? { subject } : {}, ...typeof term === 'string' ? { term } : {} };
   },
   saveLast: (app: App, last: { subject: string; term: string }): void => { app.saveLocalStorage(AI_LAST, last); },
+  /** 點選填空每一科上次的選擇（D-210 第 2 點）：`{ 科目的 key: true/false }`；讀不懂的那一科當成沒記過。 */
+  picks(app: App): Record<string, boolean> {
+    const value: unknown = app.loadLocalStorage(AI_PICK);
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
+  },
+  savePick: (app: App, key: string, pick: boolean): void => { app.saveLocalStorage(AI_PICK, { ...aiPrefs.picks(app), [key]: pick }); },
   /** 加深的工作（tasks/ai-cards-deepen.md §3-2）：和製卡的工作分開存，原樣讀出來，由 core/ai 的 readDeepenJobs 判斷。 */
   deepenJobs: (app: App): unknown => app.loadLocalStorage(AI_DEEPEN),
   saveDeepenJobs: (app: App, jobs: unknown[]): void => { app.saveLocalStorage(AI_DEEPEN, jobs); },

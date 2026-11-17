@@ -3,7 +3,7 @@ import type { App, Plugin } from 'obsidian';
 import { deepenPending, groupHints, issueText } from '../core/ai/index.ts';
 import type { DeepenInspection, DeepenJob } from '../core/ai/index.ts';
 import { isDeckPath } from '../core/deck/index.ts';
-import { SERVICES } from './ai-cards.ts';
+import { PICK_NOTE, SERVICES } from './ai-cards.ts';
 import type { Deepen, DeepenOutcome } from './deepen.ts';
 
 // 加深這一節的視窗（tasks/ai-cards-deepen.md §1）：沿用 AI 製卡的視窗，第一步換成加深的內容。只在電腦（D-134、D-039）。
@@ -42,6 +42,8 @@ class DeepenModal extends Modal {
   private busy = false;
   private direction = '';
   private material = '';
+  /** 這次勾不勾點選填空（D-210 第 3 點）；null 是還沒開過表單，照這一科記的。 */
+  private pick: boolean | null = null;
   private readonly host: DeepenHost;
   private readonly modals: Set<Modal>;
   readonly path: string;
@@ -101,11 +103,17 @@ class DeepenModal extends Modal {
     const material = field('教材').createEl('input', { type: 'text', placeholder: '選填，例如「課本 p.40～51 的照片」' });
     material.value = this.material;
     material.addEventListener('input', () => { this.material = material.value; });
+    const pickCell = field('點選填空');
+    const pick = pickCell.createEl('input', { type: 'checkbox' });
+    this.pick ??= deepen.pick(this.path);
+    pick.checked = this.pick;
+    pickCell.createSpan({ text: PICK_NOTE, cls: 'essence-cards-ai-pick-note' });
+    pick.addEventListener('change', () => { this.pick = pick.checked; });
     const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
     const copy = this.buttons(el).createEl('button', { text: '複製提示', cls: 'mod-cta' });
     copy.addEventListener('click', () => {
       copy.disabled = true;
-      void deepen.copy(this.path, this.direction, this.material).then(result => {
+      void deepen.copy(this.path, this.direction, this.material, this.pick ?? undefined).then(result => {
         copy.disabled = false;
         if ('error' in result) { message.setText(result.error); return; }
         this.job = result.job;
