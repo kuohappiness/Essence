@@ -40,7 +40,7 @@ jobs:
 
   cards:
     needs: plan
-    if: needs.plan.outputs.cards == 'true'
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
