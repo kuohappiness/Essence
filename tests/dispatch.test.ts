@@ -110,6 +110,9 @@ const CASES: Case[] = [
   // tests/helper.ts 寫到 product.md，但不是 *.test.ts（照原本 pre-commit 的 --include='*.test.ts'）。
   { name: `改 ${PRODUCT}（沒有測試寫到它）`, change: edit(PRODUCT), preCommit: {}, ci: { cards: 'full' } },
   { name: '改根目錄的 NOTES.MD（大寫副檔名）', change: edit('NOTES.MD'), preCommit: {}, ci: { cards: 'full' } },
+  // 最上層的任務說明與討論稿（過渡期是 Cards 與跨外掛的）：和 docs/ 一樣，規劃文件的 commit 不跑三個外掛的完整檢查。
+  { name: '改 tasks/x.md', change: edit('tasks/x.md'), preCommit: {}, ci: { cards: 'full' } },
+  { name: '改 Claude Codex Discussion/x.md（路徑有空白）', change: edit('Claude Codex Discussion/x.md'), preCommit: {}, ci: { cards: 'full' } },
   { name: `改 ${SKILL}`, change: edit(SKILL), preCommit: {}, ci: { cards: 'full' } },
   { name: '刪 plugins/mindboard/src/old.ts', change: async e => { await e.git('rm', '-q', '--', 'plugins/mindboard/src/old.ts'); }, preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
   {

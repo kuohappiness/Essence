@@ -57,8 +57,11 @@ export const RULES: Rule[] = [
     matches: path => under('src/', 'tests/')(path) || CARDS_TOOL.test(path) || CARDS_CONFIG.has(path),
   },
   {
-    id: 7, name: '文件、試作場與 skill', effect: () => ({ cards: 'related' }),
-    matches: path => under('docs/', 'experiments/', '.claude/', '.agents/')(path) || (!path.includes('/') && lower(path).endsWith('.md')),
+    // tasks/、Claude Codex Discussion/ 是最上層（過渡期 Cards 與跨外掛）的任務說明與討論稿；任務說明 §2 的表漏列，
+    // 不列會落到第 8 條，每次規劃文件的 commit 都跑三個外掛的完整檢查（〈結果〉）。
+    id: 7, name: '文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related' }),
+    matches: path => under('docs/', 'tasks/', 'Claude Codex Discussion/', 'experiments/', '.claude/', '.agents/')(path)
+      || (!path.includes('/') && lower(path).endsWith('.md')),
   },
   { id: 8, name: '以上都不是', matches: () => true, effect: () => 'all' },
 ];
