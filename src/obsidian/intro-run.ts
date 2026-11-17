@@ -30,8 +30,8 @@ const ADD_TIPS = {
   noDest: '原本的卡組裡找不到這個學習目標，或它的 ID 重複、寫法有問題',
   locked: (path: string): string => `「${deckName(path)}」的寫入還沒確定，請重開 Obsidian 後再按`,
   saved: (path: string): string => `「${deckName(path)}」可能已經寫好，請再按一次`,
-  moved: (count: number): string => `已把 ${String(count)} 個候選卡片加進這一篇的學習目標`,
-  confirm: (count: number, suspects: number): string => `把 ${String(count)} 個候選卡片加進這一篇的學習目標？` + (suspects ? `可能重複的 ${String(suspects)} 項請逐項看。` : ''),
+  moved: (count: number, deepen = false): string => `已把 ${String(count)} 個${deepen ? '新的學習目標' : '候選卡片'}加進這一篇的學習目標`,
+  confirm: (count: number, suspects: number, deepen = false): string => `把 ${String(count)} 個${deepen ? '新的學習目標' : '候選卡片'}加進這一篇的學習目標？` + (suspects ? `可能重複的 ${String(suspects)} 項請逐項看。` : ''),
 };
 /** phone、closed 不提示：手機上沒有按鈕，關閉時畫面也不在了。 */
 const BLOCKED: Partial<Record<WriteBlock | 'needs-update', string>> = {
@@ -47,7 +47,7 @@ const BLOCKED: Partial<Record<WriteBlock | 'needs-update', string>> = {
 function addMessage(path: string, result: AddResult): string | null {
   const left = (items: readonly { ref: ItemRef; why: string }[]): string[] => items.map(each => `「${itemName(each.ref)}」：${each.why}`);
   switch (result.kind) {
-    case 'written': return [...result.moved.length ? [ADD_TIPS.moved(result.moved.length)] : [], ...result.confirmed ? [] : [ADD_TIPS.saved(path)], ...left(result.left)].join('\n') || null;
+    case 'written': return [...result.moved.length ? [ADD_TIPS.moved(result.moved.length, result.moved.every(ref => ref.kind === 'deepen'))] : [], ...result.confirmed ? [] : [ADD_TIPS.saved(path)], ...left(result.left)].join('\n') || null;
     case 'nothing': return result.left.length ? left(result.left).join('\n') : WHY.changed;
     case 'changed': return ADD_TIPS.changed;
     case 'timeout': return ADD_TIPS.locked(path);
@@ -162,7 +162,7 @@ export function createIntroRunner(host: IntroRunHost): { busy(path: string): boo
       const batch = boxBatch(box);
       const refs = batch.items.map(refOf);
       if (!refs.length) return { kind: 'nothing', left: [] };
-      if (!await ask(ADD_TIPS.confirm(refs.length, batch.rest)) || !alive) return null;
+      if (!await ask(ADD_TIPS.confirm(refs.length, batch.rest, box.kind === 'deepen')) || !alive) return null;
       const result = await write(state, path, refs, now => {
         const found = boxOf(now, refs);
         return !!found && sameRefs(boxBatch(found).items.map(refOf), refs);

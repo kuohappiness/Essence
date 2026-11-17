@@ -17,7 +17,7 @@ import type { Life, Texts } from './reads.ts';
 import { createWrites, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, moveCandidates, planExisting, WHY } from '../core/ai/index.ts';
+import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, moveItems, planExisting, WHY } from '../core/ai/index.ts';
 import type { ClearItem, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
@@ -922,7 +922,7 @@ export function createState(options: StateOptions): State {
       if (last.locked) return null;
       last.changed = !still(text);
       if (last.changed) return null;
-      last.plan = moveCandidates(text, refs, { elsewhere });
+      last.plan = moveItems(text, refs, { elsewhere });
       if (last.plan.text === null) return null;
       const deck = parseDeck(last.plan.text);
       const expect = last.plan.moved.flatMap(ref => deck.targets.filter(t => t.id !== null && t.id === ref.id).map(t => ({ id: t.id!, name: t.name })));
@@ -992,6 +992,9 @@ export function createState(options: StateOptions): State {
       const id = found.item.id;
       const at = locate(id);
       if ('why' in at) { left.push({ ref, why: at.why }); continue; }
+      // 加深的補題（「加進已有的學習目標（加深）」）：目的地只能是這一篇；出處有課外的留給家長（tasks/ai-cards-deepen.md §3-3）。
+      if (found.box.deepen && at.path !== source) { left.push({ ref, why: EXISTING_WHY.otherDeck }); continue; }
+      if (found.box.deepen && hasOutsideItem(found.item.original)) { left.push({ ref, why: EXISTING_WHY.outside }); continue; }
       if (at.path === source) { own.push({ ref, id, dest: null }); continue; }
       if (addLocks.has(at.path)) { left.push({ ref, why: EXISTING_WHY.locked(at.path) }); continue; }
       groups.set(at.path, [...groups.get(at.path) ?? [], { ref, id, original: found.item.original }]);

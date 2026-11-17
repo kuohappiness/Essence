@@ -1,4 +1,4 @@
-import { expandTabs, linesOf, listTree, markNeed, nameIds, parseDeck } from '../deck/index.ts';
+import { expandTabs, frontmatterLines, headingKey, linesOf, listTree, markNeed, nameIds, parseDeck } from '../deck/index.ts';
 import type { Deck, Line } from '../deck/index.ts';
 import { canRead, PICK_NEEDS } from '../version/index.ts';
 import { findItem, introBoxes } from './intro.ts';
@@ -159,7 +159,9 @@ function compose(lines: readonly Line[], boxes: readonly IntroBox[], chosen: rea
     // 框裡只剩標題行與空的 `>` 行：整個框拿掉（第二輪 R5：還有家長的字就留著）。
     const rest = [];
     for (let i = box.line + 1; i < box.end; i++) if (!remove.has(i)) rest.push(lines[i].raw);
-    if (rest.every(raw => /^\s{0,3}>\s*$/.test(raw))) for (let i = box.line; i < box.end; i++) remove.add(i);
+    // 加深的框裡的小標題是 AI 分組用的（tasks/ai-cards-deepen.md §3-1）：項目都搬走了，只剩小標題也算空。
+    const empty = (raw: string): boolean => /^\s{0,3}>\s*$/.test(raw) || (box.kind === 'deepen' && HEADING.test(raw.replace(/^\s{0,3}> ?/, '')));
+    if (rest.every(empty)) for (let i = box.line; i < box.end; i++) remove.add(i);
   }
   const block = chosen.flatMap(each => each.lines);
   // 照原本的行走一次：拿掉的那幾段記成一個缺口（gap），插入處記成 null。
@@ -191,4 +193,125 @@ function compose(lines: readonly Line[], boxes: readonly IntroBox[], chosen: rea
     if (i < kept.length - 1 && !blank(kept[i + 1])) result.push('');
   }
   return result.join(eol) + (finalEol ? eol : '');
+}
+
+// ── 「加深的學習目標」的加入（tasks/ai-cards-deepen.md §3-3）：移到同名小標題直屬的範圍。 ──
+
+const DEEPEN_WHY = {
+  twoHeadings: (title: string): string => `卡組裡有兩個以上同名的小標題「${title}」，請手動搬`,
+} as const;
+
+interface Heading { line: number; level: number; key: string; text: string }
+const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
+const OPEN_FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+/** 本文（引言框與程式碼圍欄以外、屬性區之後）的標題。 */
+function bodyHeadings(lines: readonly Line[], boxes: readonly IntroBox[], start: number): Heading[] {
+  const found: Heading[] = [];
+  let fence: { char: string; count: number } | null = null;
+  for (let i = start; i < lines.length; i++) {
+    const raw = lines[i].raw;
+    if (fence) { if (new RegExp('^ {0,3}' + fence.char + '{' + String(fence.count) + ',}[ \\t]*$').test(raw)) fence = null; continue; }
+    const open = OPEN_FENCE.exec(raw);
+    if (open && !(open[1][0] === '`' && open[2].includes('`'))) { fence = { char: open[1][0], count: open[1].length }; continue; }
+    if (/^\s{0,3}>/.test(raw) || boxes.some(box => i >= box.line && i < box.end)) continue;
+    const m = HEADING.exec(raw);
+    if (m) found.push({ line: i, level: m[1].length, key: headingKey(m[2] ?? ''), text: (m[2] ?? '').trim() });
+  }
+  return found;
+}
+
+/** 框裡那一項上面最近的小標題（同一個框裡、拿掉引言框前綴之後的標題行）；沒有是 null。 */
+function boxHeading(lines: readonly Line[], box: IntroBox, item: BoxItem): { level: number; key: string; raw: string } | null {
+  for (let i = item.line - 1; i > box.line; i--) {
+    const inner = lines[i].raw.replace(/^\s{0,3}> ?/, '');
+    const m = HEADING.exec(inner);
+    if (m) return { level: m[1].length, key: headingKey(m[2] ?? ''), raw: inner.trimEnd() };
+  }
+  return null;
+}
+
+/**
+ * 加深的學習目標一項一項搬（§3-3）：照框裡那一項上面的小標題找本文同級同名的標題。剛好一個：放在它直屬的範圍（到第一個子標題或下一個
+ * 同級以上的標題，取先到的）最後一個目標整項的後面，直屬範圍沒有目標時放在標題的下一行；一個都沒有：在本文最後一個目標後面新增這個小標題
+ * （本文沒有目標時放在第一個加深框之前）；不只一個：那一項留著。框裡沒有小標題的照候選的放法。搬完核對其他目標不變、新目標歸在預期的標題底下。
+ */
+export function moveDeepen(text: string, refs: readonly ItemRef[], context: MoveContext): MovePlan {
+  let current = text;
+  const moved: ItemRef[] = [], left: Left[] = [];
+  for (const ref of refs) {
+    const step = moveOneDeepen(current, ref, context);
+    if ('why' in step) { left.push({ ref, why: step.why }); continue; }
+    current = step.text;
+    moved.push(ref);
+  }
+  return { text: moved.length ? current : null, moved, left };
+}
+
+function moveOneDeepen(text: string, ref: ItemRef, context: MoveContext): { text: string } | { why: string } {
+  const lines = linesOf(text);
+  const boxes = introBoxes(text);
+  const found = findItem(text, ref);
+  if (found.kind !== 'found' || found.item.kind !== 'deepen') return { why: found.kind === 'duplicate' ? WHY.duplicate : WHY.changed };
+  const before = parseDeck(text, { layout: true });
+  const last = before.targets.at(-1);
+  const tabs = usesTabs(lines, boxes);
+  const id = nameIds(found.item.original.split('\n')[0]).trailing?.id;
+  if (!id) return { why: WHY.noId };
+  const bodyIds = new Set(before.targets.flatMap(t => t.id ?? []));
+  const others = boxes.flatMap(box => box.items).filter(each => each.line !== found.item.line && each.id === id);
+  if (bodyIds.has(id) || others.length || context.elsewhere(id)) return { why: WHY.takenId(id) };
+  const fm = frontmatterLines(lines);
+  const headings = bodyHeadings(lines, boxes, fm && fm !== 'unclosed' ? fm.close + 1 : 0);
+  const wanted = boxHeading(lines, found.box, found.item);
+  const endOf = (target: (typeof before.targets)[number]): number => before.layout.get(target.line)!.end;
+  let at: number, head: string[] = [], expect: string | null = null;
+  const indentOfTarget = (target: (typeof before.targets)[number] | undefined): number => target ? indentOf(lines[target.line].raw).width : 0;
+  let rootIndent = indentOfTarget(last);
+  if (wanted) {
+    const same = headings.filter(h => h.level === wanted.level && h.key === wanted.key);
+    if (same.length > 1) return { why: DEEPEN_WHY.twoHeadings(same[0].text) };
+    expect = wanted.key;
+    if (same.length === 1) {
+      const h = same[0];
+      const stop = headings.find(each => each.line > h.line)?.line ?? lines.length;
+      const inScope = before.targets.filter(t => t.line > h.line && t.line < stop);
+      const tail = inScope.at(-1);
+      at = tail ? endOf(tail) : h.line + 1;
+      rootIndent = tail ? indentOfTarget(tail) : 0;
+    } else {
+      at = last ? endOf(last) : found.box.line;
+      head = [wanted.raw, ''];
+    }
+  } else {
+    at = last ? endOf(last) : found.box.line;
+  }
+  const out = unboxed(found.item, rootIndent, tabs);
+  if ('why' in out) return out;
+  const next = compose(lines, boxes, [{ item: found.item, box: found.box, lines: [...head, ...out.lines] }], at);
+  const after = parseDeck(next);
+  // 寫之前核對：原本的每個目標完整內容不變（新增標題會讓後面的小標題序號位移，不比 sectionIndex），新目標恰好一個、和在框裡時相同、歸在預期的標題底下。
+  const kept = after.targets.filter(t => t.id !== id);
+  if (content(kept, ['sectionIndex']) !== content(before.targets, ['sectionIndex'])) return { why: WHY.verify };
+  const target = after.targets.filter(t => t.id === id);
+  if (target.length !== 1) return { why: WHY.verify };
+  if (expect !== null && headingKey(target[0].section ?? '') !== expect) return { why: WHY.verify };
+  const alone = parseDeck((target[0].section === null ? '' : `# ${target[0].section}\n`) + out.lines.join('\n'), { subject: before.props.subject }).targets;
+  if (alone.length !== 1 || content(target, ['section', 'sectionIndex']) !== content(alone, ['section', 'sectionIndex'])) return { why: WHY.verify };
+  if (after.problems.some(p => p.code === 'duplicate-id')) return { why: WHY.verify };
+  if (needsMark(after) && !(typeof after.props.need === 'string' && canRead(PICK_NEEDS, after.props.need))) {
+    const marked = markNeed(next, PICK_NEEDS);
+    return marked === null ? { why: WHY.need } : { text: marked };
+  }
+  return { text: next };
+}
+
+/** 一次加入的項目分兩種搬法：候選（含「候選卡片（加深）」）照 §2 一起搬，加深的學習目標照 §3-3 一項一項搬。 */
+export function moveItems(text: string, refs: readonly ItemRef[], context: MoveContext): MovePlan {
+  const deepen = refs.filter(ref => ref.kind === 'deepen'), plain = refs.filter(ref => ref.kind !== 'deepen');
+  const first = plain.length ? moveCandidates(text, plain, context) : { text: null, moved: [], left: [] };
+  if (!deepen.length) return first;
+  const second = moveDeepen(first.text ?? text, deepen, context);
+  const left = [...first.left, ...second.left].sort((a, b) => refs.indexOf(a.ref) - refs.indexOf(b.ref));
+  return { text: second.text ?? first.text, moved: [...first.moved, ...second.moved], left };
 }

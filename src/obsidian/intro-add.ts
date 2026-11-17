@@ -4,7 +4,7 @@ import type { BoxKind, ItemRef } from '../core/ai/index.ts';
 import { isDeckPath, linesOf, readProperties } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 
-// 引言框的「加入」按鈕（tasks/ai-cards-add.md §1）：閱讀模式的候選卡片與加進已有的學習目標，每一項一個「加入」、標題列一個「全部加入」。
+// 引言框的「加入」按鈕（tasks/ai-cards-add.md §1、tasks/ai-cards-deepen.md §3-3）：閱讀模式的候選卡片、加進已有的學習目標與加深的學習目標，每一項一個「加入」、標題列一個「全部加入」。
 // 只在電腦（呼叫端只在電腦接）、外掛讀完之後；這一篇需要新版或屬性區讀不懂時不放。按下去時交給 add，它在最新的文字裡重新找（findItem）。
 
 /** 按下去要做的：哪一篇、哪一種框、哪幾項（畫按鈕時的身分與原文）；all 是「全部加入」。 */

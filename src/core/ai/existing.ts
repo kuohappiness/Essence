@@ -25,6 +25,9 @@ export const EXISTING_WHY = {
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
   newer: '原本的卡組需要新版的外掛才讀得懂，更新外掛之前不能加入',
+  // 加深的補題（tasks/ai-cards-deepen.md §3-3、D-190 第 3、4 點）。
+  otherDeck: '加深的補題只加進這一篇；這個學習目標在別篇，請手動處理',
+  outside: '出處裡有「課外：」，合併出處的規則還沒涵蓋課外，請手動搬',
   locked: (path: string): string => `「${deckName(path)}」的寫入還沒確定，請重開 Obsidian 後再按`,
   unsure: (path: string): string => `「${deckName(path)}」可能已經寫好，請再按一次`,
   failed: (path: string): string => `「${deckName(path)}」暫時存不進去，請稍後再按一次`,
