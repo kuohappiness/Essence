@@ -1,0 +1,213 @@
+// CI 的分派與把關（tasks/one-repo-step-1.md §4、驗收 4）：gate 的每種結果，與每種事件的比較端點。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gate, gitIn, plan, summary, type Event } from '../tools/ci-gate.ts';
+
+const run = promisify(execFile);
+const GATE = fileURLToPath(new URL('../tools/ci-gate.ts', import.meta.url));
+const ZEROS = '0'.repeat(40);
+
+type Needs = Record<string, { result?: string; outputs?: Record<string, string> }>;
+
+/** plan 說 Cards、Mindboard 要跑，Capture 不跑；每個 job 都照 plan。 */
+function needs(change: (n: Needs) => void = () => {}): string {
+  const n: Needs = {
+    plan: {
+      result: 'success',
+      outputs: {
+        cards: 'true', capture: 'false', mindboard: 'true',
+        reasons: JSON.stringify({ cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', mindboard: '完整檢查（改到 plugins/mindboard/a.ts）' }),
+        compare: 'aaa..bbb（PR：分岔點到 PR 的 head）',
+      },
+    },
+    shared: { result: 'success' },
+    cards: { result: 'success' },
+    capture: { result: 'skipped' },
+    mindboard: { result: 'success' },
+  };
+  change(n);
+  return JSON.stringify(n);
+}
+
+void test('§4 gate：每個 job 都照 plan 才過；摘要有外掛、跑不跑、理由、結果與比較的端點', () => {
+  const result = gate(needs());
+  assert.equal(result.ok, true, result.problems.join('\n'));
+  const text = summary(result);
+  assert.match(text, /\| 外掛 \| 跑不跑 \| 理由 \| 結果 \|/);
+  assert.match(text, /\| Capture \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
+  assert.match(text, /\| Mindboard \| 跑 \| 完整檢查（改到 plugins\/mindboard\/a\.ts） \| success \|/);
+  assert.match(text, /比較：aaa\.\.bbb/);
+});
+
+void test('§4 gate：要跑的 failure、cancelled、skipped 都不過', () => {
+  for (const [result, message] of [['failure', /Cards：要跑，結果是 failure/], ['cancelled', /Cards：要跑，結果是 cancelled/], ['skipped', /Cards：要跑卻跳過/]] as const) {
+    const g = gate(needs(n => { n.cards.result = result; }));
+    assert.equal(g.ok, false, result);
+    assert.match(g.problems.join('\n'), message);
+    assert.match(summary(g), /\| Cards \| 跑 \| .* \| ✗ /);
+  }
+});
+
+void test('§4 gate：不跑的照表 skipped 才過，跑了就不過', () => {
+  const g = gate(needs(n => { n.capture.result = 'success'; }));
+  assert.equal(g.ok, false);
+  assert.match(g.problems.join('\n'), /Capture：不該跑卻跑了（success）/);
+});
+
+void test('§4 gate：plan 或共用檢查沒成功都不過；plan 失敗時摘要照樣印得出表', () => {
+  const failed = gate(needs(n => { n.plan = { result: 'failure', outputs: {} }; n.cards.result = 'skipped'; n.mindboard.result = 'skipped'; }));
+  assert.equal(failed.ok, false);
+  assert.match(failed.problems.join('\n'), /plan 沒有成功（failure）/);
+  const text = summary(failed);
+  assert.match(text, /\| 外掛 \| 跑不跑 \| 理由 \| 結果 \|/);
+  assert.match(text, /\| Cards \| 不合法（沒有）（plan 沒有成功） \|/);
+  assert.match(text, /比較：（plan 沒有輸出）/);
+
+  const shared = gate(needs(n => { n.shared.result = 'failure'; }));
+  assert.equal(shared.ok, false);
+  assert.match(shared.problems.join('\n'), /共用檢查沒有成功（failure）/);
+});
+
+void test('§4 gate：欄位缺、JSON 解析失敗、旗標不是合法值都不過', () => {
+  const missingJob = gate(needs(n => { delete n.mindboard; }));
+  assert.equal(missingJob.ok, false);
+  assert.match(missingJob.problems.join('\n'), /Mindboard：job 沒有結果/);
+
+  const missingShared = gate(needs(n => { delete n.shared; }));
+  assert.equal(missingShared.ok, false);
+
+  const missingFlag = gate(needs(n => { delete n.plan.outputs!.capture; }));
+  assert.equal(missingFlag.ok, false);
+  assert.match(missingFlag.problems.join('\n'), /Capture：plan 的旗標不合法（沒有）/);
+
+  const badFlag = gate(needs(n => { n.plan.outputs!.cards = 'yes'; }));
+  assert.equal(badFlag.ok, false);
+  assert.match(badFlag.problems.join('\n'), /Cards：plan 的旗標不合法（yes）/);
+
+  const badReasons = gate(needs(n => { n.plan.outputs!.reasons = '{'; }));
+  assert.equal(badReasons.ok, false);
+  assert.match(badReasons.problems.join('\n'), /plan 的理由解析失敗/);
+
+  for (const text of [undefined, '', 'not json', 'null', '[1']) {
+    const g = gate(text);
+    assert.equal(g.ok, false, String(text));
+    assert.match(g.problems.join('\n'), /NEEDS 解析失敗/);
+  }
+});
+
+void test('§4 gate 的命令：結束碼跟著結論，摘要寫進 GITHUB_STEP_SUMMARY', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'essence-ci-gate-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 'summary.md');
+  await run(process.execPath, [GATE, 'gate'], { env: { ...process.env, NEEDS: needs(), GITHUB_STEP_SUMMARY: file } });
+  assert.match(await readFile(file, 'utf8'), /分派與把關：通過/);
+  await assert.rejects(run(process.execPath, [GATE, 'gate'], { env: { ...process.env, NEEDS: needs(n => { n.cards.result = 'skipped'; }), GITHUB_STEP_SUMMARY: file } }), { code: 1 });
+  assert.match(await readFile(file, 'utf8'), /要跑卻跳過/);
+});
+
+/**
+ * 暫存 repo：
+ *   start ── cards1（改 src/a.ts）── mindboard1（改 plugins/mindboard/a.ts）   ← feature（分支改過 Cards）
+ *     ├── main1（改 src/b.ts）                                               ← main（PR 開了之後 base 前進、改了 Cards）
+ *     └── only（改 plugins/mindboard/b.ts）                                   ← only（只改 Mindboard 的分支）
+ */
+async function history(t: test.TestContext) {
+  const root = await mkdtemp(join(tmpdir(), 'essence-ci-plan-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const commit = async (path: string, text: string) => {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+    git('add', '--', path);
+    git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '--no-verify', '-m', path);
+    return git('rev-parse', 'HEAD');
+  };
+  git('init', '-q', '-b', 'main');
+  const start = await commit('src/a.ts', 'export const a = 1;\n');
+  const main1 = await commit('src/b.ts', 'export const b = 1;\n');
+  git('checkout', '-q', '-b', 'feature', start);
+  const cards1 = await commit('src/a.ts', 'export const a = 2;\n');
+  const mindboard1 = await commit('plugins/mindboard/a.ts', 'export const m = 1;\n');
+  git('checkout', '-q', '-b', 'only', start);
+  const only = await commit('plugins/mindboard/b.ts', 'export const m = 2;\n');
+  git('update-ref', 'refs/remotes/origin/main', main1);
+  git('tag', 'v0.0.1', only);
+  return { root, env, git, start, main1, cards1, mindboard1, only };
+}
+
+const runs = (p: ReturnType<typeof plan>) => Object.entries(p.runs).filter(([, on]) => on).map(([name]) => name).join(',');
+
+void test('§4 比較端點：PR 用分岔點到 head，不用 base 的最新；base 前進改了 Cards、head 只改 Mindboard → 只有 Mindboard', async t => {
+  const h = await history(t);
+  const event: Event = { name: 'pull_request', ref: 'refs/pull/1/merge', sha: 'merge-sha', payload: { pull_request: { base: { sha: h.main1 }, head: { sha: h.only } } } };
+  const p = plan(event, gitIn(h.root), h.root);
+  assert.equal(runs(p), 'mindboard');
+  assert.match(p.compare, new RegExp(`^${h.start}\\.\\.${h.only}`));
+  assert.match(p.reasons.cards, /照分派表跳過/);
+  // 缺 SHA：跑全部。
+  assert.equal(runs(plan({ ...event, payload: {} }, gitIn(h.root), h.root)), 'cards,capture,mindboard');
+});
+
+void test('§4 比較端點：push 到 main 有 before 就比 before..sha；全是 0、clone 裡沒有、不是祖先都跑全部', async t => {
+  const h = await history(t);
+  const push = (before: string, sha: string): Event => ({ name: 'push', ref: 'refs/heads/main', sha, payload: { before } });
+  const ok = plan(push(h.start, h.main1), gitIn(h.root), h.root);
+  assert.equal(runs(ok), 'cards');
+  assert.match(ok.compare, new RegExp(`^${h.start}\\.\\.${h.main1}`));
+
+  for (const [before, why] of [[ZEROS, /沒有上一次的 SHA/], ['1234567890abcdef1234567890abcdef12345678', /clone 裡找不到/], [h.only, /不是這次的祖先/]] as const) {
+    const all = plan(push(before, h.main1), gitIn(h.root), h.root);
+    assert.equal(runs(all), 'cards,capture,mindboard', before);
+    assert.match(all.reasons.mindboard, why);
+    assert.equal(all.compare, '全部');
+  }
+});
+
+void test('§4 比較端點：push 到分支算整個分支（和 origin/main 的合併基點）；沒有 origin/main 跑全部；push tag 跑全部', async t => {
+  const h = await history(t);
+  const branch = (ref: string, sha: string): Event => ({ name: 'push', ref, sha, payload: { before: h.cards1 } });
+  // 最後一次 push 只改 Mindboard，前一次改了 Cards：照整個分支算，Cards 也要跑。
+  const feature = plan(branch('refs/heads/feature', h.mindboard1), gitIn(h.root), h.root);
+  assert.equal(runs(feature), 'cards,mindboard');
+  assert.match(feature.compare, new RegExp(`^${h.start}\\.\\.${h.mindboard1}`));
+  assert.equal(runs(plan(branch('refs/heads/only', h.only), gitIn(h.root), h.root)), 'mindboard');
+
+  const tag = plan(branch('refs/tags/v0.0.1', h.only), gitIn(h.root), h.root);
+  assert.equal(runs(tag), 'cards,capture,mindboard');
+  assert.match(tag.reasons.cards, /push tag/);
+
+  h.git('update-ref', '-d', 'refs/remotes/origin/main');
+  const lost = plan(branch('refs/heads/only', h.only), gitIn(h.root), h.root);
+  assert.equal(runs(lost), 'cards,capture,mindboard');
+  assert.match(lost.reasons.capture, /找不到和 origin\/main 的合併基點/);
+});
+
+void test('§4 plan 的命令：寫 GITHUB_OUTPUT 的旗標、理由與比較的端點，也印 checkout 的 SHA', async t => {
+  const h = await history(t);
+  const dir = await mkdtemp(join(tmpdir(), 'essence-ci-plan-out-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const event = join(dir, 'event.json');
+  const output = join(dir, 'output.txt');
+  const summaryFile = join(dir, 'summary.md');
+  await writeFile(event, JSON.stringify({ pull_request: { base: { sha: h.main1 }, head: { sha: h.only } } }));
+  const { stdout } = await run(process.execPath, [GATE, 'plan'], {
+    cwd: h.root,
+    env: { ...h.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge', GITHUB_SHA: h.only, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summaryFile },
+    encoding: 'utf8',
+  });
+  const lines = (await readFile(output, 'utf8')).trim().split('\n');
+  assert.deepEqual(lines.slice(0, 3), ['cards=false', 'capture=false', 'mindboard=true']);
+  const reasons = JSON.parse(lines.find(line => line.startsWith('reasons='))!.slice('reasons='.length)) as Record<string, string>;
+  assert.match(reasons.mindboard, /完整檢查（改到 plugins\/mindboard\/b\.ts）/);
+  assert.match(lines.find(line => line.startsWith('compare='))!, new RegExp(`${h.start}\\.\\.${h.only}`));
+  assert.match(stdout, new RegExp(`checkout：${h.only}`));
+  assert.match(await readFile(summaryFile, 'utf8'), /Mindboard：跑/);
+});
