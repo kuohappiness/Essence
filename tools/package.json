@@ -12,15 +12,17 @@
     "secretlint": "node secretlint.mjs",
     "local-paths": "node check-local-paths.ts",
     "skills": "node check-skill-mirror.ts",
+    "plugin-imports": "node check-plugin-imports.ts",
     "progress-board": "node progress-board.ts",
     "roadmap-board": "node roadmap-board.ts",
-    "check": "npm run docs && npm run secretlint && npm run local-paths && npm run skills"
+    "check": "npm run docs && npm run secretlint && npm run local-paths && npm run skills && npm run plugin-imports"
   },
   "devDependencies": {
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
     "@types/markdown-it": "^14.2.0",
     "github-slugger": "^2.0.0",
     "markdown-it": "^14.3.3",
-    "secretlint": "^13.0.7"
+    "secretlint": "^13.0.7",
+    "typescript": "^5.9.3"
   }
 }
