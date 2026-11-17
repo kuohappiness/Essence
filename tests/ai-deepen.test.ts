@@ -225,3 +225,11 @@ void test('§4-3 待審核：框裡只剩家長自己的字（沒有 ID 的清�
   const newer = '\n> [!note] 加深的學習目標\n';
   assert.equal(deepenPending(DECK + older + newer), true);
 });
+
+void test('§4-1 基準裡的目標之後被刪或暫停（不在啟用目標裡）：不算進 pool、也不算新記穩', () => {
+  const base = { stable: ['a', 'b', 'gone', 'paused'], first: false };
+  // 啟用目標只剩 a、b、e、f（gone 刪了、paused 暫停了，不在清單裡）；pool 是 e、f。
+  assert.deepEqual(remindOf(['a', 'b', 'e', 'f'], m([['a', 'stable'], ['e', 'stable']]), base), { show: true, first: false, fresh: 1, pool: 2, need: 1 });
+  // 暫停的目標記穩了也不算：它不在啟用目標裡。
+  assert.equal(remindOf(['a', 'b', 'e', 'f'], m([['paused', 'stable']]), base).show, false);
+});

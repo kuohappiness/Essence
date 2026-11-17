@@ -149,3 +149,29 @@ void test('§4 提醒一區：複製後是等待貼回，寫好後是待審核�
   await deepen.skip(DECK);
   assert.deepEqual(box.saved.skips, { [DECK]: { ids: [], at: '2026-11-17T10:00:00+08:00' } });
 });
+
+void test('§3-2 複製之後卡組改名再貼回：不寫，新的那一篇不動', async t => {
+  const memory = createMemoryFiles({ [DECK]: DECK_TEXT });
+  const box = machine();
+  const { deepen, state } = await load(t, memory, box);
+  const copied = await deepen.copy(DECK, '', '');
+  assert.ok('job' in copied);
+  const renamed = DECK.replace('溫度.md', '溫度與熱.md');
+  memory.rename(DECK, renamed);
+  await state.flush();
+  const stop = await deepen.save(copied.job, REPLY, null);
+  assert.equal(stop.kind, 'stop');
+  assert.equal(memory.texts.get(renamed), DECK_TEXT);
+  assert.equal(memory.texts.has(DECK), false);
+});
+
+void test('§2-3 快照只寫檔名、同檔名的卡組有兩篇：不歸屬，提示裡沒有那份地圖', async t => {
+  const twin = 'Essence Cards/學業/國二上/自然/舊/國二上自然 2-1 溫度.md';
+  const memory = createMemoryFiles({ [DECK]: DECK_TEXT, [twin]: DECK_TEXT.replace('^abc234', '^tuv234'), [OLD_SNAPSHOT]: OLD_SNAPSHOT_TEXT });
+  const box = machine();
+  const { deepen, clipboard } = await load(t, memory, box);
+  const copied = await deepen.copy(DECK, '', '');
+  assert.ok('job' in copied);
+  assert.match(clipboard[0], /最新的學習地圖：無/);
+  assert.doesNotMatch(clipboard[0], /溫度的全貌/);
+});
