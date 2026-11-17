@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { check } from '../src/core/ai/index.ts';
+import { check, deepenTargets } from '../src/core/ai/index.ts';
 import { buildIndex, parseScope, targetsInScope } from '../src/core/catalog/index.ts';
 import type { CatalogDeck } from '../src/core/catalog/index.ts';
 import { isOutside, parseDeck, sourceLinks } from '../src/core/deck/index.ts';
@@ -122,4 +122,24 @@ void test('考試範圍生效時，課外的重學排在範圍內的新卡後面
   assert.deepEqual(order(null), ['def456:relearn', 'abc123:new']);
   // 課外的保持率不提高。
   assert.equal(planToday(input(exam)).slots.get('def456')?.retention, 0.8);
+});
+
+void test('常錯：undo 拿掉中間的答對，前後兩筆答錯變成連續、同一天算一次；重複的 ID 只送第一個', () => {
+  const lines = [
+    encodeEntry('2026-11-01T10:00:00.000+08:00', { lt: 'u', r: 'miss', v: 'x' }),
+    encodeEntry('2026-11-01T10:01:00.000+08:00', { lt: 'u', r: 'good', v: 'x' }),
+    encodeEntry('2026-11-01T10:02:00.000+08:00', { lt: 'u', r: 'miss', v: 'x' }),
+  ];
+  const before = mergeHistory([{ path: 'Essence Cards/紀錄/2026-11 Windows-test.jsonl', text: lines.join('\n') + '\n' }]);
+  assert.equal(missCount(before.reviews), 2);
+  const undone = [...lines, encodeEntry('2026-11-01T10:03:00.000+08:00', { undo: '2026-11-01T10:01:00.000+08:00' })];
+  const after = mergeHistory([{ path: 'Essence Cards/紀錄/2026-11 Windows-test.jsonl', text: undone.join('\n') + '\n' }]);
+  assert.equal(missCount(after.reviews), 1);
+  assert.equal(masteryOf(['u'], after.reviews).get('u'), 'unstable');
+  // 跨天的第二次答錯才是常錯。
+  const twoDays = [...undone, encodeEntry('2026-11-03T10:00:00.000+08:00', { lt: 'u', r: 'near', v: 'x' })];
+  assert.equal(masteryOf(['u'], mergeHistory([{ path: 'Essence Cards/紀錄/2026-11 Windows-test.jsonl', text: twoDays.join('\n') + '\n' }]).reviews).get('u'), 'weak');
+
+  const deck = parseDeck('---\n科目: 自然\n---\n- 甲 ^abc123\n    - 甲是什麼？ :: 甲\n- 乙 ^abc123\n    - 乙是什麼？ :: 乙\n- 丙 ^def456\n    - 丙是什麼？ :: 丙\n');
+  assert.deepEqual(deepenTargets(deck, new Map()).map(t => t.id + t.name), ['abc123甲', 'def456丙']);
 });
