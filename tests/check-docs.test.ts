@@ -260,3 +260,78 @@ void test('命令列：有問題時 exit code 1 並逐行列出，沒有時印�
     (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes('a.md:3  c.md  找不到檔案'),
   );
 });
+
+// D-208 第一步 §7：外掛的資料夾照最上層的規則查。
+void test('§7 外掛的 tasks、討論稿與 docs/plans 第一層也要有狀態；README、子資料夾與外掛的其他資料夾不查', async t => {
+  const { add, run } = await repo(t);
+  await add('plugins/mindboard/tasks/ok.md', '# 任務\n\n狀態：進行中\n');
+  await add('plugins/mindboard/tasks/missing.md', '# 任務\n\n建議模型：Opus\n');
+  await add('plugins/capture/Claude Codex Discussion/2026-11-17-x.md', '# 討論\n\n日期：2026-11-17\n');
+  await add('plugins/capture/docs/plans/x.md', '# 主題\n\n規畫中\n');
+  await add('plugins/mindboard/tasks/README.md', '# 不查\n');
+  await add('plugins/mindboard/tasks/sub/deep.md', '# 不查\n');
+  await add('plugins/mindboard/docs/backlog.md', '# 不查\n');
+  await add('plugins/mindboard/notes/x.md', '# 不查\n');
+  assert.deepEqual(run(), [
+    'plugins/capture/Claude Codex Discussion/2026-11-17-x.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'plugins/capture/docs/plans/x.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'plugins/mindboard/tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
+  ]);
+});
+
+void test('§7 外掛的 roadmap：要有〈現在在哪裡〉、已完成最多 10 列；最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉', async t => {
+  const { add, run } = await repo(t);
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => `第 ${i + 1} 件`);
+  const plugin = 'plugins/mindboard/docs/roadmap.md';
+  const target = '../plugins/mindboard/docs/roadmap.md#現在在哪裡';
+  const missing = (line: number) => `${ROADMAP}:${line}  ${target}  外掛有自己的 roadmap，最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉（D-208 第 4 點）`;
+  const top = (now: string, after = '') => ['# 路線圖', '', '## 現在在哪裡', '', now, '', '## 已完成', '', after, ''].join('\n');
+  // 外掛沒有 roadmap：最上層不用連。
+  await add(ROADMAP, top('Cards 的進度。'));
+  assert.deepEqual(run(), []);
+  // 外掛的 roadmap 本身照最上層的規則。
+  await add(plugin, '# Mindboard 路線圖\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n' + rows(DONE_ROWS + 1).map(work => `| 2026-11-17 | ${work} |`).join('\n') + '\n');
+  assert.deepEqual(run(), [
+    `${plugin}:1  ## 現在在哪裡  找不到這一節`,
+    `${plugin}:17  ## 已完成  11 列，上限 10`,
+    missing(3),
+  ]);
+  await add(plugin, roadmap(rows(DONE_ROWS)));
+  // 最上層沒連、連到錯的錨點、連結在〈現在在哪裡〉以外都要報。
+  assert.deepEqual(run(), [missing(3)]);
+  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../plugins/mindboard/docs/roadmap.md#已完成)。'));
+  assert.deepEqual(run(), [missing(3)]);
+  await add(ROADMAP, top('Cards 的進度。', '[Mindboard](../plugins/mindboard/docs/roadmap.md#現在在哪裡)'));
+  assert.deepEqual(run(), [missing(3)]);
+  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../plugins/mindboard/docs/roadmap.md#現在在哪裡)。'));
+  assert.deepEqual(run(), []);
+});
+
+void test('§7 外掛的任務對外掛自己的 backlog；BEFORE_D195 只放過最上層的舊任務；檔名有空白與中文照樣查到', async t => {
+  const { root, add, run } = await repo(t);
+  const task = (result: string) => `# 任務\n\n狀態：已完成\n\n## 結果\n\n${result}\n`;
+  const debt = (...rows: string[]) => `# B\n\n## 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n${rows.map(row => `| ${row} | 空檔 |`).join('\n')}\n`;
+  await add('docs/backlog.md', debt('補測：最上層才有'));
+  await add('plugins/capture/docs/backlog.md', debt('補測：外掛的列'));
+  await add('plugins/mindboard/docs/backlog.md', '# Mindboard 的待做\n\n還沒有技術債表。\n');
+  await add('plugins/capture/tasks/ok.md', task('延後的測試：「補測：外掛的列」'));
+  await add('plugins/capture/tasks/轉錄 稿.md', task('延後的測試：「補測：最上層才有」'));
+  await add('plugins/mindboard/tasks/no-table.md', task('延後的測試：「補測：外掛的列」'));
+  await add('plugins/mindboard/tasks/none.md', task('延後的測試：無'));
+  await add('plugins/mindboard/tasks/w3.md', task('合併了。'));
+  await add('tasks/w3.md', task('合併了。'));
+  const w3 = 'plugins/mindboard/tasks/w3.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）';
+  assert.deepEqual(run(true), [
+    'plugins/capture/tasks/轉錄 稿.md:7  延後的測試：  plugins/capture/docs/backlog.md 的技術債表找不到「補測：最上層才有」開頭的列（D-195）',
+    'plugins/mindboard/tasks/no-table.md:7  延後的測試：  plugins/mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）',
+    w3,
+  ]);
+  // 外掛沒有 backlog 也一樣。
+  git(root, 'rm', '-q', '--cached', '--', 'plugins/mindboard/docs/backlog.md');
+  assert.deepEqual(run(true).filter(p => p.includes('no-table.md')), ['plugins/mindboard/tasks/no-table.md:7  延後的測試：  plugins/mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）']);
+  // 補完刪掉列的歷史任務：沒改到就不對照列名。
+  await add('plugins/capture/tasks/轉錄 稿.md', task('延後的測試：「補測：外掛的列」'));
+  git(root, 'commit', '-q', '-m', 'x', '--no-verify');
+  await add('plugins/capture/docs/backlog.md', debt('補測：別的列'));
+  assert.deepEqual(run(true), [w3]);
+});
