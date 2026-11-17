@@ -21,9 +21,9 @@
 - [知識庫、依能力複習與精熟循環](learning-growth.md)
 - [複習體驗與卡片管理](experience.md)
 - [AI 與外掛生態](ai-and-ecosystem.md)
-- [Essence Capture](capture.md)
-- [Essence Mindboard](mindboard.md)
 - [相似字比較卡](similar-chars.md)
 - [獨立 App](standalone-app.md)
 - [更新與相容](updates.md)
 - [維修與查修的準備](maintenance.md)
+
+Capture、Mindboard 的待做與待決已搬到各自的 `docs/backlog.md`（[Capture](../../plugins/capture/docs/backlog.md)、[Mindboard](../../plugins/mindboard/docs/backlog.md)，[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。

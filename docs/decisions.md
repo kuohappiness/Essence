@@ -5560,7 +5560,7 @@
 
 - Essence Mindboard 是獨立的 GitHub repo `Essence-Mindboard`，不放進 Essence Cards 的 repo。本機在 `D:\程式開發\Essence Mindboard`，和 Cards、Capture 並排。
 - 開始寫程式時才建，在那之前不建空的骨架。
-- 規劃、決定與進度都留在 Essence Cards：點子與待決問題在 [plans/mindboard.md](plans/mindboard.md)，決定寫成這裡的 D-ID，進度寫在路線圖。Mindboard 的 repo 放程式與簡短的 README，AGENTS.md 指向這裡；其餘照 [D-076](#d-076-capture-是知識入口教材轉錄成教材庫) 補充（2026-10-14）。
+- 規劃、決定與進度都留在 Essence Cards：點子與待決問題在 [plans/mindboard.md](../plugins/mindboard/docs/backlog.md)，決定寫成這裡的 D-ID，進度寫在路線圖。Mindboard 的 repo 放程式與簡短的 README，AGENTS.md 指向這裡；其餘照 [D-076](#d-076-capture-是知識入口教材轉錄成教材庫) 補充（2026-10-14）。
 - 建 repo 時一起設好開發檢查（pre-commit、ESLint、knip、secretlint，[D-117](#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)），並複製通用的 Claude 記憶。
 
 **理由**：
@@ -5889,7 +5889,7 @@
 
 **決定**：
 
-1. **Capture 移出 v1**：PDF 與圖片轉錄改列[第二階段](backlog.md#第二階段想做的事)，v1 完工與真實使用驗證都不需要轉錄稿。Capture 的 repo 骨架留著，不刪；[規畫](plans/capture.md)與待決問題照舊留在那裡。
+1. **Capture 移出 v1**：PDF 與圖片轉錄改列[第二階段](backlog.md#第二階段想做的事)，v1 完工與真實使用驗證都不需要轉錄稿。Capture 的 repo 骨架留著，不刪；[規畫](../plugins/capture/docs/backlog.md)與待決問題照舊留在那裡。
 2. **v1 的教材直接附給 AI**：沿用 AI 製卡最小版的接法：複製提示 → 貼到家長自己的 AI 對話、附上課本或講義的頁面（照片或 PDF）→ 貼回。手寫或其他工具產生的筆記照舊可以當材料（[D-009](#d-009-一般筆記可直接使用)、[D-032](#d-032-v1-的材料來源)）。
 3. **只改教材來源**：AI 製卡的接法（[D-126](#d-126-訂閱優先的-ai-製卡與側欄修改) 訂閱優先、API 與手動備援）不在這次決定，照舊之後另定。
 4. **出處**：照 [D-080](#d-080-轉錄稿的錨點與出處的寫法)、[D-164](#d-164-出處的寫法與讀法) 寫頁碼與圖表；跳回出處打得開的是筆記，教材是課本時照頁碼翻實體課本。打開轉錄稿裡那張圖、那個表，跟著 Capture 到第二階段。

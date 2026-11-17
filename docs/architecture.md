@@ -96,7 +96,7 @@ v1 的材料來源 ✅（[D-032](decisions.md#d-032-v1-的材料來源)）：
 - 卡組從 Obsidian 筆記製作：手寫、其他工具產生的筆記，或第二階段 Capture 轉錄的教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。v1 的課本與講義由家長在自己的 AI 對話附上（照片或 PDF），Cards 不讀 PDF（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；錯題照片仍由 Cards 分析（D-061）。
 - Cards 不依賴 Capture：筆記帶有交接資訊就使用，沒有也能運作。
 
-和心智圖外掛對接的做法 💡（助理提案；[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)）。使用者 2026-10-11 決定：細節列入未來的專門討論（[Essence Mindboard](plans/mindboard.md)）；用區塊 ID 連結學習目標的方式已同意，並寫進使用說明書（D-048 補充）：
+和心智圖外掛對接的做法 💡（助理提案；[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)）。使用者 2026-10-11 決定：細節列入未來的專門討論（[Essence Mindboard](../plugins/mindboard/docs/backlog.md)）；用區塊 ID 連結學習目標的方式已同意，並寫進使用說明書（D-048 補充）：
 
 - **用檔案對接，不用程式綁在一起**：和 Capture 一樣，各自安裝、各自可用。心智圖外掛直接讀 vault 裡的卡組筆記和複習紀錄。
 - **v1 只要做到三件事，幾乎不增加工作**：
