@@ -172,7 +172,7 @@ const INFLECTIONS: ReadonlySet<string> = new Set(['過去式', '過去分詞', '
 /**
  * 去掉成對的 `**` 與 `==`（名稱的粗體、螢光筆，§1-1：只為了認結尾與拆字義，名稱本身不改）。變化與英翻中都先做這一步再拆括號（L2 R7）。
  */
-const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
+export const unbold = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1');
 
 /** 最後一組成對的括號（全半形都算，左右可以不同）與它前面的字；沒有是 null。 */
 function lastBracket(text: string): { before: string; inner: string } | null {

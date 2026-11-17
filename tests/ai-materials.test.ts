@@ -22,6 +22,11 @@ for (const [name, expected] of [
   ['現在完成式（從過去持續到現在） 文法', null],
   ['間接問句 排序', null],
   ['能說明擴散', null],
+  // L2 第一輪 R3：粗體或螢光筆包住字和義項時先去掉標記再去義項；只剩義項的不算字。
+  ['**light（輕的）** 英翻中', 'light'],
+  ['==light（輕的）== 中翻英', 'light'],
+  ['**light** 英翻中', 'light'],
+  ['**（另義）** 英翻中', null],
 ] as const) void test('§1-1 名稱的字 ' + JSON.stringify(name), () => {
   const deck = parseDeck(english(`- ${name}\n    - Q ＿＿ :: light\n`));
   assert.equal(learnedWord(deck.targets[0]), expected);
