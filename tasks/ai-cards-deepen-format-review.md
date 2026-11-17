@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深與主動提示）開工前的格式查核（給 Codex）
 
-狀態：等 Codex 第一輪
+狀態：第一輪已查核（[報告](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-format-review.md>)）；等第二輪
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -28,3 +28,15 @@
 ## 回報
 
 只回報，不改產品程式與文件。寫在 `Claude Codex Discussion/2026-11-17-ai-cards-deepen-format-review.md`，標題下第一行寫狀態。每項寫觸發條件、預期與實際、影響、位置與證據，區分「已重現」與「看規格推斷」，另標真實路徑會不會發生；能用小腳本對現有程式驗證的就驗證。
+
+## 第二輪（2026-11-17）
+
+基準：這一段所在的 commit。Claude 照第一輪 R1～R8 改了任務說明的 §2-2、§2-3、§3-1、§3-2、§3-3、§4-1、§4-3、§5-1、§5-2、§6、§8；§6 與 §2-1 的判斷已經實作（`f695b5f`：`src/core/deck/sources.ts` 的 `課外：`、`isOutside`，`src/core/catalog/` 的 `targetsInScope`、`scopeCheck`，`src/core/study/plan.ts` 的重學，`src/core/study/mastery.ts`，`tests/ai-deepen-mastery.test.ts`）。
+
+請查：
+
+1. 每一項 R 的改法有沒有解決第一輪說的情境，有沒有帶出新的問題（照 [D-207](../docs/decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制) 分：一定修、可記限制、交使用者選）。
+2. 記成限制的四項（§6 舊外掛讀 `課外：`、另一台電腦的等待貼回與待審核、只連到教材以外的筆記還不算延伸、門檻試作的補充情境）是不是真的「極低或走不到」，或影響小到可以記。
+3. 已實作的 §6 與 §2-1：對照任務說明，有沒有和規格不一致的地方（`git diff efe50f0 f695b5f -- src tests`）。
+
+回報接在同一份報告後面，標題寫「第二輪」。
