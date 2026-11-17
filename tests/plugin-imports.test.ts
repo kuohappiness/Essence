@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSource } from '../tools/check-plugin-imports.ts';
+import { checkPackage, checkSource } from '../tools/check-plugin-imports.ts';
 
 const run = promisify(execFile);
 const CHECK = fileURLToPath(new URL('../tools/check-plugin-imports.ts', import.meta.url));
@@ -83,6 +83,22 @@ void test('§6 symlink 指到外掛外、package.json 的 file: 相依指到外�
     ]);
     return true;
   });
+});
+
+// npm（npm-package-arg）把 ~/ 展開成家目錄；file: 不分大小寫，沒有協定而以 . ~/ / \ 或磁碟代號開頭、或有兩個以上 / 的也當成
+// 本機路徑；百分比編碼怎麼解隨版本不同。本機相依只接受外掛裡、只用英數與 . _ - / 的相對路徑。放行的寫法都和 npm 11.6.2 的解析對過
+// （在外掛裡，或不是本機路徑）。
+void test('§6 外掛 package.json 的本機相依只接受外掛裡的相對路徑（L2 R6）：npm 會解到外掛外的寫法都擋', () => {
+  const check = (spec: string) => checkPackage('plugins/mindboard/package.json', JSON.stringify({ name: 'essence-mindboard', dependencies: { x: spec } }, null, 2));
+  for (const spec of [
+    'file:~/x', 'file:~', 'file:%2e%2e/%2e%2e/src', 'file:a%2F..%2F..%2F..', 'file:..\\..\\src', 'file:../capture', 'file:/abs', 'file:///abs', 'file:',
+    'file:./a#b', 'FILE:../capture', 'File:~/x', 'link:../capture', 'LINK:~/x', 'git+file:///repo', 'GIT+FILE:../r',
+    '../capture', '~/x', '~\\x', '/abs', '\\abs', 'C:/x', '..\\capture', './a/../../capture', 'lib/../../../src',
+  ]) assert.equal(check(spec).length, 1, spec);
+  for (const spec of [
+    'file:./lib', 'file:lib/sub', 'link:./x', 'file:.', 'file:./a/../b', './lib', 'lib/sub/x',
+    '^19.0.0', '~1.2.3', '>=1 <2', 'latest', 'npm:react@19', 'github:a/b', 'a/b', 'a/b#feature/x', 'https://example.invalid/x.tgz', 'git+https://example.invalid/r.git',
+  ]) assert.deepEqual(check(spec), [], spec);
 });
 
 void test('§6 --staged 讀暫存區：工作樹修好了、暫存區還壞著照樣擋；預設讀工作樹', async t => {

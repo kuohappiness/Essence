@@ -2,7 +2,8 @@
 // 用法：node tools/check-plugin-imports.ts [--staged]
 //   預設：Git 追蹤的檔，內容讀工作樹（npm run check 與 CI 用）。--staged：清單與內容都讀暫存區（pre-commit 用）。
 // 擋：plugins/<外掛>/ 的程式用相對路徑跑出自己的資料夾；根目錄 src/、tests/、tools/ 的程式用相對路徑進到 plugins/；
-//     plugins/<外掛>/ 追蹤的 symlink 指到外掛外；plugins/<外掛>/package.json 的 file:、link: 相依指到外掛外。
+//     plugins/<外掛>/ 追蹤的 symlink 指到外掛外；plugins/<外掛>/package.json 的本機相依（file:、link:、沒有協定的路徑等）
+//     不是外掛裡只用英數與 . _ - / 的相對路徑。
 // 路徑用 TypeScript 的 preProcessFile 取字面值：註解與字串裡的不算，import、export … from、require、import()、
 // import x = require() 與沒有代換的模板字面值都取得到；import('../../src/' + name) 取到字面的前段，照前段判斷（偏嚴）。
 // 套件名稱、node:、網址照常。執行時才組出來的路徑、tsconfig 的 paths、打包工具的 alias 這裡看不到（backlog〈已知的限制〉）。
@@ -60,7 +61,26 @@ export function checkLink(path: string, target: string): Problem[] {
   return [{ file: path, line: 1, target, reason: `symlink 指到 plugins/${plugin}/ 外（D-208 第 10 點）` }];
 }
 
-/** 外掛 package.json 的 file:、link: 相依指到外掛外。 */
+/**
+ * npm 當成本機路徑的相依寫法（npm-package-arg 的 isFileSpec 與 fromFile）：file:、link:、git+file:（大小寫不分），或沒有協定、
+ * 以 . ~/ / \ 或磁碟代號開頭、含反斜線、# 前有兩個以上 / 的（只有一個 / 是 GitHub 的簡寫）。回傳路徑的部分，不是本機路徑回傳 undefined。
+ */
+function localPath(spec: string): string | undefined {
+  const prefixed = /^(?:file|link|git\+file):(.*)$/is.exec(spec);
+  if (prefixed) return prefixed[1];
+  if (/^[a-z][a-z0-9+.-]+:/i.test(spec)) return undefined; // 其他協定：npm:、github:、https: 等
+  const slashes = spec.split('#')[0].split('/').length - 1;
+  return /^(?:\.|~[/\\]|[/\\]|[a-z]:)/i.test(spec) || spec.includes('\\') || slashes >= 2 ? spec : undefined;
+}
+
+/**
+ * 本機路徑只接受白名單（L2 R6）：只用英數與 . _ - /、不以 / 開頭、正規化後在外掛裡。npm 會把 ~/ 展開成家目錄、Windows 上
+ * 反斜線也是分隔；百分比編碼與 FILE: 這類寫法怎麼解，隨 npm 的版本與平台不同（npm 11.6.2 在 Windows 當成字面的資料夾名）。
+ * 這裡不跟著 npm 的解析走，白名單以外的一律不收。
+ */
+const LOCAL_PATH = /^[A-Za-z0-9._/-]+$/;
+
+/** 外掛 package.json 的本機相依（file:、link: 等）不是外掛裡的相對路徑。 */
 export function checkPackage(path: string, text: string): Problem[] {
   const plugin = /^plugins\/([^/]+)\/package\.json$/.exec(path)?.[1];
   if (!plugin) return [];
@@ -77,12 +97,14 @@ export function checkPackage(path: string, text: string): Problem[] {
     if (!deps || typeof deps !== 'object') continue;
     for (const [name, value] of Object.entries(deps as Record<string, unknown>)) {
       if (typeof value !== 'string') continue;
-      const local = /^(?:file|link):(.*)$/.exec(value)?.[1];
+      const local = localPath(value);
       if (local === undefined) continue;
-      const absolute = /^(?:[a-z]:)?[\\/]/i.test(local);
-      if (!absolute && inside(posix.normalize(posix.join(`plugins/${plugin}`, local.replaceAll('\\', '/'))).replace(/\/+$/, ''), `plugins/${plugin}`)) continue;
+      const allowed = LOCAL_PATH.test(local) && !local.startsWith('/');
+      if (allowed && inside(posix.normalize(posix.join(`plugins/${plugin}`, local)).replace(/\/+$/, ''), `plugins/${plugin}`)) continue;
       const line = lines.findIndex(l => l.includes(JSON.stringify(name))) + 1 || 1;
-      problems.push({ file: path, line, target: value, reason: `${field} 的 ${name} 指到 plugins/${plugin}/ 外（D-208 第 10 點）` });
+      const reason = allowed ? `${field} 的 ${name} 指到 plugins/${plugin}/ 外（D-208 第 10 點）`
+        : `${field} 的 ${name} 是本機路徑，只接受外掛裡只用英數與 . _ - / 的相對路徑（npm 會把 ~/ 展開成家目錄、反斜線當成分隔，D-208 第 10 點）`;
+      problems.push({ file: path, line, target: value, reason });
     }
   }
   return problems;
