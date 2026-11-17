@@ -217,3 +217,11 @@ void test('§4-2、§4-3 提醒一區的一行：等待貼回優先、再來待�
   assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: { ...ready, show: false } }), null);
   assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: null }), null);
 });
+
+void test('§4-3 待審核：框裡只剩家長自己的字（沒有 ID 的清單、題目已經搬走的補題）不算；較早一批沒處理完照算', () => {
+  assert.equal(deepenPending(DECK + '\n> [!note] 加深的學習目標\n> - 我的筆記：下次再問老師\n'), false);
+  assert.equal(deepenPending(DECK + '\n> [!note] 加進已有的學習目標（加深）\n> - abc222 能說明溶解\n>     - 出處：p.3\n'), false);
+  const older = '\n> [!note]- 候選卡片（加深）\n> - 能比較 ^abc333\n>     - Q :: A\n';
+  const newer = '\n> [!note] 加深的學習目標\n';
+  assert.equal(deepenPending(DECK + older + newer), true);
+});

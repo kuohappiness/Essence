@@ -128,9 +128,12 @@ export const refOf = (item: BoxItem): ItemRef => ({ kind: item.kind, id: item.id
 
 /**
  * 待審核（tasks/ai-cards-deepen.md §4-3）：這一篇有任何一個加深的框（三種框名，哪一批都算）裡還有項目。只看卡組本身，不看快照；
- * 空框、框裡沒有清單項目的字、第 1 批與最小版留下的框不算。
+ * 空框、框裡只剩家長自己的字（沒有行尾 ID 的清單、沒有題目的補題）、第 1 批與最小版留下的框不算。
  */
-export const deepenPending = (text: string): boolean => introBoxes(text).some(box => box.deepen && box.items.length > 0);
+export const deepenPending = (text: string): boolean => introBoxes(text).some(box => box.deepen && box.items.some(item => box.kind === 'existing'
+  // 補題：底下還有題目行。新目標、候選：名稱行有行尾 ID。框裡只剩家長自己的字（沒有 ID 的清單、說明）不算（tasks/ai-cards-deepen.md §4-3）。
+  ? item.original.split('\n').slice(1).some(line => /::|==[^=\n]+==/.test(line))
+  : item.id !== null));
 
 /** 框裡那一項的出處有 `課外：`（tasks/ai-cards-deepen.md §3-3：加深的補題出處合併還沒涵蓋課外，那一項留給家長）。original 是那一項去掉引言框前綴之後的字。 */
 export function hasOutsideItem(original: string): boolean {

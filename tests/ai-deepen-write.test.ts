@@ -313,3 +313,58 @@ void test('恢復資料：同一篇只留一份（貼回過的優先）；還沒
   assert.deepEqual(read.jobs.map(job => job.id), ['b']);
   assert.equal(read.broken, 1);
 });
+
+void test('§3-1 檔尾的各種樣子：沒有結尾換行、沒關的引言框、表格、接續行、只有屬性區；原本的字不動、驗得過', () => {
+  const batch = composeBatch(inspectDeepen(REPLY, FORM, SUBJECT, HERE), '國二上自然 2-1', ids('xyz234', 'qrs567'), '2026-11-17');
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-1 溫度\n狀態: 啟用\n---\n';
+  const target = '\n- 能說出溫度計的原理 ^abc234\n    - 出處：p.40\n    - 溫度計靠什麼原理？ :: 熱脹冷縮';
+  const tails = [
+    head + target,
+    head + target + '\n\n> [!tip] 家長的框\n> 還沒寫完',
+    head + target + '\n\n| 溫標 | 冰點 |\n|---|---|\n| 攝氏 | 0 |',
+    head + target + '\n  接續的一行   ',
+    head,
+    head + target + '\n\n\n   \n\t\n',
+  ];
+  for (const original of tails) {
+    const out = appendBatch(original, batch);
+    assert.ok('text' in out, original);
+    const kept = original.replace(/(?:\n[ \t]*)+$/, '');
+    assert.ok(out.text.startsWith(kept + '\n\n> [!note] 給家長的備註\n'), original);
+    assert.ok(out.text.endsWith('>     - 攝氏 0 度是什麼？ :: 冰點\n'));
+    assert.equal(verifyAppend(original, out.text, batch, false), true, original);
+    assert.deepEqual(introBoxes(out.text).map(box => box.title), ['加深的學習目標', '加進已有的學習目標（加深）', '候選卡片（加深）'], original);
+  }
+  // 檔尾那一行本身行尾的空白不動。
+  const spaced = appendBatch(head + target + '  ', batch);
+  assert.ok('text' in spaced && spaced.text.includes('熱脹冷縮  \n\n> [!note]'));
+});
+
+void test('§3-2 中斷：新 ID 只剩一部分、或這一批沒有新 ID（只補題）都是結果不明', async () => {
+  const job = started();
+  const written = appendBatch(DECK, job.save!);
+  assert.ok('text' in written);
+  // 家長已經把候選刪掉：新 ID 只剩一個。
+  const partial = new Map([[HERE.path, written.text.replace(/> - 能說出攝氏溫標的定點 \^qrs567\n(?:>.*\n)*/, '')]]);
+  const first = fakeIo(partial);
+  assert.deepEqual(await runDeepen({ ...job, save: { ...job.save!, writing: true } }, first.io), { kind: 'stop', why: 'unclear' });
+  // 只補題：沒有新 ID，檔裡就算已經有同樣的題目也不當證據。
+  const addsOnly = inspectDeepen('> [!note] 加進已有的學習目標\n> - abc234 能說出溫度計的原理\n>     - 出處：p.40\n>     - 溫度上升時液柱怎樣？ :: 上升\n\n<<<完>>>', FORM, SUBJECT, HERE);
+  assert.deepEqual(addsOnly.errors, []);
+  const only = beginDeepen(JOB, 'r', null, composeBatch(addsOnly, '國二上自然 2-1', ids(), '2026-11-17'), '2026-11-17T10:00:00+08:00', new Set());
+  const appended = appendBatch(DECK, only.save!);
+  assert.ok('text' in appended);
+  const second = fakeIo(new Map([[HERE.path, appended.text]]));
+  assert.deepEqual(await runDeepen({ ...only, save: { ...only.save!, writing: true } }, second.io), { kind: 'stop', why: 'unclear' });
+  assert.ok(!second.log.includes('append'));
+});
+
+void test('§3-2 寫入回呼裡驗沒過（沒關的圍欄）：不寫、不留 writing；改好之後照常寫', async () => {
+  const files = new Map([[HERE.path, DECK + '\n```\n']]);
+  const { io, stored } = fakeIo(files);
+  const job = started();
+  assert.deepEqual(await runDeepen(job, io), { kind: 'stop', why: 'fence' });
+  assert.equal(stored.at(-1)!.save!.writing, false);
+  files.set(HERE.path, DECK);
+  assert.deepEqual(await runDeepen(stored.at(-1)!, io), { kind: 'done', wrote: true });
+});
