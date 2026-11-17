@@ -88,7 +88,8 @@ export interface CatalogIndex {
 
 const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'active' ? unit.targets : [];
 
-const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
+/** 單元的鍵（年級學期、科目、單元編號照寬鬆的寫法比）：目錄、小考的 refs 都用這一個。 */
+export const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');

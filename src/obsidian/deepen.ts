@@ -1,7 +1,8 @@
 import {
   baselineOf, beginDeepen, buildDeepenPrompt, chooseBase, composeBatch, deepenPending, deepenRow, deepenTargets, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSkips, readSnapshot, remindOf, RULE_SUBJECTS, skipFor, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
 } from '../core/ai/index.ts';
-import type { CardForm, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
+import type { CardForm, Purpose, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
+import { deckInScope, unitKey } from '../core/catalog/index.ts';
 import { blockIds, isDeckPath, newId } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
 import { masteryOf, parseTime } from '../core/study/index.ts';
@@ -54,6 +55,7 @@ const STOP: Record<DeepenStop['why'], string> = {
   fence: '這一篇有沒關好的程式碼區塊（``` 或 ~~~），接在後面的東西會被當成程式碼；請先修好再按「繼續」',
   verify: '組好的內容讀回來和預期不同，這次沒有寫；請回報這個問題',
   unsaved: '這篇筆記有還沒存進去的修改，先不寫；等一下再按「繼續」',
+  locked: '這一篇前一次寫入花太久、不知道寫成沒有，這次開著 Obsidian 的期間不再寫它；這次沒有寫，重開 Obsidian 後再按「繼續」',
   unclear: '上一次寫到一半中斷了，認不出這一批寫進去沒有。看過卡組最後面的加深框再選：已經寫進去就選「當作完成」，沒有就選「放棄」',
   blocked: '先不寫；等一下再按「繼續」',
   failed: '寫不進去，這次停在一半；按「繼續」會從停下的地方接著做',
@@ -86,13 +88,30 @@ export function createDeepen(deps: DeepenDeps) {
   async function exclusive(id: string, work: () => Promise<DeepenOutcome>): Promise<DeepenOutcome> {
     if (busy.has(id)) return BUSY;
     busy.add(id);
-    try { return await work(); } finally { busy.delete(id); }
+    // 寫入中的列不能按取消（L2 R9）：開始與結束都重算一次。
+    void refreshLater();
+    try { return await work(); } finally { busy.delete(id); void refreshLater(); }
   }
+  const busyDeck = (path: string): boolean => jobs.some(job => job.deck === path && busy.has(job.id));
+
+  /**
+   * 算記穩了、常錯的目標（§2-1 的啟用目標，L2 R5）：啟用的卡組照 state 的 deckTargets（暫停、重複 ID、紀錄停用的都不在裡面）；
+   * 暫停的卡組可以手動加深，照同樣的條件從這一篇自己挑（目標沒暫停、讀得懂、有題目、紀錄沒停用、ID 不重複）。其餘的目標照樣送給 AI
+   * 看結構與去重，但標成還沒記穩、不算進記穩目標。
+   */
+  function eligible(state: State, path: string, deck: Deck): string[] {
+    if (deck.props.status === 'active') return [...state.deckTargets(path)];
+    const stopped = state.aiStopped(path);
+    return [...new Set(deck.targets.filter(t => t.id !== null && t.ok && !t.fields.paused && t.prompts.length > 0 && !stopped({ id: t.id, line: t.line })).map(t => t.id!))];
+  }
+  /** 紀錄或卡組有讀不到的（state 的 unread，L2 R4）：記穩了的數字不可靠，不問也不讓發起。 */
+  const partial = (state: State): boolean => state.writeBlock() === 'unread';
 
   /** 這一篇現在的樣子（§1）：卡組筆記、啟用或暫停、讀得懂、不需要新版、至少一個有 ID 的目標。 */
   function ready(path: string): Readiness {
     const state = deps.state();
     if (!state || state.writeBlock() === 'loading') return { ok: false, why: '正在讀取卡組；等一下再按' };
+    if (partial(state)) return { ok: false, why: '還有卡組或複習紀錄沒讀到（可能還在從 iCloud 下載），記穩了的數字不準；等一下再按' };
     if (!isDeckPath(path)) return { ok: false, why: '加深只用在卡組筆記' };
     const entry = state.decks().find(each => each.path === path);
     if (!entry) return { ok: false, why: '這篇筆記不是卡組，或還沒讀到' };
@@ -104,7 +123,7 @@ export function createDeepen(deps: DeepenDeps) {
     const ids = [...new Set(entry.deck.targets.filter(t => t.id !== null && t.ok).map(t => t.id!))];
     if (!ids.length) return { ok: false, why: '這一篇還沒有讀得懂、有 ID 的學習目標：先存檔補上 ID，或修好寫法有問題的目標' };
     const history = state.history();
-    const mastery = masteryOf(ids, history.reviews, id => history.incomplete || history.held.includes(id));
+    const mastery = masteryOf(eligible(state, path, entry.deck), history.reviews, id => history.incomplete || history.held.includes(id));
     const counts = { stable: 0, weak: 0, unstable: 0 };
     for (const id of ids) { const each = mastery.get(id); if (each === 'stable') counts.stable++; else if (each === 'weak') counts.weak++; else counts.unstable++; }
     return { ok: true, path, name: fileName(path), deck: entry.deck, mastery, counts };
@@ -124,13 +143,30 @@ export function createDeepen(deps: DeepenDeps) {
   /** 這一科點選填空的預設（D-210 第 3 點）：這台電腦上次的選擇，沒有記過照規則表。 */
   const pickFor = (key: string): boolean => deps.store.picks()[key] ?? RULE_SUBJECTS.find(each => each.key === key)?.pick ?? false;
 
+  /**
+   * 學習目的（§2-2、L2 R8）：這一篇或它的單元有今天以後的小考是準備小考；在生效的考試範圍裡是準備段考；其餘平常複習。
+   * 兩個都有時寫小考：日期通常比較近、範圍比較窄。沿用小考與考試範圍的讀取結果，不另存日期。
+   */
+  function purposeOf(path: string, deck: Deck): Purpose {
+    const state = deps.state();
+    if (!state) return '平常複習';
+    const at = deps.now();
+    const today = stamp(at.ms, at.offset).slice(0, 10);
+    const { term, subject, unit } = deck.props;
+    const key = term !== null && subject !== null && unit !== null ? unitKey(term, subject, unit.code) : null;
+    if (state.quizzes().some(quiz => quiz.date !== null && quiz.date >= today && quiz.refs.some(ref => 'deck' in ref ? ref.deck === path : ref.unit === key))) return '準備小考';
+    const exam = state.exam();
+    return exam.path !== null && exam.usable && exam.file !== null && deckInScope(exam.file, deck) ? '準備段考' : '平常複習';
+  }
+
+
   function formOf(deck: Deck, path: string, direction: string, material: string, pick: boolean | undefined): { form: CardForm; key: string } | null {
     const subject = RULE_SUBJECTS.find(each => each.subject === deck.props.subject && deps.rules[each.key]?.length);
     if (!subject) return null;
     const { term, unit } = deck.props;
     return {
       key: subject.key,
-      form: { subject: subject.key, term: term ?? '', unit: unit ? `${unit.code} ${unit.name}`.trim() : fileName(path), purpose: '平常複習', supplement: subject.supplement, pick: pick ?? pickFor(subject.key), adjust: direction.trim(), material: material.trim() },
+      form: { subject: subject.key, term: term ?? '', unit: unit ? `${unit.code} ${unit.name}`.trim() : fileName(path), purpose: purposeOf(path, deck), supplement: subject.supplement, pick: pick ?? pickFor(subject.key), adjust: direction.trim(), material: material.trim() },
     };
   }
 
@@ -173,6 +209,8 @@ export function createDeepen(deps: DeepenDeps) {
   async function compute(): Promise<DeepenRow[]> {
     const state = deps.state();
     if (!state || state.writeBlock() === 'loading' || deps.store.remindOff()) return [];
+    // 讀不到的時候只留這台電腦自己知道的「等你貼回」：記穩了的數字與卡組裡的框都不可靠（L2 R4）。
+    if (partial(state)) return waitingRows(state);
     const now = deps.now().ms;
     const infos = (await deps.snapshots()).flatMap(each => { const info = readSnapshot(each.path, each.text); return info ? [info] : []; });
     const skips = readSkips(deps.store.skips(), text => parseTime(text)?.at ?? null);
@@ -185,8 +223,11 @@ export function createDeepen(deps: DeepenDeps) {
       const waiting = jobs.some(job => job.deck === entry.path);
       let pending = false;
       if (!waiting) {
-        const text = await deps.read(entry.path);
-        pending = text !== null && deepenPending(text);
+        // 一篇讀不到只略過那一篇，不讓整次重算失敗、留著舊的列（L2 R4）。
+        let text: string | null;
+        try { text = await deps.read(entry.path); } catch { continue; /* 讀不到是同步中的正常狀態，下一次重算再看；不記錯誤 */ }
+        if (text === null) continue;
+        pending = deepenPending(text);
       }
       let remind = null;
       if (!waiting && !pending) {
@@ -197,10 +238,15 @@ export function createDeepen(deps: DeepenDeps) {
         const mastery = masteryOf(active, history.reviews, id => history.incomplete || history.held.includes(id));
         remind = remindOf(active, mastery, chooseBase(base && base.at !== null ? { at: base.at, stable: base.stable ?? [], first: base.kind !== 'deepen' } : null, skip));
       }
-      const row = deepenRow(entry.path, name, { waiting, pending, remind });
+      const row = deepenRow(entry.path, name, { waiting, writing: waiting && busyDeck(entry.path), pending, remind });
       if (row) found.push(row);
     }
     return found;
+  }
+  /** 只有這台電腦自己知道的列：等你貼回、正在寫。 */
+  function waitingRows(state: State): DeepenRow[] {
+    const known = new Set(state.decks().map(entry => entry.path));
+    return jobs.filter(job => known.has(job.deck)).flatMap(job => deepenRow(job.deck, fileName(job.deck), { waiting: true, writing: busy.has(job.id), pending: false, remind: null }) ?? []);
   }
   /** 重算一次（同時只跑一份，中間又被叫就再跑一次）；回傳時已經算好。 */
   function refresh(): Promise<void> {
@@ -209,7 +255,8 @@ export function createDeepen(deps: DeepenDeps) {
       do {
         again = false;
         let next: DeepenRow[];
-        try { next = await compute(); } catch (error) { deps.onError(error); next = rows; }
+        // 算到一半出錯：不留舊的可以按的列，只留等你貼回（L2 R4）。
+        try { next = await compute(); } catch (error) { deps.onError(error); next = rows.filter(row => row.kind === 'waiting' || row.kind === 'writing'); }
         if (JSON.stringify(next) !== JSON.stringify(rows)) { rows = next; for (const listener of listeners) listener(); }
       } while (again);
     })().finally(() => { computing = null; });

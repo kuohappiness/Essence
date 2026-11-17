@@ -150,7 +150,7 @@ export interface DeepenIo {
 /** 停下來的原因（畫面換成給家長看的字）。 */
 export interface DeepenStop {
   kind: 'stop';
-  why: 'changed' | 'fence' | 'verify' | 'unsaved' | 'unclear' | 'blocked' | 'failed' | 'unreadable' | 'conflict' | 'name' | 'timeout' | 'phone' | 'loading' | 'needs-update' | 'displaced';
+  why: 'changed' | 'fence' | 'verify' | 'unsaved' | 'locked' | 'unclear' | 'blocked' | 'failed' | 'unreadable' | 'conflict' | 'name' | 'timeout' | 'phone' | 'loading' | 'needs-update' | 'displaced';
   detail?: string;
 }
 export type DeepenResult = { kind: 'done'; wrote: boolean } | DeepenStop;

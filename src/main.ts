@@ -433,8 +433,10 @@ export default class EssenceCardsPlugin extends Plugin {
     if (action === 'skip') { await deepen.skip(row.path); return; }
     if (action === 'cancel') {
       const job = deepen.jobOf(row.path);
-      if (job) await deepen.cancel(job);
-      new Notice('已取消這次加深');
+      // 照取消的結果通知：正在寫的那一份取消不了（L2 R9）。
+      const result = job ? await deepen.cancel(job) : null;
+      new Notice(result?.kind === 'stop' ? result.message : '已取消這次加深');
+      this.entry?.refresh();
       return;
     }
     if (action === 'open' && row.kind === 'pending') { this.openNote(row.path); return; }
@@ -681,7 +683,7 @@ export default class EssenceCardsPlugin extends Plugin {
     // 卡組重讀之後更新存檔按鈕的樣子。
     this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); this.refreshDeepen(); });
     // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
-    this.state.onUnread(() => { this.updateReminders(); });
+    this.state.onUnread(() => { this.updateReminders(); this.refreshDeepen(); });
     this.entry?.refresh();
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，

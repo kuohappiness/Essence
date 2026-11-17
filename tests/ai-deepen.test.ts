@@ -245,3 +245,25 @@ void test('§4-1 基準裡的目標之後被刪或暫停（不在啟用目標裡
   // 暫停的目標記穩了也不算：它不在啟用目標裡。
   assert.equal(remindOf(['a', 'b', 'e', 'f'], m([['paused', 'stable']]), base).show, false);
 });
+
+void test('§4-3 補題框的題目用卡組的讀法（L2 R6）：接續行、欄位、圍欄、行內程式碼、說明不算；問答、填空、只有問題的算', () => {
+  const D = '---\n科目: 自然\n---\n\n- 甲 ^abc222\n    - Q :: A\n';
+  const box = (body: string): string => D + '\n> [!note] 加進已有的學習目標（加深）\n> - abc222 甲\n' + body;
+  const cases: [string, string, boolean][] = [
+    ['接續行', '>   說明中 :: 留著\n', false],
+    ['欄位', '>     - 出處：p.3\n', false],
+    ['圍欄', '>     ```\n>     x :: y\n>     ```\n', false],
+    ['行內程式碼', '>     - 用 `a :: b` 寫\n', false],
+    ['說明', '>     - 我的說明\n', false],
+    ['更深一層的說明', '>     - 我的說明\n>         - 裡面 :: 寫了\n', false],
+    ['問答', '>     - 補題 :: 答\n', true],
+    ['填空', '>     - 水的沸點是 ==100== 度\n', true],
+    ['只有問題', '>     - 只有問題 ::\n', true],
+  ];
+  for (const [name, body, want] of cases) assert.equal(deepenPending(box(body)), want, name);
+});
+
+void test('§4-2 正在寫進卡組的列（L2 R9）：不是等你貼回，不能取消', () => {
+  assert.deepEqual(deepenRow('a.md', 'L3', { waiting: true, writing: true, pending: false, remind: null }), { path: 'a.md', kind: 'writing', text: 'L3：加深正在寫進卡組' });
+  assert.equal(deepenRow('a.md', 'L3', { waiting: true, writing: false, pending: false, remind: null })?.kind, 'waiting');
+});
