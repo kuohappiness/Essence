@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深這一節與主動提示）的 L2 審查請求（給 Codex）
 
-狀態：第三輪待審（2026-11-17）；前兩輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
+狀態：第四輪待審（2026-11-17）；前三輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -100,4 +100,15 @@
   - R15：學習目的的「今天」改用 `scopeDate(dayOf(…))`，和小考清單同一個換日。
 - 驗證：`node --test --test-timeout=300000 tests/ai-deepen-state.test.ts tests/ai-deepen-flow.test.ts tests/ai-add-state.test.ts tests/ai-add-existing-state.test.ts tests/main-wiring.test.ts` 與 `tests/state*.test.ts`；完整的 `npm run check`。
 - 回報接在討論稿最後，標題〈第三輪〉；延續的標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
+## 第四輪
+
+- 待審 commit：`238ed547485c450064d2ef28ade4bfa6266839fb`；差異 `2b4d1ad..238ed54`。請**新開一個 session**，推理等級高。這是最後一輪（第四輪後交使用者）。
+- **範圍只有第三輪 R16～R18 的修正**（延續使用者選的 R10、R14、R15 範圍）。先讀 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)最後的〈Claude 核對與修正（第三輪）〉。
+- 請特別看：
+  - R16：`src/state/index.ts` 的 `addCandidates`、`addExisting` 目的地與來源三個 plan 把鎖移到最前面之後，第 1 批原本的回報（`timeout`、`locked` 的留在框裡原因、`changed`）有沒有變；鎖著時不呼叫 `track` 會不會讓待讀或核對讀取卡住。
+  - R17：`src/obsidian/deepen-modal.ts` 的 `start`：讀取編號、重試、關閉後晚到的結果。
+  - R18：`src/obsidian/deepen.ts` 的 `refreshForClick` 與 `src/main.ts` 的 `deepenAct`。
+- 驗證：`node --test --test-timeout=300000 tests/ai-deepen-flow.test.ts tests/ai-deepen-state.test.ts tests/ai-add-state.test.ts tests/ai-add-existing-state.test.ts tests/deepen-modal.test.ts tests/main-wiring.test.ts`；完整的 `npm run check`。
+- 回報接在討論稿最後，標題〈第四輪〉。
 
