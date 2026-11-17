@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深這一節與主動提示）的 L2 審查請求（給 Codex）
 
-狀態：第二輪待審（2026-11-17）；第一輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
+狀態：第三輪待審（2026-11-17）；前兩輪的報告與核對在 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -88,3 +88,17 @@
 - 第一輪〈驗證〉第 3 點：不可破壞的性質「原本的字一個都不動」有兩個任務說明寫明的例外：檔尾的空白行清掉、給家長的備註併進原有的頂層備註框（§3-1）。
 - 驗證：`node --test --test-timeout=300000 tests/ai-deepen.test.ts tests/ai-deepen-write.test.ts tests/ai-deepen-flow.test.ts tests/ai-deepen-mastery.test.ts tests/ai-deepen-state.test.ts tests/ai-deepen-links.test.ts tests/main-wiring.test.ts`；完整的 `npm run check` 照第一輪。R1～R6、R8、R9 的修正沒有重跑 Windows 實機；R7 的改名在 Windows 實機跑過（任務說明〈結果〉的「R7 的 Windows 實機」：詢問框按「僅此一次」與「不更新」、資料夾改名）。
 - 回報接在同一份討論稿最後，標題〈第二輪〉；延續第一輪的標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
+## 第三輪
+
+- 待審 commit：`51c25199e81a1ac76c0b0f8d963505f01dc3c986`；只查第二輪修正的差異與受影響的路徑（`049238b..51c2519`）。請**新開一個 session**，推理等級高。
+- 先讀 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)最後的〈Claude 核對與修正（第二輪）〉。
+- 請特別看：
+  - R10：`REFUSE` 改了共用的寫入邊界（`writes.edit`、`fillFile`）；第 1 批的加入、補題遇鎖從「存一次編輯器」變成「不存」。請確認沒有別的呼叫者靠 null 的存檔行為，以及拒寫之後核對讀取、待讀與存檔按鈕的狀態。
+  - R11：改名的串行（`main.ts` 的 `renames`）出錯時會不會卡住之後的改名；外掛停用時排著的工作。
+  - R12：`QUOTED` 與重讀核對有沒有漏掉會改錯的組合。
+  - R13：`sameButTargets` 只比 `對象` 以外的屬性與本文；有沒有不是改名、卻只差 `對象` 的情況會被當成已發布。
+  - R14：30 秒的上限與 `Late` 不記錯誤；`readWait` 只在測試裡改。
+- 驗證：同第二輪的七份測試；完整的 `npm run check`。Windows 實機只重跑了 R11 的連續改名（任務說明〈結果〉）。
+- 回報接在討論稿最後，標題〈第三輪〉；延續的標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
