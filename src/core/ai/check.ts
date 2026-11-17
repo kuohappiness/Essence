@@ -280,6 +280,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     for (const piece of value.split('、')) {
       const item = piece.trim();
       if (!item) { issue(line, '不符', 'source-empty', '出處有空的項目'); continue; }
+      // 課外層（tasks/ai-cards-deepen.md §6）：`課外：` 後面整段是可以查的來源，只顯示、不連；要寫來源。
+      if (/^課外\s*[：:]/.test(item)) { if (!item.replace(/^課外\s*[：:]/, '').trim()) issue(line, '不符', 'source-outside-empty', '「課外：」後面要寫可以查的來源，例如 `課外：高中基礎物理 熱學`'); continue; }
       if (/第.{1,3}段/.test(item)) issue(line, '不符', 'source-paragraph', `出處不寫「第幾段」（§2-5）：${item}`);
       const unitMatch = /^((?:國[一二三][上下]\s*)?(?:\d+-\d+|L\d+))(?:\s+|$)(.*)$/.exec(item);
       const rest = unitMatch ? unitMatch[2] : item;

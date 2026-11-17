@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
+import { isDeckPath, isOutside, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
 import { buildIndex, deckInScope, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopeDay, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, QuizInput, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
@@ -658,7 +658,7 @@ export function createState(options: StateOptions): State {
     const index = catalogIndex();
     if (scoped?.file !== chosen.file || scoped.index !== index) {
       const ids = targetsInScope(chosen.file, index);
-      scoped = { file: chosen.file, index, scope: { contains: (_entry, target) => target.id !== null && ids.has(target.id), hasPeriod: scopePeriod(chosen.file).kind === 'ok' } };
+      scoped = { file: chosen.file, index, scope: { contains: (_entry, target) => target.id !== null && ids.has(target.id), hasPeriod: scopePeriod(chosen.file).kind === 'ok', outside: (entry, target) => isOutside(target.fields.sources, entry.deck.props) } };
     }
     return scoped.scope;
   }

@@ -5,6 +5,8 @@ export { appendLine, changesInOrder, isLogPath, mergeHistory, readablePieces, re
 export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';
 export { planToday } from './plan.ts';
 export { findDuplicateIds } from './duplicates.ts';
+export { masteryOf, missCount, STABLE_DAYS, WEAK_MISSES } from './mastery.ts';
+export type { Mastery } from './mastery.ts';
 export type { DuplicateId, DuplicateTarget } from './duplicates.ts';
 export { nextCard, progress, scopeCount, todayLeft, checkTyped, typedKey, typedUnits } from './session.ts';
 export { memoryColors } from './practice.ts';

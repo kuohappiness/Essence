@@ -4,7 +4,7 @@
 
 /**
  * 連結的目標：block 是 `#^id`、heading 是舊的段落標題、note 是筆記連結本身（alias 只顯示，不送去開）；
- * unit 是別的單元；text 不做連結（先備，D-087）。
+ * unit 是別的單元；text 不做連結（先備，D-087；課外，tasks/ai-cards-deepen.md §6）。
  */
 export type SourceLink =
   | { kind: 'block'; id: string }
@@ -27,6 +27,8 @@ export interface SourceItem {
   basis?: 'written' | 'carried';
   /** 字面上有單元的線索、但沒有算進歸屬（`小五上 p.15`、`1-3 p.20`、網址裡的編號）。普通標題要比材料才知道，不算。 */
   missed?: true;
+  /** `課外：<來源>` 那一段（D-136 的課外層，tasks/ai-cards-deepen.md §6）：只顯示，不算單元、不連。 */
+  outside?: true;
 }
 /** 這一篇自己的屬性：本科的名稱、本篇的編號（`L3 p.30` 就是這一篇）、自己的學期。 */
 export interface SourceOwner { term: string | null; subject: string | null; unit: { code: string } | null }
@@ -540,9 +542,10 @@ function readSources(sources: readonly string[], own: SourceOwner): { parts: Sou
   for (const [at, { index, t }] of entries.entries()) {
     const entry = t.text;
     const display = restore(entry.replace(RAW_END, ''), tokens);
-    if (/^先備 ?[：:]/.test(entry)) {
+    const outside = /^課外 ?[：:]/.test(entry);
+    if (outside || /^先備 ?[：:]/.test(entry)) {
       forget();
-      readings.push({ entry: index, span: spanOf(t), items: [{ text: display, link: { kind: 'text' } }], follows: null, scope: scopeNow() });
+      readings.push({ entry: index, span: spanOf(t), items: [{ text: display, link: { kind: 'text' }, ...outside ? { outside: true as const } : {} }], follows: null, scope: scopeNow() });
       continue;
     }
     const segments = segmentsOf(t), start = readings.length;
@@ -628,4 +631,13 @@ export function splitSource(text: string, own: SourceOwner): SourceSplit {
   if (found && (!found.other || term || short)) { code = found.code; rest = found.rest; }
   const scanned = scan(rest, tokens);
   return { term, short, code, places: scanned.found.map(each => each.link), bad: scanned.bad, left: restore(scanned.left, tokens) };
+}
+
+/**
+ * 延伸（syntax §2-9〈延伸〉、tasks/ai-cards-deepen.md §6）：出處的每一項都是 `課外：`。沒有出處的不算。
+ * 只連到教材以外的筆記也算延伸（D-152 第 3 點），要看連到的筆記有沒有 `來源類型`，這裡拿不到，還沒做（技術債）。
+ */
+export function isOutside(sources: readonly string[], own: SourceOwner): boolean {
+  const items = sourceLinks(sources, own);
+  return items.length > 0 && items.every(item => item.outside === true);
 }
