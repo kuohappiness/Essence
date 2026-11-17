@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, parseDeck } from '../deck/index.ts';
+import { blanksIn, outsideSource, parseDeck, splitSourceItems } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -277,11 +277,12 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
 
   function checkSource(value: string, line: number): void {
     if (value.includes('|')) issue(line, '不符', 'half-pipe', '欄位之間用全形「｜」分隔（§0）');
-    for (const piece of value.split('、')) {
-      const item = piece.trim();
-      if (!item) { issue(line, '不符', 'source-empty', '出處有空的項目'); continue; }
-      // 課外層（tasks/ai-cards-deepen.md §6）：`課外：` 後面整段是可以查的來源，只顯示、不連；要寫來源。
-      if (/^課外\s*[：:]/.test(item)) { if (!item.replace(/^課外\s*[：:]/, '').trim()) issue(line, '不符', 'source-outside-empty', '「課外：」後面要寫可以查的來源，例如 `課外：高中基礎物理 熱學`'); continue; }
+    // 和卡組的讀法同一種切法：連結裡的頓號不切，`課外：` 前面的空白或逗號也切（tasks/ai-cards-deepen.md §6）。
+    if (value.split('、').some(piece => !piece.trim())) issue(line, '不符', 'source-empty', '出處有空的項目');
+    for (const item of splitSourceItems(value)) {
+      // 課外層：`課外：` 後面整段是可以查的來源，只顯示、不連；要寫來源。
+      const outside = outsideSource(item);
+      if (outside !== null) { if (!outside) issue(line, '不符', 'source-outside-empty', '「課外：」後面要寫可以查的來源，例如 `課外：高中基礎物理 熱學`'); continue; }
       if (/第.{1,3}段/.test(item)) issue(line, '不符', 'source-paragraph', `出處不寫「第幾段」（§2-5）：${item}`);
       const unitMatch = /^((?:國[一二三][上下]\s*)?(?:\d+-\d+|L\d+))(?:\s+|$)(.*)$/.exec(item);
       const rest = unitMatch ? unitMatch[2] : item;

@@ -60,11 +60,41 @@ void test('課外：那一段只顯示、不連、不算單元；每一項都是
   assert.deepEqual(items.map(item => [item.link.kind, item.outside ?? false]), [['unit', false], ['text', true]]);
 });
 
-void test('檢查：課外：要寫來源', () => {
+const read = (source: string): [string, unknown, boolean][] => sourceLinks([source], own).map(item => [item.text, item.link, item.outside ?? false]);
+
+void test('課外：前綴的寬鬆寫法、空來源與連結裡的頓號（格式查核第二輪）', () => {
+  // 課外與冒號之間多幾格空白也認，整段只顯示，不讀成這一篇的頁碼。
+  assert.deepEqual(read('課外  ：高中課本 p.44'), [['課外  ：高中課本 p.44', { kind: 'text' }, true]]);
+  // 沒寫來源的不算延伸（保守留在課內）。
+  for (const empty of ['課外：', '課外：；', '課外 ： 。']) assert.equal(isOutside([empty], own), false, empty);
+  // 連結裡的頓號不切。
+  assert.deepEqual(read('課外：[[甲、乙]]'), [['課外：[[甲、乙]]', { kind: 'text' }, true]]);
+});
+
+void test('課外：不改前後出處的承接；前面是空白或逗號也自成一項', () => {
+  const p44 = { kind: 'unit', term: '國二上', unit: '1-8', rest: { kind: 'block', id: 'p44' } };
+  // 課外插在中間，後面的頁碼仍跟著 1-8，不跳回 1-3。
+  assert.deepEqual(read('國二上 1-3、1-8、課外：高中課本、p.44').at(-1), ['p.44', p44, false]);
+  assert.deepEqual(read('國二上 1-3、1-8 課外：高中課本、p.44').slice(1), [['1-8', { kind: 'unit', term: '國二上', unit: '1-8', rest: null }, false], ['課外：高中課本', { kind: 'text' }, true], ['p.44', p44, false]]);
+  // 課外後面的數字仍是頁碼（接著 p.44）。
+  assert.deepEqual(read('p.44、課外：高中課本、46').map(each => each[1]), [{ kind: 'block', id: 'p44' }, { kind: 'text' }, { kind: 'block', id: 'p46' }]);
+  assert.deepEqual(read('p.44 課外：高中課本'), [['p.44', { kind: 'block', id: 'p44' }, false], ['課外：高中課本', { kind: 'text' }, true]]);
+  assert.deepEqual(read('p.44，課外：高中課本、p.46').map(each => each[2]), [false, true, false]);
+  // 分行寫：每一行各自是一項。
+  assert.equal(isOutside(['課外：高中課本', '課外：科學人雜誌'], own), true);
+  assert.equal(isOutside(['課外：高中課本', 'p.44'], own), false);
+});
+
+void test('檢查：課外：要寫來源；和卡組同一種切法', () => {
   const reply = (source: string): string => `## 1 溶液\n\n- 能說明水的密度隨溫度改變\n    - 出處：${source}\n    - 4°C 的水和 20°C 的水哪一個密度大？ :: **4°C**\n`;
-  const codes = (source: string): string[] => check(reply(source), {}).issues.map(issue => issue.code);
-  assert.ok(!codes('課外：高中基礎物理 熱學').includes('source-unknown'));
-  assert.ok(codes('課外：').includes('source-outside-empty'));
+  // 帶轉錄稿：認不得的出處才會報 source-unknown，可以驗出錯切。
+  const transcript = '# 第 2 章\n\n## 溶液\n\n水的密度 ^p44\n';
+  const codes = (source: string): string[] => check(reply(source), { transcript }).issues.map(issue => issue.code).filter(code => code.startsWith('source'));
+  assert.deepEqual(codes('課外：高中基礎物理 熱學'), []);
+  assert.deepEqual(codes('課外：[[甲、乙]]'), []);
+  assert.deepEqual(codes('p.44 課外：高中課本'), []);
+  for (const empty of ['課外：', '課外：；', '課外  ：']) assert.ok(codes(empty).includes('source-outside-empty'), empty);
+  assert.ok(codes('p.44、、課外：高中課本').includes('source-empty'));
 });
 
 const deck = (path: string, text: string): CatalogDeck => ({ path, deck: parseDeck(text) });

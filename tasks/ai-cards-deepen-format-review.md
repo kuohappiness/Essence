@@ -1,6 +1,6 @@
 # AI 製卡第 2 批（加深與主動提示）開工前的格式查核（給 Codex）
 
-狀態：第一輪已查核（[報告](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-format-review.md>)）；等第二輪
+狀態：兩輪都已查核（[報告](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-format-review.md>)）；Claude 已照第二輪改進任務說明與 `課外：` 的讀法，交使用者選的兩項已選定
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
