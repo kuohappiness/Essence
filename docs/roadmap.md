@@ -23,7 +23,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
 | 英文一字多義 | 規則已改（D-125） | 有多義字的真實教材時試用 | 新教材 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
 | 英文的學習地圖與預設 | 方向定案（[D-193](decisions.md#d-193-英文的學習地圖詞是根句型是骨架)）：先做國中；每個字都開中翻英；不規則變化另立；文法第一次就做、打字，詞序用排序；容易混淆的字第一次就比；記憶錨點由 AI 預設加、只寫有連結的；一課分單字、文法兩篇。[英文預設](card-rules/english.md) v0.14 草稿：用翰林八上 L4、L5 試過，使用者定了試用找到的缺口，動詞的中翻英翻卡後列出變化，Sonnet 盲測 L5 一次（[trials.md](card-rules/trials.md)） | 打字與排序已合併進 `main`（2026-11-16，[PR #14](https://github.com/kuohappiness/Essence-Cards/pull/14)）；手機上的換行、句首大寫與朗讀等下一次 [iPhone 實機測試](backlog.md#v1-需要做的任務) | iPhone 實機 | [english.md](card-rules/english.md) |
-| AI 製卡第 2 批：加深這一節與主動提示 | 已定案（[D-194](decisions.md#d-194-加深的主動提示記穩了三分之一就問按一下才做)、[D-209](decisions.md#d-209-加深第-2-批的六項選擇門檻二分之一課外-標法常錯兩次)）；在分支 `claude/ai-cards-deepen-04562a` 實作：「加深這一節」命令、提醒一區的加深列與「這次不用」、這台電腦的開關、`課外：` 的標法與佇列、`來源類型` 的名稱；門檻試作與格式查核兩輪做完 | Windows 實機、開 PR、Codex L2，使用者同意後合併；iPhone 併入下一次實機測試 | Claude、Codex | [任務說明](../tasks/ai-cards-deepen.md)、[討論稿](<../Claude Codex Discussion/2026-11-05-deepening-prompt.md>) |
+| AI 製卡第 2 批：加深這一節與主動提示 | 已合併進 `main`（2026-11-17，[PR #16](https://github.com/kuohappiness/Essence-Cards/pull/16)，[D-194](decisions.md#d-194-加深的主動提示記穩了三分之一就問按一下才做)、[D-209](decisions.md#d-209-加深第-2-批的六項選擇門檻二分之一課外-標法常錯兩次)，見已完成） | iPhone 併入下一次實機測試；延後的技術債見任務說明〈結果〉 | Claude、Codex | [任務說明](../tasks/ai-cards-deepen.md)、[討論稿](<../Claude Codex Discussion/2026-11-05-deepening-prompt.md>) |
 
 第一個里程碑：W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（D-111），2026-10-27 達成（[檢查](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)已結案）。第二個里程碑：上線前，第一次升正式版 `0.4.0`，2026-11-12 裝到正式 vault；品質檢查見上表。下一個里程碑還沒定（[quality.md](agents/quality.md#里程碑)）。接下來照 D-111 的順序，從 [backlog 的 v1 任務](backlog.md#v1-需要做的任務)挑下一批。
 
@@ -56,7 +56,7 @@ flowchart LR
 |---|---|
 | 2026-11-17 | AI 製卡第 3 批合併進 `main`：英文製卡與加深送孩子已有的單字（名稱去掉方向、粗體與最後的全形括號），製卡與加深畫面多一個點選填空的勾選、每科記在這台電腦，送出的提示改成 `提示 v4`、`加深 v2`；Codex L2 兩輪（[任務說明](../tasks/ai-cards-materials.md)、[PR #17](https://github.com/kuohappiness/Essence-Cards/pull/17)、[L2](<../Claude Codex Discussion/2026-11-17-ai-cards-materials-l2.md>)） |
 | 2026-11-17 | 點選填空的勾選寫在送出提示的任務段，五科都收得到；加深也帶勾選，英文另外送學過的單字；預設國語、英文勾（[D-210](decisions.md#d-210-點選填空的勾選寫在任務段加深也帶英文送學過的單字)） |
-| 2026-11-17 | 加深第 2 批的六項選擇（[D-209](decisions.md#d-209-加深第-2-批的六項選擇門檻二分之一課外-標法常錯兩次)）：主動提示改成上一次還沒記穩的有一半記穩就問；課外層的出處寫 `課外：<來源>`、算延伸並加需要版本；常錯是答錯兩次以上；混課內課外的比較卡整組出 |
+| 2026-11-17 | AI 製卡第 2 批合併進 `main`：「加深這一節」命令、提醒一區的加深列與「這次不用」、這台電腦的開關、`課外：` 的標法與佇列；Codex L2 四輪，iPhone 併入下一次實機測試（[任務說明](../tasks/ai-cards-deepen.md)、[PR #16](https://github.com/kuohappiness/Essence-Cards/pull/16)） |
 | 2026-11-17 | 加深第 2 批的六項選擇（[D-209](decisions.md#d-209-加深第-2-批的六項選擇門檻二分之一課外-標法常錯兩次)）：主動提示改成上一次還沒記穩的有一半記穩就問；課外層的出處寫 `課外：<來源>`、算延伸並加需要版本；常錯是答錯兩次以上；混課內課外的比較卡整組出 |
 | 2026-11-17 | 三個外掛改在同一個 repo 開發：Capture、Mindboard 寫第一行程式前先建 `plugins/`，Cards 等穩定基線再搬，repo 改名 `Essence` 另排時段；決定維持一份；Codex 查核兩輪（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） |
 | 2026-11-17 | AI 製卡第 1 批合併進 `main`：電腦的閱讀模式按引言框的「加入」，候選搬進同一篇，加進已有目標的先寫進原本的卡組、讀回確認再從框裡拿掉；`提示 v3` 送已有目標的第一題（§5 的試用延到正式用之前，記在技術債；[任務說明](../tasks/ai-cards-add.md)，PR #15） |
