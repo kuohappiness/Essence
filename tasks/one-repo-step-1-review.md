@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第一步：L2 獨立審查（給 Codex）
 
-狀態：待審
+狀態：第二輪待審（第一輪 R1～R6 已回應與修正，見[〈第二輪〉](#第二輪)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -75,7 +75,7 @@
 3. 兩個 hook 開頭先用 `cmp` 比對自己和這個工作樹的 `.githooks/` 那一份，不一樣就 `exec` 工作樹那一份（〈平台事實〉新增的一列：開 worktree 的工具會把共用的 `core.hooksPath` 改成另一個 checkout 的絕對路徑，新舊分支的 hook 會混用）。判斷寫在 sh 裡，因為這時還不知道該用哪一份 `tools/hooks.ts`；工作樹那一份是舊版（例如還沒有這一步的分支）時，跑的就是舊版。
 4. `knip.jsonc` 把 `tools/hooks.ts` 列成入口；`ci-gate.ts` 只被測試 import，它的 export 不受 knip 檢查（〈平台事實〉）。
 5. `check-skill-mirror --staged` 獨立一個 commit，放在 §3 之前。
-6. capture、mindboard 的 job 不設 `setup-node` 的快取；鎖檔沒有相依時跳過 `npm ci`。
+6. capture、mindboard 的 job 不設 `setup-node` 的快取；鎖檔沒有相依時跳過 `npm ci`（第一輪 R5 之後改成直接 `npm ci`）。
 7. §10 量完改成預設（`tools/hooks.ts` 的 `stagedCopy`）：外掛的檢查（完整與相關測試）在系統暫存資料夾裡只有暫存內容的副本跑。做法上自己決定的：
    - 在 hook 原本的環境跑 `git checkout-index`，`git commit <路徑>`、`-a` 取到的是暫時的索引；`core.autocrlf=false`，副本一律 LF（和 CI 一樣；Windows 的工作檔是 CRLF）。
    - 副本放一個 `.git` 檔指向這個工作樹的 git 資料夾（`--absolute-git-dir`），要讀 tag 與歷史的測試才跑得了。代價：子程序已經清掉 `GIT_INDEX_FILE`，副本裡的 git 讀預設的索引，`git commit <路徑>`、`-a` 時可能和副本內容不同（原本讀工作樹也有同樣的落差）。也考慮過用 `git worktree add --no-checkout` 加 `read-tree` 做一個索引完全一致的副本，但要多管 `.git/worktrees/` 的登錄與中斷後的清理，沒採用。
@@ -89,3 +89,53 @@
 - 只審查與回報，不改檔；可以在隔離的暫存 repo 或 clone 重現。不要 push、不要開 PR、不要動 `main` 的設定（分支保護、必過檢查）；需要在 GitHub 上實際跑的，寫成探針步驟交給 Claude。
 - 每項發現寫：哪一軸（規格／規範與設計）、觸發條件、預期／實際、影響、位置、證據（已重現／靜態推斷／待驗證）、**真實路徑會不會發生**與發生機率、建議處理。可以回報「規格本身有漏洞」。
 - 報告寫在 `Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md`，標題下第一行寫狀態；頭尾寫待審 commit、審查範圍、測試結果與沒驗的項目及原因。
+
+## 第二輪
+
+第一輪（Codex，`b8396a6`）回報 R1～R6，Claude 逐項核對都成立：R3 記成已知的限制，其餘修。報告與逐項的回應（修之前的四欄、判斷、修正的 commit）在 [`Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md`](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈Claude 回應〉。這一輪只審修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-1`（已 push），本機 worktree `.claude/worktrees/one-repo-step-1`。沒有未提交的修改（`docs/syntax.md` 只有換行差異，同第一輪）。`main` 仍在 `d655645`，沒有前進。
+- 只審 `b8396a60c093a8b051f73abc7b63749ff518235f..<最後的 commit>` 的差異與受影響的路徑，不必整包重審。新的 commit（由舊到新，一項發現一個）：
+  - `6b0a3a637e0b6cb5c78f498a11dfbeea0ee84810` R1 `secretlint --staged` 掃暫存區的內容
+  - `3c8a30731ccdada57e2909a2a1aa28f75e5d782c` R2 相關測試照這次比較的內容選
+  - `a64ff61773dd45951a4bad114cb3cc0a0382b79f` R3 記成已知的限制（只改文件），連同第一輪報告
+  - `3a236db5af1145b3f16bbe83d9bbec807540e3bd` R4 gate 查型別
+  - `acf0afe77c39f892e032e7d07f202238183eba98` R5 capture、mindboard 直接 `npm ci`
+  - `dfddc48153bf3aa23845ecde98ba7370df2c0247` R6 外掛本機相依的白名單
+  - 最後一個是這一節所在的文件 commit（第一輪的回應、這一節、〈結果〉、roadmap）
+- 看差異：`git diff b8396a60c093a8b051f73abc7b63749ff518235f <最後的 commit>`；逐個：`git log --reverse -p b8396a60c093a8b051f73abc7b63749ff518235f..<最後的 commit>`。最後的 commit 是這一節所在的 commit（`git log -1 --format=%H -- tasks/one-repo-step-1-review.md`）。
+
+### 受影響的路徑
+
+- R1：`tools/secretlint.mjs --staged` 的呼叫端：pre-commit 與 pre-merge-commit 的共用檢查（`tools/hooks.ts` 的 `SHARED_CHECKS`）。預設模式（`npm run secretlint`、CI）的列檔與讀檔不變，只多了 `engineOptions.cwd`。
+- R2：`relatedTests` 的呼叫端 `dispatch()`：pre-commit 的分派（`--staged`）、`--range` 不加 `--ci`（`--explain` 與〈第一批的紀錄〉）。CI 與 pre-merge-commit 用 CI 的跑法，不呼叫它。
+- R4：gate 的每種輸入與摘要；plan 的輸出格式沒改。
+- R5：CI 的 capture、mindboard job。
+- R6：`checkPackage`（共用檢查的 `check-plugin-imports`，預設與 `--staged` 都用）。
+- R3：只改文件。
+
+### 實作者自己選的做法（第二輪）
+
+1. R1 用 `git checkout-index` 把這次 commit 的檔取到暫存資料夾，再走 secretlint 的讀檔模式；沒用 `executeOnContent`（stdin 模式）：讀檔模式用 `istextorbinary` 判斷二進位，只跑支援 binary 的規則，`executeOnContent` 一律當文字，兩種模式會不一致。取出時關掉 `core.autocrlf`（拿到 commit 的位元組）與 `core.symlinks`（symlink 寫成內容是目標的一般檔，不會指到副本外）；子模組沒有內容，略過；不照副本裡的 `.gitignore` 略過（`respectGitignore: false`，這次 commit 的檔都掃）；`--diff-filter` 加上 `T`（symlink 換成一般檔也是新內容）。暫存資料夾在 `finally` 刪。規則檔照舊讀工作樹的 `.secretlintrc.json`（`engineOptions.cwd` 設成 repo 根，原本靠從 CWD 往上找）：它不是被掃的內容，改它是共用的輸入，三個外掛都檢查。300 個檔多約 0.2 秒（舊 0.8 秒、新 1.0 秒）。
+2. R2 只讀一般檔（mode `100644`、`100755`），symlink 的測試檔不算（原本讀工作樹會跟著連結）。`dispatch.ts` 的 `main` 把 `dispatch()` 也放進 `try`：相關測試讀 Git 失敗時和讀改動失敗一樣，結束碼 2。
+3. R4 每個外掛的理由缺、空或不是字串時，那一列標 ✗，理由欄顯示「（沒有）」；`reasons` 整個缺或是空字串時，三個外掛各列一個問題。結果與旗標型別錯時，問題裡附上那個值。
+4. R5 沒有在 GitHub 上做鎖檔不同步的紅燈探針：安裝那一步只剩 `npm ci` 一個指令，Actions 照它的結束碼判 step；本機用 npm 11.6.2 驗了四種鎖檔（〈驗證方式〉）。
+5. R6 的「本機路徑」照 npm-package-arg 的分類擴大成整類：大小寫不分的 `file:`、`link:`、`git+file:`，以及沒有協定、以 `.`、`~/`、`/`、`\`、磁碟代號開頭、含反斜線、或 `#` 前有兩個以上 `/` 的寫法（只有一個 `/` 的 `a/b` 是 GitHub 的簡寫）。核對時發現 npm 11.6.2 在 Windows 把 `file:%2e%2e/…`、`FILE:../…` 解成外掛裡字面的資料夾名，沒有跑出去：第一輪報告與修正指示裡「decode 後跑出去」在這個版本不成立；白名單照樣不收（隨版本不同，名稱也不合理）。真的會跑出去的是 `file:~/…`、`~/…`、不加協定的 `../…`、`lib/../../../src` 與 `git+file:`。
+
+### 驗證方式
+
+- 回歸測試都先寫，修之前跑過是失敗的：
+  - R1：`tests/quality.test.ts`「D-141 每次 commit 都跑文件檢查且讀暫存區…」新增的一段：暫存區有金鑰、工作檔已刪 → 擋；暫存區乾淨、工作檔有金鑰 → 放行；`git commit -a`、`git commit -- <路徑>` → 擋；別的檔 stage 了金鑰、`-- <路徑>` 不含它 → 放行；symlink 換成含金鑰的一般檔（T）→ 擋。修之前停在第一種（Missing expected rejection）。
+  - R2：`tests/dispatch.test.ts`「§2 分派表：相關測試照這次比較的內容找（L2 R2）…」（修之前選到工作樹新加的測試、漏掉 `rules.ts` 與暫存區的測試）；`tests/hooks.test.ts`「§3 乾淨 clone 的 hook：子資料夾、…」新增的兩段：測試的修改沒 stage → 照暫存區選到、跑了；工作樹新加、沒 stage 的測試 → 不選、不擋。用 `b8396a6` 的 `dispatch.ts` 跑，停在第一段（記號只有 `capture`）。
+  - R4：`tests/ci-gate.test.ts`「§4 gate：比較端點與理由缺、空或型別錯都不過（L2 R4）…」16 種輸入，每種都斷言紅燈、問題的文字與摘要印得出來。修之前停在第一種（沒有 `compare` 仍 `ok: true`）。
+  - R5：workflow 沒有本機的自動測試。本機探針（Windows、npm 11.6.2，複製 `plugins/mindboard/` 的 `package.json` 與鎖檔）：同步、沒有相依 → `npm ci` 結束碼 0、不建 `node_modules`；`package.json` 加了相依、鎖檔沒更新 → 1（`EUSAGE`，`--offline` 時先報 `ENOTCACHED`）；鎖檔不是 JSON → 1（`EUSAGE`）；沒有鎖檔 → 1（`EUSAGE`）。GitHub 上的正向結果見下面的 run。
+  - R6：`tests/plugin-imports.test.ts`「§6 外掛 package.json 的本機相依只接受外掛裡的相對路徑（L2 R6）…」25 個擋、17 個放行。修之前停在 `file:~/x`。放行的與 npm 11.6.2 的 `npm-package-arg` 解析對過：在外掛裡、不是本機路徑，或 npm 不支援（`link:` 回 `EUNSUPPORTEDPROTOCOL`，npm 自己就裝不起來）。
+- 每個改到共用輸入的 commit，pre-commit 都在暫存內容的副本跑了三個外掛的完整檢查。
+- GitHub：`dfddc48` 的 push run [44147697017](https://github.com/kuohappiness/Essence-Cards/actions/runs/44147697017)：plan 比較 `d655645..dfddc48`（push 到分支：和 `origin/main` 的合併基點到這次），三個外掛都是完整檢查；plan、shared、cards（247 秒）、capture、mindboard、gate 六個 job 都成功。capture、mindboard 的「Run npm ci」步驟成功（`up to date, audited 1 package`，沒有相依）。這一節所在的文件 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：R5 的 GitHub 紅燈探針（上面第 4 點）；hook 程序被強制結束後的暫存資料夾（第一輪就列的限制；R1 的 `essence-secretlint-*` 也一樣可能留下，裡面是暫存區的內容、沒有連結）。
+
+### 回報
+
+照第一輪〈回報與權限〉。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。報告接在同一份報告的最後，加〈第二輪〉一節，標題下的狀態行一起改。

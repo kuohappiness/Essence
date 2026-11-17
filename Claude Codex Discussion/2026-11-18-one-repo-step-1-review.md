@@ -1,6 +1,6 @@
 # D-208 第一步｜Codex L2 審查
 
-狀態：待修（第一輪，建議暫緩合併）
+狀態：第一輪已回應與修正（R3 記成已知的限制），待第二輪 L2
 
 審查分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f`，以 `d655645e7fd6a239364642b4d2aebc470c171085` 為共同祖先及規格基準。審查請求在分支的 `tasks/one-repo-step-1-review.md`（`b8396a6`）。範圍涵蓋基準版 `tasks/one-repo-step-1.md` §1～§10 和驗收，對照 D-208 第 1、2、3、4、5、9、10 點、D-117、D-141、D-195 及開工前查核。審查同時核對實作者列出的八項選擇。分支 worktree 的 `docs/syntax.md` 只有換行差異，獨立探針使用待審 commit 的隔離 clone。
 
@@ -110,3 +110,14 @@ GitHub Actions 的待審 SHA 已完成，六個 job 都成功。本機完整檢�
 - **影響**：相依跨出外掛，外掛只在開發者自己的電腦裝得起來。
 - **修法類型**：收窄：改成白名單。
 - **動到什麼**：`tools/check-plugin-imports.ts` 的 `checkPackage`、`tests/plugin-imports.test.ts`；看得到的行為只有多擋；放進第二輪 L2。
+
+### 判斷與修正
+
+- **R1 成立，一定修（`6b0a3a6`）**。自己在 `b8396a6` 重現：暫存區有金鑰、工作檔刪掉後 commit 成功。同一類（`--staged` 掃的不是這次 commit 的內容）還有一個：`--diff-filter=ACMR` 漏了型別變更 `T`，symlink 換成含金鑰的一般檔不會被掃，一起修。做法：`git checkout-index` 把這次 commit 的檔取到暫存資料夾，再照讀檔模式掃（二進位的判斷和預設模式一樣：`@secretlint/source-creator` 用 `istextorbinary`，二進位只跑支援 binary 的規則；stdin 模式一律當文字，沒採用）。回歸在 `tests/quality.test.ts` 的 D-141 測試：兩個方向、`-a`、`-- <路徑>`、別的檔已 stage、型別變更。300 個檔多約 0.2 秒。
+- **R2 成立，修（`3c8a307`）**。`relatedTests` 改讀這次比較的內容：`--staged` 讀索引（hook 的環境裡就是這次 commit 用的索引），`--range` 讀 head 的樹；測試檔與 `src/core/ai/rules.ts` 都是。用 `b8396a6` 的 `dispatch.ts` 跑新的 hook 測試，停在第一段（只跑了 Capture，Cards 的相關測試漏掉），重現了報告的漏跑；反向（工作樹新加的測試被選到、副本裡沒有而擋下）在 `tests/dispatch.test.ts` 也重現了。
+- **R3 成立，記成已知的限制（`a64ff61`）**。舊版 hook 是已經 commit 的程式，這一步沒辦法讓它轉交；合併後主資料夾一更新就是新版，之後每個 checkout 的 hook 都會轉交，真實路徑只在過渡期。報告建議「把重設相對 `.githooks` 落到已存在的安裝或開工入口」：已經是了（`tools/` 的 `prepare`），合併後在 `tools/` 跑 `npm ci` 就會改回相對的，寫進驗收第 14 項。寫進 backlog〈已知的限制〉、`docs/agents/quality.md`〈檢查指令〉的 worktree 那一點。
+- **R4 成立，修（收窄，`3a236db`）**。`gate()` 對每個值先查型別：比較端點要是非空字串；`reasons` 要是物件，每個外掛的理由要是非空字串；結果與旗標型別錯時列成問題並附上值；摘要不會因型別錯拋錯，plan 失敗時照樣印得出表。
+- **R5 成立，修（收窄，`acf0afe`）**。兩個 job 直接 `npm ci`。本機用 npm 11.6.2 驗了同步、不同步、壞掉、沒有鎖檔四種（審查請求〈第二輪〉的〈驗證方式〉）；沒有相依時 `npm ci` 成功、不建 `node_modules`，所以原本「跳過安裝」省不到東西。
+- **R6 成立，修整類（收窄，`dfddc48`）**。改成白名單，「本機路徑」照 npm-package-arg 的分類擴大成整類（大小寫不分的 `file:`、`link:`、`git+file:`，與沒有協定的路徑寫法）。核對時更正一點：npm 11.6.2 在 Windows 把 `file:%2e%2e/…`、`FILE:../…` 解成外掛裡字面的資料夾名，沒有跑出去；真的會跑出去的是 `file:~/…`、`~/…`、不加協定的 `../…`、`lib/../../../src` 與 `git+file:`。白名單一律不收，放行的寫法和 npm 的解析對過。
+
+這些修正改到共用的路徑，照 code-quality 放進第二輪 L2：[審查請求〈第二輪〉](../tasks/one-repo-step-1-review.md#第二輪)。
