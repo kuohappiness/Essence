@@ -11,7 +11,7 @@ export type { Item, Line, NameIds } from './markdown.ts';
 export { isDeckPath, listDeckPaths, readDecks } from './read.ts';
 export { folderIssues, folderLabel, guardedMoves, misplacedFolders, presentFolders } from './folders.ts';
 export type { FolderIssue } from './folders.ts';
-export { chapterAlias, codeKey, headingKey, isOutside, outsideSource, readSourceParts, readTerm, sourceLabel, sourceLinks, splitSource, splitSourceItems, splitUnit, termKey, termRank, tidy } from './sources.ts';
+export { chapterAlias, codeKey, headingKey, hasOutside, isOutside, outsideSource, readSourceParts, readTerm, sourceLabel, sourceLinks, splitSource, splitSourceItems, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceProblem, SourceScope } from './sources.ts';
 export type { Couplet, Deck, DeckProps, PickGroup, PoemOrder, PropertyIssue, SentenceCells, SentenceOrder, Typing, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
 export { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuestion, verifySourceEdit } from './source-edit.ts';

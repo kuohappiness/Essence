@@ -659,3 +659,9 @@ export function isOutside(sources: readonly string[], own: SourceOwner): boolean
   const items = sourceLinks(sources, own);
   return items.length > 0 && items.every(item => item.outside === true);
 }
+
+/**
+ * 出處裡有沒有任何一項是有寫來源的 `課外：`（要不要加 `需要版本`，syntax §0-1、D-209）：0.5.0 以前把它讀成這一篇的位置與單元，
+ * 只要有一項就會讀錯，不必每一項都是。
+ */
+export const hasOutside = (sources: readonly string[], own: SourceOwner): boolean => sourceLinks(sources, own).some(item => item.outside === true);

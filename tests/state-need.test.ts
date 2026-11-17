@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createState } from '../src/state/index.ts';
 import type { IdIssue, State, StateOptions } from '../src/state/index.ts';
-import { canRead, PICK_NEEDS, releaseOf } from '../src/core/version/index.ts';
+import { canRead, OUTSIDE_NEEDS, PICK_NEEDS, releaseOf } from '../src/core/version/index.ts';
 import { encodeEntry } from '../src/core/study/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
 import { createMemoryEditor } from './helpers/editor.ts';
@@ -218,4 +218,31 @@ void test('這個建置讀得懂自己寫的標記：manifest 的版號不低於
   const h = await setup(t, { [P]: MARK + WITH_ID, [LOG]: encodeEntry('2026-10-01T19:00:00.000+08:00', { lt: 'abc222', r: 'good', v: '12345678' }) + '\n' }, { build: manifest.version + '+1a2b3c4' });
   assert.deepEqual(h.state.blocked(), { decks: [], targets: [], all: false });
   assert.deepEqual(h.state.today().share.map(item => item.lt), ['abc222']);
+});
+
+// 出處的 `課外：`（syntax §0-1、D-209）：0.5.0 以前會讀成這一篇的位置，正式目標有一項就要 OUTSIDE_NEEDS；讀不懂它的建置不寫（不擋自己）。
+const OUTSIDE = '---\n科目: 自然\n---\n- 能說明 A ^abc222\n    - 出處：p.44、課外：高中基礎物理 熱學\n    - Q :: A\n';
+const OUTSIDE_MARKED = `---\n科目: 自然\n需要版本: ${OUTSIDE_NEEDS}\n---\n- 能說明 A ^abc222\n    - 出處：p.44、課外：高中基礎物理 熱學\n    - Q :: A\n`;
+
+void test('課外：正式目標有一項就加 OUTSIDE_NEEDS；建置讀不懂時不加', async t => {
+  const h = await setup(t, { [P]: OUTSIDE }, { build: `${OUTSIDE_NEEDS}+1a2b3c4` });
+  assert.equal(h.state.deckStatus(P).mark, 'missing');
+  assert.equal((await save(h, OUTSIDE)).value, OUTSIDE_MARKED);
+  const old = await setup(t, { [P]: OUTSIDE }, { build: '0.5.0+1a2b3c4' });
+  assert.equal(old.state.deckStatus(P).mark, undefined);
+  assert.equal((await save(old, OUTSIDE)).value, OUTSIDE);
+});
+
+void test('課外：沒寫來源、或只在引言框裡的不加；較低的值換成 OUTSIDE_NEEDS；和比較卡一起時取較新的', async t => {
+  const build = { build: `${OUTSIDE_NEEDS}+1a2b3c4` };
+  const empty = OUTSIDE.replace('課外：高中基礎物理 熱學', '課外：');
+  assert.equal((await save(await setup(t, { [P]: empty }, build), empty)).value, empty);
+  const boxed = '---\n科目: 自然\n---\n- 能說明 B ^abc333\n    - Q :: B\n\n> [!note] 加深的學習目標\n> - 能說明 A ^abc222\n>     - 出處：課外：高中課本\n>     - Q :: A\n';
+  assert.equal((await save(await setup(t, { [P]: boxed }, build), boxed)).value, boxed);
+  const newer = OUTSIDE_MARKED.replace(`需要版本: ${OUTSIDE_NEEDS}`, '需要版本: 0.5.0');
+  assert.equal((await save(await setup(t, { [P]: newer }, { build: '9.0.0+1a2b3c4' }), newer)).value, OUTSIDE_MARKED);
+  const both = '---\n科目: 國語\n---\n' + WITH_ID + '- 能說明 A ^abc333\n    - 出處：課外：國語辭典\n    - Q :: A\n';
+  const value = (await save(await setup(t, { [P]: both }, build), both)).value;
+  assert.ok(value.startsWith(`---\n科目: 國語\n需要版本: ${OUTSIDE_NEEDS}\n---\n`), value);
+  assert.ok(canRead(PICK_NEEDS, OUTSIDE_NEEDS));
 });
