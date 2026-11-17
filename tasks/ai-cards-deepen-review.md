@@ -91,14 +91,13 @@
 
 ## 第三輪
 
-- 待審 commit：`51c25199e81a1ac76c0b0f8d963505f01dc3c986`；只查第二輪修正的差異與受影響的路徑（`049238b..51c2519`）。請**新開一個 session**，推理等級高。
-- 先讀 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)最後的〈Claude 核對與修正（第二輪）〉。
+- 待審 commit：`51c25199e81a1ac76c0b0f8d963505f01dc3c986`。請**新開一個 session**，推理等級高。
+- **範圍只有 R10、R14、R15 的修正**（使用者 2026-11-17 決定）：其他項目不再審。R11～R13（改名時改快照連結的邊角）使用者判斷發生機率低、影響小（最壞照第一次加深算、多一份快照），已修的程式保留、不再審；R1～R9 第二輪已核對。
+- 先讀 [L2 討論稿](<../Claude Codex Discussion/2026-11-17-ai-cards-deepen-l2.md>)最後的〈Claude 核對與修正（第二輪）〉的 R10、R14、R15 三列。
 - 請特別看：
-  - R10：`REFUSE` 改了共用的寫入邊界（`writes.edit`、`fillFile`）；第 1 批的加入、補題遇鎖從「存一次編輯器」變成「不存」。請確認沒有別的呼叫者靠 null 的存檔行為，以及拒寫之後核對讀取、待讀與存檔按鈕的狀態。
-  - R11：改名的串行（`main.ts` 的 `renames`）出錯時會不會卡住之後的改名；外掛停用時排著的工作。
-  - R12：`QUOTED` 與重讀核對有沒有漏掉會改錯的組合。
-  - R13：`sameButTargets` 只比 `對象` 以外的屬性與本文；有沒有不是改名、卻只差 `對象` 的情況會被當成已發布。
-  - R14：30 秒的上限與 `Late` 不記錯誤；`readWait` 只在測試裡改。
-- 驗證：同第二輪的七份測試；完整的 `npm run check`。Windows 實機只重跑了 R11 的連續改名（任務說明〈結果〉）。
+  - R10：`REFUSE` 改了共用的寫入邊界（`src/state/writes.ts` 的 `edit`、`fillFile`）；第 1 批的加入（`addCandidates`）、補題（`addExisting` 的目的地與來源清理）遇鎖從「存一次編輯器」變成「不存」。請確認：沒有別的呼叫者靠 null 的存檔行為；一般存檔、補 ID、暫停恢復不受影響；拒寫之後核對讀取、待讀與存檔按鈕的狀態；回報給家長的結果（`unsaved`、`locked`、`timeout`）和實際一致。
+  - R14：`src/obsidian/deepen.ts` 的 `limited`（30 秒，同還原的上限）與 `Late` 不記錯誤；部分狀態另看 `state.unread()`；晚到的結果不採用、回來後能照常重算。
+  - R15：學習目的的「今天」改用 `scopeDate(dayOf(…))`，和小考清單同一個換日。
+- 驗證：`node --test --test-timeout=300000 tests/ai-deepen-state.test.ts tests/ai-deepen-flow.test.ts tests/ai-add-state.test.ts tests/ai-add-existing-state.test.ts tests/main-wiring.test.ts` 與 `tests/state*.test.ts`；完整的 `npm run check`。
 - 回報接在討論稿最後，標題〈第三輪〉；延續的標「延續 Rx」，修正帶出的標「Rx 修正引入」。
 
