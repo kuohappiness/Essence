@@ -95,11 +95,11 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
   await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../tools/secretlint.mjs', import.meta.url), 'utf8'));
   await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../.secretlintrc.json', import.meta.url), 'utf8'));
-  // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製；兩份 skill 的檢查換成替身（這裡沒有 skill）。
+  // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製；兩份 skill 與 roadmap 的檢查換成替身（這裡沒有）。
   for (const name of ['check-local-paths.ts', 'hooks.ts', 'dispatch.ts', 'check-plugin-imports.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
   }
-  await writeFile(join(root, 'tools/check-skill-mirror.ts'), 'export {};\n');
+  for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(root, 'tools', name), 'export {};\n');
   await mkdir(join(root, '.githooks'));
   for (const name of ['pre-commit', 'commit-msg']) {
     const hook = join(root, '.githooks', name);
@@ -218,7 +218,7 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
   for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-plugin-imports.ts', '.secretlintrc.json']) {
     await writeFile(join(repo, path), await readFile(new URL('../' + path, import.meta.url), 'utf8'));
   }
-  await writeFile(join(repo, 'tools/check-skill-mirror.ts'), 'export {};\n');
+  for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(repo, 'tools', name), 'export {};\n');
   await symlink(fileURLToPath(new URL('../tools/node_modules', import.meta.url)), modules, 'junction');
   await writeFile(join(repo, 'README.md'), '# R\n');
   await git(['add', '--', 'README.md']);
@@ -292,7 +292,7 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   for (const name of ['hooks.ts', 'dispatch.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
   }
-  for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-plugin-imports.ts']) {
+  for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-plugin-imports.ts', 'roadmap-board.ts']) {
     await writeFile(join(root, 'tools', name), 'export {};\n');
   }
   await mkdir(join(root, '.githooks'));

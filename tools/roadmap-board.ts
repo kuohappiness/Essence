@@ -1,19 +1,28 @@
 // 開發進度白板：把 docs/roadmap.md 的「現在在哪裡」與「已完成」換成手機好讀的一頁（D-141：roadmap 是唯一來源，這頁只換樣子顯示）。
+// 外掛有自己的 roadmap（plugins/<外掛>/docs/roadmap.md，D-208 第 4 點）時，也讀它的「現在在哪裡」，名稱前加外掛名；
+// 正式 vault 的版本與「已完成」只從最上層讀（過渡期都是 Cards）。
 // main 上的 roadmap 一改，GitHub Actions（.github/workflows/progress-board.yml）就產生並發布到 GitHub Pages：https://kuohappiness.github.io/Essence-Cards/roadmap.html
 // 本機預覽：node tools/roadmap-board.ts（要先在 tools/ 裝過相依），輸出 _site/roadmap.html（_site/ 在 .gitignore）；--out <檔案> 改輸出位置。
-// 找不到需要的節或欄時印出「行號  原因」並以 exit code 1 結束；表格內容怎麼改都照樣產生。
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+// --check：只讀、只解析每一份 roadmap 並查會不會帶出私人資訊，不寫網頁（tools 的 npm run check 與 pre-commit 用；--staged 讀暫存區）。--root <資料夾> 給測試用。
+// 找不到需要的節或欄時印出「檔案:行號  原因」並以 exit code 1 結束；表格內容怎麼改都照樣產生。
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { LIST_PAGE as PROGRESS_MAP, TOKENS, escape } from './progress-board-data.ts';
 
 export const ROADMAP = 'docs/roadmap.md';
+/** 外掛的 roadmap：存在的才讀（由外掛的第一個任務建，建了就自動出現在白板上）。 */
+export const PLUGIN_ROADMAP = /^plugins\/([^/]+)\/docs\/roadmap\.md$/;
 const REPO = 'https://github.com/kuohappiness/Essence-Cards';
-const DOCS_URL = `${REPO}/blob/main/docs/`;
+const BLOB = `${REPO}/blob/main/`;
 /** 發布在 GitHub Pages 同一站（https://kuohappiness.github.io/Essence-Cards/）的檔名。 */
 export const BOARD_FILE = 'roadmap.html';
-const ROADMAP_URL = `${DOCS_URL}roadmap.md`;
+
+/** 連結的基準：相對連結以那份 roadmap 所在的資料夾為準，#錨點接到那份 roadmap 本身。 */
+interface Base { dir: string; page: string }
+const baseOf = (file: string): Base => ({ dir: `${BLOB}${posix.dirname(file)}/`, page: `${BLOB}${file}` });
 
 /** html 是轉好的行內 HTML（連結改成 GitHub 網址）；text 是純文字，分組與摘要用。 */
 export interface Cell { html: string; text: string }
@@ -29,8 +38,8 @@ export class RoadmapError extends Error {
 
 const markdown = new MarkdownIt({ html: false, linkify: false });
 
-/** 相對連結以 docs/ 為基準改成 GitHub 上 main 的網址；roadmap 內的錨點接到 roadmap 的網址；http(s) 不動；其他（file:、本機路徑）拿掉連結只留文字。 */
-function fixLinks(tokens: Token[]): Token[] {
+/** 相對連結以 roadmap 所在的資料夾為基準改成 GitHub 上 main 的網址；roadmap 內的錨點接到那份 roadmap 的網址；http(s) 不動；其他（file:、本機路徑）拿掉連結只留文字。 */
+function fixLinks(tokens: Token[], base: Base): Token[] {
   const kept: Token[] = [];
   let dropped = 0;
   for (const token of tokens) {
@@ -39,8 +48,8 @@ function fixLinks(tokens: Token[]): Token[] {
     const href = token.attrGet('href') ?? '';
     let url: string | null = null;
     if (/^https?:\/\//i.test(href)) url = href;
-    else if (href.startsWith('#')) url = ROADMAP_URL + href;
-    else if (!/^[a-z][a-z0-9+.-]*:|^[/\\]/i.test(href)) url = new URL(href, DOCS_URL).href;
+    else if (href.startsWith('#')) url = base.page + href;
+    else if (!/^[a-z][a-z0-9+.-]*:|^[/\\]/i.test(href)) url = new URL(href, base.dir).href;
     if (!url) { dropped++; continue; }
     token.attrSet('href', url);
     token.attrSet('target', '_blank');
@@ -50,10 +59,10 @@ function fixLinks(tokens: Token[]): Token[] {
   return kept;
 }
 
-function cell(token: Token | undefined): Cell {
+function cell(token: Token | undefined, base: Base): Cell {
   const children = token?.children ?? [];
   const text = children.map(child => child.content).join('').trim();
-  const html = markdown.renderer.renderInline(fixLinks(children), markdown.options, {}).trim();
+  const html = markdown.renderer.renderInline(fixLinks(children, base), markdown.options, {}).trim();
   return { html, text };
 }
 
@@ -65,7 +74,7 @@ function cellsInLine(line: string): number {
 }
 
 /** 每個 `##` 底下的第一張表；同名的節只取第一個。 */
-function tablesByHeading(tokens: Token[], lines: readonly string[]): Map<string, Table> {
+function tablesByHeading(tokens: Token[], lines: readonly string[], base: Base): Map<string, Table> {
   const tables = new Map<string, Table>();
   let heading = '';
   for (let i = 0; i < tokens.length; i++) {
@@ -89,7 +98,7 @@ function tablesByHeading(tokens: Token[], lines: readonly string[]): Map<string,
       else if (t.type === 'tr_close' && row) { if (!inHead) table.rows.push(row); row = null; }
       else if (t.type === 'inline' && row) {
         if (inHead) table.header.push(t.content.trim());
-        else row.push(cell(t));
+        else row.push(cell(t, base));
       }
     }
     tables.set(heading, table);
@@ -112,16 +121,22 @@ function need(tables: Map<string, Table>, section: string): Table {
 const EMPTY: Cell = { html: '', text: '' };
 const RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?/;
 
-/** 讀 roadmap：欄位照表頭的名稱找，欄的順序與列數怎麼變都可以。 */
-export function parseRoadmap(source: string): Roadmap {
-  const tables = tablesByHeading(markdown.parse(source, {}), source.split(/\r?\n/));
+const tablesOf = (source: string, file: string) => tablesByHeading(markdown.parse(source, {}), source.split(/\r?\n/), baseOf(file));
+
+function worksOf(tables: Map<string, Table>): Work[] {
   const now = need(tables, '現在在哪裡');
   const [name, status, next, waiting] = ['工作', '狀態', '下一步', '等誰'].map(n => column(now, '現在在哪裡', n));
   const entry = now.header.indexOf('入口');
-  const works = now.rows.map(row => ({
+  return now.rows.map(row => ({
     name: row[name] ?? EMPTY, status: row[status] ?? EMPTY, next: row[next] ?? EMPTY, waiting: row[waiting] ?? EMPTY,
     entry: entry >= 0 ? row[entry] ?? EMPTY : EMPTY,
   })).filter(work => work.name.text);
+}
+
+/** 讀最上層的 roadmap：欄位照表頭的名稱找，欄的順序與列數怎麼變都可以。file 是它在 repo 裡的路徑（相對連結的基準）。 */
+export function parseRoadmap(source: string, file = ROADMAP): Roadmap {
+  const tables = tablesOf(source, file);
+  const works = worksOf(tables);
 
   const finished = need(tables, '已完成');
   const [date, work] = ['日期', '工作'].map(n => column(finished, '已完成', n));
@@ -138,6 +153,15 @@ export function parseRoadmap(source: string): Roadmap {
   const unreleased = newer.filter(d => /\bmain\b/.test(d.work.text));
 
   return { works, done, vault, unreleased };
+}
+
+/** 外掛的 roadmap 只讀「現在在哪裡」，名稱前加外掛名（「Mindboard｜」）；連結以它自己所在的資料夾為準。 */
+export function parsePluginWorks(source: string, file: string): Work[] {
+  const folder = PLUGIN_ROADMAP.exec(file)?.[1] ?? '';
+  const prefix = folder.charAt(0).toUpperCase() + folder.slice(1) + '｜';
+  return worksOf(tablesOf(source, file)).map(work => ({
+    ...work, name: { html: escape(prefix) + work.name.html, text: prefix + work.name.text },
+  }));
 }
 
 /** 等誰的分組：去掉開頭的「等」，空的歸「沒寫」；使用者排第一，其餘照 roadmap 出現的順序。 */
@@ -171,8 +195,8 @@ function renderDone(done: Done): string {
 
 const RECENT = 5;
 
-/** generated：產生的時間；commit：GitHub Actions 的 GITHUB_SHA，本機預覽沒有。 */
-export function renderBoard(roadmap: Roadmap, generated: string, commit?: string): string {
+/** generated：產生的時間；commit：GitHub Actions 的 GITHUB_SHA，本機預覽沒有；sources：讀了哪幾份 roadmap（頁尾的來源）。 */
+export function renderBoard(roadmap: Roadmap, generated: string, commit?: string, sources: readonly string[] = [ROADMAP]): string {
   const groups = groupByWaiting(roadmap.works);
   const chips = groups.map(([key, works], i) => `<a class="chip${key === '使用者' ? ' you' : ''}" href="#g${i}">${escape(label(key))}<b>${works.length}</b></a>`).join('');
   const sections = groups.map(([key, works], i) => `<section class="group${key === '使用者' ? ' you' : ''}" id="g${i}"><h2>${escape(label(key))}<span class="n">${works.length}</span></h2>${works.map(renderWork).join('')}</section>`).join('\n');
@@ -187,6 +211,7 @@ export function renderBoard(roadmap: Roadmap, generated: string, commit?: string
   const older = roadmap.done.slice(RECENT);
   const more = older.length ? `<details class="more"><summary>再早的 ${older.length} 列</summary>${older.map(renderDone).join('')}</details>` : '';
   const source = commit ? ` · <a href="${REPO}/commit/${escape(commit)}" target="_blank" rel="noopener">${escape(commit.slice(0, 7))}</a>` : '';
+  const from = sources.map(file => `<a href="${baseOf(file).page}" target="_blank" rel="noopener">${escape(file)}</a>`).join('、');
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -208,7 +233,7 @@ ${sections}
 ${unreleased}
 <section class="list" id="done"><h2>最近完成</h2>${recent}${more}</section>
 </main>
-<footer>來源：<a href="${ROADMAP_URL}" target="_blank" rel="noopener">docs/roadmap.md</a>${source} · <a href="${PROGRESS_MAP}">功能地圖</a></footer>
+<footer>來源：${from}${source} · <a href="${PROGRESS_MAP}">功能地圖</a></footer>
 </body>
 </html>
 `;
@@ -280,26 +305,63 @@ footer{padding-block:0 32px;font-size:12px;color:var(--muted)}
 @media (max-width:330px){.facts{grid-template-columns:1fr}}
 `;
 
+/** 最上層與存在的外掛 roadmap，最上層排第一；staged 時清單與內容都讀暫存區。 */
+function readRoadmaps(root: string, staged: boolean): { file: string; text: string }[] {
+  const wanted = (file: string) => file === ROADMAP || PLUGIN_ROADMAP.test(file);
+  let files: string[];
+  let read: (file: string) => string;
+  if (staged) {
+    files = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 }).split('\0').filter(wanted);
+    read = file => execFileSync('git', ['show', `:${file}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
+  } else {
+    const plugins = existsSync(join(root, 'plugins')) ? readdirSync(join(root, 'plugins')).map(name => `plugins/${name}/docs/roadmap.md`) : [];
+    files = [ROADMAP, ...plugins].filter(file => wanted(file) && existsSync(join(root, file)));
+    read = file => readFileSync(join(root, file), 'utf8');
+  }
+  return [...new Set(files)].sort((a, b) => Number(b === ROADMAP) - Number(a === ROADMAP) || (a < b ? -1 : a > b ? 1 : 0))
+    .map(file => ({ file, text: read(file) }));
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   const at = args.indexOf('--out');
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const out = resolve(root, at >= 0 ? args[at + 1] : `_site/${BOARD_FILE}`);
-  let roadmap: Roadmap;
-  try {
-    roadmap = parseRoadmap(readFileSync(resolve(root, ROADMAP), 'utf8'));
-  } catch (error) {
-    if (!(error instanceof RoadmapError)) throw error;
-    console.error(`${ROADMAP}${error.line ? `:${error.line}` : ''}  ${error.message}`);
+  const rootAt = args.indexOf('--root');
+  const root = rootAt >= 0 ? resolve(args[rootAt + 1]) : resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const check = args.includes('--check');
+  const roadmaps = readRoadmaps(root, args.includes('--staged'));
+  if (roadmaps[0]?.file !== ROADMAP) {
+    console.error(`${ROADMAP}  找不到這份檔`);
     process.exit(1);
   }
+  let roadmap: Roadmap | undefined;
+  const works: Work[] = [];
+  let failed = false;
+  for (const { file, text } of roadmaps) {
+    try {
+      if (file === ROADMAP) roadmap = parseRoadmap(text, file);
+      else works.push(...parsePluginWorks(text, file));
+    } catch (error) {
+      if (!(error instanceof RoadmapError)) throw error;
+      console.error(`${file}${error.line ? `:${error.line}` : ''}  ${error.message}`);
+      failed = true;
+    }
+  }
+  if (failed || !roadmap) process.exit(1);
+  const files = roadmaps.map(r => r.file);
+  roadmap = { ...roadmap, works: [...roadmap.works, ...works] };
   const generated = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
-  const html = renderBoard(roadmap, generated, process.env.GITHUB_SHA);
+  const html = renderBoard(roadmap, generated, process.env.GITHUB_SHA, files);
+  // --check 也查：會帶出私人資訊時 Pages 一樣產生不了，commit 就擋。
   const leak = findPrivate(html);
   if (leak) {
-    console.error(`${ROADMAP}  白板會帶出${leak}，先從 roadmap 拿掉再產生`);
+    console.error(`${files.join('、')}  白板會帶出${leak}，先從 roadmap 拿掉再產生`);
     process.exit(1);
   }
+  if (check) {
+    console.log(`進度白板讀得出來：${files.join('、')}`);
+    return;
+  }
+  const out = resolve(root, at >= 0 ? args[at + 1] : `_site/${BOARD_FILE}`);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, html);
   console.log(`進度白板：${out}（進行中 ${roadmap.works.length} 件、已合併還沒發布 ${roadmap.unreleased.length} 列、正式 vault ${roadmap.vault?.version ?? '沒寫'}）`);

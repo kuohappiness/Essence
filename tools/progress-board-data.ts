@@ -131,7 +131,8 @@ export interface Meta { updated: string; commit?: string; deferred?: number }
 /** D-195：v1 結案前要清空的補測與補做，數字從 backlog 技術債表算。 */
 export function debtNote(meta: Meta): string {
   if (meta.deferred === undefined) return '';
-  return `<a class="debt" href="${DOCS_URL}backlog.md#${encodeURIComponent('技術債')}">v1 結案前待補測 ${meta.deferred} 列</a>`;
+  // 只數最上層的 backlog（D-208 第一步 §7、§8）：外掛的 backlog 各有自己的技術債表，第二步再決定白板怎麼呈現。
+  return `<a class="debt" href="${DOCS_URL}backlog.md#${encodeURIComponent('技術債')}">v1 結案前待補測 ${meta.deferred} 列（只算最上層的 backlog）</a>`;
 }
 
 /** 兩頁共用的顏色（含深色模式）。 */

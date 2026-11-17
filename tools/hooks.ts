@@ -14,6 +14,8 @@ export const SHARED_CHECKS: [string, ...string[]][] = [
   ['check-local-paths.ts', '--staged'],
   ['check-skill-mirror.ts', '--staged'],
   ['check-plugin-imports.ts', '--staged'],
+  // 每一份 roadmap 讀得出來（§8）：外掛的 roadmap 寫壞時 commit 就擋，不會等到 Pages 才失敗。
+  ['roadmap-board.ts', '--check', '--staged'],
 ];
 
 /** 外掛的資料夾：Cards 過渡期在根目錄（第二步搬進 plugins/cards/）。 */

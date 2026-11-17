@@ -25,7 +25,7 @@ const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
 const COPIED = [
   '.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json', 'tools/package.json',
   'tools/hooks.ts', 'tools/dispatch.ts', 'tools/check-docs.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts',
-  'tools/check-skill-mirror.ts', 'tools/check-plugin-imports.ts',
+  'tools/check-skill-mirror.ts', 'tools/check-plugin-imports.ts', 'tools/roadmap-board.ts', 'tools/progress-board-data.ts',
 ];
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
