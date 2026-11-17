@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第一步：開工前查核（給 Codex）
 
-狀態：等 Codex 查核（報告寫在 `Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md`）
+狀態：已查核（報告與 Claude 的回應在 [`Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md`](<../Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md>)，任務說明已照改）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 

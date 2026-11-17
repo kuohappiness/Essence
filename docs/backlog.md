@@ -249,7 +249,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 定案在 [D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)（使用者 2026-11-17），細節與驗收在決定本文：
 
-- **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。[任務說明](../tasks/one-repo-step-1.md)已寫，等 Codex 開工前查核。
+- **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。[任務說明](../tasks/one-repo-step-1.md)已經過 Codex 開工前查核並改完，等本機施工。
 - **轉錄稿格式**：第一個需要共同規格的 Capture 任務搬到最上層 `docs/`（第 6 點）。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
 - **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。
