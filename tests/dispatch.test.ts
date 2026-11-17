@@ -206,12 +206,35 @@ void test('§2 分派表：第一個 commit（還沒有 HEAD）的暫存區照�
   assert.deepEqual(actual(JSON.parse(stdout) as Result), expected({ mindboard: 'full' }));
 });
 
+void test('§2 分派表：相關測試照這次比較的內容找（L2 R2）：暫存區不看工作樹的修改與新檔，--range 讀 head 的樹', async t => {
+  const e = await setup(t);
+  // 工作樹：寫到轉錄稿格式的測試改成沒寫到、規則檔改成不列 english.md、新加一個寫到決定紀錄的測試，都不 stage。
+  await e.put('tests/syntax-a.test.ts', 'export {};\n');
+  await e.put('src/core/ai/rules.ts', 'export const files = [];\n');
+  await e.put('tests/unstaged.test.ts', `'${DECISIONS}';\n`);
+  for (const path of [SYNTAX, DECISIONS, ENGLISH]) await edit(path)(e);
+  const tests = ['tests/ai-rules.test.ts', 'tests/decisions-index.test.ts', 'tests/deck.test.ts', 'tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts'];
+  assert.deepEqual((await e.dispatch('--staged')).plugins.cards.tests, tests, '--staged');
+  await e.git('commit', '-q', '-m', 'docs');
+  assert.deepEqual((await e.dispatch('--range', e.base, 'HEAD')).plugins.cards.tests, tests, '--range');
+  // 反過來：head 的樹裡沒寫到（測試的修改先 commit 了），工作樹裡寫到也不選。
+  await e.git('add', '--', 'tests/syntax-a.test.ts');
+  await e.git('commit', '-q', '-m', 'stub');
+  const stub = (await e.git('rev-parse', 'HEAD')).trim();
+  await e.put(SYNTAX, '# S\n\n再改一次\n');
+  await e.git('add', '--', SYNTAX);
+  await e.git('commit', '-q', '-m', 'syntax again');
+  await e.put('tests/syntax-a.test.ts', `'${SYNTAX}';\n`);
+  assert.deepEqual((await e.dispatch('--range', stub, 'HEAD')).plugins.cards.tests, ['tests/nested/syntax-b.test.ts'], '--range 讀 head 的樹');
+});
+
 void test('§2 分派表：本 repo 的相關測試照實際搜尋找得到（文件的測試、規則檔的特例）', () => {
-  assert.ok(relatedTests(ROOT, [DECISIONS]).includes('tests/decisions-index.test.ts'));
-  const english = relatedTests(ROOT, [ENGLISH]);
+  const related = (path: string) => relatedTests(ROOT, { kind: 'staged' }, [path]);
+  assert.ok(related(DECISIONS).includes('tests/decisions-index.test.ts'));
+  const english = related(ENGLISH);
   assert.ok(english.includes('tests/deck.test.ts') && english.includes('tests/ai-rules.test.ts'), english.join(' '));
   // 這份測試自己不算：路徑用拼接寫。
-  for (const path of [SYNTAX, DECISIONS, ENGLISH, PRODUCT, SKILL]) assert.ok(!relatedTests(ROOT, [path]).includes('tests/dispatch.test.ts'), path);
-  assert.ok(relatedTests(ROOT, [SYNTAX]).length >= 1);
-  assert.deepEqual(relatedTests(ROOT, [PRODUCT]), []);
+  for (const path of [SYNTAX, DECISIONS, ENGLISH, PRODUCT, SKILL]) assert.ok(!related(path).includes('tests/dispatch.test.ts'), path);
+  assert.ok(related(SYNTAX).length >= 1);
+  assert.deepEqual(related(PRODUCT), []);
 });

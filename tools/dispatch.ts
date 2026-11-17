@@ -6,8 +6,7 @@
 // 輸出 JSON。不用 npm 套件：CI 的分派 job 與 hook 不必先安裝就能跑。
 // 結束碼：0 正常；1 有擋下的路徑（子模組）；2 Git 讀取失敗或參數錯（不能當成「沒有改動」）。
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
@@ -79,24 +78,51 @@ export interface Dispatch {
 
 const RANK: Record<Run, number> = { skip: 0, related: 1, full: 2 };
 
-/** 寫到這些路徑的測試檔：照原本 pre-commit 的 grep -rlF --include='*.test.ts'，加上嵌進 main.js 的規則檔（rules.ts 的特例）。 */
-export function relatedTests(root: string, paths: string[]): string[] {
+const git = (root: string, args: string[], input?: string) =>
+  execFileSync('git', args, { cwd: root, input, maxBuffer: 1 << 28, stdio: ['pipe', 'pipe', 'pipe'] });
+
+/**
+ * 這次比較的內容裡，路徑合 wanted 的一般檔與內容（L2 R2）：staged 讀索引（hook 的環境裡就是這次 commit 用的索引，
+ * git commit <路徑>、-a 的暫時索引也是），range 讀 head 的樹。不讀工作樹：沒 stage 的修改與新檔不影響選哪些測試。
+ */
+function comparedTexts(root: string, compare: Dispatch['compare'], wanted: (path: string) => boolean): Map<string, string> {
+  // ls-files -s：「<mode> <物件> <stage>\t<路徑>」；ls-tree：「<mode> <型別> <物件>\t<路徑>」。
+  const [args, column] = compare.kind === 'staged' ? [['ls-files', '-s', '-z'], 1] : [['ls-tree', '-r', '-z', '--full-tree', compare.head], 2];
+  const objects = new Map<string, string>();
+  for (const entry of git(root, args).toString('utf8').split('\0').filter(Boolean)) {
+    const tab = entry.indexOf('\t');
+    const meta = entry.slice(0, tab).split(' ');
+    const path = entry.slice(tab + 1);
+    if ((meta[0] === '100644' || meta[0] === '100755') && wanted(path) && !objects.has(path)) objects.set(path, meta[column]);
+  }
+  const texts = new Map<string, string>();
+  if (!objects.size) return texts;
+  const out = git(root, ['cat-file', '--batch'], [...objects.values()].join('\n') + '\n');
+  let at = 0;
+  for (const path of objects.keys()) {
+    const end = out.indexOf(0x0a, at);
+    const size = Number(out.subarray(at, end).toString('latin1').split(' ')[2]);
+    texts.set(path, out.subarray(end + 1, end + 1 + size).toString('utf8'));
+    at = end + 1 + size + 1;
+  }
+  return texts;
+}
+
+const RULES_FILE = 'src/core/ai/rules.ts';
+
+/**
+ * 寫到這些路徑的測試檔：照原本 pre-commit 的 grep -rlF --include='*.test.ts'，加上嵌進 main.js 的規則檔（rules.ts 的特例）。
+ * 測試檔與 rules.ts 讀這次比較的內容（comparedTexts），和 hook 在副本裡跑的是同一份。
+ */
+export function relatedTests(root: string, compare: Dispatch['compare'], paths: string[]): string[] {
   if (!paths.length) return [];
   const found = new Set<string>();
-  const testsDir = join(root, 'tests');
-  if (existsSync(testsDir)) {
-    for (const name of readdirSync(testsDir, { recursive: true, encoding: 'utf8' })) {
-      if (!name.endsWith('.test.ts')) continue;
-      const file = 'tests/' + name.replaceAll('\\', '/');
-      const text = readFileSync(join(root, file), 'utf8');
-      if (paths.some(path => text.includes(path))) found.add(file);
-    }
-  }
-  const rules = join(root, 'src/core/ai/rules.ts');
-  // 嵌進 main.js 的規則檔路徑寫在 rules.ts，測試只寫到其中一份；改哪一份都跑規則的測試（第二次里程碑檢查 R8）。
-  if (existsSync(rules)) {
-    const text = readFileSync(rules, 'utf8');
-    if (paths.some(path => text.includes(`'${path}'`))) found.add('tests/ai-rules.test.ts');
+  const texts = comparedTexts(root, compare, path => (path.startsWith('tests/') && path.endsWith('.test.ts')) || path === RULES_FILE);
+  for (const [file, text] of texts) {
+    // 嵌進 main.js 的規則檔路徑寫在 rules.ts，測試只寫到其中一份；改哪一份都跑規則的測試（第二次里程碑檢查 R8）。
+    if (file === RULES_FILE) {
+      if (paths.some(path => text.includes(`'${path}'`))) found.add('tests/ai-rules.test.ts');
+    } else if (paths.some(path => text.includes(path))) found.add(file);
   }
   return [...found].sort();
 }
@@ -138,7 +164,7 @@ export function dispatch(changes: Change[], { root, ci, compare }: { root: strin
     let why: string;
     if (run === 'full') why = `完整檢查（改到 ${list(touched[plugin])}）`;
     else if (run === 'related') {
-      tests = relatedTests(root, related);
+      tests = relatedTests(root, compare, related);
       if (tests.length) why = `相關測試（寫到 ${list(related)} 的 ${tests.length} 個測試檔）`;
       else {
         run = 'skip';
@@ -204,17 +230,16 @@ export function main(args: string[], cwd = process.cwd()): number {
     console.error('用法：node tools/dispatch.ts --staged | --range <base> <head> [--ci] [--explain]');
     return 2;
   }
-  let root: string;
-  let changes: Change[];
+  let result: Dispatch;
   try {
-    root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    changes = readChanges(root, compare);
+    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    // 相關測試也讀 Git（這次比較的內容），讀不到一樣不能當成沒有改動。
+    result = dispatch(readChanges(root, compare), { root, ci, compare });
   } catch (error) {
     const stderr = (error as { stderr?: Buffer | string }).stderr?.toString().trim();
     console.error(`分派表讀不到 Git 的改動，不能當成沒有改動：${stderr || (error as Error).message}`);
     return 2;
   }
-  const result = dispatch(changes, { root, ci, compare });
   console.log(args.includes('--explain') ? explain(result) : JSON.stringify(result, null, 2));
   if (result.blocked.length) {
     console.error(`擋下：${list(result.blocked)} 是子模組（gitlink），這個 repo 不支援子模組。`);

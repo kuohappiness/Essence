@@ -19,6 +19,7 @@ const SOURCE = fileURLToPath(new URL('..', import.meta.url));
 const TOOLS_MODULES = join(SOURCE, 'tools/node_modules');
 // 路徑拆開寫：分派表照路徑字串找相關測試，寫成一整串會讓改那份文件時也跑這個測試。
 const SYNTAX = 'docs/' + 'syntax.md';
+const PRODUCT = 'docs/' + 'product.md';
 const SKILL = 'code-quality/' + 'SKILL.md';
 const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
 /** 從工作樹複製進 clone 的：hook 與共用檢查的工具（這次要驗的版本）。 */
@@ -236,6 +237,28 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   r = await commit(['-a', '-m', 'all']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture', 'mindboard:all']);
+
+  // 相關測試照這次 commit 的內容選（L2 R2）。寫到轉錄稿格式的測試替身在暫存區，工作樹裡改成沒寫到：照樣選到、跑了。
+  // Cards 要跑：放一個空的 node_modules 當作裝過。
+  await mkdir(join(repo, 'node_modules'));
+  const stub = 'tests/syntax-stub.test.ts';
+  const stubText = await readFile(join(repo, stub), 'utf8');
+  await put(stub, 'export {};\n');
+  await appendFile(join(repo, SYNTAX), '\n');
+  await git(repo, 'add', '--', SYNTAX);
+  r = await commit(['-m', 'syntax, stub changed only in the working tree']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['capture', 'cards-related']);
+  await put(stub, stubText);
+  // 工作樹新加、沒 stage 的測試寫到這次改的文件：不選它（副本裡沒有它，選到就會擋下可以 commit 的文件）。
+  await put('tests/unstaged.test.ts', `// ${PRODUCT}\nprocess.exit(1);\n`);
+  await appendFile(join(repo, PRODUCT), '\n');
+  await git(repo, 'add', '--', PRODUCT);
+  r = await commit(['-m', 'product, unstaged test']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, []);
+  assert.match(lastLine(r.out), /Cards：照分派表跳過（沒有測試寫到 docs\/product\.md）/);
+  await rm(join(repo, 'tests/unstaged.test.ts'));
 
   // 只 stage 一份 skill、工作樹的兩份剛好一致：共用檢查讀暫存區，擋下。
   for (const copy of SKILL_COPIES) await appendFile(join(repo, copy, SKILL), '\n補一行。\n');
