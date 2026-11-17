@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第一步：L2 獨立審查（給 Codex）
 
-狀態：第二輪待審（第一輪 R1～R6 已回應與修正，見[〈第二輪〉](#第二輪)）
+狀態：第三輪待審（第二輪的 R7 已修，見[〈第三輪〉](#第三輪)；第一輪 R1～R6 見[〈第二輪〉](#第二輪)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -139,3 +139,40 @@
 ### 回報
 
 照第一輪〈回報與權限〉。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。報告接在同一份報告的最後，加〈第二輪〉一節，標題下的狀態行一起改。
+
+## 第三輪
+
+第二輪（Codex，`5503513`）回報 R7（延續 R1：`checkout-index` 取出時套用 `.gitattributes` 的轉換），其餘修正核對通過，R3 維持已知的限制。Claude 重現後寫了四欄，修法要再送 L2，交給使用者選，使用者選「修，送第三輪」。報告、四欄與判斷在 [`Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md`](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第二輪〉與〈Claude 回應（第二輪）〉。這一輪只審 R7 的修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-1`（已 push），本機 worktree `.claude/worktrees/one-repo-step-1`。沒有未提交的修改（`docs/syntax.md` 只有換行差異，同前兩輪）。`main` 仍在 `d655645`。
+- 只審 `550351313d94c78a08b6e783c2e366bad95ba9cb..<最後的 commit>`：
+  - `a97aa2f28a0dcd89a24eb3cdb0e789bf45f43017` R7 `secretlint --staged` 照原樣寫出索引的 blob
+  - 最後一個是這一節所在的文件 commit（第二輪的報告與回應、這一節、〈結果〉、backlog、roadmap）
+- 看差異：`git diff 550351313d94c78a08b6e783c2e366bad95ba9cb <最後的 commit>`。最後的 commit 是這一節所在的 commit（`git log -1 --format=%H -- tasks/one-repo-step-1-review.md`）。
+
+### 受影響的路徑
+
+- `tools/secretlint.mjs --staged` 的呼叫端：pre-commit 與 pre-merge-commit 的共用檢查（`tools/hooks.ts` 的 `SHARED_CHECKS`）。預設模式（`npm run secretlint`、`npm run check`、CI）的列檔與讀檔不變。
+
+### 實作者自己選的做法（第三輪）
+
+1. 列整個索引（`git ls-files -s -z`）再挑這次 commit 的檔，不把路徑當成 pathspec 交給 Git：`*`、`:` 開頭的檔名不會被解讀，檔很多時也不會超過命令列的長度。只取 stage 0；子模組略過；symlink 寫成內容是目標的一般檔（和第一輪一樣）。
+2. `cat-file --batch` 的輸出上限 256MB（和 R2 的 `tools/dispatch.ts` 一樣）：一次 commit 的內容超過時讀不到，照「取不出暫存區的內容，沒有掃金鑰」擋下。
+3. 寫出前確認路徑在暫存資料夾裡（索引裡的路徑 Git 已經擋過 `..`，這裡多確認一次）；物件不是 blob 時也擋。
+4. 沒處理：同一個索引裡只差大小寫的兩個路徑，在不分大小寫的檔案系統會寫到同一個檔，只掃到後寫的那份（`checkout-index` 也一樣）。Windows 的 `git add` 加不進來，這個 repo 也沒有。
+5. 同一類、這次不改的兩處（預設模式、外掛檢查用的副本），理由在〈Claude 回應（第二輪）〉；預設模式記進 backlog〈已知的限制〉。
+
+### 驗證方式
+
+- 回歸先寫，修之前跑過是失敗的：`tests/quality.test.ts`「D-141 每次 commit 都跑文件檢查且讀暫存區…」新增的一段，Git 取出檔案時會套用的四種屬性（`working-tree-encoding=UTF-16LE`、`filter`、`text eol=crlf`、`ident`）× 已 stage／只在工作樹，八種都要擋下，filter 的 smudge 指令（`touch smudge-ran; sed …`）沒被執行。修之前停在第一種（`Missing expected rejection: working-tree-encoding=UTF-16LE（只在工作樹）`）。同一個測試裡第一輪的案例（兩個方向、`-a`、`-- <路徑>`、別的檔已 stage、型別變更）照樣通過。
+- 本機探針（Windows、Git 2.52）：`git -c core.autocrlf=false checkout-index` 遇到只在工作樹的 `working-tree-encoding=UTF-16LE` 取出 UTF-16LE、smudge 指令改掉內容、`text eol=crlf` 加上 `\r`；`git cat-file blob :a.md` 是原本的內容。
+- 301 個檔的 `--staged`：R1 版約 1.07 秒、R7 版約 1.17 秒（各 5 次）。
+- pre-commit 在暫存內容的副本跑了三個外掛的完整檢查並通過（`a97aa2f`）。
+- GitHub：`a97aa2f` 的 push run [44200346263](https://github.com/kuohappiness/Essence-Cards/actions/runs/44200346263)：plan 比較 `d655645..a97aa2f`，三個外掛都是完整檢查；plan、shared、cards（305 秒）、capture、mindboard、gate 六個 job 都成功。這一節所在的文件 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：只差大小寫的路徑（上面第 4 點）；hook 程序被強制結束後的暫存資料夾（前兩輪就列的限制）。
+
+### 回報（第三輪）
+
+照第一輪〈回報與權限〉。報告接在同一份報告的最後，加〈第三輪〉一節，標題下的狀態行一起改。這是第三輪；照 code-quality，第四輪之後還有擋合併的發現就停下來交給使用者。

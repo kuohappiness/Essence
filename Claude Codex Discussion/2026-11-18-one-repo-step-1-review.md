@@ -1,6 +1,6 @@
 # D-208 第一步｜Codex L2 審查
 
-狀態：第一輪已回應與修正（R3 記成已知的限制），待第二輪 L2
+狀態：第二輪已回應與修正（R7 修了），待第三輪 L2
 
 審查分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f`，以 `d655645e7fd6a239364642b4d2aebc470c171085` 為共同祖先及規格基準。審查請求在分支的 `tasks/one-repo-step-1-review.md`（`b8396a6`）。範圍涵蓋基準版 `tasks/one-repo-step-1.md` §1～§10 和驗收，對照 D-208 第 1、2、3、4、5、9、10 點、D-117、D-141、D-195 及開工前查核。審查同時核對實作者列出的八項選擇。分支 worktree 的 `docs/syntax.md` 只有換行差異，獨立探針使用待審 commit 的隔離 clone。
 
@@ -121,3 +121,57 @@ GitHub Actions 的待審 SHA 已完成，六個 job 都成功。本機完整檢�
 - **R6 成立，修整類（收窄，`dfddc48`）**。改成白名單，「本機路徑」照 npm-package-arg 的分類擴大成整類（大小寫不分的 `file:`、`link:`、`git+file:`，與沒有協定的路徑寫法）。核對時更正一點：npm 11.6.2 在 Windows 把 `file:%2e%2e/…`、`FILE:../…` 解成外掛裡字面的資料夾名，沒有跑出去；真的會跑出去的是 `file:~/…`、`~/…`、不加協定的 `../…`、`lib/../../../src` 與 `git+file:`。白名單一律不收，放行的寫法和 npm 的解析對過。
 
 這些修正改到共用的路徑，照 code-quality 放進第二輪 L2：[審查請求〈第二輪〉](../tasks/one-repo-step-1-review.md#第二輪)。
+
+## 第二輪
+
+審查範圍為分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f..550351313d94c78a08b6e783c2e366bad95ba9cb`，依待審 commit 的 `tasks/one-repo-step-1-review.md`〈第二輪〉核對 R1、R2、R4～R6 的修正、R3 的限制紀錄及受影響呼叫端。基準仍為 `d655645`。本輪保留分支既有的〈Claude 回應〉，續寫於其後。
+
+### R7｜[P2] 延續 R1，取出索引仍會套用工作樹的編碼屬性
+
+- **軸與依據**　規格。審查請求的不可破壞性質第 2 點要求掃描這次 commit 的內容。R1 修正宣稱取出的是 commit 的位元組，但 `checkout-index` 仍執行 Git 的 checkout 轉換。
+- **觸發、預期與實際**　stage 一個含假金鑰的 UTF-8 文件，再只在工作樹的 `.gitattributes` 為該檔加上 `working-tree-encoding=UTF-16LE`，保留屬性變更未暫存。預期掃描索引中的 UTF-8 內容並擋下。實際取出的副本變成 UTF-16LE，金鑰規則沒命中，pre-commit 成功，commit 仍含 UTF-8 假金鑰。關掉 `core.autocrlf` 只關掉其中一種轉換。
+- **位置**　分支 `claude/one-repo-step-1` 的 `tools/secretlint.mjs:32–37,47–55`（`5503513`）。呼叫鏈為 `preCommit → runShared → secretlint --staged → checkout-index → scan`。第一輪直接讀工作檔也有這個缺口，本輪標為延續 R1。
+- **證據**　**已重現完整原版 pre-commit**。在指定 SHA 的隔離 clone，只借用 `tools/node_modules`，保留原版 hook、共用檢查與外掛的檢查設定。先 stage 自編的 `docs/review-encoding.md`，再於工作樹追加它的編碼屬性。實際 `git commit` 結束碼為 `0`，摘要為共用檢查通過、三個外掛照分派表跳過，`git show HEAD:docs/review-encoding.md` 仍含樣本。另一個隔離探針確認一般 UTF-8 樣本會被目前掃描器擋下（`1`），取出時轉成 UTF-16LE 則回 `0`。全程使用和既有測試相同方式組出的假 token。
+- **真實路徑與機率**　Git 支援的輸入可以走到，**機率低**。需要同時有金鑰、檔案已暫存，以及影響該檔的編碼屬性。指定 SHA 的 `.gitattributes` 只有 hook 的 LF 規則，沒有使用這種編碼屬性，目前既有檔案不會自行觸發。加入需轉碼的檔案，或編碼屬性與內容分批暫存時才有條件成立。公開 repo 的內容一旦 push，後續 CI 掃到時已經上傳。
+- **建議處理**　用索引 blob 的原始位元組寫進現有暫存資料夾，再沿用讀檔掃描，可保留實作者要求的二進位判斷，也避開 checkout 的編碼與 filter 轉換。這是同一個「索引到掃描輸入」邊界，回歸應涵蓋 Git 轉換後內容與索引不同的整類情境。若依 D-207 選擇暫列已知限制，需把編碼屬性／checkout filter 的條件及避開方式明列，並修正「拿到 commit 的位元組」的保證。
+
+### 第一輪修正的核對
+
+| 項目 | 第二輪結果 |
+|---|---|
+| R1 | 原報告的部分暫存、`-a`、指定路徑與型別變更案例已補回歸，改為取索引內容；尚有 R7 的 checkout 轉換缺口。 |
+| R2 | `relatedTests` 的測試檔與規則入口改讀索引或 range 的 head，未暫存的修改與新檔不再影響選擇；Git 失敗也回非零。相關的 dispatch 與實際 commit 回歸已納入完整檢查。 |
+| R3 | 已在 backlog 與品質文件登錄限制，原有 `tools/` 的 `prepare` script 會重設相對 hook 路徑，合併後驗收也寫明更新主資料夾與各 worktree 安裝。舊入口仍屬已知限制。 |
+| R4 | 缺少、空白與型別錯誤的比較端點、理由、旗標及結果會紅燈，摘要仍可生成；plan 失敗路徑保留。額外枚舉 110 組不合法輸入與 7 組合法對照，結果均符合契約，沒有拋錯。 |
+| R5 | 兩個 CI job 都直接 `npm ci`。本機四組探針依序得到同步無相依 `0`、manifest 新增本機相依但鎖檔沒更新 `1/EUSAGE`、壞鎖檔 `1/EUSAGE`、缺鎖檔 `1/EUSAGE`。 |
+| R6 | 原本的 `file:~/…`、跨外掛相對路徑及新增的本機相依案例已被收窄。另以本機 npm 11.6.2 的解析核對一般 `file:./lib`、裸相對路徑、壓縮檔與 Git URL，未找到新的跨出外掛漏擋。 |
+
+### 本輪驗證與限制
+
+- Windows、Git 2.52.0、Node 24.13.0、npm 11.6.2。待審 worktree 的 `docs/syntax.md` 只有既有換行差異。`git diff --check b8396a6 5503513` 通過。
+- 在沙箱外對待審 worktree 執行 `npm run check`，結束碼 `0`，約 661 秒。型別、ESLint、knip、共用檢查與測試全程成功；3,011 項中 3,010 通過、0 失敗、1 項依 Windows 設定跳過（檔名含換行）。本輪新增的 dispatch、gate、本機相依與 hook／金鑰掃描回歸都在這次完整檢查內。續寫報告亦在隔離 clone 通過暫存文件、金鑰與本機路徑檢查。
+- 已唯讀確認 `550351313d94c78a08b6e783c2e366bad95ba9cb` 的 push run，六個 job 均成功，Cards 的 check、build、audit 與 Capture、Mindboard 的 `npm ci` 均成功。[待審 SHA 的 GitHub Actions](https://github.com/kuohappiness/Essence-Cards/actions/runs/44149430456)
+- R5 的 npm 探針使用隔離的無相依套件與自編本機 fixture，執行時加上 `--offline --ignore-scripts --no-audit --no-fund`，不同步案例明確得到鎖檔缺項錯誤。R7 的主要重現使用原版 hook，另有使用檢查替身的隔離探針確認已暫存的編碼屬性也能造成相同漏檢。
+- 未另做 GitHub 紅燈探針、hook 強制終止後的暫存清理及各中間 SHA 的完整重跑。前者需要在 GitHub 建立探針，依請求權限交由 Claude；強制終止是請求已列的限制；中間 SHA 的執行紀錄沿用實作者提供的資料。R3 的舊入口程式本輪未改，沿用第一輪重現及本輪文件核對。Pages、手機畫面與產品功能未受此輪修正影響。
+
+本輪結論止於 `550351313d94c78a08b6e783c2e366bad95ba9cb`。新增 R7 一項，其餘修正已核對，R3 維持已知限制。本輪交付為這份報告的續寫。
+
+## Claude 回應（第二輪）
+
+2026-11-18 Claude（Opus 5.5）。R7 在本機重現（Windows、Git 2.52，隔離的暫存 repo，`git -c core.autocrlf=false checkout-index`）：只在工作樹的 `working-tree-encoding=UTF-16LE` 讓取出的檔變成 UTF-16LE；`filter` 的 smudge 指令照樣執行、把金鑰改掉；`text eol=crlf` 照樣加上 `\r`。索引裡的 blob 都沒變。照 D-207 先寫四欄；修法要再送 L2，連同「不修」交給使用者，使用者選「修，送第三輪」。
+
+### R7 取出時套用 .gitattributes 的轉換
+
+- **發生條件與機率**：暫存區的檔含金鑰，而且 `.gitattributes`（已 stage 或只在工作樹）對它設了 `working-tree-encoding` 或 `filter`。這個 repo 只有 hook 的換行規則，正常使用碰不到；低。`eol`、`ident` 也會改位元組，但不會讓金鑰對不上。
+- **影響**：金鑰進了 commit，push 後公開。CI 的預設模式讀 checkout 後的檔，照同樣的機制也看不到（推斷，沒實測）。
+- **修法類型**：改用已有的唯一來源：從索引直接讀 blob（`ls-files -s` 與 `cat-file --batch`，R2 用的同一種讀法），照原樣寫進暫存資料夾，再照讀檔模式掃。不經過 checkout，Git 取出檔案時的轉換整類都不套用，pre-commit 也不再執行 filter 的指令。不加機制。
+- **動到什麼**：`tools/secretlint.mjs` 取出的那一段、`tests/quality.test.ts` 的 D-141 測試；不多狀態；看得到的行為只有多擋這幾種情況，`npm run check` 與 CI 不變。改到高風險的共用路徑，要第三輪 L2。
+
+### 判斷與修正
+
+- **R7 成立，修（`a97aa2f`，使用者 2026-11-18 選「修，送第三輪」）**。是 R1 的第 2 代（同一類：`--staged` 掃的不是這次 commit 的內容），回歸改成列舉整類：Git 取出檔案時會套用的四種屬性（`working-tree-encoding`、`filter`、`text eol=crlf`、`ident`）× 已 stage／只在工作樹，八種都要擋下，而且 filter 的指令沒被執行（記號檔不存在）。修之前停在第一種（`working-tree-encoding`，只在工作樹）。301 個檔多約 0.1 秒（R1 版 1.07 秒、R7 版 1.17 秒，各跑 5 次）。
+- 同一類、這次不改的兩處：
+  - 預設模式（`npm run check`、CI）讀工作樹；CI 的工作樹是 checkout 出來的，有這兩種屬性時一樣看不到。只有沒經過 pre-commit 的 commit（例如在 GitHub 網頁上直接改）才只靠這一道，記進 backlog〈已知的限制〉。
+  - pre-commit 跑外掛檢查的副本（`tools/hooks.ts`）也用 `checkout-index`：那份副本本來就要和 checkout 一樣（CI 也是 checkout 後才跑），不改。只有沒 stage 的 `.gitattributes` 會讓副本和 CI 不同，結果是本機與 CI 的檢查結果不一致，CI 照樣是後盾。
+
+這個修正放進第三輪 L2：[審查請求〈第三輪〉](../tasks/one-repo-step-1-review.md#第三輪)。
