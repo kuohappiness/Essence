@@ -1,6 +1,6 @@
 # AI 製卡第 3 批：送給 AI 的材料（英文單字清單、點選填空的勾選）（給 Claude，本機執行）
 
-狀態：實作完成、Windows 實機做完，等 Codex L2 與使用者同意合併（2026-11-17，[PR #17](https://github.com/kuohappiness/Essence-Cards/pull/17)）；§3～§5 使用者選定甲、甲、接在第 2 批的分支上做（[D-210](../docs/decisions.md#d-210-點選填空的勾選寫在任務段加深也帶英文送學過的單字)），分支 `claude/ai-cards-materials-b3`
+狀態：L2 第一輪的 R1～R3 已修（`104369c`、`82d3d92`），等 Codex 第二輪與使用者同意合併（2026-11-17，[PR #17](https://github.com/kuohappiness/Essence-Cards/pull/17)）；§3～§5 使用者選定甲、甲、接在第 2 批的分支上做（[D-210](../docs/decisions.md#d-210-點選填空的勾選寫在任務段加深也帶英文送學過的單字)），分支 `claude/ai-cards-materials-b3`
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。只改送出的提示、製卡畫面與這台電腦的存放，不寫使用者的卡組；送出的提示決定 AI 交回什麼，算 AI 製卡的流程改動，合併前照 [quality.md](../docs/agents/quality.md#高風險範圍要做-l2) 判斷 L2（§6）。
 
