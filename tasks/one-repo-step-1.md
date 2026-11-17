@@ -224,7 +224,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 11. Windows 本機與 CI 的 Linux 都跑過第 1～4 項的測試（本機是 Git for Windows 的 sh）。
 12. `main` 的必過檢查查過，結果寫進〈結果〉（§4）。
 13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。
-14. 合併後：主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
+14. 合併後：先更新主資料夾（共用的 `core.hooksPath` 常指到它，舊版的 hook 不會轉交，L2 R3）；主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`，確認 `git config core.hooksPath` 是相對的 `.githooks`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
 
 ## 平台事實
 
