@@ -158,6 +158,21 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await run('git', ['update-index', '--cacheinfo', `100644,${await object(secret)},s.md`], isolated);
   await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
   await run('git', ['reset', '-q', '--', 's.md'], isolated);
+  // Git 取出檔案時的轉換都不算（L2 R7，R1 的第 2 代，所以列舉整類）：.gitattributes 不管已 stage 還是只在工作樹，設了
+  // 編碼、filter、換行或 ident，掃的仍是索引裡的位元組。filter 的指令把金鑰換掉，也不會在 pre-commit 被執行。
+  await run('git', ['config', 'filter.hide.smudge', 'touch smudge-ran; sed s/ghp/XXX/'], isolated);
+  await run('git', ['add', '--', 'e.md'], isolated);
+  for (const attribute of ['working-tree-encoding=UTF-16LE', 'filter=hide', 'text eol=crlf', 'ident']) {
+    for (const staging of ['只在工作樹', '已 stage']) {
+      await writeFile(join(root, '.gitattributes'), `e.md ${attribute}\n`);
+      if (staging === '已 stage') await run('git', ['add', '--', '.gitattributes'], isolated);
+      await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/, `${attribute}（${staging}）`);
+      if (staging === '已 stage') await run('git', ['rm', '-q', '--cached', '--', '.gitattributes'], isolated);
+    }
+  }
+  await assert.rejects(access(join(root, 'smudge-ran')), { code: 'ENOENT' });
+  await rm(join(root, '.gitattributes'));
+  await run('git', ['rm', '-q', '--cached', '--', 'e.md'], isolated);
   await rm(join(root, 'e.md'));
   // 本機路徑也每次都掃，檔案內容與 commit 訊息都擋（第二次里程碑檢查 R5）。帳號名是自編的，拆開寫本檔才不會被掃到。
   const local = 'C:' + String.raw`\Users\alice\AppData`;
