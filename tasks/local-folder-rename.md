@@ -1,6 +1,6 @@
 # 本機資料夾改名 `Essence`（D-211，給 Claude，本機執行）
 
-狀態：準備中（2026-11-18）：腳本與測試寫好，在真的資料夾跑過唯讀的檢查；等〈改名前〉的收尾與使用者挑停手的時段。
+狀態：準備好了（2026-11-18）：腳本與測試寫好；〈改名前〉第 1、2、4、5 項做完，`check` 印「可以改名。」；等使用者挑停手的時段（第 3、6 項在那時確認）。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。依據：[D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 7 點、[D-211](../docs/decisions.md#d-211-本機資料夾也改名舊對話收尾後不接續)。
 
@@ -45,10 +45,12 @@
 
    清之前先唯讀掃一次有沒有連結（junction）；沒有就用不加 `--force` 的 `git worktree remove`。對應的對話一起封存。
 
-2. **只在本機的分支** `claude/ai-cards-materials-0a4b27`：多一個 `280a217`（第 3 批的任務說明），`git cherry main` 標 `-`，內容已在 `main`。刪分支，或推上 GitHub 保存。
+   2026-11-18 做完：四個都沒有連結，`git worktree remove` 都移除了登錄；`one-repo-step-1`、`progress-board-382fc5` 各留一個空資料夾，被還開著的程式占著刪不掉（app 關掉後就能刪，改名後的新對話順手刪）。「AI 製卡模組完整版」的對話自動審核不讓封存，請使用者自己封存。
+
+2. **只在本機的分支** `claude/ai-cards-materials-0a4b27`：多一個 `280a217`（第 3 批的任務說明），`git cherry main` 標 `-`，內容已在 `main`。2026-11-18 刪掉了。
 3. **交接**：每件進行中的工作在 roadmap「現在在哪裡」寫清楚做到哪、下一步、等誰；有任務說明的寫在〈結果〉或狀態行。這一刻的 roadmap 就是改名後接手測試的答案。
-4. **演練留下的東西**：五個演練對話封存；`D:\程式開發\Rename Rehearsal B` 與 `~/.claude/projects` 裡 `Rename-Rehearsal` 開頭的四個資料夾搬到 scratchpad。
-5. **腳本放到資料夾外面**：複製到 `D:\程式開發\Essence Cards Backup\rename-local-folder\`，在 `D:\程式開發` 執行 `check`，沒有 ❌。
+4. **演練留下的東西**：五個演練對話封存；`D:\程式開發\Rename Rehearsal B` 與 `~/.claude/projects` 裡 `Rename-Rehearsal` 開頭的四個資料夾搬到 scratchpad。2026-11-18 做完。
+5. **腳本放到資料夾外面**：複製到 `D:\程式開發\Essence Cards Backup\rename-local-folder\`，在 `D:\程式開發` 執行 `check`，沒有 ❌。2026-11-18 做完：只剩記憶（51 個檔）與 Codex 兩項提醒，印「可以改名。」
 6. **停手**：其他對話與 Codex 都停下，沒有在跑的背景工作。
 
 ## 改名（使用者，app 關掉時）
