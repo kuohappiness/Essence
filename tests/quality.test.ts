@@ -173,6 +173,16 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await assert.rejects(access(join(root, 'smudge-ran')), { code: 'ENOENT' });
   await rm(join(root, '.gitattributes'));
   await run('git', ['rm', '-q', '--cached', '--', 'e.md'], isolated);
+  // 只差大小寫的兩個路徑（檔名或資料夾名）：不分大小寫的檔案系統會寫成同一個檔，撞到就擋；區分大小寫的照常兩份都掃
+  // （L2 R8，R7 修正引入；同一類的第 3 代，列舉整類）。物件直接寫進索引：Windows 的 git add 加不進來，合併在區分大小寫的
+  // 系統上做的分支就會帶進來。索引照位元組排序，大寫的先寫出，金鑰放在先寫的那份。
+  const clean = await object('# C\n');
+  const leaked = await object(secret);
+  for (const [first, second] of [['docs/Case.md', 'docs/case.md'], ['Docs/case.md', 'docs/case.md']]) {
+    await run('git', ['update-index', '--add', '--cacheinfo', `100644,${leaked},${first}`, '--cacheinfo', `100644,${clean},${second}`], isolated);
+    await assert.rejects(run('git', commit, isolated), process.platform === 'linux' ? /secretlint-rule-github/ : /同一個檔/, first);
+    await run('git', ['update-index', '--force-remove', '--', first, second], isolated);
+  }
   await rm(join(root, 'e.md'));
   // 本機路徑也每次都掃，檔案內容與 commit 訊息都擋（第二次里程碑檢查 R5）。帳號名是自編的，拆開寫本檔才不會被掃到。
   const local = 'C:' + String.raw`\Users\alice\AppData`;

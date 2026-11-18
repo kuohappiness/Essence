@@ -35,7 +35,7 @@ const git = (args, input) => execFileSync('git', args, { cwd: root, input, maxBu
 /**
  * 把這次 commit 的檔從索引照原樣寫進 copy，回傳寫出的路徑；讀不到或寫不出來時回傳 undefined（L2 R7）。直接讀 blob、不經過
  * checkout：.gitattributes 的轉換都不套用，filter 的指令也不會執行。symlink 寫成內容是目標的一般檔，不會指到副本外；
- * 子模組（gitlink）沒有內容，略過。
+ * 子模組（gitlink）沒有內容，略過。兩個路徑在這台的檔案系統是同一個檔（只差大小寫等）時擋下，不蓋過去（L2 R8）。
  */
 function extract(copy) {
   try {
@@ -50,6 +50,7 @@ function extract(copy) {
     }
     if (!entries.length) return [];
     const out = git(['cat-file', '--batch'], entries.map(entry => entry.object).join('\n') + '\n');
+    const written = [];
     let at = 0;
     for (const { path, object } of entries) {
       const end = out.indexOf(0x0a, at);
@@ -60,10 +61,18 @@ function extract(copy) {
       const inside = relative(copy, target);
       if (!inside || isAbsolute(inside) || inside.split(/[\\/]/)[0] === '..') throw new Error(`${path} 不在 repo 裡`);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, out.subarray(end + 1, end + 1 + Number(size)));
+      // 只建立新檔（L2 R8）：不分大小寫的檔案系統上，只差大小寫的兩個路徑是同一個檔，蓋過去就只掃到後寫的那份。
+      try {
+        writeFileSync(target, out.subarray(end + 1, end + 1 + Number(size)), { flag: 'wx' });
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        const other = written.find(done => done.toLowerCase() === path.toLowerCase());
+        throw new Error(`${path}${other ? ` 和 ${other}` : ''} 在這台的檔案系統是同一個檔（例如只差大小寫），兩份不能分開掃`);
+      }
+      written.push(path);
       at = end + 1 + Number(size) + 1;
     }
-    return entries.map(entry => entry.path);
+    return written;
   } catch (error) {
     console.error(`取不出暫存區的內容，沒有掃金鑰：${error.stderr?.toString().trim() || error.message}`);
     return undefined;
