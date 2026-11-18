@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第一步（D-208 第 5 點，給 Claude，本機執行）
 
-狀態：L2 通過，待合併（Codex 四輪：R1～R9 都處理了，R3 記成已知的限制，其餘修了；[審查請求](one-repo-step-1-review.md)；[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)；開工前 Codex 查核過一輪，Claude 照回報改完：[報告與回應](<../Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md>)）
+狀態：已合併進 `main`（2026-11-18，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)，`16cef58`；合併後的步驟見〈結果〉驗收第 14 項。Codex L2 四輪：R1～R9 都處理了，R3 記成已知的限制，其餘修了；[審查請求](one-repo-step-1-review.md)；[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)；開工前 Codex 查核過一輪，Claude 照回報改完：[報告與回應](<../Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。這一步改 pre-commit、pre-merge-commit 與 CI，也就是合併前的防線：合併前做 L2（[D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點）。**不改 Cards 的產品程式（`src/`），不改會動到正式 vault 的工具**（安裝、更新、備份、還原、比較）。
 
@@ -285,7 +285,10 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 | `893f43b` | L2 R8：只差大小寫的兩個路徑寫成同一個檔時擋下（只建立新檔） |
 | `2255c56` | 第三輪的報告與回應、第四輪的審查請求、〈結果〉、roadmap |
 | `d7e2a0b` | L2 R9：撞名的回歸照暫存資料夾實際分不分大小寫選預期（只改測試） |
-| 這一列所在的 commit | 第四輪的報告與回應、〈結果〉、roadmap |
+| `dfc1954` | 第四輪的報告與回應、〈結果〉、roadmap |
+| `2415568` | 併進 `main`（再審輪試行的說明）：解任務說明第 13、14 項與 roadmap 的衝突 |
+| `16cef58` | [PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21) 合併進 `main` |
+| 這一列所在的 commit（`main`） | 合併後：狀態、〈結果〉第 14 項、roadmap、backlog |
 
 **和任務說明不一樣、或自己選的做法**（L2 請一併看）：
 
@@ -316,6 +319,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
    - L2 第一輪的修正 push 後（`dfddc48`）：[run 44147697017](https://github.com/kuohappiness/Essence-Cards/actions/runs/44147697017) plan 判斷「全部」（比較 `d655645..dfddc48`），六個 job 都成功；capture、mindboard 的 `npm ci`（L2 R5）成功，鎖檔沒有相依（`up to date, audited 1 package`）。
    - L2 第二輪的修正 push 後（`a97aa2f`）：[run 44200346263](https://github.com/kuohappiness/Essence-Cards/actions/runs/44200346263) plan 判斷「全部」（比較 `d655645..a97aa2f`），六個 job 都成功。
    - L2 第三輪的修正 push 後（`893f43b`）：[run 44207031006](https://github.com/kuohappiness/Essence-Cards/actions/runs/44207031006) 六個 job 都成功；Linux 上 R8 的撞名案例兩份都掃、被金鑰規則擋下（D-141 測試通過）。
+   - 合併前最後的 head（`2415568`）：push [run 44215829441](https://github.com/kuohappiness/Essence-Cards/actions/runs/44215829441) 與 PR [run 44218037463](https://github.com/kuohappiness/Essence-Cards/actions/runs/44218037463) 都成功；合併後 `main` 的 push（`16cef58`）：[run 44218946028](https://github.com/kuohappiness/Essence-Cards/actions/runs/44218946028) plan、shared、cards、capture、mindboard、gate 都成功。
 6. Cards 的 `npm run check`：CI 的 cards job 每次都通過；Windows 本機：改到共用輸入或 Cards 程式的 commit 在 pre-commit 都跑了完整檢查並通過（§10 的 `9a55771` 起在暫存內容的副本跑：`9a55771` 616 秒、`02afb0a` 約 600 秒；這段時間照常改任務說明，沒有影響檢查）；反向探針的 commit 也跑了一次（565 秒）。L2 第一輪的修正：R1、R2、R4、R5、R6 的 commit 改到共用的輸入，pre-commit 都跑了三個外掛的完整檢查並通過。第二輪的 R7（`a97aa2f`）、第三輪的 R8（`893f43b`）也一樣；第四輪的 R9 只改測試，pre-commit 跑了 Cards 的完整檢查並通過（`d7e2a0b`）。
 7. knip：2026-11-17 Windows，在 `tools/progress-board-data.ts`（共用）與 `tools/vault-io.ts`（Cards）各加一個沒用到的 export，`npm run knip` 兩個都報出來（Unused exports 2）；拿掉後通過，`tools/package.json` 的 script 入口與 secretlint preset 沒被報。
 8. §6、§7、§8 的測試在 `tests/plugin-imports.test.ts`、`tests/check-docs.test.ts`、`tests/roadmap-board.test.ts`、`tests/progress-board.test.ts`，都在上面的完整檢查裡通過。§8 的手機寬度：用自編的 Mindboard roadmap（兩列、一格超過 50 字）產生白板，375px 沒有橫向捲動（`scrollWidth` 375），外掛的列照「等誰」分組，連結指回 `plugins/mindboard/` 自己的位置。L2 R6 加了外掛本機相依的白名單案例（25 個擋、17 個放行）。
@@ -328,11 +332,17 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 11. 第 1～4 項的測試：Windows 本機（Git for Windows 的 sh）在改到共用輸入的 commit 的 pre-commit 都跑過，另外也單獨跑過；Linux 在 CI 的 cards job 跑過。
 12. `main` 沒有必過檢查：`gh api repos/kuohappiness/Essence-Cards/branches/main/protection` 回 404「Branch not protected」，`rules/branches/main` 回 `[]`（2026-11-17）。之後要設時只設 gate（quality.md〈檢查指令〉）。
 13. L2：第一輪 Codex（2026-11-18，`b8396a6`）回報 R1～R6，都成立：R3 記成已知的限制，其餘修了（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)）。第二輪 Codex（2026-11-18，`5503513`）核對 R1～R6 的修正都通過，新報 R7（延續 R1：取出時套用 `.gitattributes` 的轉換）；使用者選修並送第三輪，修了。第三輪 Codex（2026-11-18，`c3aa6eb`）確認 R7 已修，新報 R8（R7 修正引入：只差大小寫的路徑寫成同一個檔）；使用者選修並送第四輪，修了。第四輪 Codex（2026-11-18，`2255c56`）確認 R8 已修、沒有擋合併的發現，另報不擋合併的 R9（回歸測試用作業系統猜暫存資料夾分不分大小寫），只改測試、已修（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第四輪〉）。第二～四輪都由使用者轉交：上面第 13 項的「再審照試行由 Claude 用 codex exec 送」是在分支開工後才寫進 main（11898ab），合併 main 時才看到，這件沒用上。
-14. 合併後才做：還沒做。
+14. 合併後（2026-11-18，`16cef58`）：
+    - 主資料夾：未追蹤的 L2 報告（內容已在 `main`）搬到 repo 外，再 `git merge --ff-only`；在 `tools/` 跑 `npm ci`，`core.hooksPath` 是相對的 `.githooks`（共用的 `.git/config`）。這個 worktree 也跑了，同樣是相對的。
+    - 其他三個 worktree（`ai-cards-materials-0a4b27`、`edit-markup-2ba4bd`、`progress-board-382fc5`，別的 session 的）還在沒有第一步的版本，沒有 `tools/package.json`，不裝也不改設定：它們的 `config.worktree` 把 `core.hooksPath` 設成主資料夾 `.githooks` 的絕對路徑，主資料夾的新 hook 轉給它們自己的舊 hook。併進 `main` 後要在 `tools/` 跑 `npm ci`（hook 缺 `tools/node_modules` 時會提示）。
+    - backlog〈已知的限制〉的「舊版的 hook 不會轉交」那一列刪掉：開 worktree 的工具指到的是主資料夾，主資料夾已經是會轉交的新版，過渡期結束。
+    - Pages：Progress board [run 44218946129](https://github.com/kuohappiness/Essence-Cards/actions/runs/44218946129) 成功；`roadmap.html`、`progress-map-list.html`、`progress-map-board.html` 都回 200，進度白板是合併後的內容。
+    - 舊 `Essence-Capture` repo：`AGENTS.md` 與 `README.md` 改成開發在這個 repo 的 `plugins/capture/`、那個 repo 之後放發布檔、現在不放程式，在它的 `main` commit `af34daa` 並 push（作者用和這個 repo 相同的 GitHub noreply：那個 repo 沒設 repo 層級的信箱，全域的是個人信箱）。
 
 **另外看到的**：
 
 - 新開的 Windows worktree 取出的 `docs/syntax.md` 是 CRLF，Cards 的 deck 測試會失敗（原本就有的情況，探針 worktree 又遇到一次）；把工作檔轉成 LF 後通過。§10 之後 pre-commit 的副本一律取出成 LF，commit 不再受影響；自己在工作樹跑 `npm run check` 時還是要轉。
+- `tools/` 的 `npm ci` 報 3 個高風險，都是 secretlint 13 的相依 `picomatch` 4.0.7（ReDoS，GHSA-fc5q-39xc-vjpf）；合併前根目錄的鎖檔就是同一版。只在開發工具、比對的樣式是自己的設定，CI 的稽核是 `--omit=dev`，不受影響；`npm audit fix --force` 會降回 secretlint 12，這一步不處理。
 - CI 每個 job 都有 GitHub 的警告：`actions/checkout@v4`、`actions/setup-node@v4` 用的 Node.js 20 已經停止支援。`main` 原本就有，不在這一步改。
 
 延後的測試：無（第 1～4 項的測試在 Windows 本機與 CI 的 Linux 都跑過；檔名有換行那一例只在 Linux 跑，CI 通過。第 14 項是合併後的步驟，不是延後的測試）。

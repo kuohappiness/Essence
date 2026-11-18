@@ -1,6 +1,6 @@
 # D-208 第一步｜Codex L2 審查
 
-狀態：L2 通過（第四輪；R9 只改測試，已修），待合併
+狀態：L2 通過（第四輪；R9 只改測試，已修），已合併進 `main`（2026-11-18，`16cef58`，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)）
 
 審查分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f`，以 `d655645e7fd6a239364642b4d2aebc470c171085` 為共同祖先及規格基準。審查請求在分支的 `tasks/one-repo-step-1-review.md`（`b8396a6`）。範圍涵蓋基準版 `tasks/one-repo-step-1.md` §1～§10 和驗收，對照 D-208 第 1、2、3、4、5、9、10 點、D-117、D-141、D-195 及開工前查核。審查同時核對實作者列出的八項選擇。分支 worktree 的 `docs/syntax.md` 只有換行差異，獨立探針使用待審 commit 的隔離 clone。
 
