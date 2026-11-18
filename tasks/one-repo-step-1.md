@@ -223,7 +223,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 10. §10 量到的數字與結論寫進 backlog。
 11. Windows 本機與 CI 的 Linux 都跑過第 1～4 項的測試（本機是 Git for Windows 的 sh）。
 12. `main` 的必過檢查查過，結果寫進〈結果〉（§4）。
-13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。
+13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。第二輪起的再審照[試行](auto-codex-rereview-trial.md)由 Claude 用 `codex exec` 送，第一輪照舊由使用者轉交。
 14. 合併後：主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
 
 ## 平台事實
