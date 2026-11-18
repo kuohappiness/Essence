@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPrompt, execArgs, PRESETS, sessionIdFromLog, usageFromRollout, usageLine } from '../tools/codex.ts';
+import {
+  buildPrompt, confirmationMessage, execArgs, isCostly, lastWeekly, PRESETS, resolvePreset, sessionIdFromLog, usageFromRollout, usageLine,
+} from '../tools/codex.ts';
 
 // D-212：Claude 直接呼叫本機 Codex 的腳本。實際執行 Codex 不在測試裡（要使用者的登入與額度），這裡測組參數與讀紀錄。
 
@@ -76,4 +78,37 @@ void test('附在回覆末端的一行：剩下的百分比與週額度重置時
   assert.ok(usage);
   assert.equal(usageLine(usage, 'Asia/Taipei'), 'Codex 本輪：6,395 token｜5 小時額度剩 67%｜週額度剩 40%（11/23 週一 08:37 重置）');
   assert.equal(usageLine({ tokens: 120 }), 'Codex 本輪：120 token');
+});
+
+void test('xhigh 與 Astra 要先問使用者：預設或個別指定都算，其餘照常跑（D-212 第 2 點，2026-11-19）', () => {
+  assert.equal(isCostly(resolvePreset('bug', {})), true);
+  assert.equal(isCostly(resolvePreset('escalate', {})), true);
+  for (const kind of ['l2', 'format', 'discuss', 'milestone'] as const) assert.equal(isCostly(resolvePreset(kind, {})), false, kind);
+  assert.equal(isCostly(resolvePreset('l2', { effort: 'xhigh' })), true);
+  assert.equal(isCostly(resolvePreset('format', { model: 'gpt-6.2-astra' })), true);
+  assert.equal(isCostly(resolvePreset('bug', { effort: 'high' })), false);
+  assert.deepEqual(resolvePreset('l2', { model: undefined, effort: 'medium' }), { ...PRESETS.l2, effort: 'medium' });
+});
+
+void test('拒絕的訊息寫明模型、等級、--confirmed 與之前記錄的週額度', () => {
+  const now = 1795000000_000;
+  const weekly = { usedPercent: 69, resetsAt: 1795394278 };
+  const message = confirmationMessage('bug', PRESETS.bug, weekly, now, 'Asia/Taipei');
+  assert.match(message, /bug 從頭查，用 gpt-6\.2-sol、xhigh/);
+  assert.match(message, /--confirmed/);
+  assert.match(message, /週額度剩 31%（11\/23 週一 08:37 重置）/);
+  assert.match(confirmationMessage('escalate', PRESETS.escalate, { usedPercent: 10, resetsAt: 1794000000 }, now), /已經過了重置時間/);
+  assert.match(confirmationMessage('escalate', PRESETS.escalate, undefined, now), /讀不到之前記錄的週額度/);
+});
+
+void test('usage.jsonl 取最後一筆有週額度的紀錄；空行、壞行與沒有額度的略過', () => {
+  const jsonl = [
+    JSON.stringify({ kind: 'l2', tokens: 10, weekly: { usedPercent: 50, resetsAt: 1 } }),
+    JSON.stringify({ kind: 'format', tokens: 20, weekly: { usedPercent: 60, resetsAt: 2 } }),
+    JSON.stringify({ kind: 'format', exit: 1 }),
+    '{"kind":"disc',
+    '',
+  ].join('\n');
+  assert.deepEqual(lastWeekly(jsonl), { usedPercent: 60, resetsAt: 2 });
+  assert.equal(lastWeekly(''), undefined);
 });

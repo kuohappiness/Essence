@@ -4,7 +4,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Claude 直接呼叫本機的 Codex（D-212）：`npm run codex -- <類型> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <等級>]`。
+ * Claude 直接呼叫本機的 Codex（D-212）：`npm run codex -- <類型> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <等級>] [--confirmed]`。
+ * xhigh 或 Astra 會用掉大量額度，沒有 `--confirmed` 就不跑：先問使用者，同意了才加（D-212 第 2 點）。
  * 每次都是新的 Codex session（D-171 第 1 點）。回報存在 `.local/codex/`，Codex 的執行紀錄另存一份 .log，Claude 只讀回報。
  * 跑完印一行 token 與額度，Claude 附在回覆末端（D-212 第 3 點）。
  * CLI 是 Codex App 內附的那一份，路徑隨 App 更新而變，每次用 Get-AppxPackage 找；`CODEX_CLI` 可以指定別的。
@@ -31,6 +32,18 @@ export const PRESETS = {
 export type Kind = keyof typeof PRESETS;
 
 const isKind = (value: string): value is Kind => Object.hasOwn(PRESETS, value);
+
+interface Overrides { model?: string | undefined; effort?: Preset['effort'] | undefined }
+
+/** 這一輪實際用的模型與等級：預設，加上個別請求的指定。 */
+export function resolvePreset(kind: Kind, overrides: Overrides): Preset {
+  return { ...PRESETS[kind], ...(overrides.model ? { model: overrides.model } : {}), ...(overrides.effort ? { effort: overrides.effort } : {}) };
+}
+
+/** 會用掉大量額度的模式（D-212 第 2 點，使用者 2026-11-19）：推理等級 xhigh，或 Astra 模型（任何等級）。預設或個別指定都算。 */
+export function isCostly(preset: Pick<Preset, 'model' | 'effort'>): boolean {
+  return preset.effort === 'xhigh' || /astra/i.test(preset.model);
+}
 
 export function buildPrompt(kind: Kind, requestFile: string, note?: string): string {
   const preset: Preset = PRESETS[kind];
@@ -107,6 +120,25 @@ export function usageLine(usage: Usage, timeZone?: string): string {
   return parts.join('｜');
 }
 
+/** usage.jsonl（每輪跑完寫一行）裡最後一筆有週額度的紀錄。 */
+export function lastWeekly(jsonl: string): Window | undefined {
+  for (const line of jsonl.split('\n').reverse()) {
+    try {
+      const weekly = (JSON.parse(line) as Partial<Usage>).weekly;
+      if (weekly) return weekly;
+    } catch { /* 空行或寫到一半的行 */ }
+  }
+  return undefined;
+}
+
+/** 沒有 --confirmed 時印的訊息：Claude 照這段問使用者，同意了才加 --confirmed 重跑。 */
+export function confirmationMessage(kind: Kind, preset: Pick<Preset, 'model' | 'effort'>, weekly?: Window, now = Date.now(), timeZone?: string): string {
+  const quota = !weekly ? '讀不到之前記錄的週額度。'
+    : weekly.resetsAt * 1000 <= now ? '上一輪記錄的週額度已經過了重置時間。'
+      : `上一輪記錄的週額度剩 ${remaining(weekly)}（${resetTime(weekly.resetsAt, timeZone)} 重置）。`;
+  return `這一輪是${PRESETS[kind].label}，用 ${preset.model}、${preset.effort}，會用掉大量額度（D-212 第 2 點）：先問使用者，同意了再加 --confirmed 重跑。${quota}`;
+}
+
 function findCodexCli(): string {
   if (process.env.CODEX_CLI) return process.env.CODEX_CLI;
   if (process.platform !== 'win32') return 'codex';
@@ -142,13 +174,17 @@ function changedPaths(before: string, after: string): string[] {
   return after.split('\n').filter((line) => line && !seen.has(line));
 }
 
-interface RunOptions { note: string | undefined; model: string | undefined; effort: Preset['effort'] | undefined }
+interface RunOptions extends Overrides { note: string | undefined; confirmed: boolean }
 
 async function run(kind: Kind, requestFile: string, options: RunOptions): Promise<number> {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', windowsHide: true }).trim();
   if (!existsSync(join(root, requestFile))) throw Error(`找不到請求檔：${requestFile}（相對 repo 根目錄）`);
-  const preset = { ...PRESETS[kind], ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}) };
+  const preset = resolvePreset(kind, options);
   const dir = join(root, '.local', 'codex');
+  if (isCostly(preset) && !options.confirmed) {
+    const usageFile = join(dir, 'usage.jsonl');
+    throw Error(confirmationMessage(kind, preset, existsSync(usageFile) ? lastWeekly(readFileSync(usageFile, 'utf8')) : undefined));
+  }
   mkdirSync(dir, { recursive: true });
   const started = new Date();
   const stamp = started.toISOString().replace(/[:.]/g, '-');
@@ -185,6 +221,8 @@ async function run(kind: Kind, requestFile: string, options: RunOptions): Promis
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+  const confirmedAt = args.indexOf('--confirmed');
+  if (confirmedAt >= 0) args.splice(confirmedAt, 1);
   const flag = (name: string): string | undefined => {
     const at = args.indexOf(name);
     if (at < 0) return undefined;
@@ -199,11 +237,11 @@ if (import.meta.main) {
   const isEffort = (value: string): value is Preset['effort'] => (efforts as readonly string[]).includes(value);
   const effortValue = effort !== undefined && isEffort(effort) ? effort : undefined;
   if (!kind || !isKind(kind) || !requestFile || (effort !== undefined && !effortValue)) {
-    console.error(`用法：npm run codex -- <${Object.keys(PRESETS).join('|')}> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <${efforts.join('|')}>]`);
+    console.error(`用法：npm run codex -- <${Object.keys(PRESETS).join('|')}> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <${efforts.join('|')}>] [--confirmed]`);
     process.exitCode = 1;
   } else {
     try {
-      process.exitCode = await run(kind, requestFile, { note, model, effort: effortValue });
+      process.exitCode = await run(kind, requestFile, { note, model, effort: effortValue, confirmed: confirmedAt >= 0 });
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

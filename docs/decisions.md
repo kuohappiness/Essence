@@ -6117,7 +6117,7 @@
 **決定**：
 
 1. **Claude 直接呼叫本機 Codex**：在本機 session，Claude 寫好請求後用 `npm run codex -- <類型> <請求檔>`（`tools/codex.ts`）在背景跑 Codex App 內附的 CLI，不再請使用者開新對話、選等級、貼上、回報。每次呼叫都是新的 Codex session；Codex 的完整回報放在最後一則訊息，存在 `.local/codex/`，執行紀錄另存，Claude 只讀回報。Claude 把回報原文附進討論稿或審查報告，核對、修正、送下一輪；雙方一致或到第四輪（D-171）才交給使用者。Codex 只回報、Claude 修，照 [D-131](#d-131-claude-實作codex-在關鍵點查核)。
-2. **模型與推理等級的預設**寫在腳本，個別請求可以另外指定：L2（含再審）、開工前格式查核、討論稿、里程碑檢查用 gpt-6.2-sol、high；bug 從頭查用 gpt-6.2-sol、xhigh；卡關的最後一步用 gpt-6.2-astra、low（必要時 medium），先問使用者再跑。要跑測試重現的類型用 workspace-write 沙箱（和之前在 Codex App 裡一樣），格式查核與討論稿用唯讀。使用者自己的 Codex 全域預設不動。
+2. **模型與推理等級的預設**寫在腳本，個別請求可以另外指定：L2（含再審）、開工前格式查核、討論稿、里程碑檢查用 gpt-6.2-sol、high；bug 從頭查用 gpt-6.2-sol、xhigh；卡關的最後一步用 gpt-6.2-astra、low（必要時 medium），先問使用者再跑。2026-11-19 使用者補充：xhigh 與 Astra 會用掉大量額度，一律先問、同意了才跑；預設或個別指定都算，腳本沒有 `--confirmed` 就不跑（[quality.md〈高風險範圍〉](agents/quality.md#高風險範圍要做-l2)）。要跑測試重現的類型用 workspace-write 沙箱（和之前在 Codex App 裡一樣），格式查核與討論稿用唯讀。使用者自己的 Codex 全域預設不動。
 3. **每次呼叫後，回覆末端附一行**：這一輪的 token、5 小時與週額度剩多少、週額度的重置時間（腳本從 Codex 的 session 紀錄讀）。
 4. **任務開始時判斷在本機或雲端做，整件在同一邊**：需要 Codex 查核的（L2、格式查核、討論稿、bug 從頭查、里程碑檢查），或碰 Obsidian、vault、備份工具、iPhone 測試準備、只有 Windows 才有的問題，在本機做；其餘（不屬高風險範圍的程式、文件與規劃、不碰 Obsidian 的試作場與研究）建議在雲端做，Claude 在任務開始時主動提醒。雲端做到一半發現要 Codex 查核：推分支、在任務說明寫下進度，提醒使用者回本機接手。
 5. **雲端 session 的環境**：`.claude/hooks/cloud-setup.mjs`（SessionStart，只在 `CLAUDE_CODE_REMOTE=true` 時跑）設 `core.hooksPath`，並在 CI 用到的四個資料夾跑 `npm ci`；Node 低於 24 時提醒。2026-11-19 第一次雲端實測後補：淺層 clone 沒有 git tag，16 個跨版本測試失敗，改成補抓 tag；PATH 上是 Node 22、映像另有 `/opt/node24`，改成換過去；沒有相依的外掛不跑 `npm ci`（[quality.md〈本機或雲端〉](agents/quality.md#本機或雲端)）。
