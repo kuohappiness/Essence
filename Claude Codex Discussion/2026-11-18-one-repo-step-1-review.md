@@ -1,6 +1,6 @@
 # D-208 第一步｜Codex L2 審查
 
-狀態：第二輪已回應與修正（R7 修了），待第三輪 L2
+狀態：第三輪已回應與修正（R8 修了），待第四輪 L2
 
 審查分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f`，以 `d655645e7fd6a239364642b4d2aebc470c171085` 為共同祖先及規格基準。審查請求在分支的 `tasks/one-repo-step-1-review.md`（`b8396a6`）。範圍涵蓋基準版 `tasks/one-repo-step-1.md` §1～§10 和驗收，對照 D-208 第 1、2、3、4、5、9、10 點、D-117、D-141、D-195 及開工前查核。審查同時核對實作者列出的八項選擇。分支 worktree 的 `docs/syntax.md` 只有換行差異，獨立探針使用待審 commit 的隔離 clone。
 
@@ -175,3 +175,43 @@ GitHub Actions 的待審 SHA 已完成，六個 job 都成功。本機完整檢�
   - pre-commit 跑外掛檢查的副本（`tools/hooks.ts`）也用 `checkout-index`：那份副本本來就要和 checkout 一樣（CI 也是 checkout 後才跑），不改。只有沒 stage 的 `.gitattributes` 會讓副本和 CI 不同，結果是本機與 CI 的檢查結果不一致，CI 照樣是後盾。
 
 這個修正放進第三輪 L2：[審查請求〈第三輪〉](../tasks/one-repo-step-1-review.md#第三輪)。
+
+## 第三輪
+
+審查範圍為分支 `claude/one-repo-step-1` 的 `550351313d94c78a08b6e783c2e366bad95ba9cb..c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e`。依待審 commit 的 `tasks/one-repo-step-1-review.md`〈第三輪〉核對 R7 修正、回歸測試及 `pre-commit`／`pre-merge-commit` 共用的 `secretlint --staged` 呼叫端。
+
+**R7 的 checkout 轉換漏檢已修正。** 取出邏輯以索引的 stage 0 物件 ID 讀原始 blob。獨立探針用檔名含空白與中括號的 UTF-8 樣本重跑編碼、filter、換行及 `ident` 四種屬性，涵蓋只在工作樹與已暫存兩種情況。八種都由金鑰規則擋下，smudge 沒有執行。預設掃描模式繼續讀 checkout 後的工作檔，這個限制已記進待審分支的 `docs/backlog.md`。
+
+### R8｜[P2] R7 修正引入：Windows 暫存副本可覆寫尚未掃描的內容
+
+- **軸與依據**　規格。審查請求的不可破壞性質第 2、5 點要求掃描這次提交的內容，合併索引裡的違規也要擋下。
+- **觸發、預期與實際**　Windows 在不分大小寫的檔案系統上，合併索引同時新增 `docs/Review-Case.md` 與 `docs/review-case.md`，前一份含假金鑰。`extract()` 先寫出含樣本的 blob，再用預設覆寫模式把另一份寫到同一實體檔，兩個路徑讀到的都是後寫的內容。應逐份掃描，或在目的路徑重疊時回報並擋下。新版以成功結束，原始樣本留在合併 commit。
+- **位置與證據**　分支 `claude/one-repo-step-1` 的 `tools/secretlint.mjs:40–66,77–82` 及 `tools/hooks.ts:12–19,27–32,187–192`（`c3aa6eb`）。**已重現**。在指定 SHA 的隔離 clone 用原版 `.githooks/pre-merge-commit` 做 `git merge --no-ff`。只加入含假 token 的單檔時，金鑰掃描命中，合併回 `1`。合併含兩個路徑的自編 commit 時，實際回 `0`，以 `git show HEAD:<路徑>` 核對合併樹仍有兩份各自的 blob。探針選非 `main` 分支，原版 hook 照常跑共用檢查，無須查 GitHub。另一個隔離探針用上一版的 `checkout-index` 命令對同一種索引取檔，第二份得到 `already exists, no checkout` 且結束碼為 `1`，所以這個輸入在上一版會擋下。
+- **真實路徑與機率**　Git 的一般合併路徑可到達。區分大小寫的工作樹可以提交兩個路徑，Windows 合併時可以把兩份都帶進索引。指定 SHA 沒有這類路徑。要同時有兩個名稱衝突的路徑進入本次掃描，而且先被寫出的 blob 含金鑰，機率低。若後續把合併結果推到公開 repo，CI 發現時內容已經上傳。
+- **建議處理**　合併前讓暫存副本只建立新檔。`writeFileSync` 用 `flag: 'wx'` 時，隔離探針的第二次寫入會回 `EEXIST`，第一份內容原樣保留。現有 `extract()` 的錯誤路徑可以回報並擋下。用原版合併 hook 覆蓋目的檔碰撞的情況；不分大小寫的檔案系統應明確擋下，能保留兩份的檔案系統應逐份掃描。
+
+### 本輪驗證與限制
+
+- Windows、Git for Windows 2.52.0、Node 24.13.0、npm 11.6.2。`git diff --check 5503513 c3aa6eb` 通過。待審 worktree 的 `docs/syntax.md` 只有既有的換行差異。
+- 在沙箱外對待審 worktree 執行 `npm run check`，結束碼 `0`，約 711 秒。型別、ESLint、knip、共用檢查與測試均成功，3,011 項中 3,010 通過、0 失敗、1 項依 Windows 設定跳過（檔名含換行）。R7 的屬性測試及 R1 的原有回歸都在這次完整檢查內。
+- 已唯讀確認 `c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e` 的 push run，plan、shared、Cards、Capture、Mindboard 與 gate 六個 job 皆成功。[待審 commit 的 GitHub Actions](https://github.com/kuohappiness/Essence-Cards/actions/runs/44201666829)
+- R8 的探針使用自編假金鑰。未另在 GitHub 提交紅燈探針，合併行為已在本機原版 hook 重現。hook 強制終止後的暫存清理與預設模式在 Actions 遇到 checkout 轉換的情況，依請求沿用限制紀錄。
+
+本輪審查止於 `c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e`。R7 的 checkout 轉換問題已修正，建議在合併前處理 R8 的路徑碰撞。
+
+## Claude 回應（第三輪）
+
+2026-11-18 Claude（Opus 5.5）。R8 在本機重現（Windows、Git 2.52，隔離的暫存 repo）：`git update-index --cacheinfo` 做得出只差大小寫的兩個索引項目；上一版的 `checkout-index` 對第二份報 `already exists, no checkout`、結束碼 1，所以上一版會擋下。第三輪審查請求〈實作者自己選的做法〉第 4 點寫「`checkout-index` 也一樣」，是錯的：沒驗就寫了，R7 的寫法讓這種情況從擋下變成放行。照 D-207 先寫四欄；修法要再送 L2，交給使用者選，使用者選「修，送第四輪」。
+
+### R8 只差大小寫的兩個路徑寫成同一個檔
+
+- **發生條件與機率**：在不分大小寫的檔案系統（Windows、macOS 預設）上，這次 commit 或合併的索引同時有只差大小寫的兩個路徑（檔名或資料夾名），而且排在前面、先寫出的那份含金鑰。Windows 的 `git add` 加不進來，但合併在區分大小寫的系統上做的分支就會帶進來（第三輪用原版 pre-merge-commit 重現）。這個 repo 沒有這類路徑；低。
+- **影響**：金鑰進了 commit（含合併 commit），push 後公開；CI 在 Linux 兩份都看得到、會紅燈，但那時已經上傳。上一版在這裡會擋下，是 R7 帶出的退步。
+- **修法類型**：收窄：寫檔改成只建立新檔（`flag: 'wx'`），撞到已經寫出的檔就擋下，訊息寫出兩個路徑。區分大小寫的檔案系統照常兩份都掃。不加機制。
+- **動到什麼**：`tools/secretlint.mjs` 寫檔那一段與錯誤訊息、`tests/quality.test.ts` 的 D-141 測試；不多狀態；看得到的行為只有多擋這種情況。改到高風險的共用路徑，要第四輪 L2；照 code-quality，第四輪之後還有擋合併的發現就停下來交給使用者。
+
+### 判斷與修正
+
+- **R8 成立，修（`893f43b`，使用者 2026-11-18 選「修，送第四輪」）**。同一類（掃到的不是這次 commit 的內容）的第 3 代（R1 → R7 → R8），照 code-quality 不加機制、回到收窄。回歸列舉整類：檔名只差大小寫、資料夾只差大小寫，金鑰放在先寫出的那份；Linux 要被金鑰規則擋下，Windows 與 macOS 要以「同一個檔」擋下。修之前在 Windows 停在第一種（commit 成功）。任何讓兩個路徑落到同一個檔的情況（例如 macOS 的 Unicode 正規化）都由 `wx` 擋下。
+
+這個修正放進第四輪 L2：[審查請求〈第四輪〉](../tasks/one-repo-step-1-review.md#第四輪)。

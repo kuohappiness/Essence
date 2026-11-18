@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第一步：L2 獨立審查（給 Codex）
 
-狀態：第三輪待審（第二輪的 R7 已修，見[〈第三輪〉](#第三輪)；第一輪 R1～R6 見[〈第二輪〉](#第二輪)）
+狀態：第四輪待審（第三輪的 R8 已修，見[〈第四輪〉](#第四輪)；第二輪的 R7 見[〈第三輪〉](#第三輪)；第一輪 R1～R6 見[〈第二輪〉](#第二輪)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -161,7 +161,7 @@
 1. 列整個索引（`git ls-files -s -z`）再挑這次 commit 的檔，不把路徑當成 pathspec 交給 Git：`*`、`:` 開頭的檔名不會被解讀，檔很多時也不會超過命令列的長度。只取 stage 0；子模組略過；symlink 寫成內容是目標的一般檔（和第一輪一樣）。
 2. `cat-file --batch` 的輸出上限 256MB（和 R2 的 `tools/dispatch.ts` 一樣）：一次 commit 的內容超過時讀不到，照「取不出暫存區的內容，沒有掃金鑰」擋下。
 3. 寫出前確認路徑在暫存資料夾裡（索引裡的路徑 Git 已經擋過 `..`，這裡多確認一次）；物件不是 blob 時也擋。
-4. 沒處理：同一個索引裡只差大小寫的兩個路徑，在不分大小寫的檔案系統會寫到同一個檔，只掃到後寫的那份（`checkout-index` 也一樣）。Windows 的 `git add` 加不進來，這個 repo 也沒有。
+4. 沒處理：同一個索引裡只差大小寫的兩個路徑，在不分大小寫的檔案系統會寫到同一個檔，只掃到後寫的那份（`checkout-index` 也一樣）。Windows 的 `git add` 加不進來，這個 repo 也沒有。（第三輪 R8：這段不對。`checkout-index` 遇到第二份會失敗、整個 commit 擋下；合併也帶得進來。已修，見[〈第四輪〉](#第四輪)。）
 5. 同一類、這次不改的兩處（預設模式、外掛檢查用的副本），理由在〈Claude 回應（第二輪）〉；預設模式記進 backlog〈已知的限制〉。
 
 ### 驗證方式
@@ -176,3 +176,37 @@
 ### 回報（第三輪）
 
 照第一輪〈回報與權限〉。報告接在同一份報告的最後，加〈第三輪〉一節，標題下的狀態行一起改。這是第三輪；照 code-quality，第四輪之後還有擋合併的發現就停下來交給使用者。
+
+## 第四輪
+
+第三輪（Codex，`c3aa6eb`）確認 R7 已修，新報 R8（R7 修正引入：只差大小寫的兩個路徑在不分大小寫的檔案系統寫成同一個檔，先寫的那份被蓋掉、沒掃到；上一版的 `checkout-index` 在這裡會失敗而擋下）。Claude 重現後寫了四欄，修法要再送 L2，交給使用者選，使用者選「修，送第四輪」。報告、四欄與判斷在 [`Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md`](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第三輪〉與〈Claude 回應（第三輪）〉。這一輪只審 R8 的修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-1`（已 push），本機 worktree `.claude/worktrees/one-repo-step-1`。沒有未提交的修改（`docs/syntax.md` 只有換行差異，同前幾輪）。`main` 仍在 `d655645`。
+- 只審 `c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e..<最後的 commit>`：
+  - `893f43b72330ffc0a1fa46c7fcd33da3e7d6a1ac` R8 只差大小寫的兩個路徑寫成同一個檔時擋下（只建立新檔）
+  - 最後一個是這一節所在的文件 commit（第三輪的報告與回應、這一節、〈結果〉、roadmap）
+- 看差異：`git diff c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e <最後的 commit>`。最後的 commit 是這一節所在的 commit（`git log -1 --format=%H -- tasks/one-repo-step-1-review.md`）。
+
+### 受影響的路徑
+
+- `tools/secretlint.mjs --staged` 的呼叫端：pre-commit 與 pre-merge-commit 的共用檢查（`tools/hooks.ts` 的 `SHARED_CHECKS`）。預設模式不變。
+
+### 實作者自己選的做法（第四輪）
+
+1. 照第三輪報告的建議：寫檔改成只建立新檔（`writeFileSync` 的 `flag: 'wx'`）。暫存資料夾是新建的空資料夾，回 `EEXIST` 只會是這次 commit 的兩個路徑在這台是同一個檔；擋下，訊息寫出兩個路徑（照大小寫不分比對找得到另一個時）。其他寫檔錯誤照舊擋下並印出原因。區分大小寫的檔案系統照常兩份都寫、都掃。
+2. 只用收窄，不加機制：這是同一類（掃到的不是這次 commit 的內容）的第 3 代（R1 → R7 → R8），照 code-quality 回到收窄。
+3. 不只大小寫：任何讓兩個路徑落到同一個檔的情況（例如 macOS 的 Unicode 正規化）都由 `wx` 擋下，訊息找不到另一個路徑時只寫這一個。資料夾與檔案撞名（`A/b` 和 `a`）時，寫檔或建資料夾會失敗，照「取不出暫存區的內容」擋下。
+
+### 驗證方式
+
+- 回歸先寫，修之前跑過是失敗的：`tests/quality.test.ts`「D-141 每次 commit 都跑文件檢查且讀暫存區…」新增的一段，列舉整類：檔名只差大小寫（`docs/Case.md`、`docs/case.md`）與資料夾只差大小寫（`Docs/case.md`、`docs/case.md`），物件直接寫進索引，金鑰放在先寫出的那份。Linux 要被金鑰規則擋下（兩份都掃），Windows 與 macOS 要以「同一個檔」擋下。修之前在 Windows 停在第一種（`Missing expected rejection: docs/Case.md`，commit 成功）。同一個測試裡 R1、R7 的案例照樣通過。
+- 本機探針（Windows、Git 2.52）：`git update-index --cacheinfo` 做得出只差大小寫的兩個索引項目；上一版的 `checkout-index` 對第二份報 `already exists, no checkout`、結束碼 1；新版印「取不出暫存區的內容，沒有掃金鑰：docs/review-case.md 和 docs/Review-Case.md 在這台的檔案系統是同一個檔（例如只差大小寫），兩份不能分開掃」、結束碼 1。Node 的 `wx` 第二次寫入回 `EEXIST`，第一份內容保留。
+- pre-commit 在暫存內容的副本跑了三個外掛的完整檢查並通過（`893f43b`）。
+- GitHub：`893f43b` 的 push run [44207031006](https://github.com/kuohappiness/Essence-Cards/actions/runs/44207031006)：六個 job 都成功；cards job（Linux，區分大小寫）裡 D-141 測試通過，即撞名的兩種情況在 Linux 兩份都掃、被金鑰規則擋下。這一節所在的文件 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：用 `git merge` 帶進撞名路徑的 pre-merge-commit（第三輪報告已用原版 hook 重現；新版走同一段 `extract()`，回歸用索引直接寫入）；macOS 的 Unicode 正規化（沒有機器）；hook 程序被強制結束後的暫存資料夾（前幾輪就列的限制）。
+
+### 回報（第四輪）
+
+照第一輪〈回報與權限〉。報告接在同一份報告的最後，加〈第四輪〉一節，標題下的狀態行一起改。這是第四輪：照 code-quality，這一輪之後還有擋合併的發現，Claude 停下來交給使用者決定，不再自動送下一輪。
