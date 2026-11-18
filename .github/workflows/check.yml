@@ -1,7 +1,46 @@
 name: Check
 on: [push, pull_request]
+# 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4）：plan 照分派表的 CI 跑法決定哪幾個外掛要跑；共用檢查每次都跑；
+# gate 確認每個 job 都照 plan（要跑的成功、不跑的跳過），合併條件看 gate。
 jobs:
-  check:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      cards: ${{ steps.plan.outputs.cards }}
+      capture: ${{ steps.plan.outputs.capture }}
+      mindboard: ${{ steps.plan.outputs.mindboard }}
+      reasons: ${{ steps.plan.outputs.reasons }}
+      compare: ${{ steps.plan.outputs.compare }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 比較的端點由事件決定（PR 的分岔點、push 的上一次、分支和 origin/main 的合併基點），要完整的歷史。
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # 分派表不用 npm 套件，不必安裝。
+      - id: plan
+        run: node tools/ci-gate.ts plan
+
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+      # 共用檢查只裝 tools/ 的相依，不裝根目錄（D-208 第一步 §1）。
+      - run: npm ci
+        working-directory: tools
+      - run: npm run check
+        working-directory: tools
+
+  cards:
+    needs: plan
+    if: needs.plan.outputs.cards == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,7 +51,59 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/package-lock.json
+      # Cards 的檢查也跑共用檢查與 plugin-imports，兩邊都要裝。
+      - run: npm ci
+        working-directory: tools
       - run: npm ci
       - run: npm run check
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  capture:
+    needs: plan
+    if: needs.plan.outputs.capture == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/capture
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # 直接 npm ci：鎖檔不存在、壞了或和 package.json 不同步都由 npm 擋下，不自己判斷「沒有相依」（L2 R5）。
+      # 建置與 audit 等外掛有程式的第一個任務再加。
+      - run: npm ci
+      - run: npm run check
+
+  mindboard:
+    needs: plan
+    if: needs.plan.outputs.mindboard == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/mindboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run check
+
+  # 要跑的 job 被跳過時，其他 job 都是綠的，只有這裡擋得到。main 之後要設必過檢查時只設這個 job（2026-11-17 查過，現在沒設）。
+  gate:
+    needs: [plan, shared, cards, capture, mindboard]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node tools/ci-gate.ts gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}

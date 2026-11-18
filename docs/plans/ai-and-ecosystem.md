@@ -52,7 +52,7 @@
 
 ## 三個外掛共用設定
 
-Capture、Mindboard 的其他項目已搬到 [Essence Capture](capture.md)、[Essence Mindboard](mindboard.md)（2026-10-31）；NotebookLM 當 Capture 上游、心智圖外掛的對接細節也一起搬過去。
+Capture、Mindboard 的其他項目已搬到 [Essence Capture](../../plugins/capture/docs/backlog.md)、[Essence Mindboard](../../plugins/mindboard/docs/backlog.md)（2026-10-31）；NotebookLM 當 Capture 上游、心智圖外掛的對接細節也一起搬過去。
 
 | 點子 | 原意與目前資訊 | 狀態或來源 |
 |---|---|---|

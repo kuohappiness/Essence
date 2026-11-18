@@ -1,4 +1,6 @@
 // 文件檢查（D-141、D-143、D-195）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、roadmap 有「現在在哪裡」一節、「已完成」的列數、任務、討論稿與 plans 的檔頭狀態行、結束的任務有「延後的測試：」一行。
+// 外掛的資料夾（D-208 第 4 點）：plugins/<外掛>/ 底下的 tasks、討論稿、docs/plans 與 docs/roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
+// 外掛有 roadmap 時，最上層 roadmap 的〈現在在哪裡〉要連到它的〈現在在哪裡〉。
 // 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
 //   預設：檔案清單取 Git 追蹤的檔案，內容讀工作樹（npm run check 與 CI 用）。
 //   --staged：清單與內容都讀暫存區（pre-commit 用）。
@@ -15,6 +17,23 @@ export const DONE_ROWS = 10;
 export const STATUS_DIRS = ['tasks', 'Claude Codex Discussion', 'docs/plans'];
 
 export const BACKLOG = 'docs/backlog.md';
+
+const PLUGIN_ROADMAP = /^plugins\/([^/]+)\/docs\/roadmap\.md$/;
+
+/** tasks、討論稿與 docs/plans 第一層的檔（最上層與 plugins/<外掛>/ 底下都算），README 除外。 */
+function isStatusDoc(file: string): boolean {
+  if (posix.basename(file) === 'README.md') return false;
+  const dir = posix.dirname(file);
+  return STATUS_DIRS.includes(dir) || STATUS_DIRS.includes(/^plugins\/[^/]+\/(.+)$/.exec(dir)?.[1] ?? '');
+}
+
+/** 任務對到的 backlog：最上層的 tasks/ 對最上層的 backlog，plugins/<外掛>/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
+function taskBacklog(file: string): string | undefined {
+  const dir = posix.dirname(file);
+  if (dir === 'tasks') return BACKLOG;
+  const plugin = /^plugins\/([^/]+)\/tasks$/.exec(dir)?.[1];
+  return plugin === undefined ? undefined : `plugins/${plugin}/docs/backlog.md`;
+}
 
 // D-195 之前就結束的任務，〈結果〉沒有「延後的測試：」，不回頭補。
 export const BEFORE_D195 = new Set([
@@ -201,6 +220,25 @@ function checkRoadmap(doc: Doc): Problem[] {
   return problems;
 }
 
+/** 外掛有自己的 roadmap 時，最上層 roadmap 的〈現在在哪裡〉一節裡要有連到它〈現在在哪裡〉的連結（D-208 第 4 點：最上層是入口）。 */
+function checkPluginRoadmapLink(top: Doc | undefined, plugin: string): Problem[] {
+  const target = `${posix.relative(posix.dirname(ROADMAP), plugin)}#現在在哪裡`;
+  const reason = '外掛有自己的 roadmap，最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉（D-208 第 4 點）';
+  if (!top) return [{ file: ROADMAP, line: 0, target, reason }];
+  const now = section(top, '現在在哪裡');
+  // 沒有這一節的由 checkRoadmap 報。
+  if (!now) return [];
+  const links = linksOf({ ...top, tokens: top.tokens.slice(now.open, now.close) });
+  const found = links.some(({ href }) => {
+    const hash = href.indexOf('#');
+    if (hash < 0) return false;
+    const path = decode(href.slice(0, hash).split('?')[0]);
+    const fragment = decode(href.slice(hash + 1));
+    return path !== undefined && posix.normalize(posix.join(posix.dirname(ROADMAP), path)) === plugin && fragment === '現在在哪裡';
+  });
+  return found ? [] : [{ file: ROADMAP, line: top.tokens[now.open].map![0] + 1, target, reason }];
+}
+
 // 標題下第一個非空行；沒有一級標題時是 undefined。
 function statusLine(doc: Doc): { heading?: Token; index?: number } {
   const heading = doc.tokens.find(token => token.type === 'heading_open' && token.tag === 'h1');
@@ -252,10 +290,13 @@ function fields(doc: Doc, [from, to]: [number, number]): { line: number; value: 
 }
 
 // 技術債表每一列第一格的純文字（D-195 的計數與對照共用）。
-export function debtRows(doc: Doc | undefined): string[] {
-  if (!doc) return [];
+export const debtRows = (doc: Doc | undefined): string[] => debtTable(doc) ?? [];
+
+// 同上；沒有這份檔或沒有〈技術債〉一節時是 undefined（外掛的 backlog 可能還沒有技術債表）。
+function debtTable(doc: Doc | undefined): string[] | undefined {
+  if (!doc) return undefined;
   const at = doc.tokens.findIndex((token, i) => token.type === 'heading_open' && headingAt(doc, i).title === '技術債');
-  if (at < 0) return [];
+  if (at < 0) return undefined;
   const [from, to] = under(doc, at);
   const rows: string[] = [];
   for (let i = from; i < to; i++) {
@@ -271,10 +312,13 @@ const isDeferredRow = (row: string) => /^(?:補測|補做)：/.test(row);
 export const countDeferred = (backlog: string) => debtRows(parse(BACKLOG, backlog)).filter(isDeferredRow).length;
 
 // D-195：任務的狀態改成已完成、已合併、已結案時，以「結果」開頭的二級標題底下（含三級小節）要有恰好一行「延後的測試：」，
-// 寫「無」或技術債表的列名（「補測：…」「補做：…」）。rows 有給時（只對這次改到的檔）列名要對得到。
-function checkDeferred(doc: Doc, rows?: string[]): Problem[] {
+// 寫「無」或技術債表的列名（「補測：…」「補做：…」）。debt 有給時（只對這次改到的檔）列名要對得到那個任務的 backlog
+// （最上層的任務對最上層的 backlog，外掛的任務對外掛的；rows 是 undefined 表示那份沒有技術債表）。
+function checkDeferred(doc: Doc, debt?: { file: string; rows: string[] | undefined }): Problem[] {
   const name = posix.basename(doc.file);
-  if (posix.dirname(doc.file) !== 'tasks' || name === 'README.md' || name.endsWith('review.md') || BEFORE_D195.has(name)) return [];
+  const backlog = taskBacklog(doc.file);
+  // BEFORE_D195 只放過最上層的舊任務：外掛的同名檔（例如 plugins/mindboard/tasks/w3.md）照查。
+  if (!backlog || name === 'README.md' || name.endsWith('review.md') || (backlog === BACKLOG && BEFORE_D195.has(name))) return [];
   const { index } = statusLine(doc);
   if (index === undefined || !FINISHED.test(doc.lines[index])) return [];
   const problem = (line: number, reason: string): Problem[] => [{ file: doc.file, line, target: '延後的測試：', reason: `${reason}（D-195）` }];
@@ -287,8 +331,11 @@ function checkDeferred(doc: Doc, rows?: string[]): Problem[] {
   if (NONE.test(value)) return [];
   const refs = [...value.matchAll(ROW_REF)].map(m => m[1].trim());
   if (!refs.length) return problem(line, '寫「無」，或用「」括住技術債表的列名，例如「補測：……」');
-  if (!rows) return [];
-  return refs.filter(ref => !rows.some(row => row.startsWith(ref))).flatMap(ref => problem(line, `技術債表找不到「${ref}」開頭的列`));
+  if (!debt) return [];
+  const { file, rows } = debt;
+  if (!rows) return problem(line, `${file} 沒有技術債表（或沒有這份檔），對不到列名`);
+  const where = file === BACKLOG ? '' : `${file} 的`;
+  return refs.filter(ref => !rows.some(row => row.startsWith(ref))).flatMap(ref => problem(line, `${where}技術債表找不到「${ref}」開頭的列`));
 }
 
 export function checkDocs(root: string, { staged = false, exceptions = EXCEPTIONS }: { staged?: boolean; exceptions?: Exception[] } = {}) {
@@ -298,8 +345,15 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
   const problems: Problem[] = [];
   const used = new Set<Exception>();
   const rows = debtRows(docs.get(BACKLOG));
-  // 列名只對照這次 commit 改到的任務：補完刪掉的列，不會讓以前結束的任務壞掉。
-  const changed = staged ? new Set(git(root, ['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=ACMR']).toString('utf8').split('\n').filter(Boolean)) : new Set<string>();
+  // 列名只對照這次 commit 改到的任務：補完刪掉的列，不會讓以前結束的任務壞掉。-z 拿原本的路徑（檔名有空白、中文或引號都一樣）。
+  const changed = staged ? new Set(git(root, ['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=ACMR']).toString('utf8').split('\0').filter(Boolean)) : new Set<string>();
+  const tables = new Map<string, string[] | undefined>();
+  const debtFor = (file: string) => {
+    const backlog = taskBacklog(file);
+    if (!backlog) return undefined;
+    if (!tables.has(backlog)) tables.set(backlog, debtTable(docs.get(backlog)));
+    return { file: backlog, rows: tables.get(backlog) };
+  };
   let links = 0;
   for (const doc of docs.values()) {
     for (const { line, href } of linksOf(doc)) {
@@ -311,9 +365,10 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
       if (exception) used.add(exception);
       else problems.push({ file: doc.file, line, target, reason });
     }
-    if (doc.file === ROADMAP) problems.push(...checkRoadmap(doc));
-    if (STATUS_DIRS.includes(posix.dirname(doc.file)) && posix.basename(doc.file) !== 'README.md') problems.push(...checkStatus(doc));
-    problems.push(...checkDeferred(doc, changed.has(doc.file) ? rows : undefined));
+    if (doc.file === ROADMAP || PLUGIN_ROADMAP.test(doc.file)) problems.push(...checkRoadmap(doc));
+    if (PLUGIN_ROADMAP.test(doc.file)) problems.push(...checkPluginRoadmapLink(docs.get(ROADMAP), doc.file));
+    if (isStatusDoc(doc.file)) problems.push(...checkStatus(doc));
+    problems.push(...checkDeferred(doc, changed.has(doc.file) ? debtFor(doc.file) : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
   return { problems, files: docs.size, links, deferred: rows.filter(isDeferredRow).length };

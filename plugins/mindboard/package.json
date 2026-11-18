@@ -1,0 +1,11 @@
+{
+  "name": "essence-mindboard",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "node -e \"console.log('Mindboard 還沒有程式，沒有可檢查的項目')\""
+  }
+}

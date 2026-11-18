@@ -1,34 +1,15 @@
 #!/bin/sh
 set -eu
 
-# 合併進 main 之前，要合併的那個 commit 在 GitHub Actions 的 Check 要是綠燈（第二次里程碑檢查 R2：還原分支沒 push 過就合併，
-# Linux 上 25 個測試失敗是合併後才看到；pre-commit 只在本機的 Windows 跑）。只管在 main 上、改到程式的合併。
+# core.hooksPath 被改成另一個 checkout 的絕對路徑時（開 worktree 的工具會這樣改），轉給這個 worktree 自己的 hook。
+own="$(git rev-parse --show-toplevel)/.githooks/pre-merge-commit"
+if [ -f "$own" ] && ! cmp -s "$0" "$own"; then exec sh "$own" "$@"; fi
+
+# 邏輯在 tools/hooks.ts（D-208 第一步 §3）：合併不經過 pre-commit，這裡讀合併的索引跑一次共用檢查；
+# 合併進 main 時照分派表的 CI 跑法比合併基點到要合併的 commit，有外掛要跑就要那個 commit 的 push run 是綠燈。
 # 快轉與有衝突的合併不經過這個 hook，所以 docs/agents/quality.md 的合併步驟也寫了。gh 不能用或沒登入時警告放行。
-[ "$(git symbolic-ref --quiet --short HEAD || true)" = main ] || exit 0
-# 這個 hook 執行時還沒有 MERGE_HEAD；git 把要合併的 commit 放在 GITHEAD_<sha> 環境變數（2026-11-12 在 Git for Windows 實測）。
-heads=$(env | sed -n 's/^GITHEAD_\([0-9a-f]\{40,64\}\)=.*/\1/p')
-[ -n "$heads" ] || heads=$(git rev-parse --quiet --verify MERGE_HEAD || true)
-if [ -z "$heads" ]; then
-  echo '警告：找不到要合併的 commit，沒有確認 CI，照樣合併。' >&2
-  exit 0
-fi
-for head in $heads; do
-  short=$(git rev-parse --short "$head")
-  base=$(git merge-base HEAD "$head")
-  # 改到程式的路徑，和 pre-commit 同一份（tests/quality.test.ts 比對兩份相同）。
-  if ! git -c core.quotepath=false diff --name-only "$base" "$head" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
-    continue
-  fi
-  if ! state=$(gh run list --commit "$head" --workflow check.yml --json status,conclusion --jq '.[0] // empty | "\(.status) \(.conclusion)"' 2>/dev/null); then
-    echo "警告：查不到 GitHub Actions（gh 不能用或沒登入），沒有確認 $short 的 CI，照樣合併。" >&2
-    continue
-  fi
-  case "$state" in
-    'completed success') continue ;;
-    '') reason='沒有 CI 紀錄：先 push 這個分支，等 Check 跑完是綠燈再合併' ;;
-    completed*) reason="CI 沒通過（$state）：先修好再合併" ;;
-    *) reason="CI 還沒跑完（$state）：等它跑完是綠燈再合併" ;;
-  esac
-  echo "已擋下合併進 main：$short 的 $reason（gh run list --commit $head --workflow check.yml）。" >&2
+if [ ! -d tools/node_modules ]; then
+  echo '先在 tools/ 執行 npm ci（共用檢查的相依）' >&2
   exit 1
-done
+fi
+exec node tools/hooks.ts pre-merge-commit

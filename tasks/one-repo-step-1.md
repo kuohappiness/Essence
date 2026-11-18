@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第一步（D-208 第 5 點，給 Claude，本機執行）
 
-狀態：可以開工（Codex 開工前查核一輪，Claude 照回報改完：[報告與回應](<../Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md>)）
+狀態：L2 通過，待合併（Codex 四輪：R1～R9 都處理了，R3 記成已知的限制，其餘修了；[審查請求](one-repo-step-1-review.md)；[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)；開工前 Codex 查核過一輪，Claude 照回報改完：[報告與回應](<../Claude Codex Discussion/2026-11-17-one-repo-step-1-plan-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。這一步改 pre-commit、pre-merge-commit 與 CI，也就是合併前的防線：合併前做 L2（[D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點）。**不改 Cards 的產品程式（`src/`），不改會動到正式 vault 的工具**（安裝、更新、備份、還原、比較）。
 
@@ -59,7 +59,7 @@ hook 與 CI 只讀這一份（D-208 第 5 點）。`tools/dispatch.ts` 不用任
 | 4 | 共用的輸入：§1 列的共用工具、`tools/package.json`、`tools/package-lock.json`、`.githooks/`、`.github/workflows/`、根目錄的 `.secretlintrc.json`、`.gitattributes`、`.gitignore` | 全部 |
 | 5 | 共用規格（登錄表；第二步前新增兩個外掛都讀的規格，在這裡加一列）：`docs/syntax.md`（過渡期轉錄稿格式在 §1，Capture 寫、Cards 讀） | Cards 相關測試、Capture 完整 |
 | 6 | Cards 的程式與設定：`src/`、`tests/`、§1 列的 Cards 工具、`manifest.json`、根目錄的 `package.json`、`package-lock.json`、`tsconfig.json`、`eslint.config.js`、`knip.jsonc` | Cards 完整 |
-| 7 | `docs/`、`experiments/`、`.claude/`、`.agents/` 底下的檔（含 skill），以及根目錄的 `.md` | Cards 相關測試 |
+| 7 | `docs/`、`tasks/`、`Claude Codex Discussion/`、`experiments/`、`.claude/`、`.agents/` 底下的檔（含 skill），以及根目錄的 `.md`（`tasks/` 與 `Claude Codex Discussion/` 是施工時補的，見〈結果〉） | Cards 相關測試 |
 | 8 | 以上都不是（例如根目錄新出現的設定檔） | 全部 |
 
   `.claude/`、`.agents/` 現在改到 skill 會跑 Cards 完整；改成相關測試，是因為 skill 的兩份一致改由共用檢查讀暫存區每次都跑（§3）。外掛的測試要讀最上層的檔，就在第 5 列登錄，不靠搜尋字串。
@@ -224,7 +224,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 11. Windows 本機與 CI 的 Linux 都跑過第 1～4 項的測試（本機是 Git for Windows 的 sh）。
 12. `main` 的必過檢查查過，結果寫進〈結果〉（§4）。
 13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。第二輪起的再審照[試行](auto-codex-rereview-trial.md)由 Claude 用 `codex exec` 送，第一輪照舊由使用者轉交。
-14. 合併後：主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
+14. 合併後：先更新主資料夾（共用的 `core.hooksPath` 常指到它，舊版的 hook 不會轉交，L2 R3）；主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`，確認 `git config core.hooksPath` 是相對的 `.githooks`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
 
 ## 平台事實
 
@@ -232,21 +232,110 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 
 | 假設 | 探針與環境 | 結果 |
 |---|---|---|
-| 共用相依搬到 `tools/package.json` 後，Cards 的型別與 lint 照常通過，共用檢查不靠根目錄的 `node_modules` 也能跑 | 2026-11-17 Claude 在暫存複本（Linux、Node 22.23、npm 10.9、`main` 的 `6bfdad9`）：搬 5 個相依、兩邊各 `npm install`；`tsc`、`eslint` 通過；拿掉根目錄 `node_modules` 後 `check-docs`、`secretlint`、`check-local-paths`、`check-skill-mirror`、`decisions-index` 都能跑（從根目錄跑） | 通過；Windows 待驗 |
-| knip 要把 `tools` 設成工作區 | 同上：沒設時報 5 個 Unlisted dependencies（`markdown-it` 三處、`github-slugger`、`secretlint`）；`knip.jsonc` 寫 `workspaces` 的 `"."` 與 `"tools"` 後通過（knip 6.42.1，沒用 npm workspaces 也認） | 通過；驗收第 7 項另驗沒有漏抓 |
-| 只有一個測試要改 | 同上，跑 `check-docs`、`quality`、`local-paths`、`progress-board`、`roadmap-board`、`decisions-index`、`block-dangerous-git` 的測試：只有 `quality.test.ts` 的「D-141 每次 commit 都跑文件檢查」失敗（它把根目錄的 `node_modules` 連進暫存 repo，要改成連 `tools/node_modules`） | 已知；`tests/` 其餘的測試沒跑 |
+| 共用相依搬到 `tools/package.json` 後，Cards 的型別與 lint 照常通過，共用檢查不靠根目錄的 `node_modules` 也能跑 | 2026-11-17 Claude 在暫存複本（Linux、Node 22.23、npm 10.9、`main` 的 `6bfdad9`）：搬 5 個相依、兩邊各 `npm install`；`tsc`、`eslint` 通過；拿掉根目錄 `node_modules` 後 `check-docs`、`secretlint`、`check-local-paths`、`check-skill-mirror`、`decisions-index` 都能跑（從根目錄跑） | 通過；Windows 2026-11-17 由驗收第 3 項驗過（乾淨 clone、沒有根目錄的 `node_modules`） |
+| knip 要把 `tools` 設成工作區 | 同上：沒設時報 5 個 Unlisted dependencies（`markdown-it` 三處、`github-slugger`、`secretlint`）；`knip.jsonc` 寫 `workspaces` 的 `"."` 與 `"tools"` 後通過（knip 6.42.1，沒用 npm workspaces 也認） | 通過；沒有漏抓：驗收第 7 項（2026-11-17 Windows）在 `tools/progress-board-data.ts`（共用）與 `tools/vault-io.ts`（Cards）各加一個沒用到的 export，兩個都報出來；拿掉後通過，script 入口與 secretlint preset 沒被報 |
+| 只有一個測試要改 | 同上，跑 `check-docs`、`quality`、`local-paths`、`progress-board`、`roadmap-board`、`decisions-index`、`block-dangerous-git` 的測試：只有 `quality.test.ts` 的「D-141 每次 commit 都跑文件檢查」失敗（它把根目錄的 `node_modules` 連進暫存 repo，要改成連 `tools/node_modules`） | 已知；施工時 §1 也只改了這個測試（`ef88c86`），完整檢查通過 |
 | npm 在套件的資料夾執行 script（`npm --prefix tools run` 也是），從 `tools/` 跑 `git ls-files` 只列得到 `tools/` | Codex 2026-11-17（Windows、npm 11.6.2） | 已重現：共用工具要自己找 repo 根（§1） |
-| 從子資料夾執行 `git config core.hooksPath .githooks`，hook 照樣從工作樹的根執行 | Claude 2026-11-17 暫存 repo（Linux）：在 `tools/` 設定，從 `plugins/mb/` commit，hook 有跑；Codex 同日在 Windows（Git 2.52）確認讀到相對的 `.githooks` | 通過；Git for Windows 的實際 commit 由驗收第 2 項驗 |
+| 從子資料夾執行 `git config core.hooksPath .githooks`，hook 照樣從工作樹的根執行 | Claude 2026-11-17 暫存 repo（Linux）：在 `tools/` 設定，從 `plugins/mb/` commit，hook 有跑；Codex 同日在 Windows（Git 2.52）確認讀到相對的 `.githooks` | 通過；Git for Windows 的實際 commit 由驗收第 2 項驗過（`tests/hooks.test.ts` 在 clone 的 `tools/` 跑安裝入口，再從 `plugins/mindboard/` commit） |
 | `git commit <路徑>`、`-a` 時，hook 拿到的 `GIT_INDEX_FILE` 是另一份索引，清掉環境再讀會讀到預設的索引 | Codex 2026-11-17 暫存 repo：同一條 `git diff --cached` 隨 `GIT_INDEX_FILE` 換成另一組 | 已重現：在 hook 原本的環境讀（§3） |
 | `core.quotepath=true` 時 `--name-only` 會跳脫中文與空白，`-z` 交回原路徑；`--diff-filter=ACMRD` 會濾掉型別變更 `T`；只差大小寫的 `git mv` 加 `--no-renames` 出現 A、D 兩條；子模組只出現一條 `160000` | Codex 2026-11-17（Windows、Git 2.52） | 已重現（§2） |
 | `ts.preProcessFile(文字, true, true)`：註解與字串裡的 `import` 不算；多行 `export … from`、`import x = require()`、`require()`、沒有代換的模板字面值都取得到；`import('../../src/' + name)` 取到前段 | Claude 2026-11-17（Linux、TypeScript 5.9.3） | 通過（§6） |
-| 沒有相依的 `package.json`：`npm install` 產生只有根項目的鎖檔，`npm ci` 成功、不建 `node_modules` | Claude 2026-11-17 暫存 repo（Linux） | 通過 |
-| `actions/setup-node` 的 npm 快取遇到沒有相依的鎖檔 | 沒測 | 待驗：會警告就不設快取 |
-| 跳過的 job 在 `needs` 裡是 `skipped`；`pull_request` 合併到非預設分支也會觸發（`check.yml` 是 `on: [push, pull_request]`，沒限分支）；新分支第一次 push 的 `before` 是全 0；只重跑上游 job 會連帶重跑依賴它的 gate | GitHub 文件；驗收第 5 項實測 | 待驗 |
+| 沒有相依的 `package.json`：`npm install` 產生只有根項目的鎖檔，`npm ci` 成功、不建 `node_modules` | Claude 2026-11-17 暫存 repo（Linux）；2026-11-18 Windows（npm 11.6.2），複製 `plugins/mindboard/` 的 `package.json` 與鎖檔 | 通過；鎖檔和 `package.json` 不同步、不是 JSON、不存在時結束碼都是 1（`EUSAGE`），所以安裝直接 `npm ci`（L2 R5） |
+| `actions/setup-node` 的 npm 快取遇到沒有相依的鎖檔 | 沒測 | 不適用：capture、mindboard 的 job 不設快取（沒有相依，沒有可快取的）。shared 與 cards 照常快取，CI 沒有快取的警告（只有 GitHub 說 `actions/checkout@v4`、`actions/setup-node@v4` 用的 Node.js 20 已停止支援，`main` 原本就有） |
+| 跳過的 job 在 `needs` 裡是 `skipped`；`pull_request` 合併到非預設分支也會觸發（`check.yml` 是 `on: [push, pull_request]`，沒限分支）；新分支第一次 push 的 `before` 是全 0；只重跑上游 job 會連帶重跑依賴它的 gate | GitHub 文件；2026-11-17 驗收第 5 項實測（run 的網址在〈結果〉） | `skipped`：通過（照表跳過的 cards、capture，gate 讀到 `skipped` 判成功；`if: false` 跳過的 cards，gate 判「要跑卻跳過」）。合併到第一步分支的 draft PR 都觸發了。`before` 全 0：沒用到，push 到 `main` 以外的分支比和 `origin/main` 的合併基點，不讀 `before`（全 0 的處理由 `tests/ci-gate.test.ts` 測）。只重跑 mindboard：gate 跟著重跑、成功，plan 與 shared 沿用第一次的結果。另外：取消正在跑 cards 的 run，gate 照樣跑（`if: always()`）並判「要跑，結果是 cancelled」，run 的結論是 `cancelled` |
+| 開 worktree 的工具（Claude Code）把共用的 `.git/config` 的 `core.hooksPath` 改成另一個 checkout 的 `.githooks` 絕對路徑，新舊分支的 hook 會混用 | Claude 2026-11-17 這個 worktree（Windows）：開好後 `git config core.hooksPath` 是主資料夾的絕對路徑；在 `tools/` 跑 `npm ci`（`prepare`）後回到相對的 `.githooks` | 已重現：兩個 hook 先轉給這個 worktree 自己的 `.githooks`（§3）；`tests/hooks.test.ts` 測絕對路徑轉交 |
+| `git clone --no-local <worktree 的路徑>` 拿到那個 worktree 的 HEAD 所在的分支 | Claude 2026-11-17 Windows（Git 2.52.0） | 確認；一次約 8 秒，`tests/hooks.test.ts` 每個案例 clone 一次 |
+| `git log --follow` 接得到搬家前的歷史 | Claude 2026-11-17：Mindboard 那份預設接得到；Capture 那份改了相對連結後和原檔的相似度 40%，低於預設的 50% | Mindboard 通過；Capture 要加 `-M30%`（`git log --follow -M30% -- plugins/capture/docs/backlog.md`） |
+| knip 對只被測試 import 的檔也做 export 分析 | Claude 2026-11-17 Windows（knip 6.42.1）：在 `tools/dispatch.ts`（當時只被 `tests/dispatch.test.ts` import）加一個沒用到的 export，knip 沒報 | 不成立；驗收第 7 項改在有其他程式 import 的共用工具與 Cards 工具驗。hook 直接執行、沒有程式 import 的 `hooks.ts` 列成 knip 的入口（沒列時報成沒用到的檔）；`dispatch.ts` 由它 import，export 照樣檢查；CI 直接執行的 `ci-gate.ts` 只被測試 import，export 不受檢查 |
+| secretlint 的讀檔模式怎麼處理二進位檔（L2 R1 的修法依賴它） | Claude 2026-11-18 讀 `tools/node_modules` 的 secretlint 13.1.0：`@secretlint/source-creator` 用 `istextorbinary` 判斷，二進位只跑支援 binary 的規則（preset 裡只有 gcp，只看 `.p12`、`.json`）；`executeOnContent`（stdin 模式）一律當文字。Windows 探針：暫存一個含 token 的 PNG | 兩種模式都不報那個 PNG：`--staged` 取出副本後照讀檔模式掃，判斷一致 |
+| npm 怎麼解析外掛相依的本機路徑寫法（L2 R6） | Claude 2026-11-18 Windows、npm 11.6.2：用 npm 內附的 `npm-package-arg` 從 `plugins/mindboard/` 解 | `file:~/x`、`~/x` 到家目錄；`../capture`、`lib/../../../src` 到外掛外；`git+file:` 是本機的 git repo；`file:%2e%2e/…`、`FILE:../…` 是外掛裡字面的資料夾名（沒跑出去）；`link:` 不支援（`EUNSUPPORTEDPROTOCOL`）；`a/b`、`a/b#feature/x` 是 GitHub 的簡寫 |
+| `git checkout-index --prefix` 取出的副本（加一個指向工作樹 git 資料夾的 `.git` 檔、`node_modules` 用 junction）跑得了 Cards 的完整檢查，多花的時間不大（§10） | Claude 2026-11-17 Windows（Git 2.52、Node 24.13），`af4b12a` 的暫存區 892 個檔 | 通過：不給 `.git` 時共用檢查與 21 個測試失敗；給了全部通過。取出約 0.58 秒、清理約 0.13 秒（〈結果〉第 10 項） |
 
 ## 結果
 
-延後的測試：（實作後填）
+2026-11-17 Claude（Opus 5.5、高）在分支 `claude/one-repo-step-1` 施工。本機是 Windows 11、Git for Windows 2.52、Node 24.13；CI 是 GitHub Actions 的 Ubuntu。
+
+**commit**（一個決定一個；每個都經過 pre-commit，push 後的 CI 見驗收第 5 項）：
+
+| commit | 內容 |
+|---|---|
+| `ef88c86` | §1 共用檢查自己一份套件（連同 hook 的安裝檢查、兩個 workflow、`knip.jsonc`、`quality.test.ts`） |
+| `c4220f0` | §5 外掛的骨架、`git mv` 兩份 backlog、引用跟著改 |
+| `09b1c02` | §2 分派表 |
+| `08a0431` | §6 外掛之間不 import |
+| `267f7e5` | §4 的 `ci-gate.ts`（還沒接上 CI） |
+| `0d05273` | §3 的前置：`check-skill-mirror --staged` 讀暫存區 |
+| `4a4acf0` | §3 兩個 hook 改用分派表 |
+| `047815c` | §4 CI 改用分派表與 gate；`ci-status.mjs` 加 `cancelled` |
+| `3f56947` | §7 文件檢查涵蓋外掛 |
+| `13ceb89` | §8 進度白板讀每一份 roadmap |
+| `af4b12a` | §9 文件 |
+| `9a55771` | §10 pre-commit 的外掛檢查改在只有暫存內容的副本跑 |
+| `02afb0a` | §2 的補正：第 7 條加上 `tasks/`、`Claude Codex Discussion/` |
+| `b8396a6` | 驗收、平台事實、〈結果〉、L2 審查請求、roadmap |
+| `6b0a3a6` | L2 R1：`secretlint --staged` 掃暫存區的內容（含型別變更） |
+| `3c8a307` | L2 R2：相關測試照這次比較的內容選 |
+| `a64ff61` | L2 R3：舊版 hook 不會轉交，記成已知的限制（只改文件）；Codex 的第一輪報告 |
+| `3a236db` | L2 R4：gate 對比較端點、理由、結果與旗標都查型別 |
+| `acf0afe` | L2 R5：capture、mindboard 的 job 直接 `npm ci` |
+| `dfddc48` | L2 R6：外掛的本機相依只接受外掛裡的相對路徑（白名單） |
+| `5503513` | 第一輪的回應、第二輪的審查請求、〈結果〉、roadmap |
+| `a97aa2f` | L2 R7：`secretlint --staged` 照原樣寫出索引的 blob，不經過 checkout |
+| `c3aa6eb` | 第二輪的報告與回應、第三輪的審查請求、〈結果〉、backlog、roadmap |
+| `893f43b` | L2 R8：只差大小寫的兩個路徑寫成同一個檔時擋下（只建立新檔） |
+| `2255c56` | 第三輪的報告與回應、第四輪的審查請求、〈結果〉、roadmap |
+| `d7e2a0b` | L2 R9：撞名的回歸照暫存資料夾實際分不分大小寫選預期（只改測試） |
+| 這一列所在的 commit | 第四輪的報告與回應、〈結果〉、roadmap |
+
+**和任務說明不一樣、或自己選的做法**（L2 請一併看）：
+
+- §2 第 7 條加上 `tasks/`、`Claude Codex Discussion/`（`02afb0a`，§2 的表也補了）：表只列 `docs/`、`experiments/`、`.claude/`、`.agents/` 與根目錄的 `.md`，這兩個最上層的文件資料夾落到第 8 條「以上都不是」，只改任務說明或討論稿的 commit 會跑三個外掛的完整檢查（本機約 10 分鐘、CI 每個 job 都跑）；原本的 hook 對它們只跑文件檢查。寫〈結果〉前用 `--staged --explain` 看這個 commit 的分派才發現。補完後拿整個 repo 跑一次（`--range` 從空樹到 `HEAD`），落到第 8 條的只剩 `.ignore`（搜尋工具略過舊白板 HTML 的設定），照表三個外掛都檢查，沒有再改。外掛自己的 `tasks/` 等資料夾不受影響（在外掛資料夾底下，照外掛的那一條）。
+
+- `roadmap-board --check --staged` 也放進 hook 的共用檢查（§3 的清單沒有）：§8 要「外掛的 roadmap 寫壞時 commit 就擋」，commit 跑的是 hook 的共用檢查、不是 `tools` 的 `npm run check`，不放進去就擋不到。
+- `roadmap-board --check` 除了解析，也跑產生網頁時的私人資訊檢查（`findPrivate`）：Pages 產生時會因為它失敗，commit 就該擋；測試加了一個帶電子郵件的例子。
+- `check-skill-mirror --staged` 獨立一個 commit（`0d05273`），放在 §3 之前：§3 的 hook 要呼叫它。
+- `knip.jsonc` 的 `tools` 工作區把 `hooks.ts` 列成入口：hook 用 node 直接執行、沒有程式 import 它，沒列時 knip 報它是沒用到的檔（〈平台事實〉）。
+- 兩個 hook 先檢查 `core.hooksPath`：指到別的 checkout 的 `.githooks`（開 worktree 的工具會這樣改，〈平台事實〉）時，轉給這個工作樹自己的 hook；不轉的話，舊分支的 worktree 會跑新分支的 hook，反過來也一樣。`tests/hooks.test.ts` 有案例。
+- §10 改成預設時的做法（副本放系統暫存資料夾、LF、`.git` 檔、借 `node_modules` 的連結、Ctrl+C 與刪不掉時怎麼辦）逐條寫在[審查請求](one-repo-step-1-review.md)〈實作者自己選的做法〉第 7 點。
+- capture、mindboard 的 job 不設 `setup-node` 的快取（沒有相依，沒有可以快取的）。安裝那一步原本在鎖檔沒有相依時跳過；L2 R5 指出讀鎖檔失敗、鎖檔和 `package.json` 不同步也會被當成沒有相依，改成直接 `npm ci`（`acf0afe`）。
+- L2 第一輪的修正裡自己選的做法，列在[審查請求〈第二輪〉](one-repo-step-1-review.md#第二輪)。
+
+**驗收**：
+
+1. `tests/dispatch.test.ts`：§2 的每一列都有案例（第 7 條補的兩個資料夾也有），`--staged` 與 `--range` 都測；Git 讀取失敗非零結束、合併 commit 用兩棵樹比也測了。檔名有換行那一列只在 Linux 跑（CI 通過）。L2 R2 加了相關測試照這次比較的內容找的案例（暫存區不看工作樹的修改與新檔、`--range` 讀 head 的樹）。
+2. `tests/hooks.test.ts`（新檔，從工作樹明確複製 hook 與工具進 clone 再 commit 一次當基準）：五種情況、從外掛資料夾 commit、`git commit -- <路徑>`、`-a`、只 stage 一份 skill、已經存在的 linked worktree、`core.hooksPath` 被改成絕對路徑、缺 `tools/node_modules`、缺根目錄的 `node_modules` 都有案例；§10 加了：暫存區與工作樹不同時照暫存區（擋下與放行各一）、`git commit -- <路徑>` 照 HEAD 的內容、`-a` 照工作樹的內容，每次 commit 後副本都刪了、借出去的 `node_modules` 還在。`tests/quality.test.ts` 原有的 hook 覆蓋都保留，改成從新的入口跑；pre-merge-commit 用 `gh` 的替身測 push run 的參數、`cancelled`、只改文件也要 CI、合併索引裡的壞連結被擋。L2 第一輪後：R1 的金鑰（暫存區與工作檔兩個方向、`-a`、`-- <路徑>`、別的檔已 stage、型別變更）加進 `tests/quality.test.ts` 的 D-141 測試；R2 的兩個方向（測試的修改沒 stage、工作樹新加的測試）加進 `tests/hooks.test.ts` 的第二個測試。L2 第二輪後：R7 的整類（Git 取出檔案時會套用的四種屬性 × 已 stage／只在工作樹）加進同一個 D-141 測試。L2 第三輪後：R8 的整類（檔名只差大小寫、資料夾只差大小寫）也加進同一個測試；第四輪的 R9 讓它照暫存資料夾實際分不分大小寫選預期的訊息。
+3. Windows 2026-11-17：`git clone --no-local` 一份、根目錄沒有 `node_modules`、只連 `tools/node_modules`，`npm run check` 從根目錄、`tools/`、`plugins/mindboard/` 跑都通過；金鑰、本機路徑、壞連結三種樣本放在根目錄與 `plugins/mindboard/` 各一次（stage、不 commit），六次三處都擋下、結束碼一樣。新 clone 沒有主資料夾 `.local/` 的測試 vault 登錄時，本機路徑檢查會把測試 vault 的名稱當成正式 vault 擋下：這是原本就有的行為（登錄不進 repo），驗收時把登錄複製進 clone。
+4. `tests/ci-gate.test.ts`：gate 的每種結論、plan 失敗、欄位缺、JSON 壞、旗標不合法；比較端點的八種事件都有案例。L2 R4 加了比較端點、理由、結果與旗標缺、空或型別錯的 16 種輸入。
+5. GitHub 上實際跑：
+   - 第一步的分支 push（`047815c`）：[run 44109504787](https://github.com/kuohappiness/Essence-Cards/actions/runs/44109504787) plan 判斷「全部」（比較 `d655645..047815c`，push 到分支：和 `origin/main` 的合併基點到這次），六個 job 都成功；shared 的 log 只有 `tools/` 的 `npm ci`。§9 之後的 `af4b12a` 也全綠：[run 44115207246](https://github.com/kuohappiness/Essence-Cards/actions/runs/44115207246)（cards 297 秒，其他都在 15 秒內）。
+   - 只在 `plugins/mindboard/` 加非 `.md` 的檔（draft PR #18 合併到第一步的分支）：[run 44112480040](https://github.com/kuohappiness/Essence-Cards/actions/runs/44112480040) 只跑 plan、shared、mindboard，cards 與 capture 是 skipped，gate 成功，摘要寫了「照分派表跳過（這次改的路徑都不是它的：…）」；沒有根目錄的 `npm ci`。
+   - 只改 `docs/product.md`（draft PR #19）：[run 44112509671](https://github.com/kuohappiness/Essence-Cards/actions/runs/44112509671) Cards 升成完整檢查、通過，capture、mindboard skipped，gate 成功。
+   - 反向（draft PR #20，探針分支把 cards job 的 `if` 改成 `false`）：[run 44117803057](https://github.com/kuohappiness/Essence-Cards/actions/runs/44117803057) plan 判斷「全部」，shared、capture、mindboard 都成功，cards skipped，gate 紅燈，摘要寫「Cards：要跑卻跳過」。
+   - 小探針：[run 44112480040](https://github.com/kuohappiness/Essence-Cards/actions/runs/44112480040) 只重跑 mindboard（第 2 次），gate 跟著重跑、成功，plan 與 shared 沿用第 1 次的結果；[run 44112509671](https://github.com/kuohappiness/Essence-Cards/actions/runs/44112509671) 重跑後在 cards 跑到一半時取消（第 2 次），gate 照樣跑完並判「Cards：要跑，結果是 cancelled」，run 的結論是 `cancelled`。
+   - 看完後三個 PR 都關掉、探針分支刪掉。
+   - L2 第一輪的修正 push 後（`dfddc48`）：[run 44147697017](https://github.com/kuohappiness/Essence-Cards/actions/runs/44147697017) plan 判斷「全部」（比較 `d655645..dfddc48`），六個 job 都成功；capture、mindboard 的 `npm ci`（L2 R5）成功，鎖檔沒有相依（`up to date, audited 1 package`）。
+   - L2 第二輪的修正 push 後（`a97aa2f`）：[run 44200346263](https://github.com/kuohappiness/Essence-Cards/actions/runs/44200346263) plan 判斷「全部」（比較 `d655645..a97aa2f`），六個 job 都成功。
+   - L2 第三輪的修正 push 後（`893f43b`）：[run 44207031006](https://github.com/kuohappiness/Essence-Cards/actions/runs/44207031006) 六個 job 都成功；Linux 上 R8 的撞名案例兩份都掃、被金鑰規則擋下（D-141 測試通過）。
+6. Cards 的 `npm run check`：CI 的 cards job 每次都通過；Windows 本機：改到共用輸入或 Cards 程式的 commit 在 pre-commit 都跑了完整檢查並通過（§10 的 `9a55771` 起在暫存內容的副本跑：`9a55771` 616 秒、`02afb0a` 約 600 秒；這段時間照常改任務說明，沒有影響檢查）；反向探針的 commit 也跑了一次（565 秒）。L2 第一輪的修正：R1、R2、R4、R5、R6 的 commit 改到共用的輸入，pre-commit 都跑了三個外掛的完整檢查並通過。第二輪的 R7（`a97aa2f`）、第三輪的 R8（`893f43b`）也一樣；第四輪的 R9 只改測試，pre-commit 跑了 Cards 的完整檢查並通過（`d7e2a0b`）。
+7. knip：2026-11-17 Windows，在 `tools/progress-board-data.ts`（共用）與 `tools/vault-io.ts`（Cards）各加一個沒用到的 export，`npm run knip` 兩個都報出來（Unused exports 2）；拿掉後通過，`tools/package.json` 的 script 入口與 secretlint preset 沒被報。
+8. §6、§7、§8 的測試在 `tests/plugin-imports.test.ts`、`tests/check-docs.test.ts`、`tests/roadmap-board.test.ts`、`tests/progress-board.test.ts`，都在上面的完整檢查裡通過。§8 的手機寬度：用自編的 Mindboard roadmap（兩列、一格超過 50 字）產生白板，375px 沒有橫向捲動（`scrollWidth` 375），外掛的列照「等誰」分組，連結指回 `plugins/mindboard/` 自己的位置。L2 R6 加了外掛本機相依的白名單案例（25 個擋、17 個放行）。
+9. `node tools/check-docs.ts` 通過（362 個 Markdown 檔、7563 個連結）。`git log --follow -- plugins/mindboard/docs/backlog.md` 接到搬之前的 `47636f4`；Capture 那份改了相對連結後和原檔的相似度低於預設的 50%，要用 `git log --follow -M30% -- plugins/capture/docs/backlog.md` 才接得到（六個 commit 都在）。
+10. §10 量測（2026-11-17 Windows，`af4b12a` 的暫存區，892 個檔）：`git checkout-index` 取出到暫存資料夾、`node_modules` 用 junction 借工作樹的，依序跑 Cards 完整檢查的每一步。
+    - 不給 `.git`：型別、lint、knip 通過；共用檢查（`git ls-files`）與 21 個測試失敗，都是要讀 tag、歷史或 clone 這個 repo 的（`compare-versions` 8、`pick-old-version` 6、`ai-add-old-version` 2、`hooks` 2、`backup`、`build`、`update-vault` 各 1）。
+    - 放一個 `.git` 檔指向工作樹的 git 資料夾：每一步都通過，型別 9.5 秒、lint 25 秒、knip 3.5 秒、共用檢查 8.6 秒、測試 536 秒，合計約 590 秒；同一份檢查在工作樹裡跑的 commit（反向探針）是 565 秒（量測時同時跑了別的檢查，差距在誤差內）。
+    - 多花的只有取出與清理：取出（含寫 `.git` 檔、連 `node_modules`）約 0.58 秒、清理約 0.13 秒（各量 5 次取中位數）；只改外掛、本來約 4 秒的 commit 多約 0.7 秒，Cards 的完整檢查約 9 分鐘。
+    - 結論：可行、多花的時間不大，改成預設（`9a55771`）：pre-commit 的外掛檢查（Cards、Capture、Mindboard，完整與相關測試）都在副本跑。backlog 那一列刪掉。
+11. 第 1～4 項的測試：Windows 本機（Git for Windows 的 sh）在改到共用輸入的 commit 的 pre-commit 都跑過，另外也單獨跑過；Linux 在 CI 的 cards job 跑過。
+12. `main` 沒有必過檢查：`gh api repos/kuohappiness/Essence-Cards/branches/main/protection` 回 404「Branch not protected」，`rules/branches/main` 回 `[]`（2026-11-17）。之後要設時只設 gate（quality.md〈檢查指令〉）。
+13. L2：第一輪 Codex（2026-11-18，`b8396a6`）回報 R1～R6，都成立：R3 記成已知的限制，其餘修了（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)）。第二輪 Codex（2026-11-18，`5503513`）核對 R1～R6 的修正都通過，新報 R7（延續 R1：取出時套用 `.gitattributes` 的轉換）；使用者選修並送第三輪，修了。第三輪 Codex（2026-11-18，`c3aa6eb`）確認 R7 已修，新報 R8（R7 修正引入：只差大小寫的路徑寫成同一個檔）；使用者選修並送第四輪，修了。第四輪 Codex（2026-11-18，`2255c56`）確認 R8 已修、沒有擋合併的發現，另報不擋合併的 R9（回歸測試用作業系統猜暫存資料夾分不分大小寫），只改測試、已修（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第四輪〉）。第二～四輪都由使用者轉交：上面第 13 項的「再審照試行由 Claude 用 codex exec 送」是在分支開工後才寫進 main（11898ab），合併 main 時才看到，這件沒用上。
+14. 合併後才做：還沒做。
+
+**另外看到的**：
+
+- 新開的 Windows worktree 取出的 `docs/syntax.md` 是 CRLF，Cards 的 deck 測試會失敗（原本就有的情況，探針 worktree 又遇到一次）；把工作檔轉成 LF 後通過。§10 之後 pre-commit 的副本一律取出成 LF，commit 不再受影響；自己在工作樹跑 `npm run check` 時還是要轉。
+- CI 每個 job 都有 GitHub 的警告：`actions/checkout@v4`、`actions/setup-node@v4` 用的 Node.js 20 已經停止支援。`main` 原本就有，不在這一步改。
+
+延後的測試：無（第 1～4 項的測試在 Windows 本機與 CI 的 Linux 都跑過；檔名有換行那一例只在 Linux 跑，CI 通過。第 14 項是合併後的步驟，不是延後的測試）。
 
 ## 第一批的紀錄
 
@@ -258,6 +347,7 @@ D-208 第 5 點：第二步（Cards 搬家）開工前，用這些紀錄核對�
 
 | 日期 | 種類 | 發生了什麼 | 省下或花掉 | 出處 |
 |---|---|---|---|---|
+| 2026-11-17 | 共用檢查省下的步驟 | 第一步一次設好共用檢查（文件、金鑰、本機路徑、skill 兩份一致、外掛之間不 import、進度白板讀得出來）、分派表、兩個 hook 與 CI 的 gate；Capture、Mindboard 寫第一行程式前就有。舊 `Essence-Capture` repo 從沒設過 hook 與 CI | 分開的 repo 要在 Capture、Mindboard 各設一次 hook、CI、金鑰與本機路徑掃描、文件檢查，之後改規則也要改兩三處；這裡改一次就生效 | 這份任務說明〈結果〉 |
 
 ## 附錄 A：〈repo 結構〉的草稿
 

@@ -1,40 +1,14 @@
 #!/bin/sh
 set -eu
 
-if [ ! -d node_modules ]; then
-  echo '先執行 npm install' >&2
+# core.hooksPath 被改成另一個 checkout 的絕對路徑時（開 worktree 的工具會這樣改），轉給這個 worktree 自己的 hook，
+# 新舊分支的 hook 才不會混用（tasks/one-repo-step-1.md〈平台事實〉）。
+own="$(git rev-parse --show-toplevel)/.githooks/pre-commit"
+if [ -f "$own" ] && ! cmp -s "$0" "$own"; then exec sh "$own" "$@"; fi
+
+# 邏輯在 tools/hooks.ts（D-208 第一步 §3）：照分派表（tools/dispatch.ts）決定跑哪些外掛的檢查，共用檢查每次都跑。
+if [ ! -d tools/node_modules ]; then
+  echo '先在 tools/ 執行 npm ci（共用檢查的相依）' >&2
   exit 1
 fi
-# 文件檢查每次都跑，讀暫存區（D-141）；程式檢查只在程式相關的檔案有變動時跑。
-node tools/check-docs.ts --staged
-# 金鑰也每次都掃，只掃這次暫存的檔：repo 公開，只改文件的 commit 也會直接推上 main（第二次里程碑檢查 R4）。
-node tools/secretlint.mjs --staged
-# 本機路徑也每次都掃（帳號名、iCloud 雲碟、vault 名稱；第二次里程碑檢查 R5），commit 訊息由 commit-msg 掃。
-node tools/check-local-paths.ts --staged
-staged=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD)
-# 暫存區上面讀完了。測試與工具會在暫存資料夾跑 git，hook 繼承的 GIT_DIR、GIT_INDEX_FILE 等會讓它們改到這個 repo
-# （2026-10-29：測試的 git init 把共用 .git/config 的 core.bare 改成 true，所有 worktree 都不能用）。
-# shellcheck disable=SC2046
-unset $(git rev-parse --local-env-vars)
-if printf '%s\n' "$staged" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
-  # 測試改用 dot reporter：通過的只印一個點，失敗的照常印出，exit code 照常傳回。AI 讀 commit 的輸出要花 token，
-  # 原本約 4.2 萬字（外掛架構檢查環節 9 的 Q2）。手動跑與 CI 不變。
-  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--test-reporter=dot" npm run check
-  exit 0
-fi
-# 只改文件時，測試會讀的檔案（例如 syntax.md 的範例）有變動，就跑寫到它路徑的那幾個測試檔（2026-10-29 b63c1bb 讓 CI 紅了）。
-# 通過時只印一行。
-tests=$(printf '%s\n' "$staged" | while IFS= read -r path; do
-  [ -n "$path" ] || continue
-  grep -rlF --include='*.test.ts' -e "$path" tests || true
-  # 嵌進 main.js 的規則檔路徑寫在 rules.ts，測試只寫到其中一份；改哪一份都跑規則的測試（第二次里程碑檢查 R8）。
-  if grep -qF -e "'$path'" src/core/ai/rules.ts; then echo tests/ai-rules.test.ts; fi
-done | sort -u)
-[ -n "$tests" ] || exit 0
-# 測試檔的路徑沒有空白，照空白拆開。
-# shellcheck disable=SC2086
-if ! out=$(node --test --test-concurrency=1 --test-reporter=dot $tests 2>&1); then
-  printf '%s\n' "$out" >&2
-  exit 1
-fi
-echo "讀到這次文件的測試通過：$(echo $tests)"
+exec node tools/hooks.ts pre-commit

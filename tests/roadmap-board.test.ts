@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parseRoadmap, renderBoard } from '../tools/roadmap-board.ts';
+import { fileURLToPath } from 'node:url';
+import { ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRoadmap, renderBoard } from '../tools/roadmap-board.ts';
 
 const SAMPLE = `# 標題
 
@@ -101,4 +106,65 @@ void test('頁面：等你排最前、有版本與待發布數；不帶出本機
   assert.match(findPrivate('寫到 C:\\Users\\someone\\x') ?? '', /本機路徑/);
   assert.match(findPrivate('聯絡 someone@example.com') ?? '', /電子郵件/);
   assert.equal(findPrivate('12345+bot@users.noreply.github.com'), null);
+});
+
+// D-208 第一步 §8：外掛的 roadmap（自編的，放在暫存資料夾）。
+const PLUGIN_SAMPLE = `# Mindboard 路線圖
+
+## 現在在哪裡
+
+| 工作 | 狀態 | 下一步 | 等誰 |
+|---|---|---|---|
+| 畫布 | 規畫中 | 看[任務](../tasks/canvas.md)、[本頁](#現在在哪裡) | 使用者 |
+`;
+const MINDBOARD = 'plugins/mindboard/docs/roadmap.md';
+
+void test('§8 外掛的 roadmap：只讀現在在哪裡，名稱前加外掛名，連結以它自己的資料夾為準', () => {
+  const [work] = parsePluginWorks(PLUGIN_SAMPLE, MINDBOARD);
+  assert.equal(work.name.text, 'Mindboard｜畫布');
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/plugins\/mindboard\/tasks\/canvas\.md"/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/plugins\/mindboard\/docs\/roadmap\.md#/);
+  // 同樣的寫法在最上層指回最上層的位置。
+  const [top] = parseRoadmap(SAMPLE.replace('../tasks/x.md', '../tasks/canvas.md')).works;
+  assert.match(top.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/tasks\/canvas\.md"/);
+  // 外掛的 roadmap 少了必要的欄照樣報出行號。
+  assert.throws(() => parsePluginWorks(PLUGIN_SAMPLE.replace('| 等誰 |', '|').replace('|---|---|---|---|', '|---|---|---|').replace(' | 使用者 |', ' |'), MINDBOARD),
+    (error: unknown) => error instanceof RoadmapError && error.line === 5 && error.message.includes('等誰'));
+});
+
+void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析、不產生網頁，寫壞的外掛 roadmap 報檔案與行號；--staged 讀暫存區；私人資訊也擋', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-roadmap-board-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const script = fileURLToPath(new URL('../tools/roadmap-board.ts', import.meta.url));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  const put = async (path: string, text: string) => {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  };
+  const board = (...args: string[]) => execFileSync(process.execPath, [script, '--root', root, ...args], { encoding: 'utf8', stdio: 'pipe', env });
+  await put(ROADMAP, SAMPLE);
+  await put(MINDBOARD, PLUGIN_SAMPLE);
+  await put('plugins/capture/docs/backlog.md', '# 沒有 roadmap 的外掛不讀\n');
+  assert.match(board('--check'), /進度白板讀得出來：docs\/roadmap\.md、plugins\/mindboard\/docs\/roadmap\.md/);
+  await assert.rejects(access(join(root, '_site')), { code: 'ENOENT' });
+  board('--out', 'out/board.html');
+  const html = await readFile(join(root, 'out/board.html'), 'utf8');
+  assert.match(html, /<span class="wname">Mindboard｜畫布<\/span>/);
+  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
+  // 寫壞的外掛 roadmap：--check 報檔案與行號。
+  const broken = PLUGIN_SAMPLE.replace('| 工作 | 狀態 | 下一步 | 等誰 |', '| 工作 | 狀態 | 下一步 | 卡在 |');
+  await put(MINDBOARD, broken);
+  assert.throws(() => board('--check'), (error: { status: number; stderr: string }) =>
+    error.status === 1 && error.stderr.includes(`${MINDBOARD}:5  「現在在哪裡」的表格少了「等誰」這一欄`));
+  // --staged：工作樹修好了、暫存區還是壞的照樣擋。
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, stdio: 'pipe' });
+  git('init', '-q');
+  git('add', '--', ROADMAP, MINDBOARD);
+  await put(MINDBOARD, PLUGIN_SAMPLE);
+  assert.match(board('--check'), /讀得出來/);
+  assert.throws(() => board('--check', '--staged'), (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes(`${MINDBOARD}:5`));
+  // --check 也查白板會不會帶出私人資訊（Pages 產生時同樣會擋）。信箱是自編的，拆開寫本檔才不會被掃到。
+  await put(MINDBOARD, PLUGIN_SAMPLE.replace('| 使用者 |', '| 使用者 ' + 'someone' + '@' + 'example.com |'));
+  assert.throws(() => board('--check'), (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes('白板會帶出電子郵件'));
 });

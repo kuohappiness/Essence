@@ -12,7 +12,8 @@ try {
 } catch { process.exit(0); }
 
 const [last] = Array.isArray(runs) ? runs : [];
-if (!last || !['failure', 'timed_out', 'startup_failure'].includes(last.conclusion)) process.exit(0);
+// cancelled 也提醒：被取消的 run 證明不了 main 是綠的（D-208 第一步 §4：要跑的 job 被取消時 gate 不一定跑完）。
+if (!last || !['failure', 'timed_out', 'startup_failure', 'cancelled'].includes(last.conclusion)) process.exit(0);
 const context = `GitHub Actions 在 main 最近一次跑完沒通過（${last.conclusion}）：${String(last.headSha).slice(0, 7)}「${last.displayTitle}」，${last.createdAt}，${last.url}。`
   + '開始其他工作前先用 gh run view <id> --log-failed 看原因：能修就修，不能修就告訴使用者（docs/agents/quality.md〈檢查指令〉）。';
 console.log(JSON.stringify({
