@@ -223,7 +223,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
 10. §10 量到的數字與結論寫進 backlog。
 11. Windows 本機與 CI 的 Linux 都跑過第 1～4 項的測試（本機是 Git for Windows 的 sh）。
 12. `main` 的必過檢查查過，結果寫進〈結果〉（§4）。
-13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。
+13. 合併前 L2：新開的 Codex session，審查請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-1-review.md`。第二輪起的再審照[試行](auto-codex-rereview-trial.md)由 Claude 用 `codex exec` 送，第一輪照舊由使用者轉交。
 14. 合併後：先更新主資料夾（共用的 `core.hooksPath` 常指到它，舊版的 hook 不會轉交，L2 R3）；主資料夾與每個 worktree 在 `tools/` 跑一次 `npm ci`，確認 `git config core.hooksPath` 是相對的 `.githooks`；Pages 的 Progress board 跑成功、兩個網址打得開；舊 `Essence-Capture` repo 的入口改好（§5）。
 
 ## 平台事實
@@ -327,7 +327,7 @@ D-208 第 4 點：進度白板從各外掛的 roadmap 產生。外掛的 roadmap
     - 結論：可行、多花的時間不大，改成預設（`9a55771`）：pre-commit 的外掛檢查（Cards、Capture、Mindboard，完整與相關測試）都在副本跑。backlog 那一列刪掉。
 11. 第 1～4 項的測試：Windows 本機（Git for Windows 的 sh）在改到共用輸入的 commit 的 pre-commit 都跑過，另外也單獨跑過；Linux 在 CI 的 cards job 跑過。
 12. `main` 沒有必過檢查：`gh api repos/kuohappiness/Essence-Cards/branches/main/protection` 回 404「Branch not protected」，`rules/branches/main` 回 `[]`（2026-11-17）。之後要設時只設 gate（quality.md〈檢查指令〉）。
-13. L2：第一輪 Codex（2026-11-18，`b8396a6`）回報 R1～R6，都成立：R3 記成已知的限制，其餘修了（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)）。第二輪 Codex（2026-11-18，`5503513`）核對 R1～R6 的修正都通過，新報 R7（延續 R1：取出時套用 `.gitattributes` 的轉換）；使用者選修並送第三輪，修了。第三輪 Codex（2026-11-18，`c3aa6eb`）確認 R7 已修，新報 R8（R7 修正引入：只差大小寫的路徑寫成同一個檔）；使用者選修並送第四輪，修了。第四輪 Codex（2026-11-18，`2255c56`）確認 R8 已修、沒有擋合併的發現，另報不擋合併的 R9（回歸測試用作業系統猜暫存資料夾分不分大小寫），只改測試、已修（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第四輪〉）。
+13. L2：第一輪 Codex（2026-11-18，`b8396a6`）回報 R1～R6，都成立：R3 記成已知的限制，其餘修了（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)）。第二輪 Codex（2026-11-18，`5503513`）核對 R1～R6 的修正都通過，新報 R7（延續 R1：取出時套用 `.gitattributes` 的轉換）；使用者選修並送第三輪，修了。第三輪 Codex（2026-11-18，`c3aa6eb`）確認 R7 已修，新報 R8（R7 修正引入：只差大小寫的路徑寫成同一個檔）；使用者選修並送第四輪，修了。第四輪 Codex（2026-11-18，`2255c56`）確認 R8 已修、沒有擋合併的發現，另報不擋合併的 R9（回歸測試用作業系統猜暫存資料夾分不分大小寫），只改測試、已修（[報告與回應](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>)〈第四輪〉）。第二～四輪都由使用者轉交：上面第 13 項的「再審照試行由 Claude 用 codex exec 送」是在分支開工後才寫進 main（11898ab），合併 main 時才看到，這件沒用上。
 14. 合併後才做：還沒做。
 
 **另外看到的**：
