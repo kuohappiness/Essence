@@ -24,7 +24,9 @@
 - **本機**（電腦要開著）：要 Codex 查核的（L2、開工前的格式查核、討論稿、bug 從頭查、里程碑檢查）；碰 Obsidian、測試或正式 vault、備份工具、iPhone 測試準備的；只有 Windows 才有的問題。
 - **雲端**（電腦可以關）：其餘的，例如不屬高風險範圍的程式、文件與規劃、不碰 Obsidian 的試作場與研究。在本機 session 遇到這類任務，開工前提醒使用者可以改到雲端做。
 - 雲端做到一半發現要本機：推分支，在任務說明寫下進度與下一步，提醒使用者回本機接手。
-- 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備（設 `core.hooksPath`、在 CI 用到的四個資料夾 `npm ci`）。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
+- 雲端 session 照它自己的規則只推自己的 `claude/` 分支，不直接推 `main`（只改文件也一樣）；做完開 PR 合併。
+- 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備：設 `core.hooksPath`、淺層 clone 沒有的 git tag 補抓（跨版本測試要用）、PATH 上的 Node 低於 24 時改用映像裡 `/opt/node24`、在 CI 用到的資料夾 `npm ci`（沒有相依的跳過）。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
+- 雲端 session 不會回報給本機，本機 session 的工具也讀不到它的對話：要本機接著做時，請使用者給它的 `claude.ai/code/…` 網址，用內建瀏覽器讀（窗格要登入 claude.ai）。
 
 ## 檢查指令
 

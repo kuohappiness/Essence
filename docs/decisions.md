@@ -6119,7 +6119,7 @@
 2. **模型與推理等級的預設**寫在腳本，個別請求可以另外指定：L2（含再審）、開工前格式查核、討論稿、里程碑檢查用 gpt-6.2-sol、high；bug 從頭查用 gpt-6.2-sol、xhigh；卡關的最後一步用 gpt-6.2-astra、low（必要時 medium），先問使用者再跑。要跑測試重現的類型用 workspace-write 沙箱（和之前在 Codex App 裡一樣），格式查核與討論稿用唯讀。使用者自己的 Codex 全域預設不動。
 3. **每次呼叫後，回覆末端附一行**：這一輪的 token、5 小時與週額度剩多少、週額度的重置時間（腳本從 Codex 的 session 紀錄讀）。
 4. **任務開始時判斷在本機或雲端做，整件在同一邊**：需要 Codex 查核的（L2、格式查核、討論稿、bug 從頭查、里程碑檢查），或碰 Obsidian、vault、備份工具、iPhone 測試準備、只有 Windows 才有的問題，在本機做；其餘（不屬高風險範圍的程式、文件與規劃、不碰 Obsidian 的試作場與研究）建議在雲端做，Claude 在任務開始時主動提醒。雲端做到一半發現要 Codex 查核：推分支、在任務說明寫下進度，提醒使用者回本機接手。
-5. **雲端 session 的環境**：`.claude/hooks/cloud-setup.mjs`（SessionStart，只在 `CLAUDE_CODE_REMOTE=true` 時跑）設 `core.hooksPath`，並在 CI 用到的四個資料夾跑 `npm ci`；Node 低於 24 時提醒。
+5. **雲端 session 的環境**：`.claude/hooks/cloud-setup.mjs`（SessionStart，只在 `CLAUDE_CODE_REMOTE=true` 時跑）設 `core.hooksPath`，並在 CI 用到的四個資料夾跑 `npm ci`；Node 低於 24 時提醒。2026-11-19 第一次雲端實測後補：淺層 clone 沒有 git tag，16 個跨版本測試失敗，改成補抓 tag；PATH 上是 Node 22、映像另有 `/opt/node24`，改成換過去；沒有相依的外掛不跑 `npm ci`（[quality.md〈本機或雲端〉](agents/quality.md#本機或雲端)）。
 6. **會影響做法的記憶搬進 repo**：雲端 session 讀不到本機的記憶。全專案都要的寫進 `AGENTS.md`（給使用者的回覆用繁體中文、任務開始時判斷本機或雲端）；某類工作才要的寫進對應的 skill 或 `docs/agents/`；只跟這台電腦有關的（本機路徑、iCloud、Windows 的怪癖）留在記憶，不放進公開的 repo。
 7. **GitHub 上的 Codex 審查當補充**：使用者在 Codex 設定頁打開 Essence 的自動審查；`AGENTS.md` 加〈Code Review Rules〉，寫用繁體中文和哪些算嚴重。它只標 P0、P1，不能選模型與等級，不取代 L2。
 
