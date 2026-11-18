@@ -8,7 +8,7 @@ import { createObsidianStub, type ObsidianStub } from './helpers/obsidian.ts';
 // 寫入本身在 deck-status.test.ts 測（真的 createState），這裡看：開著的筆記走編輯器、有沒存的修改不寫、提示的字。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({
-  absWorkingDir: root, stdin: { contents: "export { changeDeckStatus } from './src/obsidian/deck-status.ts';", resolveDir: root, loader: 'ts' },
+  absWorkingDir: root, stdin: { contents: "export { changeDeckStatus, activateDeck } from './src/obsidian/deck-status.ts';", resolveDir: root, loader: 'ts' },
   bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false,
   external: ['obsidian', '@codemirror/state', '@codemirror/view'],
 })).outputFiles[0].text;
@@ -28,17 +28,18 @@ const TIPS = {
 type Result = { kind: string; reason?: string; error?: unknown };
 interface Module {
   changeDeckStatus: (app: unknown, state: unknown, path: string, value: string, onError: (error: unknown) => void) => Promise<string | null>;
+  activateDeck: (app: unknown, state: unknown, path: string, onError: (error: unknown) => void) => Promise<string | null>;
 }
-interface Fake { stub: ObsidianStub; run: (result?: Result) => Promise<string | null>; calls: { path: string; value: string; editor: { path: string; text(): string | null } | null }[]; errors: unknown[] }
+interface Fake { stub: ObsidianStub; module: Module; run: (result?: Result) => Promise<string | null>; calls: { path: string; value: string; editor: { path: string; text(): string | null } | null }[]; errors: unknown[] }
 
 function setup(): Fake {
   const stub = createObsidianStub();
   stub.texts.set(DECK, TEXT);
-  const { changeDeckStatus } = stub.load<Module>(code);
+  const module = stub.load<Module>(code);
   const calls: Fake['calls'] = [], errors: unknown[] = [];
   return {
-    stub, calls, errors,
-    run: (result = { kind: 'done', added: 0 } as Result) => changeDeckStatus(stub.app, {
+    stub, module, calls, errors,
+    run: (result = { kind: 'done', added: 0 } as Result) => module.changeDeckStatus(stub.app, {
       setDeckStatus(path: string, value: string, editor: Fake['calls'][number]['editor']) { calls.push({ path, value, editor }); return Promise.resolve(result); },
     }, DECK, '暫停', error => { errors.push(error); }),
   };
@@ -80,6 +81,36 @@ void test('換行不同不算沒存的修改：檔案是 CRLF，編輯器一律 
   openNote(h, TEXT);
   assert.equal(await h.run(), null);
   assert.equal(h.calls.length, 1);
+});
+
+// Windows 實機（2026-11-18，0.6.0 第 3 關的準備）：草稿開在閱讀模式按「啟用」，寫進隱藏的編輯器、磁碟沒改，
+// 第一次「剛剛改過」、之後每次「還沒存進去的修改」。和引言框的「加入」同一個原因（intro-run-wiring 的 openTab）。
+/** 開著這一篇的分頁，指定編輯或閱讀模式；editor 是（隱藏的）編輯器裡的文字。 */
+function openTab(h: Fake, editor: string, mode: 'source' | 'preview'): void {
+  openNote(h, editor);
+  (h.stub.leaves.at(-1)!.view as { mode: string }).mode = mode;
+}
+
+void test('只開在閱讀模式的草稿按「啟用」：走檔案，隱藏的編輯器比磁碟舊也不算還沒存進去', async () => {
+  const h = setup();
+  const draft = TEXT.replace('啟用', '草稿');
+  h.stub.texts.set(DECK, draft);
+  // 隱藏的編輯器不跟著磁碟重讀：還是「加入」之前的字。
+  openTab(h, draft + '> [!note]- 候選卡片\n> - 還沒加入 ^cand01\n', 'preview');
+  const calls: unknown[] = [];
+  const activateDraft = (path: string, editor: unknown): Promise<Result> => { calls.push([path, editor]); return Promise.resolve({ kind: 'done' }); };
+  assert.equal(await h.module.activateDeck(h.stub.app, { activateDraft }, DECK, () => {}), null);
+  assert.deepEqual(calls, [[DECK, null]]);
+});
+
+void test('暫停、恢復也一樣：閱讀模式的分頁不算開著；另有開在編輯模式的分頁才走編輯器', async () => {
+  const h = setup();
+  openTab(h, TEXT, 'preview');
+  assert.equal(await h.run(), null);
+  assert.equal(h.calls[0].editor, null);
+  openTab(h, TEXT, 'source');
+  assert.equal(await h.run(), null);
+  assert.equal(h.calls[1].editor?.path, DECK);
 });
 
 void test('還沒載入的分頁不是編輯器：走檔案', async () => {
