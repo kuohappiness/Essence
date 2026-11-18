@@ -1,12 +1,12 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；B 另等〈待使用者決定〉第 1 題
+狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；B 另等〈待使用者決定〉第 1 題
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../docs/agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
 依據：[D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 1、2、4、8、9、10 點；[第一步的任務說明](one-repo-step-1.md)（做法、〈結果〉、〈第一批的紀錄〉）；[architecture.md〈repo 結構〉](../docs/architecture.md#9-repo-結構-d-208)的目標圖；使用者 2026-11-18：`0.6.0` 裝好、iPhone 驗完就是穩定基線，搬家排在 AI 製卡第 4、5 批之前（[roadmap](../docs/roadmap.md#現在在哪裡)「三個外掛的 repo 架構」）。相關：[D-006](../docs/decisions.md#d-006-兩個獨立外掛)、[D-110](../docs/decisions.md#d-110-v1-外掛的程式結構)（第二步生效）、[D-117](../docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)、[D-143](../docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)、[D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-195](../docs/decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)、[D-212](../docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)。
 
-這一步分兩個 PR：**A 程式**（`src/`、`tests/`、Cards 的工具與設定搬進 `plugins/cards/`）先合併，**B 文件**（Cards 的文件、任務與討論稿搬進 `plugins/cards/`，三份共用文件逐段拆開）接著做。A 碰正式 vault 的工具，要穩定基線與演練；B 只改文件與讀文件的工具。兩個分開，A 的 L2 只看程式，停手改文件的時間也只到 B 的最後一段（〈停手時段〉）。
+這一步分兩個 PR：**A 程式**（`src/`、`tests/`、Cards 的工具與設定搬進 `plugins/cards/`）先合併，**B 文件**（Cards 的文件、任務與討論稿搬進 `plugins/cards/docs/`，留在最上層的任務與討論稿搬進 `docs/`（D-213），三份共用文件逐段拆開）接著做。A 碰正式 vault 的工具，要穩定基線與演練；B 只改文件與讀文件的工具。兩個分開，A 的 L2 只看程式，停手改文件的時間也只到 B 的最後一段（〈停手時段〉）。
 
 **不在這一步**：外掛 ID（`essence-cards`）、tag 的寫法（`v<版號>`）、Cards 寫進 vault 的任何格式、產品程式的行為（A 的 `src/` 一行都不改，驗收第 A2 項）；Capture、Mindboard 的程式；給別人裝的公開 repo 與發布流程（D-208 第 10 點）；Capture 要不要回 v1（D-206）。
 
@@ -100,7 +100,7 @@
 | 順序 | 路徑 | 對象 |
 |---|---|---|
 | 1 | gitlink（子模組） | 擋下 |
-| 2 | `plugins/cards/` 底下：`.md`，以及 `docs/`、`tasks/`、`Claude Codex Discussion/` 底下的檔 | Cards 相關測試 |
+| 2 | `plugins/cards/` 底下：`.md`，以及 `docs/` 底下的檔（任務與討論稿也在裡面，D-213） | Cards 相關測試 |
 | 3 | `plugins/cards/` 底下其他的檔 | Cards 完整 |
 | 4 | `plugins/capture/`、`plugins/mindboard/` 底下 | 那個外掛完整 |
 | 5 | `plugins/` 底下其他的 | 全部 |
@@ -223,14 +223,14 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 ### B0 開工條件
 
 1. A 已合併；〈待使用者決定〉第 1 題有答案。
-2. 用腳本產生**文件清單**（D-208 第 8 點「先列舊路徑、新路徑與引用處」），commit 進這份說明的附錄，再搬；清單是當下 `main` 的實況，所以在 B 開工時產生，不在這裡先寫死。每一份要搬的檔（或三份拆開的文件的每一段）一列：舊路徑、新路徑、搬法（整份 `git mv`、逐段拆出）、歸屬的理由，以及每一個引用處（來源檔:行、連到的錨點）。引用處除了 Markdown 連結，也含工具裡寫死的路徑（例如 `tools/check-docs.ts` 的 `BEFORE_D195` 與例外清單裡的 `tasks/w6-format-review-fixes.md`、`tasks/docs-architecture.md`、測試讀的路徑、`rules.ts` 的表）。
+2. 用腳本產生**文件清單**（D-208 第 8 點「先列舊路徑、新路徑與引用處」），commit 進這份說明的附錄，再搬；清單是當下 `main` 的實況，所以在 B 開工時產生，不在這裡先寫死。每一份要搬的檔（或三份拆開的文件的每一段）一列，留在最上層的任務與討論稿也列（新路徑是 `docs/tasks/…`、`docs/Claude Codex Discussion/…`，D-213；這份說明自己也在內）：舊路徑、新路徑、搬法（整份 `git mv`、逐段拆出）、歸屬的理由，以及每一個引用處（來源檔:行、連到的錨點）。引用處除了 Markdown 連結，也含工具裡寫死的路徑（例如 `tools/check-docs.ts` 的 `BEFORE_D195` 與例外清單裡的 `tasks/w6-format-review-fixes.md`、`tasks/docs-architecture.md`、測試讀的路徑、`rules.ts` 的表）。
 3. D-208 第 9 點說例外只限「本 D-ID 所連遷移任務列出的路徑」：D-208 的第 8 點後面加一個連到這份說明的連結（只加連結，不改決定的內容）。
 
 ### B1 歸屬規則
 
 - **最上層留**：`docs/decisions.md`、`docs/progress-map.md`、`docs/agents/`、`docs/ai-models.md`、`docs/archive/`、`docs/roadmap.md`（改成入口）、`docs/backlog.md`（只留跨外掛的：共用工具的技術債與已知的限制、repo 結構）、`docs/architecture.md` 與 `docs/product.md` 的共用段落（§B2）。
 - **搬到 `plugins/cards/docs/`**：`syntax.md`（§1 照〈待使用者決定〉第 1 題）、`question-types.md`、`card-rules/`、`research/`、Cards 的 `plans/`、Cards 的 roadmap 與 backlog、`product.md` 與 `architecture.md` 的 Cards 段落。
-- **任務、討論稿、規畫**：只講 Cards 的產品、程式、製卡規則、發布或實機測試的 → `plugins/cards/` 的同名資料夾；開發流程、品質流程、文件架構、repo 結構、AI 協作、三個外掛共同的規畫 → 最上層；兩邊都有或判不出的 → 留最上層（之後再搬只要一個 commit，搬錯要改連結）。2026-11-19 看起來留最上層的：`tasks/` 的 `agents-md-rewrite`、`archive-principles`、`auto-codex-rereview-trial`、`docs-architecture`、`local-folder-rename`、`one-repo-step-1*`、`one-repo-step-2*`、`roadmap-board`、`test-two-kinds-review`；討論稿的 `token-and-docs-workflow`、`code-quality-skill`、`docs-architecture`、`token-saving`、`fix-chains-and-rule-pruning`、`one-repo-three-plugins`、`future-plans-consolidation`、`one-repo-step-1-*`。其餘照規則在清單裡判。
+- **任務、討論稿、規畫**（位置照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)：都在 `docs/` 底下）：只講 Cards 的產品、程式、製卡規則、發布或實機測試的 → `plugins/cards/docs/` 底下的 `tasks/`、`Claude Codex Discussion/`、`plans/`；開發流程、品質流程、文件架構、repo 結構、AI 協作、三個外掛共同的規畫 → 最上層的 `docs/tasks/`、`docs/Claude Codex Discussion/`（規畫照舊在 `docs/plans/`）；兩邊都有或判不出的 → 留最上層（之後再搬只要一個 commit，搬錯要改連結）。2026-11-19 看起來留最上層的：`tasks/` 的 `agents-md-rewrite`、`archive-principles`、`auto-codex-rereview-trial`、`docs-architecture`、`local-folder-rename`、`one-repo-step-1*`、`one-repo-step-2*`、`roadmap-board`、`test-two-kinds-review`；討論稿的 `token-and-docs-workflow`、`code-quality-skill`、`docs-architecture`、`token-saving`、`fix-chains-and-rule-pruning`、`one-repo-three-plugins`、`future-plans-consolidation`、`one-repo-step-1-*`。其餘照規則在清單裡判。
 - `README.md`：最上層改成 Essence 的入口（三個外掛各一行、連到各自的 roadmap 與 AGENTS.md）；Cards 現在的內容搬成 `plugins/cards/README.md`。
 - `plugins/cards/AGENTS.md`（加一行的 `CLAUDE.md`）：照[第一步附錄 B](one-repo-step-1.md#附錄-b外掛的-agentsmd)的格式，加上最上層 `AGENTS.md` 裡只適用 Cards 的規則（例如「製卡規則的輸出格式要和 `docs/syntax.md` 一致」）。〈Code Review Rules〉留在最上層：GitHub 上的 Codex 審查讀不讀子資料夾的 AGENTS.md 沒驗過（〈平台事實〉），留在最上層一定讀得到。
 
@@ -251,18 +251,22 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 ### B3 讀文件的工具
 
-- `tools/check-docs.ts`：Cards 的任務對 `plugins/cards/docs/backlog.md`（現有的外掛規則已經這樣算）；`BEFORE_D195` 也放過 `plugins/cards/tasks/` 的同名舊任務（只放過清單上的檔名，其他外掛照查）；連結的例外清單（`tools/check-docs.ts:50-58` 寫死的 `tasks/w6-format-review-fixes.md`、`tasks/docs-architecture.md`）照 B0 清單的新路徑改。
+- `tools/check-docs.ts`：
+  - 狀態目錄（`STATUS_DIRS`）改成 `docs/tasks`、`docs/Claude Codex Discussion`、`docs/plans`，最上層與 `plugins/<外掛>/` 底下照舊共用這一份（D-213）；任務對 backlog：`docs/tasks/` 對最上層的 backlog，`plugins/<外掛>/docs/tasks/` 對那個外掛的 backlog，Cards 的任務因此對 `plugins/cards/docs/backlog.md`。
+  - `BEFORE_D195` 放過 `docs/tasks/` 與 `plugins/cards/docs/tasks/` 的同名舊任務（只放過清單上的檔名，其他外掛照查）；連結的例外清單（`tools/check-docs.ts:50-58` 寫死的 `tasks/w6-format-review-fixes.md`、`tasks/docs-architecture.md`）照 B0 清單的新路徑改。
+  - **擋舊位置**（D-213 第 4 點）：最上層或 `plugins/<外掛>/` 根目錄的 `tasks/`、`Claude Codex Discussion/` 底下有追蹤的檔就報錯，訊息寫新位置；B 搬檔的那個 commit 之後才生效（同一個 commit 加）。
+  - `tools/tests/check-docs.test.ts` 寫到這些路徑的案例（狀態行、外掛的任務、`BEFORE_D195`）改成新路徑，加擋舊位置的案例。
 - `tools/roadmap-board.ts`：正式 vault 的版本與「已完成」改從 `plugins/cards/docs/roadmap.md` 讀；最上層的 roadmap 只剩跨外掛的列與連到三份外掛 roadmap 的入口。
 - `tools/progress-board-data.ts`：待補測的列數加上 Cards 的 backlog，說明那句跟著改。
-- `tools/dispatch.ts`：登錄表照第 1 題改路徑；第 9 條（最上層的文件）照舊是 Cards 相關測試。
+- `tools/dispatch.ts`：登錄表照第 1 題改路徑；第 9 條（最上層的文件）照舊是 Cards 相關測試，拿掉已經搬進 `docs/` 的 `tasks/`、`Claude Codex Discussion/`（之後在舊位置出現的檔落第 10 條「全部」，文件檢查也會擋）；對應的案例跟著改。
 - `.github/workflows/progress-board.yml`：觸發路徑加 `plugins/*/docs/backlog.md`、`plugins/cards/docs/progress-map.md`（若有）。
 - Cards 的測試讀文件的路徑改回相對 Cards 的 `../docs/…`。
-- `.claude/skills/`、`.agents/skills/` 寫到 Cards 文件路徑的地方（例如 essence-decision 的 syntax.md）兩份一起改。
+- `.claude/skills/`、`.agents/skills/` 寫到 Cards 文件路徑或 `tasks/`、`Claude Codex Discussion/` 的地方（例如 essence-decision 的 syntax.md、essence-discuss 的 `tasks/`）兩份一起改；`AGENTS.md`、`docs/agents/`、外掛的 `AGENTS.md` 寫到這兩個資料夾的句子也改（例如 AGENTS.md〈AI 協作分工〉的討論稿位置）。
 
 ### B4 收尾
 
 - `docs/architecture.md` §9：兩張圖合成一張（第二步之後），〈每一類放哪裡〉照實際；`AGENTS.md`〈開始工作前〉的「先讀 `docs/roadmap.md`」改成先讀最上層的入口，做 Cards 時讀 `plugins/cards/AGENTS.md`。
-- 合併後：本機記憶裡寫到 Cards 文件路徑的條目跟著改；roadmap 的已完成寫一列；技術債「外掛只改文件也跑完整檢查」刪掉 Cards 的部分（Capture、Mindboard 照舊）。
+- 合併後：本機記憶裡寫到 Cards 文件路徑或 `tasks/`、`Claude Codex Discussion/` 的條目跟著改；roadmap 的已完成寫一列；技術債「外掛只改文件也跑完整檢查」刪掉 Cards 的部分（Capture、Mindboard 照舊）。
 
 ## 驗收
 
@@ -296,8 +300,9 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 4. 分派表：改 `plugins/cards/docs/syntax.md` 選到寫到它的 Cards 測試（含經 helper 的，不是空的）；改最上層的轉錄稿格式（照第 1 題）分派到 Capture 的完整檢查、選到 Cards 真的讀它的測試。Capture 的檢查現在只印一行；Capture 寫、Cards 讀的共用範例與已部署讀端的相容檢查留給第一個需要共同規格的 Capture 任務（D-208 第 6 點）。
 5. **已完成的文件只改了連結**：清單上每一份搬走的已完成任務、討論稿與規畫，搬前搬後比對：狀態行相同，把連結目標換成同一個佔位字串之後全文相同。
 6. 進度白板：合併前本機產生三個頁面核對；合併後 Pages 跑成功；`roadmap.html` 有 Cards 的列與正式 vault 的版本；`progress-map` 的待補測數含 Cards 的 backlog；手機寬度（375px）照 [roadmap-board 任務](roadmap-board.md)看一次。
-7. `plugins/cards/tasks/` 的舊任務（`w3.md` 等）照舊被 `BEFORE_D195` 放過；Mindboard 的同名任務照查（第一步的測試照留）。
-8. 合併前 L2（B 改到分派表與文件檢查）。
+7. `docs/tasks/` 與 `plugins/cards/docs/tasks/` 的舊任務（`w3.md` 等）照舊被 `BEFORE_D195` 放過；Mindboard 的同名任務照查（第一步的測試照留）。
+8. **都在 `docs/` 底下**（D-213）：`git ls-files tasks "Claude Codex Discussion" "plugins/*/tasks" "plugins/*/Claude Codex Discussion"` 是空的；暫存 repo 在這四種舊位置各新增一個檔，文件檢查都擋下、訊息有新位置，`docs/tasks/` 與 `plugins/capture/docs/tasks/` 的照常查狀態行。
+9. 合併前 L2（B 改到分派表與文件檢查）。
 
 ## 平台事實
 

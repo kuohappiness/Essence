@@ -384,7 +384,7 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
 ├─ .claude/、.agents/            權限、hook、skill（三個外掛共用）
 ├─ .githooks/、.github/          commit 與 CI：照分派表只檢查改到的外掛
 ├─ docs/                         共用的文件，加上 Cards 自己的（第二步搬走）
-├─ tasks/、Claude Codex Discussion/   跨外掛的，加上 Cards 的（第二步搬走）
+├─ tasks/、Claude Codex Discussion/   跨外掛的，加上 Cards 的（第二步搬進 docs/ 與 plugins/cards/docs/，D-213）
 ├─ experiments/                  試作場
 ├─ tools/                        共用的檢查、分派表、hook 與 CI gate 的邏輯（有自己的 package.json），
 │                                加上 Cards 的工具（第二步搬走）
@@ -401,14 +401,14 @@ Essence/
 ├─ AGENTS.md、CLAUDE.md、README.md
 ├─ .claude/、.agents/、.githooks/、.github/
 ├─ docs/                         三個外掛共用：本檔（定位、接點、repo 結構）、轉錄稿格式、decisions.md、
-│                                progress-map.md、roadmap 的入口、agents/、ai-models.md、archive/
-├─ tasks/、Claude Codex Discussion/   只放跨外掛的
+│                                progress-map.md、roadmap 的入口、agents/、ai-models.md、archive/，
+│                                以及跨外掛的 plans/、tasks/、Claude Codex Discussion/（D-213）
 ├─ experiments/
 ├─ tools/                        跨外掛的檢查與進度網頁
 └─ plugins/
    ├─ cards/                     AGENTS.md、package.json、manifest.json、src/、tests/、tools/、
    │                             docs/（product、architecture、roadmap、backlog、syntax、question-types、
-   │                             card-rules、plans、research）、tasks/、Claude Codex Discussion/
+   │                             card-rules、plans、research、tasks、Claude Codex Discussion）
    ├─ capture/                   結構同上
    └─ mindboard/                 結構同上
 ```
@@ -434,15 +434,15 @@ Essence/
 | 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | `docs/agents/`；分派表 `tools/dispatch.ts` | 最上層 |
 | 功能地圖 | `docs/progress-map.md` | 最上層 |
 | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 | `docs/archive/` | 最上層 |
-| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態 | `tasks/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層，其餘各外掛 |
-| Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | `Claude Codex Discussion/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層，其餘各外掛 |
+| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態 | `tasks/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層的 `docs/tasks/`，其餘在各外掛的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
+| Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | `Claude Codex Discussion/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層的 `docs/Claude Codex Discussion/`，其餘在各外掛的 `docs/` 底下（D-213） |
 | 試作場：樣式稿、試作外掛與測試結果 | `experiments/` | 最上層 |
 | 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | Cards：`src/`、`tests/`、`tools/` 的 Cards 工具；共用的檢查：`tools/`（自己的 `package.json`）；其他外掛在自己的資料夾 | 各外掛；共用的檢查在最上層 `tools/` |
 
 ### 新文件放哪裡
 
 - 只和一個外掛有關，放那個外掛的資料夾；兩個以上或全專案的，放最上層。同一類資訊只放一處，其他地方用連結（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
-- 外掛的 `docs/`、`tasks/`、`Claude Codex Discussion/` 等第一份文件出現才建。
+- 外掛的 `docs/` 與裡面的資料夾，第一份文件出現才建。任務與討論稿在第二步的 B 之前照現在的位置寫（最上層或外掛的根目錄），B 一次搬進 `docs/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)）。
 - 決定一律寫進最上層的 `decisions.md`。
 - 已完成的任務、討論稿與規畫不搬（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；D-208 第 9 點的例外只限遷移任務列出的路徑。
 
