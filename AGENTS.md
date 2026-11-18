@@ -26,6 +26,7 @@
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
+- 判斷這件工作在本機還是雲端做；雲端做得了就提醒使用者改到雲端，分法見 `docs/agents/quality.md`〈本機或雲端〉（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）。
 - 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式、請 Codex 查核用 `code-quality`。
 
 ## 文件分工
@@ -39,7 +40,7 @@
 - roadmap 的「現在在哪裡」每件進行中的工作一列，不寫經過。
 - 做完的任務、討論稿與 plans 不刪不搬，只改標題下的狀態行（[D-143](docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 - 提到只在分支上的檔案時寫「分支 `x` 的 `path`（commit）」，不用相對連結。
-- 文件以繁體中文撰寫；英文名稱、程式識別字與必要引用保留原文。
+- 文件與給使用者的回覆（含進度短句、wrap_up、問題與按鈕）用繁體中文，commit 訊息照慣例用英文；英文名稱、程式識別字與必要引用保留原文（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）。
 
 ## AI 協作分工
 
@@ -53,6 +54,14 @@
 - AI 能測的由 AI 測；請使用者測之前，先說明 AI 為什麼測不了；需要 iPhone 實機的測試集中成一次。
 - 測試或功能要延後時，照 `docs/agents/quality.md`〈測試分兩類〉（[D-195](docs/decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）記進技術債表，不能只是沒做。
 - 規劃文件直接 commit 到 `main` 並 push；較大的程式改動開分支。
+
+## Code Review Rules
+
+給 GitHub 上的 Codex 審查讀，是合併前的補充，不取代 L2（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端) 第 7 點）。
+
+- 用繁體中文回覆。
+- 標成 P1：寫進使用者筆記的格式（`docs/syntax.md`）被改壞或舊版外掛讀不到、學習目標 ID 或複習紀錄遺失或重複、排程（FSRS 與紀錄重播）算錯、寫回筆記不冪等、金鑰或個人資料進了 repo。
+- 只改文件的 PR，看壞掉的連結、狀態行，以及和 `docs/decisions.md` 矛盾的地方。
 
 ## 改這份檔案
 

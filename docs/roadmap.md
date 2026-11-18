@@ -41,7 +41,7 @@ flowchart LR
 
 | 工作 | 範圍與入口 | 完成或開工條件 |
 |---|---|---|
-| v1 需要做的任務 | [產品定義 §5](product.md#5-範圍-第-7-步)、[任務入口](backlog.md#v1-需要做的任務)。W4～W6 後接 AI 製卡，照 D-111；Capture 移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；目前進度見上方「現在在哪裡」 | 能在 iPhone 完成段考範圍的每日複習；交付完整 HTML 使用說明書（D-048），說明學習目標 ID 與題目指紋；[技術債表](backlog.md#技術債)的「補測：」「補做：」清空（[D-195](decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）。v1 完工前（功能做完、開始真實使用驗證前）Claude 仍先問使用者：[產品路線](plans/learning-growth.md)要不要納入部分內容；[學習地圖的視覺化](plans/motivation.md#使用者提議把學習地圖做成有質感的視覺化)要不要做（使用者 2026-10-26 要求在 v1 正式結案前提醒） |
+| v1 需要做的任務 | [產品定義 §5](product.md#5-範圍-第-7-步)、[任務入口](backlog.md#v1-需要做的任務)。W4～W6 後接 AI 製卡，照 D-111；Capture 移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；目前進度見上方「現在在哪裡」 | 能在 iPhone 完成段考範圍的每日複習；交付完整 HTML 使用說明書（D-048），說明學習目標 ID 與題目指紋；[技術債表](backlog.md#技術債)的「補測：」「補做：」清空（[D-195](decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）。v1 完工前（功能做完、開始真實使用驗證前）Claude 仍先問使用者：[產品路線](plans/learning-growth.md)要不要納入部分內容；[學習地圖的視覺化](plans/motivation.md#使用者提議把學習地圖做成有質感的視覺化)要不要做（使用者 2026-10-26 要求在 v1 正式結案前提醒）；同時提醒整理說明書附錄的開發回顧時間軸（[D-099](decisions.md#d-099-文件精簡)） |
 | 真實使用驗證 | 一位學生、一次考試，依[成功標準](product.md#2-成功標準-第-1-步)與 D-075 記錄結果；不算 v1，也不算功能階段（[D-130](decisions.md#d-130-任務分成-v1-與第二階段) 補充）。舊決定稱「第 2 階段」 | v1 完工後開始；結果決定第二階段先做什麼 |
 | 第二階段想做的事 | [唯一清單](backlog.md#第二階段想做的事)，細項放 [docs/plans/](plans/README.md)，包括動機、題庫、內容深化、體驗、生態及獨立 App | 依驗證結果及使用者選擇排定要做的項目，再完成各自規格與驗收；列入不代表全部已採用或同版交付 |
 
@@ -55,6 +55,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-18 | Claude 改成直接呼叫本機 Codex：`npm run codex` 照類型帶模型與等級、每輪新開、回覆末端附 token 與額度，不再請使用者轉貼；任務開始時分本機或雲端，雲端的 hook 裝相依，會影響做法的記憶搬進 repo（[D-212](decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)） |
 | 2026-11-18 | 本機資料夾改名 `Essence` 完成：演練發現 app 的舊對話記著舊路徑、接不上，改成改名前收尾、交接寫進文件，用腳本改名並核對全部通過，新對話接手測試對得上（[D-211](decisions.md#d-211-本機資料夾也改名舊對話收尾後不接續)、[任務說明](../tasks/local-folder-rename.md)） |
 | 2026-11-18 | 三個外掛同一個 repo 的第一步合併進 `main`：建 `plugins/capture/`、`plugins/mindboard/`，commit 與 CI 照改到的路徑分派各外掛的檢查（gate 是唯一結論），共用檢查自己一份套件、外掛之間不 import；Codex L2 四輪（[PR #21](https://github.com/kuohappiness/Essence/pull/21)、[任務說明](../tasks/one-repo-step-1.md)） |
 | 2026-11-17 | AI 製卡第 3 批合併進 `main`：英文製卡與加深送孩子已有的單字（名稱去掉方向、粗體與最後的全形括號），製卡與加深畫面多一個點選填空的勾選、每科記在這台電腦，送出的提示改成 `提示 v4`、`加深 v2`；Codex L2 兩輪（[任務說明](../tasks/ai-cards-materials.md)、[PR #17](https://github.com/kuohappiness/Essence/pull/17)、[L2](<../Claude Codex Discussion/2026-11-17-ai-cards-materials-l2.md>)） |
@@ -64,4 +65,3 @@ flowchart LR
 | 2026-11-17 | 三個外掛改在同一個 repo 開發：Capture、Mindboard 寫第一行程式前先建 `plugins/`，Cards 等穩定基線再搬，repo 改名 `Essence` 另排時段；決定維持一份；Codex 查核兩輪（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） |
 | 2026-11-17 | AI 製卡第 1 批合併進 `main`：電腦的閱讀模式按引言框的「加入」，候選搬進同一篇，加進已有目標的先寫進原本的卡組、讀回確認再從框裡拿掉；`提示 v3` 送已有目標的第一題（§5 的試用延到正式用之前，記在技術債；[任務說明](../tasks/ai-cards-add.md)，PR #15） |
 | 2026-11-16 | L2 修正常帶出新問題：修之前寫機率、影響、修法與會動到什麼；正常會碰到或弄壞資料的一定修，極低或走不到的記成限制，其餘代價大的交使用者選；修法先收窄、最後才加機制（[D-207](decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制)） |
-| 2026-11-16 | 英文的打字與排序合併進 `main`：文法與變化的問答題打字作答，答錯先給中文提示與文法標籤，變化目標等同一個字的英翻中記住了才出；名稱結尾「排序」的填空題用點選填空排詞塊，句首那格顯示大寫；Codex L2 三輪，第三輪三項記成已知的限制（[PR #14](https://github.com/kuohappiness/Essence/pull/14)、[任務說明](../tasks/english-typed-order.md)） |

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
+    "test": "node --test --test-concurrency=1 --test-timeout=600000 \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "install-vault": "node tools/install-vault.mjs",
     "backup": "node tools/backup.ts",
@@ -20,7 +20,8 @@
     "knip": "node tools/knip.mjs",
     "check": "npm run typecheck && npm run lint && npm run knip && npm --prefix tools run check && npm test",
     "bench": "node tools/bench-study.ts",
-    "export-compare": "node tools/export-compare.ts"
+    "export-compare": "node tools/export-compare.ts",
+    "codex": "node tools/codex.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

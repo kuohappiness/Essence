@@ -8,18 +8,30 @@
 |---|---|
 | 規劃者 | Claude 的 Opus 5.5，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high。任務說明與決定先和「不做」比較（[D-153](../decisions.md#d-153-每個新決定與新任務先和不做比較)），討論稿請 Codex 專門站在「不做」那一方反駁，理由只能是優勢不明顯或代價解決不了（[D-177](../decisions.md#d-177-先問會不會明顯更好優勢明顯代價解決得了就該做)） |
 | 實作者 | Claude 的 Opus 5.5，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex，任務說明照 `tasks/w3.md` 寫，交回照 code-quality 的「實作交回」檢查（[D-168](../decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)） |
-| 獨立審查者（L2） | 新開的 Codex session（Sol），不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
+| 獨立審查者（L2） | Codex（Sol），由 Claude 在本機用 `npm run codex` 呼叫，每次都是新 session（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)），不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus 5.5：L1 對照、核對 L2 的發現、合併 |
 
 成本：檢查不減；能交給自動檢查的就不靠人看。Claude 實作時的 L1 是自己對照規格，不算獨立審查，所以驗收條件要先寫成能用程式判斷的句子。困難的除錯照〈[卡關時的升級](#卡關時的升級)〉。
 
+推理等級：Claude 在任務開頭用一句話建議，使用者在模型選單切換（session 不能替自己改）。照規格的機械工作、改字、commit 用 medium；一般的設計討論與文件用 high；容易漏掉矛盾的工作（大範圍的一致性檢查、牽涉很多文件的改動、把結論寫成多條決定、困難的除錯）用 xhigh，做完提醒切回。測試或推薦模型時最高只到 xhigh，不用 max，結果寫成「xhigh 下的最好表現」。
+
 換模型時（[D-197](../decisions.md#d-197-同一條發現鏈到第-3-代先重整換模型時重驗依舊行為寫的規則) 第 3 點）：上表寫的是目前的版本。常用角色的模型換版、改用別的模型或推理配置時，先改上表，再挑出依舊模型或工具行為寫的規則（上表的分工與它的理由、標「試行」的規則、Obsidian 截圖的工具限制等），有小探針或代表任務能核對的才重驗，結果記在各自的試行紀錄或依據；使用者只決定有證據的修改。臨時升級求援、單次試用不算。Claude 讀到本檔時，自己的模型和上表不同，先提醒使用者。
+
+## 本機或雲端
+
+[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端) 第 4 點。任務開始時判斷，整件在同一邊做：
+
+- **本機**（電腦要開著）：要 Codex 查核的（L2、開工前的格式查核、討論稿、bug 從頭查、里程碑檢查）；碰 Obsidian、測試或正式 vault、備份工具、iPhone 測試準備的；只有 Windows 才有的問題。
+- **雲端**（電腦可以關）：其餘的，例如不屬高風險範圍的程式、文件與規劃、不碰 Obsidian 的試作場與研究。在本機 session 遇到這類任務，開工前提醒使用者可以改到雲端做。
+- 雲端做到一半發現要本機：推分支，在任務說明寫下進度與下一步，提醒使用者回本機接手。
+- 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備（設 `core.hooksPath`、在 CI 用到的四個資料夾 `npm ci`）。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
 
 ## 檢查指令
 
 - 安裝：共用檢查的相依在 `tools/` 自己的 `package.json`，每個 clone 與 worktree 先在 `tools/` 跑 `npm ci`（`prepare` 順便設 `core.hooksPath`）；要跑 Cards 的檢查時再在根目錄 `npm ci`；Capture、Mindboard 有相依之後在各自的資料夾 `npm ci`（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第一步）。
 - `npm run check`（根目錄，Cards）：型別、ESLint（含模組邊界）、knip，接著 `tools/` 的 `npm run check`，最後測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。`tools/` 的 `npm run check` 是共用檢查：文件檢查、金鑰（secretlint）、本機路徑、skill 副本一致性、外掛之間不 import（`tools/check-plugin-imports.ts`）、進度白板讀得出每一份 roadmap（`roadmap-board --check`）。Capture、Mindboard 的 `npm run check` 在各自的資料夾，現在只印一行，寫程式的第一個任務換成型別、lint 與測試。
-- 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；`plugins/<外掛>/` 底下的狀態目錄、roadmap 與任務照同樣的規則查。
+- 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；`plugins/<外掛>/` 底下的狀態目錄、roadmap 與任務照同樣的規則查。它只認 git 追蹤的檔：連到還沒 `git add` 的新檔會報找不到，`npm run check` 停在這一步；pre-commit 又在暫存區與工作樹各查一次，所以新文件和連到它的舊文件要一起 stage，要分開 commit 時先 commit 文件。
+- 測試的時間上限：`npm test` 每個測試最多 10 分鐘（`--test-timeout`）；自己另外跑 `node --test` 時也加上限。用 Node 的 mock timers 時，呼叫被測的非同步函式後先 `await tick(t, 0)` 再推時間，不然假時鐘不再前進，`await` 永遠等不到（2026-11-04 一個測試因此無聲掛了近三小時）。背景指令超過預期又沒有輸出，先查進程與輸出，不要說成跑得比較久。
 - pre-commit（`.githooks/pre-commit` 只確認 `tools/` 裝過，邏輯在 `tools/hooks.ts`）：先在 Git 給的環境讀暫存區（`git commit <路徑>`、`-a` 用的是另一份索引），每次都跑共用檢查的暫存區版本：文件、暫存檔的金鑰（repo 公開，只改文件的 commit 也直接推上 main，[第二次里程碑檢查](<../../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R4）、本機路徑（R5：帳號名、iCloud 雲碟、vault 名稱；通用規則不含真實的值，本機規則在執行時從這台電腦取；commit 訊息由 `.githooks/commit-msg` 掃）、兩份 skill、外掛之間不 import、roadmap。接著照**分派表**（`tools/dispatch.ts`，規則見 [architecture.md〈repo 結構〉](../architecture.md#9-repo-結構-d-208)，這裡不抄第二份）決定每個外掛跑完整檢查、只跑相關測試或照表跳過，最後印一行每個外掛跑了什麼、跳過的理由。要看某次改動怎麼分派：`node tools/dispatch.ts --staged --explain`（或 `--range <base> <head>`）。
   - 測試用 dot reporter（`NODE_OPTIONS` 加 `--test-reporter=dot`）：通過的測試只印一個點，失敗的照常印出，exit code 照常傳回；AI 讀 commit 的輸出要花 token，原本約 4.2 萬字（[外掛架構檢查](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 Q2）。代價是通過的測試印的訊息看不到，需要時自己跑 `npm run check`；手動跑與 CI 不變。
   - Cards 的「相關測試」：只改 Cards 的文件時，跑寫到那個路徑的測試檔，通過時只印一行（2026-10-29：`b63c1bb` 只改 `syntax.md` 的範例就讓 CI 紅了）。新的測試要讀文件時，在測試裡寫出它的路徑（例如 `new URL('../docs/syntax.md', import.meta.url)`），分派表才找得到；兩個以上外掛都讀的最上層檔案，登錄在分派表的 `SHARED_SPECS`。
@@ -29,7 +41,7 @@
 - worktree 的 hook：`core.hooksPath` 是相對的 `.githooks`，每個 worktree 讀自己的；開 worktree 的工具把它改成另一個 checkout 的絕對路徑時，hook 會轉給這個 worktree 自己的 `.githooks`（[one-repo-step-1〈平台事實〉](../../tasks/one-repo-step-1.md#平台事實)）。在 `tools/` 跑 `npm ci` 會改回相對的。轉交寫在 D-208 第一步之後的 hook 裡：指到的 checkout 還沒有第一步時，跑的是那裡的舊 hook，不會轉交（[backlog〈已知的限制〉](../backlog.md#已知的限制)）；所以合併後先更新主資料夾。
 - CI 的結果：每個 Claude session 開始時，`.claude/hooks/ci-status.mjs` 會查 `main` 最近一次跑完的 GitHub Actions，沒通過就提醒；看到提醒先用 `gh run view <id> --log-failed` 找原因，能修就修，不能修就告訴使用者。本機是 Windows、CI 是 Linux，只在一邊壞的問題 pre-commit 擋不到（2026-10 曾紅了三天沒人發現，[第一個里程碑的檢查](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) R1）。
 - knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：`npm run knip`（`tools/knip.mjs`）已經自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`，檢查項目不變；直接跑 `npx knip` 時要自己加（2026-10-27 W6 合併時遇到）。
-- Codex 審查時：完整的 `npm run check` 要在沙箱外跑。沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣）；沒辦法解除沙箱時，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。跑的時候一次等到結束或出錯（設足夠且有上限的等待），不要短間隔反覆查進度：2026-11-04 那次 L2，這種輪詢約佔 Codex 輸入的 43%（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點，試行）。審查請求的「驗證方式」連到這一點。
+- Codex 審查時：完整的 `npm run check` 要在沙箱外跑，由 Claude 送審前自己跑、把結果寫進請求。Codex 的沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣），所以 Codex 只跑和發現有關的測試，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。跑的時候一次等到結束或出錯（設足夠且有上限的等待），不要短間隔反覆查進度：2026-11-04 那次 L2，這種輪詢約佔 Codex 輸入的 43%（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點，試行）。審查請求的「驗證方式」連到這一點。
 - 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`tools/build.mjs` 會擋）。
 - 安裝：`npm run install-vault -- <vault> [--dev]`（[D-149](../decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 4 點，擋法在 `tools/install.ts`）。開發版只裝登錄過的測試 vault：登錄存在主資料夾的 `.local/test-vaults.json`（各 worktree 共用、不進 repo），第一次先 `npm run install-vault -- <測試 vault> --register-test`。裝到測試 vault（含 `--dev`）是在專案根目錄建置、再從根目錄複製（`tools/install.ts` 的 `install` 裡測試 vault 那一段：`build({ root, … })` 之後 `deploy(root, …)`），中間有別的程序寫了 `main.js` 就會裝到那一份；裝完用開發命令結果檔的 `BUILD` 核對是不是這次的建置（[外掛架構檢查](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 N2：照實記下，不改）。其他 vault 一律當正式使用的：要工作樹乾淨、HEAD 是 `v<版號>` 的 tag、`package.json` 版號相同、DEV 關閉，產物與雜湊存到 `.local/releases/<版號>/`；退回用 `--release <版號>`，現有資料的 `需要版本`、`need` 比那一版新就拒絕。
 
@@ -45,7 +57,7 @@
 
 請 Codex 查核時（不只 L2），寫明查什麼、讀哪些檔案、基準 commit 與驗收標準；L2 照 code-quality 的 `review.md`「審查請求範本」寫。
 
-每一輪（第一輪、再審、討論稿的下一輪）都請使用者新開一個 Codex 對話：交給使用者貼的文字第一行寫「新開一個 Codex 對話，推理等級：<等級>」。沿用同一個對話時，上下文越來越長，每次呼叫都要重讀，推理等級也會帶進下一輪；2026-11-03 量到「入口與目錄第一批」沿用一個對話做 L2 七輪加討論三輪，那段時間 Codex 週額度上升 21 個百分點（表內各段合計 15，含同時段的其他對話；[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 1 點）。
+呼叫 Codex（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：在本機 session 把請求寫進討論稿或審查報告，用背景執行 `npm run codex -- <類型> <請求檔> [--note <這一輪讀哪一節>]`，等完成的通知，不輪詢。類型與預設的模型、推理等級、沙箱在 `tools/codex.ts` 的 `PRESETS`；`escalate`（Astra）先問使用者。回報存在 `.local/codex/`，原文附進同一份檔案的這一輪再核對；執行紀錄（`.log`）只在沒有回報時才讀。每次呼叫後，回覆末端附腳本印的 token 與額度那一行。xhigh 這類會跑很久的，先讓電腦保持喚醒。每一輪（第一輪、再審、討論稿的下一輪）都是新的 Codex session：沿用同一個對話時，上下文越來越長，每次呼叫都要重讀；2026-11-03 量到「入口與目錄第一批」沿用一個對話做 L2 七輪加討論三輪，那段時間 Codex 週額度上升 21 個百分點（表內各段合計 15，含同時段的其他對話；[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 1 點）。腳本找不到 Codex、登入過期或額度用完時，這一輪照舊請使用者手貼：交給使用者貼的文字第一行寫「新開一個 Codex 對話，推理等級：<等級>」。
 
 再審與討論稿的下一輪，那一節的開頭寫「這一輪只讀：本節、〈審查對象〉、上一輪的〈Claude 回應〉」（討論稿寫〈先讀這裡〉與這一輪的那一節），另外列出還沒結的發現 ID，以及這一輪可能碰到的已結發現與它們的驗收證據在哪一節；前幾輪預設不讀，需要時審查者照標題或發現 ID 只查相關的段落。新開的對話不記得前幾輪，沒寫就容易整份從頭讀（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 2 點）。
 
@@ -71,7 +83,7 @@
 [D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點。任務說明會改出題語法的解析、複習紀錄的欄位，或其他寫進使用者檔案的格式時：
 
 1. 規劃者寫好任務說明後，另寫查核請求 `tasks/<任務>-format-review.md`：只列格式那幾節、要對照的決定與 syntax.md 的章節、基準 commit；任務說明的開工條件寫明哪幾節要等查核。
-2. 新開的 Codex session（推理等級：高）查：和已有的決定、syntax.md 有沒有矛盾；舊的資料與還沒更新的舊版外掛讀不讀得到；邊界情況有沒有寫清楚、能不能寫成測試。只回報，寫在 `Claude Codex Discussion/`。
+2. 用 `npm run codex -- format <請求檔>` 請 Codex 查（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：和已有的決定、syntax.md 有沒有矛盾；舊的資料與還沒更新的舊版外掛讀不讀得到；邊界情況有沒有寫清楚、能不能寫成測試。只回報，寫在 `Claude Codex Discussion/`。
 3. Claude 核對回報、改任務說明，再實作那幾節；任務的其他部分不用等。合併前的 L2 照舊。
 
 ## 卡關時的升級
@@ -79,10 +91,10 @@
 [D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 3 點、[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)。卡關的 bug 與重大決策走同一條路線。bug 是照 code-quality 的除錯做法，列出的假設都被推翻，或做不出能重現的指令；重大決策是 D-140 第 2 點那幾類（資料格式、模組邊界、要新增決定、製卡規則或學習地圖的設計）。依序：
 
 1. **Opus xhigh**：bug 從除錯做法的第 1 步再做一次；決策寫出問題、選項與各自的代價。規劃型的對話一開始就開 xhigh，中途不切。
-2. **新開的 Codex session**：bug 從頭查（Sol，推理等級：xhigh），只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**，Codex 只回報；決策把第 1 步寫成 `Claude Codex Discussion/` 的討論稿（D-106），Codex 回應，雙方一致後交使用者確認。
-3. **Fable 5.1 high，或 Codex 的 Astra**（先開 Low 或 Medium）：前兩步都解不了，或兩家不一致又說不出誰對，才用；附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
+2. **Codex**（`npm run codex -- bug <請求檔>`，Sol、xhigh；決策用 `discuss`）：bug 從頭查，只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**，Codex 只回報；決策把第 1 步寫成 `Claude Codex Discussion/` 的討論稿（D-106），Codex 回應，雙方一致後交使用者確認。
+3. **Fable 5.1 high，或 Codex 的 Astra**（`npm run codex -- escalate`，先用 low、必要時 `--effort medium`）：前兩步都解不了，或兩家不一致又說不出誰對，才用；附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
 
-換模型與轉貼要使用者做，所以每升一級都先跟使用者說一聲。找到根因後，回到除錯做法的第 5 步，由 Opus 修；決策定了就寫成 D-ID 或任務說明。
+換 Claude 的模型要使用者做，Codex 那一步由 Claude 呼叫；每升一級都先跟使用者說一聲。找到根因後，回到除錯做法的第 5 步，由 Opus 修；決策定了就寫成 D-ID 或任務說明。
 
 ## 本專案的做法
 
@@ -90,6 +102,9 @@
 - 只在 Node 驗過的檔案存取，接上 Obsidian 前要在 Windows 版 Obsidian 對照一次（D-110）。
 - 規格的平台事實表（code-quality〈寫規格〉，[第二次里程碑檢查](<../../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R7）在本專案常見的列：iPhone（例如 `stack` 沒有位置，[D-173](../decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)）、CI 的 Linux、Obsidian 的渲染器（和 markdown-it 不同）、Obsidian 的檔案操作與計時器（例如底層的操作不會因為外掛的上限停下）。探針用 Windows 版 Obsidian 的開發命令；iPhone 的項目集中成一次實機測試。
 - 測試只用 syntax.md 的例子或自編的內容。
+- markdown-it 只當第一層的快速探針，Obsidian 的渲染器不一樣：`$…$` 是數學式、`%%…%%` 是註解、`www.` 開頭會變連結、字中間的底線也算強調（2026-11-04，Obsidian 1.15.0）。結論取決於實際畫面時，用不提交的開發命令跑真的渲染器，並告訴查核者用哪一個重現；程式判斷 Markdown 時寧可用白名單。
+- 開發命令要按按鈕或寫檔時，先找到自己建立那一篇的 leaf，在它的 `containerEl` 裡查，不用 `document.querySelector`；有確認視窗時先核對是不是這一篇。測試 vault 常開著使用者自己的分頁（2026-11-08 誤把一篇草稿改成啟用）。
+- 內容含 `\uXXXX` 跳脫時，Write 與 Edit 會把它解開成真的零寬或私用區字元（讀出來看起來仍是跳脫）。寫完用 node 掃改過的檔，有就用腳本換回跳脫，只換自己改的行；repo 裡原本就有的真字元（例如測試裡的 BOM）不動。
 - Obsidian 畫面的截圖用開發版的 `ui` 命令（Electron 的 `capturePage()`），不要用 computer-use：它會截到舊畫面，還會讓 Obsidian 被當成隱藏而停止繪製，計時器和 `requestAnimationFrame` 也跟著變慢（W6 的 Windows 實測）。
 - 測試不改全域的 `node:fs` 等 Node 內建模組：Node 自己的實作也會呼叫它們，換掉之後結果會隨 Node 的版本改變。要模擬失敗，就把替身直接交給要測的函式（例如 `createNodeFiles` 的 `seams`）。
 - 產品程式（`src/`，開發命令除外）裡的 `catch` 與 `.catch()`，不是交給錯誤紀錄（[D-155](../decisions.md#d-155-正式版的錯誤紀錄)）就要在旁邊寫一句為什麼不用，例如「讀不到是預期的，state 會重試」「已經經過 onError 記下」；ESLint 的 `no-console` 擋得到直接印 console，擋不到空的 `catch` 與吞掉的拒絕，L2 審查照這條看。

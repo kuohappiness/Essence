@@ -9,7 +9,7 @@ description: 把使用者明確同意的事寫成 Essence Cards 的 D-ID 決定�
 
 ## 步驟
 
-1. **查重**：讀 `docs/decisions.md` 索引裡相關的主題，找相關的舊決定。D-ID 不重用：新編號是目前最大號加一。
+1. **查重**：讀 `docs/decisions.md` 索引裡相關的主題，找相關的舊決定。D-ID 不重用：新編號是 `origin/main` 的最大號加一（先 `git fetch`）；同時有別的 session 在寫決定時，先用 SendMessage 預約。分支上寫的決定，合併前再查一次有沒有撞號（D-172 曾被 main 先用掉，分支的改成 D-174）。
 2. **寫條目**：在正文最後加：
 
    ```markdown
