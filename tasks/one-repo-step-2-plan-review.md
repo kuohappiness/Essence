@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步：開工前查核（給 Codex）
 
-狀態：第二輪查核中（每一輪的報告與 Claude 的回應寫在 [`Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md`](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）
+狀態：第三輪查核中（每一輪的報告與 Claude 的回應寫在 [`Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md`](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。由 Claude 用 `npm run codex -- format` 送出，每一輪都是新的 session。
 

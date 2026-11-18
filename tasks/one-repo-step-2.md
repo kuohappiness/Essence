@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核第二輪中（[查核請求](one-repo-step-2-plan-review.md)）；開工要等 `0.6.0` 裝好、iPhone 驗完
+狀態：規格寫好，開工前 Codex 查核第三輪中（[查核請求](one-repo-step-2-plan-review.md)）；開工要等 `0.6.0` 裝好、iPhone 驗完
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../docs/agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
@@ -78,7 +78,7 @@
 - 建置產物（`main.js`、`main.js.map`、`styles.css`）在 `plugins/cards/` 產生；`.gitignore` 的 `/main.js`、`/styles.css` 改成 `/plugins/cards/main.js`、`/plugins/cards/styles.css`。
 - 開發版裝到測試 vault 的方式不變：`tools/install.ts` 在 Cards 的根目錄建置、再複製到 vault（[quality.md〈檢查指令〉](../docs/agents/quality.md#檢查指令)的安裝那一項），只是根目錄換成 `plugins/cards/`。`.local/` 的位置和 Cards 在哪裡無關，照舊：測試 vault 的登錄與正式產物由 `localFolder` 用 git 的共用目錄找（`tools/install.ts:43-45`，從 worktree 跑也是主資料夾的）；Codex 的回報在 `tools/codex.ts` 用 `git rev-parse --show-toplevel` 找到的那個工作樹的 `.local/codex/`（從 worktree 跑就在那個 worktree）。
 - Cards 的 `package.json` 的 `name`、`version` 不改；`scripts.check` 拿掉 `npm --prefix tools run check`（共用檢查由 hook 與 CI 的 shared job 跑，Cards 的檢查只管 Cards，§A2），`scripts.codex` 刪掉（§A2）。
-- **升正式版的檢查不能因此變少**：`update-vault --check` 在備份之前跑 Cards 的 `npm run check`（`tools/update-vault.ts:55-60,141`），現在它含共用檢查。拿掉之後，`update-vault` 在同一步明確跑兩段：`tools/` 的 `npm run check` 與 Cards 的 `npm run check`，任一段沒過就停，還沒開始備份與安裝（驗收第 A17 項）。
+- **升正式版的檢查不能因此變少**：`update-vault --check` 在備份之前跑 Cards 的 `npm run check`（`tools/update-vault.ts:55-60,141`），現在它含共用檢查，`npm test` 也含共用工具的測試（`dispatch`、`hooks`、`ci-gate` 等）。拿掉之後，`update-vault` 在同一步明確跑：`tools/` 的 `npm run check` 與 `npm run self-check`（含 `tools/tests/` 的測試）、Cards 的 `npm run check`，任一段沒過就停，還沒開始備份與安裝（驗收第 A17 項）。
 
 ### A2 留在最上層的
 
@@ -86,8 +86,8 @@
 - `tools/` 只剩共用的：`check-docs.ts`、`secretlint.mjs`、`check-local-paths.ts`、`check-skill-mirror.ts`、`check-plugin-imports.ts`、`progress-board*.ts`、`roadmap-board.ts`、`dispatch.ts`、`hooks.ts`、`ci-gate.ts`、`codex.ts`、`package.json` 與鎖檔，加上這一步新增的設定與 `tools/tests/`。
 - **共用工具自己的完整檢查**：
   - `tools/` 加 `tsconfig.json`、ESLint 設定、knip 設定，`package.json` 加 `typecheck`、`lint`、`knip`、`test` 與合起來的 `self-check`；相依加 ESLint、typescript-eslint、knip（版本和 Cards 的一樣）。ESLint 的規則照現在對 `tools/` 的 `.ts`、`.mjs` 與測試檔生效的那些搬一份（現在的 `moduleFiles` 含 `.mjs`，`eslint.config.js:13`），Cards 專用的邊界規則（`src/` 的模組邊界、D-148）不搬。knip 的入口要加 `tests/**/*.test.ts`（現在 `tools` 工作區只列 `*.{ts,mjs}`，`knip.jsonc:13-19`，照搬會漏掉測試）。
-  - 共用工具的測試用 `git mv` 搬到 `tools/tests/`：`block-dangerous-git`、`check-docs`、`ci-gate`、`codex`、`decisions-index`、`dispatch`、`hooks`、`local-paths`、`plugin-imports`、`progress-board`、`roadmap-board`、`skill-mirror` 的 `.test.ts`。`tests/quality.test.ts` 拆開：hook 那幾個測試（第 40～400 行附近：安裝 hook、D-141、L2-3、R2、兩個 hook 只呼叫 `tools/hooks.ts`、Q2）搬到 `tools/tests/`，ESLint 規則的測試留給 Cards。分兩個 commit、各自過得了 hook：先 `git mv` 整個檔到 `tools/tests/`（不改內容以外的東西），下一個 commit 再把 ESLint 那幾個移回 Cards 的新檔；`git log --follow` 只接得到 `git mv` 的那一半，另一半在檔頭寫出處。
-  - 搬過去的測試取檔的基準跟著改：`new URL('..', import.meta.url)` 從 `tests/` 是 repo 根，從 `tools/tests/` 變成 `tools/`（`hooks.test.ts` 拿它當 `git clone` 的來源）；讀 `.githooks/`、`.claude/`、`docs/decisions.md`、`experiments/tools/` 的路徑都要多一層。每個搬過去的測試至少跑一次確認不是空跑（驗收第 A5 項核對測試數）。
+  - 共用工具的測試用 `git mv` 搬到 `tools/tests/`：`block-dangerous-git`、`check-docs`、`ci-gate`、`codex`、`decisions-index`、`dispatch`、`hooks`、`local-paths`、`plugin-imports`、`progress-board`、`roadmap-board`、`skill-mirror` 的 `.test.ts`。`tests/quality.test.ts` 拆開：hook 那幾個測試（第 40～400 行附近：安裝 hook、D-141、L2-3、R2、兩個 hook 只呼叫 `tools/hooks.ts`、Q2）搬到 `tools/tests/`，ESLint 規則的測試留給 Cards。分兩個 commit、各自過得了 hook：先在 `tests/` 裡把 ESLint 那幾個移到 Cards 的新檔（例如 `tests/eslint-rules.test.ts`，檔頭寫出處），`quality.test.ts` 只剩 hook 的部分，兩個都還在 Cards 的 `tests/` 照常跑；下一個 commit 再把只剩 hook 的 `quality.test.ts` 整檔 `git mv` 到 `tools/tests/`（只改取檔的路徑）。這樣 ESLint 的斷言一直在 Cards 的根用 Cards 的設定跑（`new ESLint()` 從執行的資料夾找設定，整檔先搬過去會用到 `tools/` 那份沒有邊界規則的設定），`git log --follow` 接得到 hook 那一半。
+  - 搬過去的測試取檔的基準跟著改：`new URL('..', import.meta.url)` 從 `tests/` 是 repo 根，從 `tools/tests/` 變成 `tools/`（`hooks.test.ts` 拿它當 `git clone` 的來源）；讀 `.githooks/`、`.claude/`、`docs/decisions.md`、`experiments/tools/` 的路徑都要多一層。每個搬過去的測試檔都要確認真的載入、跑了（驗收第 A5 項逐檔核對）。
   - 測試搬過去的那個 commit，就要讓 hook 與 CI 跑得到它們（`self-check` 與分派表的共用工具對象先做好，§A3、§A4），不能有一段 commit 共用工具的測試哪裡都不跑。
   - `tools/package.json` 的 `check`（每次 commit 的共用檢查）**不變**，不加測試：`hooks.test.ts` 每個案例 clone 一次（約 8 秒，第一步〈平台事實〉），放進每次 commit 會讓只改文件的 commit 也慢。共用工具的完整檢查由分派表決定什麼時候跑（§A3）。
   - `.claude/hooks/*.mjs` 算共用工具：`block-dangerous-git` 已有測試；`cloud-setup.mjs` 加一個測試（§A5）；`ci-status.mjs` 照舊沒有測試，但改到時跑共用工具的完整檢查。
@@ -104,7 +104,7 @@
 | 3 | `plugins/cards/` 底下其他的檔 | Cards 完整 |
 | 4 | `plugins/capture/`、`plugins/mindboard/` 底下 | 那個外掛完整 |
 | 5 | `plugins/` 底下其他的 | 全部 |
-| 6 | 決定別的檢查怎麼啟動、怎麼跑的：`.githooks/`、`.github/workflows/`、`tools/dispatch.ts`、`tools/hooks.ts`、`tools/ci-gate.ts` 與它們 import 到的 `tools/` 檔、`tools/package.json`（`prepare` 設 `core.hooksPath`）、`.gitattributes`、`.gitignore` | 全部（含共用工具） |
+| 6 | 決定別的檢查怎麼啟動、怎麼跑的：`.githooks/`、`.github/workflows/`、`tools/package.json`（`prepare` 設 `core.hooksPath`）、`.gitattributes`、`.gitignore`，以及**檢查的入口**：`.githooks/` 的 hook、`check.yml`、各外掛 `package.json` 的 scripts 直接寫到的 `tools/` 檔，加上 `tools/dispatch.ts`、`tools/hooks.ts`、`tools/ci-gate.ts`，與這些檔 import 到的 `tools/` 檔 | 全部（含共用工具） |
 | 7 | 其他共用工具：`tools/` 底下其他的檔（含 `tools/tests/`、`tools/package-lock.json`、設定）、`.claude/hooks/`、`.claude/settings.json`（Claude Code 呼叫哪些 hook）、`experiments/tools/decisions-index.mjs`、`.secretlintrc.json` | 共用工具完整 |
 | 8 | 共用規格的登錄表（A 照舊只有 `docs/syntax.md`） | 照登錄（Cards 相關測試、Capture 完整），加共用工具相關測試 |
 | 9 | 最上層的文件：`docs/`、`tasks/`、`Claude Codex Discussion/`、`experiments/`、`.claude/`、`.agents/` 底下其他的檔，根目錄的 `.md` | Cards 相關測試、共用工具相關測試 |
@@ -112,14 +112,15 @@
 
 - 「全部」＝共用檢查、共用工具、三個外掛都完整。CI 的跑法照舊把相關測試升成完整（Cards 與共用工具都是）。
 - 第 6 條和第 7 條分開的理由：第 6 條的檔決定 hook 與 CI 怎麼分派、怎麼啟動、怎麼跑外掛，壞了可能讓外掛的檢查默默不跑，要用真的外掛檢查跑一次才看得出來，所以全部跑；其他共用工具（文件檢查、白板、Codex 包裝、雲端的 hook）只影響共用檢查或自己，它們的測試都在 `tools/tests/`，跑共用工具的完整檢查就驗得到，跑外掛的檢查反而驗不到它們。做 Capture 的對話改它們不必裝 Cards。和現在比，`tools/check-docs.ts` 這類的改動不再跑 Cards 的完整檢查。
-- 第 6 條「它們 import 到的 `tools/` 檔」不用手寫清單：`tools/tests/dispatch.test.ts` 用 `ts.preProcessFile`（`check-plugin-imports` 已在用）從 `dispatch.ts`、`hooks.ts`、`ci-gate.ts` 往下找 import 到的 `tools/` 檔，斷言每一個都命中第 6 條。之後有人讓 hook import 一個新檔卻沒改分派表，這個測試就紅燈。`tools/` 新增、而且沒被這三個檔 import 的工具落在第 7 條：它只能經由自己的 script 執行，影響不到外掛的檢查。
-- `.claude/hooks/cloud-setup.mjs` 的實際效果只有雲端 session 驗得到：改它的任務在 quality.md〈本機或雲端〉照寫的開一個雲端 session 看開場訊息（§A8 寫進去），分派表只負責跑它的測試。
+- 第 6 條的「檢查的入口」不用手寫清單：`tools/tests/dispatch.test.ts` 從 `.githooks/` 的每個 hook、`.github/workflows/check.yml`、`plugins/*/package.json` 的 scripts 取字面寫到的 `tools/…` 路徑，加上 `dispatch.ts`、`hooks.ts`、`ci-gate.ts`，再用 `ts.preProcessFile`（`check-plugin-imports` 已在用）往下找 import 到的 `tools/` 檔，斷言每一個都命中第 6 條。之後有人讓 CI 的外掛 job 直接跑一個新工具、或讓 hook import 一個新檔卻沒改分派表，這個測試就紅燈。驗收含「接線已經在、這次只改被呼叫的檔」的案例（Codex 第二輪的例子：`check.yml` 的 cards job 直接跑 `node tools/check-card-output.mjs`，之後只改這支工具 → 全部）。`progress-board.yml`（Pages）用到的、以及共用檢查本身（`hooks.ts` 的 `SHARED_CHECKS` 與 `tools/package.json` 的 `check` 跑的那幾支）不算入口：它們不影響外掛的檢查，共用檢查每次 commit 都用新版跑，壞了當場看得到。
+- 2026-11-19 照這個規則，入口有 `hooks.ts`（兩個 hook）、`check-local-paths.ts`（`commit-msg`）、`ci-gate.ts`（`check.yml`）與 `dispatch.ts`；`check-docs.ts`、`progress-board*.ts`、`roadmap-board.ts`、`codex.ts` 等落第 7 條。
+- **只有雲端驗得到的**：`.claude/hooks/cloud-setup.mjs` 的內容，以及 `.claude/settings.json` 裡 `SessionStart` 怎麼接到它。`tools/tests/` 加一個測試：`settings.json` 的 `SessionStart` 指令寫到的檔存在，而且是 `.claude/hooks/cloud-setup.mjs`（路徑拼錯會讓雲端漏掉環境準備，現有的設定測試只看 `PreToolUse`）。改這兩處的任務，合併前在那個分支開一個雲端 session 看開場訊息：hook 有跑、四個資料夾各有結果（`npm ci` 完成或寫明理由的跳過）、之後的指令用的是 Node 24、`core.hooksPath` 是 `.githooks`（quality.md〈本機或雲端〉寫進去，§A8）。分派表只負責跑它們的測試。
 - **相關測試的找法**（Cards 與共用工具都一樣）：讀 Git 時用 repo 相對的路徑，交給 `node --test` 時用相對那個套件資料夾（`plugins/cards/`、`tools/`）的路徑，副本裡也在那個資料夾執行。一個改到的路徑，**原路徑與去掉 `plugins/cards/` 的路徑兩種都比**（在最上層的檔只有原路徑），任一種出現在測試檔裡就選；`rules.ts` 的特例也兩種都比（B 之後表裡寫的是 `plugins/cards/docs/card-rules/…`）。多比到時多跑幾個測試，不會少跑。
 - **經過 helper 讀規格的測試**：`tests/helpers/add-cases.ts:8` 讀 `docs/syntax.md`，`ai-add-move.test.ts`、`ai-add-old-version.test.ts` 經由它讀，現在的找法選不到它們（Codex 第一輪對 `de3438f` 實測：改 `docs/syntax.md` 只選到 `ai-add`、`deck`、`errors`、`lock`、`study`）。這是現在就有的漏洞，A 一起補：helper（`tests/helpers/` 底下的檔）寫到這個路徑時，import 那個 helper 的測試也選（一層，用 `ts.preProcessFile` 取 import）。驗收用這兩個測試。
 - A 的過渡（§A1～§A5 的 commit，Cards 還在根目錄）：`CARDS_TOOL`、`CARDS_CONFIG` 與根目錄的 `src/`、`tests/` 照舊排在共用工具那一條前面；§A6 搬家的 commit 刪掉它們，Cards 的資料夾從 `.` 換成 `plugins/cards`（`tools/hooks.ts` 的 `folder`、`tools/dispatch.ts`、`check.yml`、`cloud-setup.mjs` 同一個 commit 換）。
 - 第 2 條讓 Cards 只改文件時照舊只跑相關測試，這就是技術債「外掛只改文件也跑完整檢查」對 Cards 的完成條件（找法與案例都在這一節）；B 搬進文件後才真的用到，B 結案時刪那一列裡 Cards 的部分。
 
-**驗收用的例子**（寫進 `tools/tests/dispatch.test.ts`，`--staged` 與 `--range` 都測；每一案斷言**所有**對象的跑法（含該跳過的），相關測試的案例也斷言選到的測試檔；Cards 的測試檔以實際搜尋為準；「共用工具相關測試」只在有測試寫到那個路徑時才跑，沒有就跳過，下表沒寫的就是跳過）：
+**驗收用的例子**（寫進 `tools/tests/dispatch.test.ts`，`--staged` 與 `--range` 都測；每一案斷言**所有**對象的跑法（含該跳過的），相關測試的案例也斷言選到的測試檔；Cards 的測試檔以實際搜尋為準；pre-commit 的「相關測試」只在有測試寫到那個路徑時才跑，沒有就跳過，下表 pre-commit 欄沒寫的就是跳過；CI 照上面把相關測試升成完整，所以 CI 欄不管有沒有命中都跑）：
 
 | 這次改的 | pre-commit 跑 | CI 跑 |
 |---|---|---|
@@ -142,6 +143,8 @@
 | 改 `.claude/settings.json` | 共用、共用工具 | 共用、共用工具 |
 | 改 `tools/package.json` | 全部 | 全部 |
 | hook import 到的 `tools/` 檔（例如 `dispatch.ts` 新 import 的 `tools/a.ts`） | 全部 | 全部 |
+| 改 `tools/check-local-paths.ts`（`commit-msg` 直接呼叫） | 全部 | 全部 |
+| `check.yml` 的 cards job 已經直接跑 `node tools/x.mjs`，這次只改 `tools/x.mjs`（暫存 repo） | 全部 | 全部 |
 | 新增 `plugins/whiteboard/a.ts` | 全部（含共用工具） | 全部（含共用工具） |
 | CI 找不到比較的基點 | — | 全部（含共用工具） |
 | 第一步的例子（`plugins/mindboard/`、子模組、空 commit、中文與換行的檔名等） | 照舊 | 照舊 |
@@ -159,10 +162,10 @@
 ### A5 Cards 的工具、測試與試作場跟著改
 
 - **建置**：`plugins/cards/tools/build.mjs` 的預設根目錄照舊是自己的上一層（搬後就是 `plugins/cards/`）。AI 製卡的規則檔（`src/core/ai/rules.ts` 的表）寫的是「repo 根目錄算的路徑」，A 期間規則檔還在最上層（`docs/card-rules/`、`experiments/t4/arch/`）：`build.mjs` 讀規則檔的基準和 Cards 的根分開成兩個選項（測試可以覆寫），搬家前兩者相同，§A6 的 commit 把規則檔的預設基準改成 Cards 的根往上兩層（repo 的根）；表裡的路徑不改，`rules.ts` 就不用動（驗收第 A2 項要 `src/` 不變）。
-- **跨版本的工具認得兩種外掛根**（D-208 第 8 點）：在 Cards 的工具加一個函式，給 commit 回傳那個版本的 Cards 根：只有 `plugins/cards/manifest.json` 而且 `id` 是 `essence-cards` → `plugins/cards`；只有根目錄的 `manifest.json` 而且 `id` 是 `essence-cards` → `.`；其他一律丟錯「判不出 <commit> 的外掛根」，不猜：兩個都存在（即使只有一個的 `id` 對）、都不存在、`id` 不對、不是 JSON。「不存在」只認 Git 回報那個路徑在樹裡沒有（`git cat-file -e` 的結果）；Git 讀取失敗不算不存在，照樣丟錯。用到它的：
+- **跨版本的工具認得兩種外掛根**（D-208 第 8 點）：在 Cards 的工具加一個函式，給 commit 回傳那個版本的 Cards 根：只有 `plugins/cards/manifest.json` 而且 `id` 是 `essence-cards` → `plugins/cards`；只有根目錄的 `manifest.json` 而且 `id` 是 `essence-cards` → `.`；其他一律丟錯「判不出 <commit> 的外掛根」，不猜：兩個都存在（即使只有一個的 `id` 對）、都不存在、`id` 不對、不是 JSON。判「不存在」的做法：先 `git rev-parse --verify <commit>^{commit}` 確認 commit 在，再用 `git ls-tree <commit> -- manifest.json plugins/cards/manifest.json` 列這兩個路徑，指令成功而且沒列出來的才算不存在。不能只看 `git cat-file -e` 的結束碼：路徑不在與 commit 不在都回 128（Codex 第二輪實測），讀取失敗會被當成不存在。用到它的：
   - `compare-versions.ts` 的 `side`：讀版號（`git show <commit>:<根>/manifest.json`）、`npm ci` 的資料夾、交給轉接器的程式根都用那個版本自己的根。
   - `update-vault.ts`：舊版的基線 commit 照 `.local/releases/` 找，比較交給上面那一項。
-  - 讀舊版程式的測試（`compare-versions`、`pick-old-version`、`ai-add-old-version` 的 clone 與借 `node_modules`）：checkout 舊 tag 後用同一個函式找根，借的是 `plugins/cards/node_modules`。
+  - 讀舊版程式的測試（`compare-versions`、`pick-old-version`、`ai-add-old-version` 的 clone 與借 `node_modules`）：clone 的來源改成 repo 的根（`git rev-parse --show-toplevel`）；現在寫的是測試檔的上一層，搬後會變成 `plugins/cards/`，`git clone` 一個子資料夾在 checkout 之前就失敗（Codex 第二輪：同一個 repo 的子資料夾 `git ls-remote` 回 128）。checkout 舊 tag 後用同一個函式找根，借的是 `plugins/cards/node_modules`。這些改動和搬家同一個 commit（§A6）。
   - 既有的 fixture 逐一分類：`compare-versions.test.ts` 裡手寫、沒有 `id` 的 manifest（約第 615 行），以及把 `src`、manifest、`package.json` 複製到暫存 repo 根的案例（約第 687～721 行），各自標明是舊根、新根，還是故意判不出的案例，預期跟著寫。
 - **測試讀最上層的檔**：`new URL('../docs/…', import.meta.url)` 這類改成從 `plugins/cards/tests/` 算的 `../../../docs/…`（`ai-add`、`ai-materials`、`deck`、`errors`、`lock`、`study`、`check-syntax-pick` 等，以 `git grep` 為準）；讀 Cards 自己的檔（`new URL('../', …)`、`../src/…`）不用改。
 - **`check-plugin-imports`**：規則照舊，搬家後自動涵蓋 Cards（`plugins/cards/` 底下的檔不能跑出 `plugins/cards/`）。最上層 `tools/` 的檔不能 import `plugins/`（現有規則，`tools/tests/` 也算）。
@@ -174,7 +177,7 @@
 
 一個 commit：§A1 的 `git mv`，加上讓這個 commit 的 hook 過得了的最少修改：
 
-- §A5 測試讀最上層檔的路徑、試作場的 import、`.gitignore`；
+- §A5 測試讀最上層檔的路徑、讀舊版的測試的 clone 來源、試作場的 import、`.gitignore`；
 - Cards 資料夾的常數（§A3：`tools/hooks.ts` 的 `folder`、`tools/dispatch.ts` 刪 `CARDS_TOOL`、`CARDS_CONFIG` 與根目錄的 `src/`、`tests/`）、`check.yml` 的資料夾、`cloud-setup.mjs` 的清單與它的清單測試（搬家前的 commit 比的是 `.`，這裡一起切）；
 - **建置的規則檔基準**：`build.mjs` 的規則檔預設基準切成 repo 的根（§A5；選項與 `build.d.mts` 的型別宣告在搬家前的 commit 先加好），`build.test.ts`、`install.test.ts` 等自己組暫存 repo 的 fixture 照新的兩個根放檔；
 - Markdown 的連結（下一點）。
@@ -190,17 +193,21 @@ commit 之前先在新的位置裝好相依（`plugins/cards/` 的 `npm ci`；`t
 在**隔離的 clone**（`git clone --no-local` 到 repo 外的暫存資料夾，它有自己的 `.git`，所以 `.local/` 也是自己的，不會寫到主資料夾的正式產物）做；`.local/releases/0.6.0/` 複製進去。第 1～3 項用**演練 vault**：測試 vault 複製一份到 iCloud 以外的暫存資料夾，**不**登錄成測試 vault，clone 裡的工具就照正式 vault 的路徑走（正式安裝的條件、`.local/releases/`、發布前比較）。演練的版號在 clone 裡改成 `0.6.1`、在 clone 的 `main` 上打 tag `v0.6.1`，**不 push**；iCloud 的測試 vault 不裝這個版號（避免留下比 `main` 新的版本紀錄）。開始前印出並記下實際用到的絕對路徑（clone 的 `.local/`、演練 vault、備份的 `--to`），`--to` 指到 clone 旁邊的暫存資料夾，不用平常的備份資料夾。
 
 1. **舊版重裝**：用搬家後的工具 `install-vault -- <演練 vault> --release 0.6.0`，vault 裡三個檔的雜湊和 `.local/releases/0.6.0/release.json` 相同。
-2. **舊 ZIP 還原**：在 clone 的 `v0.6.0` worktree 用 `backup` 對演練 vault 做一份備份 ZIP。準備演練 vault 的兩份複本，每份都先刪掉一個備份裡有的卡組、拿掉一行備份裡有的複習紀錄，讓還原真的要寫東西；兩份各用搬家後的 `restore` 與 `v0.6.0` 的 `restore` 跑 `--plan` 再 `--apply`。斷言：兩邊的計畫相同；那個卡組與那行紀錄回來了；沒選的資料沒動；兩份複本還原後逐檔相同。
+2. **舊 ZIP 還原**：在 clone 的 `v0.6.0` worktree 用 `backup` 對演練 vault 做一份備份 ZIP。準備演練 vault 的兩份複本，每份都：刪掉一個備份裡有的卡組 A、拿掉一行備份裡有的複習紀錄，讓還原真的要寫東西；另外把卡組 B 改得和備份不同，還原時用 `--files` 只選 A，B 是「沒選的資料」。兩份各用搬家後的 `restore` 與 `v0.6.0` 的 `restore` 跑 `--plan` 再 `--apply`。斷言：
+   - 兩邊的計畫，拿掉目的 vault 的絕對路徑與建立時間之後，動作、順序與資料相同（計畫的 JSON 原樣一定不同，`tools/restore.ts:82`）；
+   - 卡組 A 回來、內容和 ZIP 裡的逐位元組相同；B 和還原前逐位元組相同；
+   - 補回紀錄的還原檔，檔名符合 [syntax §5-3](../docs/syntax.md#5-3-還原檔) 的格式（裝置碼每次隨機，兩份檔名本來就不同，`tools/restore.ts:150`），照紀錄的來源比，內容與行數兩邊相同；
+   - 其他檔兩份複本逐檔相同。
 3. **搬後的 Windows 更新**：`update-vault --check` 把演練 vault 從 `0.6.0`（根目錄的外掛根）比到 `0.6.1`（`plugins/cards` 的外掛根）：共用與 Cards 兩段檢查都跑了、備份做了、發布前比較是「可以比較」、差異只有建置版本；接著 `--install`：vault 裡 `main.js` 第一行的 `BUILD` 是 `0.6.1+<commit>`、三個檔的雜湊和 clone 的 `.local/releases/0.6.1/` 相同，卡組與複習紀錄和更新前逐檔相同（版本紀錄照 D-149 該加的那一行除外）。
-4. **開發版**：先記下 iCloud 測試 vault 現在的 `BUILD`。在 clone 用搬家後的程式（版號照舊 `0.6.0`）`install-vault -- <測試 vault> --dev`（測試 vault 的登錄複製進 clone），在 Windows 版 Obsidian 跑「版本」命令，結果檔的 `BUILD` 是這次的建置；照 [quality.md〈Obsidian 相容性檢查〉](../docs/agents/quality.md#obsidian-相容性檢查)第 2 層重跑 `files`、`today`、`a3check`，結果和搬家前那次相同。這次的 dev 產物也照驗收第 A3 項的方法和搬家前同一份程式的 dev 建置比過（iPhone 裝的就是它）。
+4. **開發版**：碰 iCloud 測試 vault 之前，先把它 `.obsidian/plugins/essence-cards/` 的三個檔（`main.js`、`manifest.json`、`styles.css`）複製到隔離的資料夾、記下雜湊與 `BUILD`（開發版沒有存在 `.local/releases/`，原本若是 `.dirty` 的建置，只記 `BUILD` 找不回原檔）。在 clone 用搬家後的程式（版號照舊 `0.6.0`）`install-vault -- <測試 vault> --dev`（測試 vault 的登錄複製進 clone），在 Windows 版 Obsidian 跑「版本」命令，結果檔的 `BUILD` 是這次的建置；照 [quality.md〈Obsidian 相容性檢查〉](../docs/agents/quality.md#obsidian-相容性檢查)第 2 層重跑 `files`、`today`、`a3check`，結果和搬家前那次相同。這次的 dev 產物也照驗收第 A3 項的方法和搬家前同一份程式的 dev 建置比過（iPhone 裝的就是它）。
 5. **跨過搬家的合併**：在 clone 裡，從搬家前的 commit 開一個只改 `src/core/deck/parse.ts` 一行的分支，合併進搬家後的分支，改動落在 `plugins/cards/src/core/deck/parse.ts`、沒有衝突（停手時段之外的分支，之後合併要靠這個）。
 6. **iPhone 載入**（使用者）：測試 vault 裝搬家後的建置，iPhone 等 iCloud 同步後打開，外掛載入、「版本」命令顯示這次的建置。固定建置版本時，A 的 `main.js` 和搬家前逐位元組相同（驗收第 A3 項，dev 版也比），所以只看載入與版本，不重跑功能。
 
-演練完（成功、中途停下或失敗都一樣）把 iCloud 測試 vault 裝回第 4 項記下的那一版，跑「版本」命令讀回 `BUILD` 確認，通知使用者。演練 vault 與 clone 在結果寫進〈結果〉之後刪掉。
+演練完（成功、中途停下或失敗都一樣）把第 4 項留存的三個檔放回 iCloud 測試 vault，核對三個檔的雜湊，再跑「版本」命令讀回 `BUILD`，通知使用者。演練 vault 與 clone 在結果寫進〈結果〉之後刪掉。
 
 ### A8 文件
 
-- `docs/agents/quality.md`〈檢查指令〉：安裝（`tools/`、`plugins/cards/`、外掛各自 `npm ci`）、`npm run check` 在 `plugins/cards/` 跑（或從根目錄 `npm --prefix plugins/cards run check`）、共用工具的完整檢查、建置與安裝的指令、分派表多一個對象、CI 多一個 job；〈高風險範圍〉與〈卡關時的升級〉的 `npm run codex` 改成 `node tools/codex.ts`；〈本機或雲端〉的 `cloud-setup` 一句跟著改，並加一句：改 `cloud-setup.mjs` 的任務，合併前在那個分支開一個雲端 session 看開場訊息（分派表只跑得到它的測試）。
+- `docs/agents/quality.md`〈檢查指令〉：安裝（`tools/`、`plugins/cards/`、外掛各自 `npm ci`）、`npm run check` 在 `plugins/cards/` 跑（或從根目錄 `npm --prefix plugins/cards run check`）、共用工具的完整檢查、建置與安裝的指令、分派表多一個對象、CI 多一個 job；〈高風險範圍〉與〈卡關時的升級〉的 `npm run codex` 改成 `node tools/codex.ts`；〈本機或雲端〉的 `cloud-setup` 一句跟著改，並加一句：改 `cloud-setup.mjs` 或 `.claude/settings.json` 的 `SessionStart` 的任務，合併前在那個分支開一個雲端 session 看開場訊息（§A3 列的四件事；分派表只跑得到它們的測試）。
 - `docs/architecture.md` §9：「現在」那張圖改成 A 之後的樣子（程式已在 `plugins/cards/`，文件還在最上層）；〈每一類放哪裡〉程式那一列、〈commit 與 CI 怎麼檢查〉加共用工具。
 - `docs/decisions.md` 的 D-110：狀態行後加一句「程式的位置照 D-208 第 8 點改在 `plugins/cards/`（第二步 A，日期）」；本文不改。
 - `plugins/capture/AGENTS.md`、`plugins/mindboard/AGENTS.md`：寫到 Cards 位置的句子跟著改（有的話）。
@@ -237,6 +244,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 - **舊錨點**：錨點用和 `check-docs` 同一個 Markdown 解析器取（程式碼框裡的 `## …` 字面不算，`syntax.md` 的範例就有）。三份文件被搬走的每個 `##` 標題留在原檔，標題下只留一行「搬到 Cards 的〈…〉（連結，D-208 第二步）」，外面連到舊錨點的照樣打得開（D-208 第 8 點「有外部依賴的舊錨點留一行轉往新頁」）。`###` 以下的錨點：repo 裡的連結由腳本改；repo 外已知的入口（本機記憶、skill、外掛的 AGENTS.md、程式註解）在 B0 的清單裡查，有引用的也留一行轉往新頁。repo 外還有沒有別的入口，repo 本身證明不了；已知的之外只剩使用者的書籤與已關的 PR，接受。
 - 整份搬走的檔（`question-types.md`、`card-rules/` 等）不留空檔，照第一步 §5 的做法。
+- **連結的來源也會搬**：拆出去的段落裡指向原檔其他段落的連結（例如 `docs/syntax.md` §0 的 `[§1](#1-轉錄稿)`，§0 去 Cards、§1 留最上層或去 `docs/transcript.md`），原本是同一份裡的錨點，拆開後要指到另一個檔。連結腳本對每個連結用**拆之前**的來源解出目標，再照拆之後的來源與目標位置重算相對路徑（A 搬的檔裡沒有 Markdown，A 的腳本只處理目標搬走的情況；B 要加來源搬走的情況）。這條連結當驗收案例，點過去要是轉錄稿的規格。
 - `rules.ts` 的規則檔路徑改成 `plugins/cards/docs/card-rules/…`（只改字串，嵌入的內容與雜湊不變，驗收第 B3 項）。這是 B 唯一改到 `src/` 的地方。`tests/ai-rules.test.ts:35` 用 `startsWith('docs/')` 挑規則檔，B 之後會一個都挑不到、「一份規則只有一個標記」的檢查默默跳過：改成新的前綴，並斷言挑到的檔數大於 0。
 
 ### B3 讀文件的工具
@@ -260,9 +268,9 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 1. `git ls-files src tests manifest.json package.json package-lock.json tsconfig.json eslint.config.js knip.jsonc` 是空的；`tools/` 底下沒有 §A1 列的 Cards 工具；`plugins/cards/` 底下有它們。
 2. **都是改名**：每個搬檔的 commit（§A2 共用測試搬家、`quality.test.ts` 的整檔 `git mv`、§A6）各自用 `git diff -M --name-status <那個 commit>^ <那個 commit>` 看，搬的每個檔都是一行 `R`，沒有同一個檔的 `D` 加 `A`；§A6 裡 `src/` 底下的每一行都是 `R100`，而且 `git diff -M <搬家>^ <A> -- src plugins/cards/src` 除了改名沒有內容差異（產品程式一行都沒改）。
-3. **建置相同**：`buildPlugin` 加一個只給測試與驗收用的選項，固定建置版本的字串。同一份程式在 `<基準>` 與 `<A>` 各用同一個固定的版本建置一次正式版與一次 dev 版：`main.js` 整份逐位元組相同（建置版本同時寫在第一行與程式本體的 `BUILD`，`src/main.ts:524,610` 用到，所以不能只去掉第一行比）、`styles.css` 相同、`embedRules()` 的結果 `deepEqual`。另外不固定版本各建置一次，`BUILD` 是各自的 `<版號>+<HEAD 短碼>`。
+3. **建置相同**：建置版本同時寫在第一行與程式本體的 `BUILD`（`tools/build.mjs:111`，`src/main.ts:524,610` 用到），所以不能只去掉第一行比。`<基準>` 沒有固定版本的選項，做法是：在乾淨的 `<基準>` checkout 照原本的入口各建置一次正式版與 dev 版，讀回產物的 `BUILD`；`buildPlugin` 在 A 加一個只給測試與驗收用的選項，在 `<A>` 用這個選項、填 `<基準>` 讀回的那個 `BUILD`，各建置一次正式版與 dev 版。兩邊的 `main.js` 整份逐位元組相同、`styles.css` 相同、`embedRules()` 的結果 `deepEqual`。`<A>` 另外照預設入口建置一次，`BUILD` 是 `<版號>+<A 的 HEAD 短碼>`。
 4. **歷史接得到**：在有完整歷史的本機 checkout，腳本對每個搬走的檔跑 `git log --follow --name-status --format=%H -- <新路徑>`，結果裡有舊路徑，也有那個檔搬之前最後一次被改的 commit；印出檢查的檔數與接不到的清單（要是空的）。拆開的 `quality.test.ts`：`git mv` 的那一半（hook）接得到；另存的那一半（ESLint）檔頭註解寫「從 `tests/quality.test.ts`（<commit>）拆出」。
-5. **檢查都過、而且不是空跑**：`plugins/cards/` 的 `npm run check`、`npm run build`，`tools/` 的 `npm run check` 與 `npm run self-check` 都通過；`self-check` 在只裝了 `tools/` 的乾淨 clone（沒有根目錄與 `plugins/cards/` 的 `node_modules`）也通過，測試數和搬過去的測試檔加起來的數目相同（每個檔至少一個測試有跑）；在一個共用工具加一個沒用到的 export，`tools/` 的 knip 報出來（再拿掉）；CI 的 cards job 沒有裝 `tools/`。
+5. **檢查都過、而且不是空跑**：`plugins/cards/` 的 `npm run check`、`npm run build`，`tools/` 的 `npm run check` 與 `npm run self-check` 都通過；`self-check` 在只裝了 `tools/` 的乾淨 clone（沒有根目錄與 `plugins/cards/` 的 `node_modules`）也通過，而且逐檔核對：測試的輸出（用會印檔名的 reporter）裡每一個搬過去的測試檔都出現、每個檔的測試數和搬之前在 Cards 跑的相同（`ci-gate.test.ts` 這類一檔多個測試的，總數證明不了每個檔都載入了）；拆開的 `quality.test.ts` 兩半，測試數加起來等於拆之前；在一個共用工具加一個沒用到的 export，`tools/` 的 knip 報出來（再拿掉）；CI 的 cards job 沒有裝 `tools/`。
 6. `tools/tests/dispatch.test.ts` 有 §A3 每一列的案例與 import 範圍的測試；`tools/tests/hooks.test.ts` 第一步的五種情況改成搬家後的路徑，加上「只改共用工具：只跑共用工具」「改 `.githooks/`：全部」；`tools/tests/ci-gate.test.ts` 有 tools 旗標的成功、跳過、要跑卻跳過、旗標不合法。
 7. **外掛邊界**：在暫存的 repo（或 worktree 裡 stage 後再拿掉），`plugins/cards/tests/` 一個 import `../../../tools/check-docs.ts` 的檔、`tools/tests/` 一個 import `../../plugins/cards/src/core/files.ts` 的檔，`check-plugin-imports --staged` 兩個都擋下；只放沒追蹤的檔它看不到，所以要 stage。樣本不 commit。
 8. **跨版本的外掛根**：Cards 工具的測試用暫存 repo 的 commit 測：只有根目錄的 manifest、只有 `plugins/cards/` 的 → 回傳正確的根；兩個都有（含只有一個 `id` 對）、都沒有、`id` 不對、不是 JSON、Git 讀取失敗 → 丟錯而且訊息有 commit。`compare-versions` 在暫存 repo 比「根目錄的版本」對「`plugins/cards` 的版本」跑得完。讀 `v0.2.0`～`v0.5.0` 的舊版測試照常通過。
@@ -274,13 +282,13 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 14. **進度網頁**：Pages 只在 `main` 的 push 跑，A 的分支看不到。合併前在 `<基準>` 與 `<A>` 各本機跑一次 `node tools/progress-board.ts`、`node tools/roadmap-board.ts`，三個頁面除了產生時間以外相同；合併後 Progress board 的 run 成功、網址打得開。
 15. §A7 演練的六項都做了，結果（雜湊、計畫與還原的內容、報告的結論、結果檔的 `BUILD`、iPhone 的畫面）寫進〈結果〉。
 16. **外掛 ID、版號與 tag**：`plugins/cards/manifest.json` 的 `id` 是 `essence-cards`；manifest 與 `package.json` 的 `version` 和 `<基準>` 的相同；`v0.2.0`～`v0.6.0` 每個 tag 指的 commit 和開工前記下的相同；正式安裝的條件接受 clone 裡的 `v0.6.1`（§A7 第 3 項）。
-17. **升正式版的檢查**：`update-vault --check` 跑共用與 Cards 兩段檢查；用測試的替身讓共用那段失敗時，丟錯、沒有做備份（備份資料夾是空的）、沒有比較與安裝。
+17. **升正式版的檢查**：`update-vault --check` 跑 `tools/` 的 `check` 與 `self-check`、Cards 的 `check`；用測試的替身分別讓共用檢查、共用工具的測試、Cards 的檢查失敗，三種都丟錯、沒有做備份（備份資料夾是空的）、沒有比較與安裝。
 18. **兩個平台**：Windows 本機跑 `plugins/cards/` 的 `npm run check`、`tools/` 的 `npm run self-check`（含 `hooks`、`dispatch`、`ci-gate`、`plugin-imports` 的測試）與第 7 項；Linux 由 CI 的 cards job 與 tools job 跑同樣的檢查。只在一邊跑的測試（例如檔名有換行的那一例）在〈結果〉寫明。
 19. 合併前 L2：新的 Codex session（`node tools/codex.ts l2 <請求檔>`，A 開工前還是 `npm run codex -- l2 …`），請求照 code-quality 的 `review.md` 寫在 `tasks/one-repo-step-2-review.md`。
 
 **B**：
 
-1. 〈文件清單〉在搬檔之前 commit；每一列的新路徑存在、舊路徑不存在（三份拆開的文件除外）；腳本對每一列跑 `git log --follow` 接得到搬之前的歷史（相似度低的照第一步的經驗加 `-M30%`，用了就在清單註明）。D-208 連到這份說明。
+1. 〈文件清單〉在搬檔之前 commit；每一列的新路徑存在、舊路徑不存在（三份拆開的文件除外）。整份搬的檔：腳本對每一列跑 `git log --follow` 接得到搬之前的歷史（相似度低的照第一步的經驗加 `-M30%`，用了就在清單註明）。逐段拆出的段落：新檔是新增的，`--follow` 接不到原檔，清單記原檔、原錨點與拆之前的 commit，腳本取那個 commit 的原段落和新位置的內容比對（連結目標換成佔位字串後相同）。D-208 連到這份說明。
 2. `node tools/check-docs.ts` 通過；腳本用 Markdown 解析器確認沒有連結指到清單上的舊路徑或已拿掉的錨點。
 3. 三份拆開的文件：搬家前每個 `##` 的錨點（解析器取的，不含程式碼框）與 B0 清單裡要留的 `###` 錨點，在原檔都還在、而且連得到新位置（腳本先存一份清單再比）；`embedRules()` 的結果和 B 之前 `deepEqual`；`ai-rules.test.ts` 挑到的規則檔數大於 0。
 4. 分派表：改 `plugins/cards/docs/syntax.md` 選到寫到它的 Cards 測試（含經 helper 的，不是空的）；改最上層的轉錄稿格式（照第 1 題）分派到 Capture 的完整檢查、選到 Cards 真的讀它的測試。Capture 的檢查現在只印一行；Capture 寫、Cards 讀的共用範例與已部署讀端的相容檢查留給第一個需要共同規格的 Capture 任務（D-208 第 6 點）。
