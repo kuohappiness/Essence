@@ -1,6 +1,6 @@
 # D-208 第一步｜Codex L2 審查
 
-狀態：第三輪已回應與修正（R8 修了），待第四輪 L2
+狀態：L2 通過（第四輪；R9 只改測試，已修），待合併
 
 審查分支 `claude/one-repo-step-1` 的 `b8396a60c093a8b051f73abc7b63749ff518235f`，以 `d655645e7fd6a239364642b4d2aebc470c171085` 為共同祖先及規格基準。審查請求在分支的 `tasks/one-repo-step-1-review.md`（`b8396a6`）。範圍涵蓋基準版 `tasks/one-repo-step-1.md` §1～§10 和驗收，對照 D-208 第 1、2、3、4、5、9、10 點、D-117、D-141、D-195 及開工前查核。審查同時核對實作者列出的八項選擇。分支 worktree 的 `docs/syntax.md` 只有換行差異，獨立探針使用待審 commit 的隔離 clone。
 
@@ -215,3 +215,44 @@ GitHub Actions 的待審 SHA 已完成，六個 job 都成功。本機完整檢�
 - **R8 成立，修（`893f43b`，使用者 2026-11-18 選「修，送第四輪」）**。同一類（掃到的不是這次 commit 的內容）的第 3 代（R1 → R7 → R8），照 code-quality 不加機制、回到收窄。回歸列舉整類：檔名只差大小寫、資料夾只差大小寫，金鑰放在先寫出的那份；Linux 要被金鑰規則擋下，Windows 與 macOS 要以「同一個檔」擋下。修之前在 Windows 停在第一種（commit 成功）。任何讓兩個路徑落到同一個檔的情況（例如 macOS 的 Unicode 正規化）都由 `wx` 擋下。
 
 這個修正放進第四輪 L2：[審查請求〈第四輪〉](../tasks/one-repo-step-1-review.md#第四輪)。
+
+## 第四輪
+
+審查範圍為分支 `claude/one-repo-step-1` 的 `c3aa6ebea30bb4f2cffa36d452f1be75cb7a1a9e..2255c5688d09bcf329b1912c13b78b5e0989a470`。依待審 commit 的 `tasks/one-repo-step-1-review.md`〈第四輪〉核對 R8 修正、回歸測試，以及兩個 hook 共用的 `secretlint --staged` 呼叫端。
+
+**R8 已修正，本輪無新增擋合併的發現。** `tools/secretlint.mjs:61–79` 用 `wx` 建立暫存檔，目的地已存在時會停止取檔並回報，`runShared()` 便擋下提交。判斷取決於實際檔案系統。大小寫比對只用來找出錯誤訊息要列的另一條路徑。
+
+- 在指定 SHA 的獨立 Windows clone，以原版 `pre-merge-commit` 跑 `git merge --no-ff`。檔名只差大小寫及目錄名只差大小寫兩案都回 `1`，訊息列出兩個衝突路徑，`HEAD` 仍在合併前。單檔含假金鑰由 GitHub token 規則正常擋下，兩個互不碰撞的乾淨檔可成功合併。
+- 另以 `secretlint --staged` 驗證目錄先建立再遭遇同名檔、檔案先建立再遭遇同名目錄的兩種順序。取檔均回 `1` 並回報失敗。
+
+### R9｜[P3] R8 修正引入：回歸測試用作業系統推定檔案系統是否區分大小寫
+
+- **軸與依據**　規範與設計。第四輪規格以暫存檔所在的檔案系統決定預期行為，回歸測試應能驗出相同的契約。
+- **觸發、預期與實際**　Windows 的暫存目錄若設定為區分大小寫，掃描器會保留兩份檔案，再由金鑰規則擋下。D-141 測試在 Windows 固定期待「同一個檔」，所以正確擋下的提交會被測試報成失敗。
+- **位置與證據**　分支 `claude/one-repo-step-1` 的 `tests/quality.test.ts:181–184`（`2255c56`）。**已重現**。在隔離暫存目錄啟用 Windows 的大小寫區分，先確認子目錄可各自用 `wx` 寫入 `Test` 和 `test`，再只對該測試子程序設定暫存路徑。執行 `node --test --test-name-pattern=D-141 tests/quality.test.ts`，第一個 `docs/Case.md` 案例以 `secretlint-rule-github` 擋下提交，測試因等待 `/同一個檔/` 而回 `1`。
+- **真實路徑與建議**　要在和目前 Windows／Ubuntu CI 測試環境不同的暫存檔案系統設定下執行，機率低。影響測試可攜性，實測金鑰仍被擋下，本輪不列為合併阻擋項。日後可讓回歸在掃描器使用的暫存位置先探測大小寫行為，再選擇預期訊息。
+
+### 本輪驗證與限制
+
+- Windows、Git for Windows 2.52.0、Node 24.13.0、npm 11.6.2。`git diff --check c3aa6eb 2255c56` 通過。待審 worktree 的 `docs/syntax.md` 只有既有換行差異。
+- 在沙箱外對待審 worktree 執行 `npm run check`，結束碼 `0`，約 709 秒。型別、ESLint、knip、共用檢查及測試均成功，3,011 項中 3,010 通過、0 失敗、1 項依 Windows 設定跳過（檔名含換行）。本輪 R8 與既有 R1、R7 回歸都在這次完整檢查內。R9 在另設的區分大小寫暫存目錄單獨重現。
+- 已唯讀核對 `2255c5688d09bcf329b1912c13b78b5e0989a470` 的 push run，plan、shared、Cards、Capture、Mindboard 與 gate 六個 job 均成功。Linux 的 Cards job 日誌顯示 D-141 通過。兩個大小寫案例在此環境都由金鑰規則擋下。[待審 commit 的 GitHub Actions](https://github.com/kuohappiness/Essence-Cards/actions/runs/44208414472) · [Cards job](https://github.com/kuohappiness/Essence-Cards/actions/runs/44208414472/job/134480322299)
+- 未獨立驗證 macOS 的 Unicode 正規化，因本機沒有 macOS 測試環境。hook 強制終止後的暫存清理沿用既有的限制紀錄，本輪以 Windows 碰撞和正常掃描路徑為範圍。
+
+本輪結論止於 `2255c5688d09bcf329b1912c13b78b5e0989a470`。R8 再審通過，R9 僅影響使用特定暫存目錄設定時的回歸測試。
+
+## Claude 回應（第四輪）
+
+2026-11-18 Claude（Opus 5.5）。R9 在本機重現：在 scratchpad 建一個資料夾，用 `fsutil file setCaseSensitiveInfo` 設成區分大小寫（子資料夾跟著繼承，`Case`、`case` 兩個都寫得進去），把 `TMP`、`TEMP` 指到那裡跑 D-141 測試：commit 被 `secretlint-rule-github` 正確擋下，測試卻因為等的是「同一個檔」而失敗。
+
+### R9 回歸測試用作業系統猜暫存資料夾分不分大小寫
+
+- **發生條件與機率**：在暫存資料夾的大小寫行為和作業系統預設不同的環境跑測試（Windows 設成區分大小寫的資料夾、macOS 的區分大小寫 APFS、Linux 的 casefold 資料夾）。目前的 Windows 本機與 Ubuntu CI 都不是；低。
+- **影響**：只有測試誤報失敗，金鑰照樣擋下；不影響 hook 與 CI 的防線。
+- **修法類型**：改用已有的唯一來源：測試在系統暫存資料夾（掃描器建副本的地方）用兩次只建立新檔的寫入探一次，照結果選預期的訊息。不加機制。
+- **動到什麼**：只有 `tests/quality.test.ts` 的 D-141 測試；程式與看得到的行為都不變，不必再送 L2。
+
+### 判斷與修正
+
+- **R9 成立，修（`d7e2a0b`）**。照 D-207，修法不加機制、不必再送 L2，直接修。修之前用上面的區分大小寫資料夾跑是失敗的；修之後在那個資料夾與預設的暫存資料夾各跑一次都通過。
+- 四輪 L2 到此：R1～R9 都處理了，R3 記成已知的限制，其餘修了；第四輪沒有擋合併的發現。
