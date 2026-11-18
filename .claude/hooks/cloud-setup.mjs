@@ -44,13 +44,15 @@ try {
   notes.push(`設定 core.hooksPath 失敗：${e.message}`);
 }
 
+// 每次都抓：容器可能從舊快照開機，已有的 tag 不代表是最新的（之後新打的版本也要抓得到）。
+const versionTags = () => run('git', ['tag', '--list', 'v*'], root).split('\n').filter(Boolean).length;
 try {
-  if (run('git', ['tag', '--list', 'v*'], root).trim() === '') {
-    run('git', ['fetch', '--tags', '--quiet', 'origin'], root);
-    notes.push(`抓了 git tag（${run('git', ['tag', '--list', 'v*'], root).trim().split('\n').length} 個 v*，跨版本測試要用）`);
-  }
+  const before = versionTags();
+  run('git', ['fetch', '--tags', '--quiet', 'origin'], root);
+  const after = versionTags();
+  if (after > before) notes.push(`補抓了 git tag（共 ${after} 個 v*，跨版本測試要用）`);
 } catch (e) {
-  notes.push(`抓 git tag 失敗，跨版本測試會失敗：${String(e.stderr || e.message).slice(-300)}`);
+  notes.push(`抓 git tag 失敗，缺的版本的跨版本測試會失敗：${String(e.stderr || e.message).slice(-300)}`);
 }
 
 for (const dir of ['.', 'tools', 'plugins/capture', 'plugins/mindboard']) {
