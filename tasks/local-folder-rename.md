@@ -1,6 +1,6 @@
 # 本機資料夾改名 `Essence`（D-211，給 Claude，本機執行）
 
-狀態：準備好了（2026-11-18）：腳本與測試寫好；〈改名前〉第 1、2、4、5 項做完，`check` 印「可以改名。」；等使用者挑停手的時段（第 3、6 項在那時確認）。
+狀態：改名完成（2026-11-18）：〈改名後〉第 1～4、6、7 項做完，見〈結果〉；第 5 項（手機看新對話、Codex 從新資料夾開）等使用者確認。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。依據：[D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 7 點、[D-211](../docs/decisions.md#d-211-本機資料夾也改名舊對話收尾後不接續)。
 
@@ -97,4 +97,17 @@
 
 ## 結果
 
-（改名後填。）
+2026-11-18，改名後的新對話（`D:\程式開發\Essence`，不用 worktree）：
+
+| 項目 | 結果 |
+|---|---|
+| 1. 接手測試 | 新對話只讀 roadmap 說出的 14 列下一步與等誰，和改名前的 `1cdc1a9` 一致（改名後工作樹乾淨、HEAD 就是它） |
+| 2. 記憶 | 開頭載入的索引 50 條，和舊位置的 `MEMORY.md` 相同（兩邊各 51 個檔）；`verify --snapshot` 10 項全部 ✅，結束碼 0（之後第 6 項才改記憶，所以現在的雜湊會和快照不同，是預期的） |
+| 3. 工具 | `npm run build` 通過。`npm run check` 第一次有 2 項 deck 測試失敗：`docs/syntax.md` 的工作檔是 CRLF（2026-11-17 20:45 寫出，早於改名；git 存的是 LF），轉回 LF 後沒有差異。第二次是本對話在 roadmap 寫了本機路徑，被白板檢查擋下，改掉了。第三次 3011 項：3010 通過、0 失敗、1 略過 |
+| 4. 第一個 commit | 本檔、roadmap 與 architecture 的更新，pre-commit 有跑（見那個 commit） |
+| 5. Remote Control 與 Codex | 等使用者：手機看不看得到新對話；Codex app 從新資料夾開、問北極星（電腦上沒有 Codex 的命令列工具，AI 測不了） |
+| 6. 文件與設定 | 本檔、roadmap（那一列與已完成）、`docs/architecture.md`〈repo 結構〉兩張圖的第一行；Capture repo 的 `AGENTS.md` 改成「旁邊的 `Essence`」（另外 commit）；記憶改了 `essence-cards-project-state`、`production-vault`（release worktree 改叫 `../Essence-release`）、`worktree-docs-to-main` 與索引；`backup-folder` 指的都是 `Essence Cards Backup`，不用改 |
+| 7. 留著的舊東西 | `~/.claude/projects/D-------Essence-Cards`、Codex 舊路徑的信任設定、app 裡的舊對話都沒動 |
+| 順手 | `.claude/worktrees/` 裡 `one-repo-step-1`、`progress-board-382fc5` 兩個空資料夾刪掉了（先確認是空的） |
+
+驗收：第 1、2 項在改名前後由使用者跑（`紀錄\snapshot.json` 在；`run` 的輸出沒有另外存檔；使用者貼了〈改名〉第 3 步只在「全部通過」時才貼的開場話，`verify` 也全部 ✅）；第 3 項 `D:\程式開發\Essence Cards` 不在，`git worktree list` 只有主資料夾一行；第 4 項 `core.hooksPath` 只有 `.git/config` 的 `.githooks`，`.git` 底下的設定檔沒有舊路徑；第 5 項由 `verify` 核對；第 6 項除第 5 項外都做到。

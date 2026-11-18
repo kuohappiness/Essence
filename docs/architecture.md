@@ -1,6 +1,6 @@
 # Essence Cards｜架構
 
-更新：2026-11-17｜狀態：架構釐清七步已完成；出題語法已定稿，檔案格式見[出題語法與資料格式](syntax.md)；三個外掛的 repo 結構見[第 9 節](#9-repo-結構-d-208)
+更新：2026-11-18｜狀態：架構釐清七步已完成；出題語法已定稿，檔案格式見[出題語法與資料格式](syntax.md)；三個外掛的 repo 結構見[第 9 節](#9-repo-結構-d-208)
 
 這份文件回答「技術上怎麼組成」。為什麼做、做到什麼程度見[產品定義](product.md)。
 
@@ -379,7 +379,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 ### 現在（第一步之後）
 
 ```text
-Essence/                         GitHub 的 repo（2026-11-18 改名）；本機資料夾還叫 Essence Cards，收尾後改名（D-211）
+Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18 都改名，D-211）
 ├─ AGENTS.md、CLAUDE.md          全專案的底線與協作規則
 ├─ .claude/、.agents/            權限、hook、skill（三個外掛共用）
 ├─ .githooks/、.github/          commit 與 CI：照分派表只檢查改到的外掛
@@ -397,7 +397,7 @@ Essence/                         GitHub 的 repo（2026-11-18 改名）；本機
 ### 目標（第二步之後）
 
 ```text
-Essence/                         本機資料夾也改名（D-211）
+Essence/
 ├─ AGENTS.md、CLAUDE.md、README.md
 ├─ .claude/、.agents/、.githooks/、.github/
 ├─ docs/                         三個外掛共用：本檔（定位、接點、repo 結構）、轉錄稿格式、decisions.md、
