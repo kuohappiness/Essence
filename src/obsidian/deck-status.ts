@@ -2,7 +2,8 @@ import { MarkdownView, type App, type WorkspaceLeaf } from 'obsidian';
 import type { DeckStatusValue, EditorHandle, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { editorOf } from './save.ts';
 
-// 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只在電腦。開著的筆記走編輯器（和存檔同一條），沒開著的走檔案（和離開筆記補 ID 同一條）。
+// 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只在電腦。開在編輯模式的筆記走編輯器（和存檔同一條），沒開著或只開在閱讀模式的走檔案（和離開筆記補 ID 同一條）。
+// 閱讀模式的分頁改隱藏的編輯器，磁碟上留不住；它也不跟著外部的修改重讀，拿來比對會一直是「還沒存進去的修改」（Windows 實機 2026-11-18，草稿在閱讀模式按「啟用」；引言框的「加入」在 intro-run.ts 是同一個原因）。
 
 /** 給家長看的提示：寫不進去時畫面不變，要說為什麼。 */
 const STATUS_TIPS = {
@@ -42,7 +43,7 @@ export function activateDeck(app: App, state: Pick<State, 'activateDraft'>, path
 }
 async function change(app: App, path: string, onError: (error: unknown) => void, write: (editor: EditorHandle | null) => Promise<WriteResult | { kind: 'unwritable' }>): Promise<string | null> {
   try {
-    const view = app.workspace.getLeavesOfType('markdown').map(leaf => viewOf(leaf, path)).find(each => each !== null) ?? null;
+    const view = app.workspace.getLeavesOfType('markdown').map(leaf => viewOf(leaf, path)).find(each => each !== null && each.getMode() === 'source') ?? null;
     if (view?.file && !sameText(view.editor.getValue(), await app.vault.read(view.file))) return STATUS_TIPS.unsaved;
     const result = await write(view && editorOf(view, path));
     if (result.kind === 'failed') onError(result.error);
