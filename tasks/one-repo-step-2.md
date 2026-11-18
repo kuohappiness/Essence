@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核第四輪中（[查核請求](one-repo-step-2-plan-review.md)）；開工要等 `0.6.0` 裝好、iPhone 驗完
+狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；B 另等〈待使用者決定〉第 1 題
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../docs/agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
