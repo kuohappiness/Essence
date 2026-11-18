@@ -5,7 +5,7 @@ export const MAP = 'docs/progress-map.md';
 // 發布到 GitHub Pages 的檔名；根網址 index.html 轉到清單頁。
 export const LIST_PAGE = 'progress-map-list.html';
 export const BOARD_PAGE = 'progress-map-board.html';
-const REPO = 'https://github.com/kuohappiness/Essence-Cards';
+const REPO = 'https://github.com/kuohappiness/Essence';
 const DOCS_URL = `${REPO}/blob/main/docs/`;
 
 export type Status = 'done' | 'part' | 'todo' | 'later';

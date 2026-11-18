@@ -54,10 +54,10 @@ void test('反引號裡沒跳脫的 | 會切格（GFM），整列錯位前就報
 
 void test('連結改成 GitHub 上的網址：相對 docs/ 的、上一層的、有空白的、roadmap 內的錨點', () => {
   const [first, second] = parseRoadmap(SAMPLE).works;
-  assert.match(first.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/tasks\/x\.md"/);
-  assert.match(first.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/Claude%20Codex%20Discussion\/y\.md"/);
-  assert.match(first.entry.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/docs\/decisions\.md#d-1-/);
-  assert.match(second.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/docs\/roadmap\.md#/);
+  assert.match(first.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/tasks\/x\.md"/);
+  assert.match(first.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/Claude%20Codex%20Discussion\/y\.md"/);
+  assert.match(first.entry.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/decisions\.md#d-1-/);
+  assert.match(second.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md#/);
   assert.match(second.status.html, /<code>0\.5\.0<\/code>/);
 });
 
@@ -122,11 +122,11 @@ const MINDBOARD = 'plugins/mindboard/docs/roadmap.md';
 void test('§8 外掛的 roadmap：只讀現在在哪裡，名稱前加外掛名，連結以它自己的資料夾為準', () => {
   const [work] = parsePluginWorks(PLUGIN_SAMPLE, MINDBOARD);
   assert.equal(work.name.text, 'Mindboard｜畫布');
-  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/plugins\/mindboard\/tasks\/canvas\.md"/);
-  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/plugins\/mindboard\/docs\/roadmap\.md#/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/plugins\/mindboard\/tasks\/canvas\.md"/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/plugins\/mindboard\/docs\/roadmap\.md#/);
   // 同樣的寫法在最上層指回最上層的位置。
   const [top] = parseRoadmap(SAMPLE.replace('../tasks/x.md', '../tasks/canvas.md')).works;
-  assert.match(top.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/tasks\/canvas\.md"/);
+  assert.match(top.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/tasks\/canvas\.md"/);
   // 外掛的 roadmap 少了必要的欄照樣報出行號。
   assert.throws(() => parsePluginWorks(PLUGIN_SAMPLE.replace('| 等誰 |', '|').replace('|---|---|---|---|', '|---|---|---|').replace(' | 使用者 |', ' |'), MINDBOARD),
     (error: unknown) => error instanceof RoadmapError && error.line === 5 && error.message.includes('等誰'));
@@ -151,7 +151,7 @@ void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析
   board('--out', 'out/board.html');
   const html = await readFile(join(root, 'out/board.html'), 'utf8');
   assert.match(html, /<span class="wname">Mindboard｜畫布<\/span>/);
-  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
+  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
   // 寫壞的外掛 roadmap：--check 報檔案與行號。
   const broken = PLUGIN_SAMPLE.replace('| 工作 | 狀態 | 下一步 | 等誰 |', '| 工作 | 狀態 | 下一步 | 卡在 |');
   await put(MINDBOARD, broken);

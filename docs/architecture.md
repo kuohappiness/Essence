@@ -379,7 +379,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 ### 現在（第一步之後）
 
 ```text
-Essence-Cards/
+Essence/                         GitHub 的 repo（2026-11-18 改名）；本機資料夾還叫 Essence Cards（D-208 第 7 點）
 ├─ AGENTS.md、CLAUDE.md          全專案的底線與協作規則
 ├─ .claude/、.agents/            權限、hook、skill（三個外掛共用）
 ├─ .githooks/、.github/          commit 與 CI：照分派表只檢查改到的外掛
@@ -397,7 +397,7 @@ Essence-Cards/
 ### 目標（第二步之後）
 
 ```text
-Essence/                         repo 與本機資料夾改名（另排時段，D-208 第 7 點）
+Essence/                         本機資料夾也改名（D-208 第 7 點：先演練，接不上就保留舊名）
 ├─ AGENTS.md、CLAUDE.md、README.md
 ├─ .claude/、.agents/、.githooks/、.github/
 ├─ docs/                         三個外掛共用：本檔（定位、接點、repo 結構）、轉錄稿格式、decisions.md、

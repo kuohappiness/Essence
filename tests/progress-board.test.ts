@@ -47,7 +47,7 @@ void test('讀出段、說明、模組與每一列；第一個 ## 之前的說�
 
 void test('相對連結改成 GitHub 上 docs/ 的網址，外部網址不動', () => {
   const items = parseMap(SAMPLE)[0].modules[0].items;
-  assert.match(items[0].note, /href="https:\/\/github\.com\/kuohappiness\/Essence-Cards\/blob\/main\/docs\/syntax\.md#2-%E5%8D%A1%E7%B5%84"/);
+  assert.match(items[0].note, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/syntax\.md#2-%E5%8D%A1%E7%B5%84"/);
   assert.match(items[3].note, /href="https:\/\/example\.com"/);
 });
 
