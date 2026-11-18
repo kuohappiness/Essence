@@ -176,11 +176,19 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   // 只差大小寫的兩個路徑（檔名或資料夾名）：不分大小寫的檔案系統會寫成同一個檔，撞到就擋；區分大小寫的照常兩份都掃
   // （L2 R8，R7 修正引入；同一類的第 3 代，列舉整類）。物件直接寫進索引：Windows 的 git add 加不進來，合併在區分大小寫的
   // 系統上做的分支就會帶進來。索引照位元組排序，大寫的先寫出，金鑰放在先寫的那份。
+  // 預期照掃描器的副本所在（系統暫存資料夾）實際分不分大小寫，不照作業系統猜（L2 R9）：Windows 的資料夾可以設成區分大小寫。
+  const probe = await mkdtemp(join(tmpdir(), 'essence-case-'));
+  await writeFile(join(probe, 'Case'), '', { flag: 'wx' });
+  const sameFile = await writeFile(join(probe, 'case'), '', { flag: 'wx' }).then(() => false, (error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EEXIST') throw error;
+    return true;
+  });
+  await rm(probe, { recursive: true, force: true });
   const clean = await object('# C\n');
   const leaked = await object(secret);
   for (const [first, second] of [['docs/Case.md', 'docs/case.md'], ['Docs/case.md', 'docs/case.md']]) {
     await run('git', ['update-index', '--add', '--cacheinfo', `100644,${leaked},${first}`, '--cacheinfo', `100644,${clean},${second}`], isolated);
-    await assert.rejects(run('git', commit, isolated), process.platform === 'linux' ? /secretlint-rule-github/ : /同一個檔/, first);
+    await assert.rejects(run('git', commit, isolated), sameFile ? /同一個檔/ : /secretlint-rule-github/, first);
     await run('git', ['update-index', '--force-remove', '--', first, second], isolated);
   }
   await rm(join(root, 'e.md'));
