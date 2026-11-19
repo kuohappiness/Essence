@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；B 另等〈待使用者決定〉第 1 題
+狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；〈待使用者決定〉第 1 題 2026-11-20 定案（B 就搬）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../docs/agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
@@ -326,7 +326,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 ## 待使用者決定
 
-1. 💬 **轉錄稿格式（`syntax.md` §1）在 B 搬到最上層，還是留在 Cards 等第一個 Capture 任務？** D-208 第 6 點說「第一個需要共同規格的 Capture 任務」搬，第 8 點說第二步把 `syntax.md` 拆成共用與 Cards 專用；第二步先到時兩點的時機衝突。
+1. ✅ **轉錄稿格式（`syntax.md` §1）在 B 搬到最上層，還是留在 Cards 等第一個 Capture 任務？** 使用者 2026-11-20 選「B 就搬」，寫進 [D-208](../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 6 點的時機調整；B 照 Claude 的建議做。 D-208 第 6 點說「第一個需要共同規格的 Capture 任務」搬，第 8 點說第二步把 `syntax.md` 拆成共用與 Cards 專用；第二步先到時兩點的時機衝突。
    - Claude 的建議：B 就搬到最上層（例如 `docs/transcript.md`），原節留錨點與一行連結；第 6 點的另一半（Capture 寫、Cards 讀的測試讀同一份自編範例、已部署讀端的相容檢查）照舊等 Capture 的任務。理由：只搬一次；不然 `syntax.md` 先整份進 `plugins/cards/`，Capture 讀規格要讀進 Cards 的資料夾，分派表也要讓登錄表排在外掛資料夾那一條前面，之後再搬出來一次。
    - 留在 Cards 的好處：B 少一件事；代價如上，而且說明要另外寫過渡期「外掛資料夾裡的共用規格」在分派表的優先規則與案例。
    - Codex（開工前查核第一輪）同意 Claude 的建議，並提醒 `plugins/capture/docs/backlog.md` 直接連到 `docs/syntax.md#1-轉錄稿`，舊入口要留一行轉址（§B2 已寫）。
