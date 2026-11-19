@@ -25,5 +25,6 @@
 - [獨立 App](standalone-app.md)
 - [更新與相容](updates.md)
 - [維修與查修的準備](maintenance.md)
+- [工作流程優化：點子到完成的路線](workflow.md)
 
 Capture、Mindboard 的待做與待決已搬到各自的 `docs/backlog.md`（[Capture](../../plugins/capture/docs/backlog.md)、[Mindboard](../../plugins/mindboard/docs/backlog.md)，[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。
