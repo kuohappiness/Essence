@@ -1,6 +1,6 @@
 # 接句卡（D-183、D-185、D-189 第 1 點，給 Claude，本機執行）
 
-狀態：已完成（[PR #12](https://github.com/kuohappiness/Essence-Cards/pull/12) 合併進 `main`，2026-11-16）；iPhone 併入下一次實機測試
+狀態：已完成（[PR #12](https://github.com/kuohappiness/Essence-Cards/pull/12) 合併進 `main`，2026-11-16）；iPhone 在 0.6.0 上線前測試通過（2026-11-20，[清單](release-0.6.0.md) A1、B2），`0.6.0` 已裝到正式 vault
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。改到排程的選卡順序（全部卡的一輪與每日的份），屬於 [quality.md](../docs/agents/quality.md#高風險範圍要做-l2) 的高風險範圍，合併前做 L2。
 

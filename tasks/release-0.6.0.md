@@ -1,6 +1,6 @@
 # 上線前清單：升正式版 0.6.0
 
-狀態：第 0～3 關做完，iPhone 實測必測通過（2026-11-20，A6 第三次延後）；第 4 關做到第 6 步（tag `v0.6.0`、`--check` 通過），下一步等使用者第二次同意再 `--install`
+狀態：已完成（2026-11-20）：正式 vault 升到 `0.6.0+037b359`，電腦與 iPhone 都換好；Cards 搬家的穩定基線記在〈結果〉第 5 關
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。流程照 [0.4.0 的清單](release-0.4.0.md)，這份只寫這一版不同的地方；沒寫的規則（凍結、重測、必測沒過的處理、升版的九步）照 0.4.0。
 
@@ -168,3 +168,16 @@ A6 是第 2 類：沒過或這次又不做，由使用者決定修、延後或�
 - 第 4 步：附註 tag `v0.6.0` 打在 `037b359`，內容是第五項第 4 步的更新說明，已推上去。
 - 第 5 步：`git worktree add --detach ../Essence-release v0.6.0`，`npm ci`。`docs/syntax.md` 取出成 CRLF，轉成 LF 後 `git status` 仍標修改（內容與 hash 和 tag 相同，索引的時間戳記沒更新），`git -c core.autocrlf=false add docs/syntax.md` 之後工作樹乾淨。**`tools/` 也要 `npm ci --prefix tools`**：第一次 `--check` 停在型別檢查（`tools/check-docs.ts` 找不到 `markdown-it`），正式 vault 沒動、也還沒備份；補裝後重跑。
 - 第 6 步：`npm run update-vault -- <正式 vault> --check --to <備份資料夾>` 通過（03:17）：`npm run check` 通過；考前提醒「沒有生效的考試範圍」；備份 `Essence Cards 備份 2026-11-20 031730 0.5.0+af9cdbf 3349.zip`；發布前比較 `0.5.0+af9cdbf` 對 `0.6.0+037b359` 差異 0 項，兩版的讀取閘門都沒有擋下的卡組或紀錄（正式 vault 還沒有卡組）；兩台最後回報的版本都是 `0.5.0+af9cdbf`（11-14）。報告只在本機。
+- 第 7 步：報告摘要與考前提醒給使用者看，使用者同意安裝（2026-11-20 早上，第二次問）。`--check` 之後正式 vault 沒有改。`npm run update-vault -- <正式 vault> --install`：印出「已安裝 0.6.0+037b359（release）」。
+- 第 8 步：兩台都換好。電腦的 Obsidian 本來沒開，直接開正式 vault：月檔的版本行 `0.6.0+037b359`（07:08:24），外掛做了換版備份 `Essence Cards 備份 2026-11-20 070824 0.6.0+037b359 7004.zip`。iPhone 第一次跑「版本」時開的是測試 vault（顯示 `4536a17`），切到正式 vault、完全關掉再開後是 `0.6.0+037b359`，月檔的版本行 07:22:38 寫、07:23 同步到電腦。`.local/releases/0.6.0/` 有產物與雜湊。正式 vault 沒有 `Essence Cards/設定.json`，0.5.0 沒測到的設定檔釘選這次也看不到（還沒有設定檔）。
+- 第 9 步：先唯讀掃 worktree 沒有連結（junction、symlink 都沒有），用不加 `--force` 的 `git worktree remove` 拿掉。roadmap 的「升正式版 `0.6.0`」一列移到已完成，「更新與相容」一列改成 `0.6.0`；backlog〈下一次 iPhone 實機測試〉那一列改成四次做完、累積到下一次的項目；通過的「補測：」列沒有（A6 延後）；五份任務說明（poem-order、couplet-cards、english-typed-order、ai-cards-add、ai-cards-deepen）的狀態行寫上 iPhone 的結果，ai-cards-materials 沒有 iPhone 項目、不改。
+- **做的時候要注意**（給下一次升版）：release worktree 除了根目錄的 `npm ci`，`tools/` 也要 `npm ci --prefix tools`，不然 `--check` 的型別檢查找不到 `markdown-it`。
+
+第 5 關｜Cards 搬家的穩定基線（第五項第 10 步，D-208 第 8 點，2026-11-20）：
+
+- tag `v0.6.0`，開發 commit `037b359ff46b93bd6244ccc1339fd026a6719778`（凍結時的 `4536a17` 到這裡 `src/`、建置與版號檔沒變）。
+- `.local/releases/0.6.0/release.json` 記的產物 SHA-256：`main.js` `e13a91a731c5f80d9e12b17c79b045ab902429bfeaa875fbb05e454a98851d13`、`manifest.json` `a2d70a2f4d4d5629f6b526893d249c75d65bad33f9642533c5e202480009e137`、`styles.css` `38a9b2b1a37e667ed0292316a777148c2cd53df957e370d58629a88e933add13`（`main.js.map` `362847b33016ca2e702e078db1c477ebbdcaf62734db5ea3e56de7d28756604b`）。
+- iPhone 驗收：第二項必測 A1～A5 通過，A6 第三次延後、A7 沒測到；手感 B1～B4 的版面沒問題，四個手感問題下一版修。
+- roadmap「三個外掛的 repo 架構」那一列的下一步改成約停手時段開始搬家。
+
+延後的測試：「補測：系統資料夾兩台幾乎同時搬與檔案 App 搬走紀錄」（A6 第三次延後）、「讀取的等待上限」（A7 沒遇到）、「iOS 27.0.1 的『檔案』App 長按選單找不到」（讀不到的 30 秒與「移除下載」做不出佔位檔），都在 backlog 技術債；四個手感問題下一版修，修好後在 iPhone 看一次（backlog〈待決問題〉與〈下一次 iPhone 實機測試〉）。
