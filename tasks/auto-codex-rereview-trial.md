@@ -1,6 +1,6 @@
 # 試行：L2 的再審輪由 Claude 自己叫 Codex（給 Claude，本機執行）
 
-狀態：可以開工（預檢可以先做；L2 的部分等[三外掛併 repo 第一步](one-repo-step-1.md)送 L2）
+狀態：已被取代（2026-11-20）→ [D-212](../docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)：Claude 直接呼叫本機 Codex 已是正式做法、第一輪也包含在內；這個試行沒有在第一步的 L2 用上，也不再另找一件試（Claude 2026-11-20 整理）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。這份由施工[第一步](one-repo-step-1.md)的那個本機 session 一起做，它就是那件 L2 的整合者。**這是試行，不是決定**：量完由使用者看結果決定要不要寫成 D-ID、改 `quality.md` 與 code-quality 的 `review.md`；試行期間只有下面寫的地方和現行規則不同。
 
