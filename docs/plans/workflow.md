@@ -12,6 +12,37 @@
 2. 再以 Essence 當時的結論，寫一份給其他專案的初始決策流程架構（第一個用的是 ArchiSitus，在 Claude 雲端開發）。只做一次性的初始架構，各專案接手後自己迭代，Essence 不負責同步；通用規範裡不提 Essence，也不連回 Essence。
 3. 改到第二步 A、B 也會動的檔（skill、`docs/agents/`、文件檢查、`decisions-index.mjs`、architecture §9、plans/README），排在 [Cards 搬家第二步](../../tasks/one-repo-step-2.md) B 合併之後。只新增檔案的可以先做。
 
+## D-214 上線後的路線
+
+位置照第二步 B 合併之後（[D-213](../decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)）。現在的路線見[文件存放規則](README.md#一件事從點子到完成的路線)。
+
+```text
+點子
+ │ 記下來
+ ▼
+backlog〈待處理〉 ……………… 短點子、待決問題、技術債
+ │ 需要展開；backlog 這一項搬到〈已轉出〉，加一行「→ plans/A」
+ ▼
+docs/plans/A.md ……………… 還在規畫的細節；開頭寫「來自 backlog」
+ │ 要做決定
+ ▼
+討論 ………………………………… 一次問一題、附建議、和「不做」比較
+ │ 重大的：docs/Claude Codex Discussion/ 的討論稿，Claude 與 Codex 輪流，一致才交給使用者
+ │ 使用者明確同意
+ ▼
+decisions.md（D-ID）……… 寫「來自」「修改 D-xxx」，一句話與主題寫在條目裡；plans/A 加一行「→ D-xxx」
+ │ 同步規範文件（現行規則所在）；索引、往前的鏈、「現行寫在哪」由工具算
+ │ 可以交付實作
+ ▼
+docs/tasks/<任務>.md ……… 規格與驗收；開頭寫「來自 D-xxx」
+ │ 實作 → L1 自查 → 高風險的 L2（獨立查核）→ 合併
+ ▼
+roadmap〈已完成〉加一列、progress-map 改符號、任務狀態行改「已合併」
+（白板的「最近定案」由工具從決策索引產生）
+```
+
+每一站只寫兩種連結：自己的「來自」、上一站的「→ 下一站」，都只寫一次。可以拆分、合併、跳站、退回。讀入口文件只讀上面那一節：backlog 的〈待處理〉、roadmap 的狀態板。
+
 ## 已談定
 
 使用者 2026-11-19 同意，已寫成 [D-214](../decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算)。
@@ -38,6 +69,8 @@
 - 改 `tools/roadmap-board.ts`：白板分成「已完成」與「最近定案」兩塊（第 6 點）。
 - 改文件檢查：認「來自」與「→」連結、backlog 與 roadmap 的分區（第 3、4 點）；狀態板的「等誰」與「狀態」兩條檢查（第 9 點），同時把現有的列整理一次（約 7 列移到〈等觸發點〉）。
 - 改 essence-decision、essence-discuss（兩份副本）照新步驟。
+- plans/README 的存放表與路線圖改成新位置（`docs/tasks/`、`docs/Claude Codex Discussion/`），再改成連到工作流程規範（使用者 2026-11-19 提醒）。
+- 工作流程規範放上面〈D-214 上線後的路線〉那張圖（使用者 2026-11-19）。
 - backlog、roadmap 照第 4 點分區。
 
 ## 還沒談的
