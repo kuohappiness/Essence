@@ -267,7 +267,6 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 - `docs/architecture.md` §9：兩張圖合成一張（第二步之後），〈每一類放哪裡〉照實際；`AGENTS.md`〈開始工作前〉的「先讀 `docs/roadmap.md`」改成先讀最上層的入口，做 Cards 時讀 `plugins/cards/AGENTS.md`。
 - 合併後：本機記憶裡寫到 Cards 文件路徑或 `tasks/`、`Claude Codex Discussion/` 的條目跟著改；roadmap 的已完成寫一列；技術債「外掛只改文件也跑完整檢查」刪掉 Cards 的部分（Capture、Mindboard 照舊）。
-- 合併後通知 session「專案決策流程協作」（2026-11-19 約定）：從 Essence 抽出的決策流程模板，要等 B 合併後才接回 Essence，並做兩個小提案（`decisions-index` 預設只印一層、觸發點的列搬到技術債表）。A 或 B 的範圍改到 `AGENTS.md`、`.claude/skills/`、`.agents/skills/`、`docs/agents/`、`tools/check-docs.ts`、roadmap、`decisions-index.mjs` 以外的寫法時，也先通知。那個 session 已經不在時，改在 roadmap 那一列寫明模板可以接回。
 
 ## 驗收
 
