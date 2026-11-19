@@ -261,7 +261,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - `tools/dispatch.ts`：登錄表照第 1 題改路徑；第 9 條（最上層的文件）照舊是 Cards 相關測試，拿掉已經搬進 `docs/` 的 `tasks/`、`Claude Codex Discussion/`（之後在舊位置出現的檔落第 10 條「全部」，文件檢查也會擋）；對應的案例跟著改。
 - `.github/workflows/progress-board.yml`：觸發路徑加 `plugins/*/docs/backlog.md`、`plugins/cards/docs/progress-map.md`（若有）。
 - Cards 的測試讀文件的路徑改回相對 Cards 的 `../docs/…`。
-- `.claude/skills/`、`.agents/skills/` 寫到 Cards 文件路徑或 `tasks/`、`Claude Codex Discussion/` 的地方（例如 essence-decision 的 syntax.md、essence-discuss 的 `tasks/`）兩份一起改；`AGENTS.md`、`docs/agents/`、外掛的 `AGENTS.md` 寫到這兩個資料夾的句子也改（例如 AGENTS.md〈AI 協作分工〉的討論稿位置）。
+- `.claude/skills/`、`.agents/skills/` 寫到 Cards 文件路徑或 `tasks/`、`Claude Codex Discussion/` 的地方（例如 essence-decision 的 syntax.md、essence-discuss 的 `tasks/`）兩份一起改；`AGENTS.md`、`docs/agents/`、`docs/plans/`（例如 `README.md` 的存放表與流程圖、`workflow.md`）、外掛的 `AGENTS.md` 寫到這兩個資料夾的句子也改（例如 AGENTS.md〈AI 協作分工〉的討論稿位置）。這些是反引號路徑，連結腳本改不到：B0 的清單用 `git grep -n -e '`tasks/' -e '`Claude Codex Discussion/'` 掃一次，扣掉決定、已完成的任務與討論稿（當時的紀錄），其餘逐條列進清單。
 
 ### B4 收尾
 
