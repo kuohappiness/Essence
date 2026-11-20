@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -46,4 +46,25 @@ void test('L2 R2 cliPath：真的 npm（--prefix 從上層、在套件裡、套�
   assert.equal(await npm(top, ['--prefix', 'plugins/cards', 'run', 'probe', '--', 'vault']), join(top, 'vault'));
   assert.equal(await npm(pkg, ['run', 'probe', '--', 'vault']), join(pkg, 'vault'));
   assert.equal(await npm(top, ['--prefix', 'plugins/cards', 'run', 'outer']), join(pkg, 'vault'));
+});
+
+// 第二步 L2 第二輪：空字串不能變成「目前的資料夾」（搬家前 realpath('') 報 ENOENT；呼叫的腳本把空變數加引號傳進來時會碰到）。
+// 明寫的 `.` 照舊是目前的資料夾。
+void test('L2 第二輪 cliPath：空字串的路徑丟錯，`.` 照舊', () => {
+  const cwd = resolve('/repo/plugins/cards');
+  assert.throws(() => cliPath('', 'backup', {}, cwd), /空的/);
+  assert.throws(() => cliPath('', 'backup', { npm_lifecycle_event: 'backup', INIT_CWD: resolve('/repo') }, cwd), /空的/);
+  assert.equal(cliPath('.', 'backup', {}, cwd), cwd);
+});
+
+void test('L2 第二輪：install-vault、backup 的命令列給空字串的 vault 就停下，資料夾裡什麼都沒寫', async t => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'essence-cli-empty-')));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const tools = resolve(import.meta.dirname, '../tools');
+  const env = { ...process.env };
+  delete env.npm_lifecycle_event; delete env.INIT_CWD;
+  for (const args of [[join(tools, 'install-vault.mjs'), '', '--release', '9.9.9'], [join(tools, 'backup.ts'), '', '--to', 'out']]) {
+    await assert.rejects(run(process.execPath, args, { cwd: dir, env, encoding: 'utf8' }), (error: { stderr: string }) => /空的/.test(error.stderr), args[0]);
+    assert.deepEqual(await readdir(dir), [], args[0]);
+  }
 });
