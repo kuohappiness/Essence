@@ -402,12 +402,12 @@ A 的驗收全部完成。
 - 第 7 項：`check-docs.test.ts` 的「BEFORE_D195 也放過 Cards 的舊任務」：`plugins/cards/docs/tasks/w3.md` 放過、不在清單上的照查；Mindboard 的同名任務照查（第一步的測試照留）。
 - 第 8 項：`git ls-files tasks "Claude Codex Discussion" "plugins/*/tasks" "plugins/*/Claude Codex Discussion"` 是空的。`check-docs.test.ts` 的暫存 repo 在四種舊位置各放一個檔，都報、訊息有新位置；`docs/tasks/`、`plugins/capture/docs/tasks/` 沒有狀態行的照常報。
 - 檢查：`<B 搬檔>` 之前在工作樹跑 Cards 的 `npm run check`（2904 個測試全過）、`tools/` 的 `npm run check` 與 `npm run self-check`；self-check 原本 3 個失敗，修了再 commit（第 3 點與 `dispatch.test.ts` 一行註解）。
-- 第 9 項：L2 第一輪（`7c4828c`）七項都修了（[報告與回應](<../Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md>)）：R1 重跑改連結的腳本會把手修的 Cards backlog 連結改回共用目錄（腳本加 `settled`、那一處改成純文字）；R2 同一段的純文字當成連結；R3 `FROZEN_RULES` 範圍太寬（改成逐檔列路徑）；R4～R7 文件。第二輪待送。
+- 第 9 項：L2 第一輪（`7c4828c`）七項都修了（[報告與回應](<../Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md>)）：R1 重跑改連結的腳本會把手修的 Cards backlog 連結改回共用目錄（腳本加 `settled`、那一處改成純文字）；R2 同一段的純文字當成連結；R3 `FROZEN_RULES` 範圍太寬（改成逐檔列路徑）；R4～R7 文件。第二輪（`756ecd8`）四項也修了：R5 加的兩條連結從搬家前的位置也解得到（重跑要人看 2 個，改成只有一種解法）、引用式連結也讓純文字被誤改、規則檔改名後凍結的那一列留下、Capture backlog 漏改的一處。第三輪待送。
 
 實作者自己選的做法（規格沒寫到的）：
 
 1. **製卡規則送給 AI 的部分不改連結**：國語、社會、英文三份規則在 `<!-- 以下送給 AI -->` 以下有連到決定、試作場與討論稿的相對路徑；改了就是改送出的內容，嵌入的雜湊會變（D-151，驗收第 B3 項要相同）。那一段照搬之前的位置留著，文件檢查用 `FROZEN_RULES` 照搬家前的位置解（逐檔列出搬家時就在的路徑，L2 R3；表上沒有的、解不到的照樣報，改好了要從表上刪），社會那份一條連到已搬走的討論稿的放進例外清單；Cards backlog 記一列技術債，下次改那份規則的版本時一起改。代價：在 Obsidian 或 GitHub 上點那幾條連結打不開。
-2. **改連結的腳本加三條**：拆出的新檔與整份搬的檔裡，連結先照搬之前的位置解，搬之前解不到、搬之後解得到的（手寫成新位置的）不動；`stay`：沒搬的檔裡連到拆開的原檔、指定錨點（backlog 的〈技術債〉〈已知的限制〉）的連結留在原檔，不跟著那一節的大部分去 Cards；`frozen`：上面第 1 點的範圍不改。合併前 rebase 之後要重跑，用另存的計畫檔（加了 `stay` 與 `settled`：連結已照計畫改過一次，搬走或拆出的檔裡兩種解法不同的也列成要人看，L2 R1），在修正後的樹 `--check` 是 0 個修改、0 個要人看。
+2. **改連結的腳本加三條**：拆出的新檔與整份搬的檔裡，連結先照搬之前的位置解，搬之前解不到、搬之後解得到的（手寫成新位置的）不動；`stay`：沒搬的檔裡連到拆開的原檔、指定錨點（backlog 的〈技術債〉〈已知的限制〉）的連結留在原檔，不跟著那一節的大部分去 Cards；`frozen`：上面第 1 點的範圍不改。合併前 rebase 之後要重跑，用另存的計畫檔（加了 `stay` 與 `settled`：連結已照計畫改過一次，搬走或拆出的檔裡兩種解法不同的也列成要人看，L2 R1），在修正後的樹 `--check` 是 0 個修改、0 個要人看（第二輪修完後再跑一次）。
 3. **連到資料夾的連結**（`../tasks/`、`../../../docs/research/` 這類）腳本不處理，手改。
 4. `tools/tests/hooks.test.ts` 的乾淨 clone：文件照本 repo 暫存區的檔案清單同步（多的刪、少的與每一份 `.md` 從工作樹複製）。搬檔的 commit 時 clone 的 HEAD 還是舊位置，新的文件檢查會擋，pre-commit 就過不了；之後的 commit 照樣有效。
 5. `experiments/t4/` 的腳本與設定檔裡的規則檔路徑改成新位置；那裡的自我測試要在 `experiments/t4/` 另外安裝相依，沒跑。

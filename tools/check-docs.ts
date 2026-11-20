@@ -427,9 +427,13 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     problems.push(...checkDeferred(doc, changed.has(doc.file) ? debtFor(doc.file) : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
-  // 規則檔整份拿掉或改名時不報（表上那一列跟著刪）。
+  // 規則檔整份拿掉或改名也要刪那一列，不然之後同名的新檔會被放過（第二輪）。repo 裡沒有製卡規則的資料夾時（測試的暫存 repo）不看。
+  const rulesHere = [...docs.keys()].some(file => file.startsWith(posix.dirname(Object.keys(FROZEN_RULES.links)[0] ?? '') + '/'));
   for (const [file, paths] of Object.entries(FROZEN_RULES.links)) {
-    if (!docs.has(file)) continue;
+    if (!docs.has(file)) {
+      if (rulesHere) problems.push({ file, line: 0, target: file, reason: 'FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列' });
+      continue;
+    }
     for (const path of paths.filter(path => !usedFrozen.has(file + '\0' + path))) {
       problems.push({ file, line: 0, target: path, reason: 'FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉' });
     }

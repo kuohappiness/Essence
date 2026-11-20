@@ -265,4 +265,9 @@ void test('B 的 L2 R2：同一段有同一個目標的純文字與真的連結�
   assert.equal(result.text, '\\[literal](../src/a.ts) [real](../src/a.ts)\n\n[另一段](../plugins/cards/src/a.ts)\n');
   assert.deepEqual(result.conflicts.map(item => [item.line, item.ambiguous]), [[1, '../plugins/cards/src/a.ts'], [1, '../plugins/cards/src/a.ts']]);
   assert.deepEqual(rewrite('docs/x.md', result.text, map, exists).edits, []);
+  // 第二輪：同一段的引用式連結不算進行內連結的數，純文字就認得出不是連結：不改、也不用人看；定義照改。
+  const reference = '\\[literal](../src/a.ts) [ref][id]\n\n[id]: ../src/a.ts\n';
+  const referenced = rewrite('docs/x.md', reference, map, exists);
+  assert.equal(referenced.text, '\\[literal](../src/a.ts) [ref][id]\n\n[id]: ../plugins/cards/src/a.ts\n');
+  assert.deepEqual(referenced.conflicts, []);
 });

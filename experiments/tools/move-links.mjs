@@ -86,7 +86,8 @@ function parsed(text) {
     // 同一列的儲存格併成一段。
     let block = blocks.at(-1);
     if (!block || block.from !== map[0] || block.to !== map[1]) blocks.push(block = { from: map[0], to: map[1], hrefs: new Map() });
-    for (const child of token.children ?? []) {
+    // 只數行內連結與自動連結：不給定義再解析一次，引用式連結（目的地在定義那一行）就不算進這一段（B 的 L2 第二輪）。
+    for (const child of markdown.parseInline(token.content, {})[0]?.children ?? []) {
       const href = child.type === 'link_open' ? child.attrGet('href') : child.type === 'image' ? child.attrGet('src') : null;
       if (href !== null) block.hrefs.set(href, (block.hrefs.get(href) ?? 0) + 1);
     }

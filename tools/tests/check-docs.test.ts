@@ -378,6 +378,7 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
   await add('experiments/t4/arch/短規則.md', '# 短規則\n');
   await add('plugins/cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
   const social = (path: string) => 'plugins/cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
+  // elementary-chinese.md 在表上但這裡沒有這份檔（像是改名或拿掉）：那一列要刪，之後同名的新檔才不會被放過（第二輪）。
   assert.deepEqual(run(), [
     'plugins/cards/docs/card-rules/english.md:3  ../decisions.md#d-1  找不到檔案',
     'plugins/cards/docs/card-rules/english.md:7  ../nowhere.md  找不到檔案',
@@ -387,6 +388,7 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
     'plugins/cards/docs/other/x.md:3  ../decisions.md#d-1  找不到檔案',
     'plugins/cards/docs/other/x.md:7  ../decisions.md#d-1  找不到檔案',
     'plugins/cards/docs/other/x.md:7  ../nowhere.md  找不到檔案',
+    'plugins/cards/docs/card-rules/elementary-chinese.md  plugins/cards/docs/card-rules/elementary-chinese.md  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列',
     social('../../experiments/t4/arch/第二輪/判斷邊界.md'),
     social('../../experiments/t4/arch/第二輪/五步.md'),
     social('../../experiments/t4/arch/第二輪/格式.md'),

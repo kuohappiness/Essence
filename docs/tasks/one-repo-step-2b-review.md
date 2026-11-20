@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步 B：L2 獨立審查（給 Codex）
 
-狀態：第一輪報告與回應見討論稿；第二輪待審
+狀態：第一、二輪的報告與回應見討論稿；第三輪待審
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -90,3 +90,26 @@
 ### 回報（第二輪）
 
 照〈回報與權限〉，報告接在討論稿後面的〈第二輪｜Codex 報告〉（Claude 會貼進去；你寫在 `.local/codex/` 的回報即可）。
+
+## 第三輪
+
+第二輪的報告與回應在[討論稿](<../Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md>)。請**新開一個 session**，只讀討論稿的〈先讀這裡〉、〈第二輪｜Claude 回應〉和這一節。
+
+### 審查對象
+
+- 這一節所在的 commit（`git log -1 --format=%H -- docs/tasks/one-repo-step-2b-review.md`），差異只看 `git diff 756ecd8 <那個 commit>`。
+
+### 受影響的路徑
+
+- `experiments/tools/move-links.mjs` 與測試：每一段只數行內連結與自動連結（延續 R2）。
+- `tools/check-docs.ts` 與測試：表上的規則檔不在時報（延續 R3）。
+- 文件：Cards 的架構與產品定義互連的寫法（R5 引入的歧義）、Capture backlog 第 19 行（延續 R7）、討論稿、〈結果〉。
+
+### 驗證方式
+
+- 同第二輪：照清單重建的計畫加 `settled: true` 在待審樹跑 `--check`，預期 0 個修改、0 個要人看、結束碼 0；`node --test experiments/tools/move-links.test.mjs`；在 `tools/`：`node --test tests/check-docs.test.ts`；`node tools/check-docs.ts`。
+- 每一項的修法是不是解了原本的問題、有沒有引入新的。
+
+### 回報（第三輪）
+
+照〈回報與權限〉，寫在 `.local/codex/` 的回報即可，Claude 會貼進討論稿的〈第三輪｜Codex 報告〉。
