@@ -368,6 +368,8 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 2 項通過：`v0.6.0` 的 `backup` 做的 ZIP，搬家後與 `v0.6.0` 的 `restore` 各還原一份複本（刪卡組 A、拿掉紀錄 R、改卡組 B、`--files` 只選 A）：計畫去掉 vault、建立時間、備份檔路徑後相同；A 和 ZIP 逐位元組相同；B 沒變；R 各恰好一筆、在符合 §5-3 的還原檔裡；還原檔內容相同；兩份複本逐檔相同。
 - 第 3 項通過：clone 改 `0.6.1`、打 tag（沒 push），`update-vault --check` 三段檢查都過、做了備份、發布前比較 `0.6.0+037b359f`（根目錄）對 `0.6.1+5d526d97`（`plugins/cards`）差異 0 項；`--install`（演練 vault 在考試期間，加了 `--exam-ok`）裝上 `0.6.1+5d526d97`，三個檔和 clone 的 `.local/releases/0.6.1/` 相同，卡組與紀錄 50 個檔逐檔沒變。過程中遇到的都是環境：clone 沒有測試 vault 的登錄時，本機路徑檢查把文件裡的測試 vault 名稱當成一般 vault；Windows 取出的 `syntax.md` 是 CRLF 讓 deck 測試失敗（clone 改 `core.autocrlf=false`）；升版時要一起改版號寫死的三個測試（照 `fb1a051` 的做法）。
 - 第 5 項通過：從 `<基準>` 改 `src/core/deck/parse.ts` 一行的分支，合併進 `33fde4f`，改動落在 `plugins/cards/src/core/deck/parse.ts`，沒有衝突。
-- 第 4、6 項**還沒做**：要開 Windows 版 Obsidian，但 `obsidian.json` 現在開著的是正式 vault，直接開會一起叫出它，要先問使用者；第 6 項要使用者的 iPhone。測試 vault 現在的開發版（`0.6.0+4536a17`，dev）三個檔已另存、雜湊記下，還沒動過測試 vault。
+- 第 4 項通過（使用者先關掉 Obsidian、只開測試 vault）：測試 vault 原本的開發版 `0.6.0+4536a17` 三個檔另存、雜湊記下，先跑一輪 `version`、`files`、`today`、`a3check`。clone 裡 `288fc3d` 的乾淨 worktree（版號照舊 `0.6.0`）`install-vault --dev` 裝上 `0.6.0+288fc3d9`；照第 A3 項的方法比 `<基準>` 與 `288fc3d`，正式版與 dev 版逐位元組相同、`embedRules()` 相同，裝進去的 `main.js` 把建置版本換回 `<基準>` 的之後和 `<基準>` 的 dev 建置相同、`styles.css` 相同。Obsidian 完全關掉、從檔案總管重開後，`version` 回 `0.6.0+288fc3d9`；`files` 21 項、`today`（卡組、今天的份、進度）、`a3check`（11 個情境都 ok、跳過的子項 C8 與 C10 相同、`cleanupLeft` 空的）和搬家前逐項相同。
+- 第 6 項通過：使用者在 iPhone 完全關掉再打開 Obsidian，「版本」顯示 `0.6.0+288fc3d9`。
+- 演練後還原：三個檔放回測試 vault，雜湊和另存的相同；Obsidian 完全關掉再打開，`version` 讀回 `0.6.0+4536a17`。測試 vault 的紀錄多了 D-149 的版本行（Windows 換版與換回、iPhone 載入各一行），其他沒動。
 
-還沒做的驗收：§A7 第 4、6 項；第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁），連同第 5 項的 cards job 不裝 `tools/`、第 18 項的 Linux；第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
+還沒做的驗收：第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁），連同第 5 項的 cards job 不裝 `tools/`、第 18 項的 Linux；第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
