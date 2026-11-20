@@ -2,23 +2,21 @@
 
 更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡只放共用工具的技術債與已知的限制、repo 結構；Cards 的任務、技術債、待決問題與第二階段清單搬到 [Cards 的 backlog](../plugins/cards/docs/backlog.md)。搬走的每一節留標題與一行轉往新頁。
 
-收錄不等於採用。每項保留原意與來源；談定後寫進[決策紀錄](decisions.md)並從這裡移除，定案但還沒做的任務留一行連到 D-ID，內容以決策紀錄為準；任務與技術債做完就移除（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
+收錄不等於採用。每項保留原意與來源。分〈待處理〉〈已轉出〉兩區：一項需要展開、談成決定或做成任務時，搬到〈已轉出〉，下一行寫「→ 下一站（日期）」；開工只讀〈待處理〉（[工作流程規範〈backlog〉](agents/workflow.md#backlog)、[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 4 點）。技術債做完就刪那一列（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 
-## v1 需要做的任務
+## 待處理
 
-搬到 Cards 的[〈v1 需要做的任務〉](../plugins/cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（下面兩節）。
-
-## 技術債
+### 技術債
 
 共用工具（最上層 `tools/`、分派表、hook 與 CI）與 repo 結構的技術債；每個外掛的在自己的 backlog。
 
-開始一件工作或改到相關區域前，先看這張表；觸發點到了，連同完成條件一起帶進那次工作（[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。處理完刪掉那一行，修正與驗證的 commit 寫在 roadmap 的已完成。延後的測試開頭寫「補測：」、延後的功能寫「補做：」，開發空檔或額度有餘時挑來補，v1 結案前清空：補完，或使用者明確同意留到第二階段（[D-195](decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）。
+開始一件工作或改到相關區域前，先看這張表；觸發點到了，連同完成條件一起帶進那次工作（[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。處理完刪掉那一行，修正與驗證寫在那件工作的入口（任務說明的〈結果〉）；roadmap 的〈已完成〉由工具從入口產生（[D-217](decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）。延後的測試開頭寫「補測：」、延後的功能寫「補做：」，開發空檔或額度有餘時挑來補，v1 結案前清空：補完，或使用者明確同意留到第二階段（[D-195](decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）。
 
 | 項目與影響 | 觸發點 | 完成條件 | 來源 |
 |---|---|---|---|
 | 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `plugins/<外掛>/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
 
-## 已知的限制
+### 已知的限制
 
 共用工具的已知的限制；每個外掛的在自己的 backlog。
 
@@ -31,11 +29,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 分派表把結尾有斜線的資料夾路徑（`require('./x/')`）旁邊同名的 `x.js` 也算成入口 | 入口這樣寫，同時有 `x/index.js` 與 `x.js`，只改 `x.js`；現在沒有這種接線 | 多跑三個外掛的檢查，不會少跑。不用避開 | [三個外掛併進同一個 repo 第二步 A 的 L2](<Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R12（R10 修正引入） |
 | 外掛之間不 import 的檢查（`tools/check-plugin-imports.ts`）只看寫死的相對路徑：執行時才組出來的路徑、`tsconfig` 的 `paths`、打包工具的 alias、自訂 resolver 讓套件名稱指到別的外掛，都看不到 | 程式用字串組路徑再 import（`import('../../src/' + name)` 只取得到前段），或外掛設了 paths、alias、resolver | 這類跨外掛的引用不會被擋。避開：import 寫成固定的相對路徑；第一個用到 paths、alias 或 resolver 的外掛任務，把解析後不出外掛的邊界加進測試（外掛的 AGENTS.md 有寫） | [三個外掛併進同一個 repo 第一步 §6](tasks/one-repo-step-1.md#6-外掛之間不-importtoolscheck-plugin-importsts)（設計時就知道的限制，不是 L2 找到的） |
 
-## 第二階段想做的事
-
-搬到 Cards 的[〈第二階段想做的事〉](../plugins/cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
-
-## Essence Capture 與 Essence Mindboard
+### Essence Capture 與 Essence Mindboard
 
 另外兩個外掛的工作各自一份，不和 Cards 的混在一起（使用者 2026-10-31）；和 Cards 共用的部分用連結。
 
@@ -44,7 +38,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../plugins/capture/docs/backlog.md) |
 | Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `plugins/mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../plugins/mindboard/docs/backlog.md) |
 
-### 三個外掛併進同一個 repo
+#### 三個外掛併進同一個 repo
 
 定案在 [D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)（使用者 2026-11-17），細節與驗收在決定本文：
 
@@ -53,10 +47,20 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
 - **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
 
-## 歷史索引
+## 已轉出
+
+### v1 需要做的任務
+
+搬到 Cards 的[〈v1 需要做的任務〉](../plugins/cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（下面兩節）。
+
+### 第二階段想做的事
+
+搬到 Cards 的[〈第二階段想做的事〉](../plugins/cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
+
+### 歷史索引
 
 搬到 Cards 的[〈歷史索引〉](../plugins/cards/docs/backlog.md#歷史索引)（D-208 第二步）。
 
-## 已定案對照
+### 已定案對照
 
 搬到 Cards 的[〈已定案對照〉](../plugins/cards/docs/backlog.md#已定案對照)（D-208 第二步）。

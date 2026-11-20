@@ -4,6 +4,14 @@
 
 來自：[plans/workflow.md〈搬完之後要做的事〉](../plans/workflow.md#搬完之後要做的事)
 
+原狀態板（2026-11-21 前）：
+
+- 工作：工作流程優化：點子到完成的路線
+- 狀態：Essence 的流程已定案（[D-214](../decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算)、[D-215](../decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)、[D-216](../decisions.md#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)、[D-217](../decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）；獨立的第一輪與 D-ID 門檻現在就照做
+- 下一步：實作中（[任務說明](workflow-impl.md)，2026-11-21 開工）：先等使用者決定〈待使用者決定〉的 Q1、Q2 與 Codex 查核規格；初始架構等 D-214、D-215 用過一段時間再整理
+- 等誰：使用者
+- 入口：[任務說明](workflow-impl.md)
+
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：規劃 **Opus、xhigh**（牽涉很多檔案與檢查），實作 **Opus、高**。改到 pre-commit 的共用檢查、文件檢查與 CI 跑的 `npm run check`，屬於高風險，合併前做 Codex L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。要 Codex，本機做（[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)）。
 
 依據：[D-214](../decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算)、[D-215](../decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)（第 2、3 點已被 D-217 取代；第 4、5 點已照做，這次寫進 skill；第 1、7 點的觸發點寫進工作流程規範與 backlog）、[D-217](../decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)。[D-216](../decisions.md#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)（給其他專案的初始架構）這次不做，等這套流程用過一段時間。開工前 Codex 查核一輪：[請求、報告與回應](workflow-impl-plan-review.md)。

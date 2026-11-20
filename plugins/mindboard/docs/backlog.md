@@ -6,7 +6,9 @@
 
 定位：把知識架構視覺化（[D-076](../../../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)、[架構 §3](../../../docs/architecture.md#3-模組邊界-第-5-步)）；Cards 保留對接的彈性（[D-056](../../../docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。
 
-## 已記錄的方向
+## 待處理
+
+### 已記錄的方向
 
 💬 2026-10-31 使用者提出：這個看板不只服務 Essence Cards，甚至可以當成入口頁面，包含近期的工作計畫、待辦清單、重要記事等（細節之後再想）。
 
@@ -22,7 +24,7 @@
 
 開工時：先照 [D-208](../../../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點建 `plugins/mindboard/`；任務說明要記下第一批工作的紀錄（一起改的檔案、共用檢查省下的步驟、共用資料夾帶來的衝突）。
 
-## 參考軟體的待評估清單
+### 參考軟體的待評估清單
 
 使用者 2026-11-08 要求：討論階段一定要評估、分析這些參考資料（照 AGENTS.md「參考既有實作時先想最佳解」）。評估結果寫進 [docs/research/](../../cards/docs/research/)，這裡只留清單與連結。
 
@@ -32,7 +34,9 @@
 | tldraw Offline（tldraw 官方的免費桌面白板） | 無限畫布，離線、存成本機檔（`.tldraw`）；AI 走「自備 AI」，Claude Code、Codex 這類 agent 可以看畫布、改圖形、寫腳本。要查：檔案格式 AI 讀起來省不省、授權（SDK 要商業授權）、能不能放進 Obsidian、iPhone 能不能用 | [介紹文章](https://xlrocket.blog/2026/11/08/tldraw-offline%ef%bc%9a%e5%85%8d%e8%b4%b9%e7%a6%bb%e7%ba%bf%e6%97%a0%e9%99%90%e7%94%bb%e5%b8%83%ef%bc%8c%e8%ae%a9-ai-%e7%9b%b4%e6%8e%a5%e5%9c%a8%e4%bd%a0%e7%9a%84%e6%9c%ac%e5%9c%b0%e7%99%bd%e6%9d%bf/)、[官網](https://offline.tldraw.com) | 待評估 |
 | Scapple（Literature & Latte，Scrivener 的同一家公司；使用者 2026-11-08 加入） | 自由擺放的發想白板：在任何地方點一下就寫一則筆記，再拉線連起來，不強迫成樹狀的心智圖。以上是 Claude 的已知資訊，還沒核對；付費、授權、檔案格式與 AI 能不能讀，評估時再查 | [官網](https://www.literatureandlatte.com/scapple) | 待評估 |
 
-## 和 Cards 有關、留在 Cards 的項目
+## 已轉出
+
+### 和 Cards 有關、留在 Cards 的項目
 
 這些是 Cards 自己的功能，只是可能交給 Mindboard 呈現，主文留在原處：
 

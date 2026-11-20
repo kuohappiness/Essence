@@ -1,8 +1,8 @@
 # Essence Cards｜開發現況與路線圖
 
-更新：2026-11-20｜狀態：2026-11-20 從最上層的 roadmap 拆出（D-208 第 8 點，第二步 B）；跨外掛的工作在[最上層的入口](../../../docs/roadmap.md#現在在哪裡)。
+更新：2026-11-21｜狀態：2026-11-20 從最上層的 roadmap 拆出（D-208 第 8 點，第二步 B）；跨外掛的工作在[最上層的入口](../../../docs/roadmap.md#現在在哪裡)。
 
-手機看進度：[進度白板](https://kuohappiness.github.io/Essence/roadmap.html)，由最上層的入口、這份的「現在在哪裡」與「已完成」自動產生，合併進 `main` 後一兩分鐘更新（`tools/roadmap-board.ts`）。
+手機看進度：[進度白板](https://kuohappiness.github.io/Essence/roadmap.html)，由各份 roadmap 的〈現在在哪裡〉〈已完成〉與決策紀錄自動產生，合併進 `main` 後一兩分鐘更新（`tools/roadmap-board.ts`）。
 
 ## 現在在哪裡
 
@@ -10,21 +10,29 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](../../../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 實測做完（[結果](tasks/iphone-test-2026-11.md)）：E1、E6 不是佔位檔，離線作答與恢復通過；iOS 27.0.1 找不到「移除下載」「保持下載」，寫說明書時要回頭查；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債等觸發點 | 說明書開工 | [任務說明](tasks/icloud-placeholders.md) |
-| 正式版的錯誤紀錄與回報 | 已合併進 `main`（`87a0d2c`，[D-155](../../../docs/decisions.md#d-155-正式版的錯誤紀錄)、[D-160](../../../docs/decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)，[Codex L2](tasks/exam-scope-review.md) 五輪後通過）；隨 `0.2.0` 裝到正式使用的 vault（2026-10-31，見已完成） | iPhone 實測（[結果](tasks/iphone-test-2026-11.md)）：旗子、重開、傳回電腦都通過；stack 沒有位置，改成全收（[D-173](../../../docs/decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)），L2 四輪後結案（[報告](<Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)），已合併進 `main`（`25deec7`），隨 `0.3.0` 裝到正式使用的 vault（2026-11-04，見已完成）；iPhone 確認過（2026-11-11 上線前 [A12](tasks/release-0.4.0.md)）；說明書的句子跟說明書一起寫 | 說明書開工 | [任務說明](tasks/error-log.md) |
-| 第二次里程碑的品質檢查（上線前） | 檢查做完（2026-11-10），安全檢查沒有達到門檻的發現；R1～R7 與 R8 的 ESLint 已在 `main`（合併 `bbfd804`、`5f39b5d`）；R9 使用者選定改寫 D-197（[D-200](../../../docs/decisions.md#d-200-l2-的發現鏈待驗問題連兩輪沒驗先讀宿主程式整類修過仍失守就換前提)）；R10 的清理做完（2026-11-12） | R8 剩下兩項（刪除收成「只刪自己建的」入口、pre-commit 讀工作樹）照[技術債](backlog.md#技術債)的觸發點；2026-11-09 之後的 token 補量、雲端 session 有沒有接 pre-commit 只記下；R5 的作者信箱已改用 GitHub 的 noreply（之後的 commit） | 觸發點 | [報告](<Claude Codex Discussion/2026-11-10-milestone-2-review.md>) |
-| 國小社會預設 | v0.8；AI 製卡最小版已先開（使用者 2026-11-07），草稿照樣審；試用停在 v0.7，還沒判定通過；跨單元加題的寫法能用，但 Sol 不寫待核對（[試用紀錄](card-rules/trials.md)） | 試一課歷史、文化或公民類的單元，看每課目標量與要不要擋常識題，結果用來改預設（[backlog](backlog.md#v1-需要做的任務)） | 使用者 | [預設](card-rules/elementary-social.md)、[試用紀錄](card-rules/trials.md) |
-| 國小國語預設 | 放進 v1、三～六年級（[D-172](../../../docs/decisions.md#d-172-國小國語放進-v1)）；方向已定（[D-175](../../../docs/decisions.md#d-175-國小國語的學習地圖字是根生字拆成字形字義讀音)）：字義是核心，生字拆成字形、字義、讀音三種目標，語境分三階；預設草稿 v0.1 定案（Codex 查核兩輪）；翰林五上 L7 試用過，含只用 R3 的對照（[試用紀錄](card-rules/trials.md) 2026-11-04）；相似字定案做點字比較卡（[D-178](../../../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標)），畫面已定，預設的〈相似字〉改成 v0.2，每個字都寫翻面的對照；出題與評分照[規畫](plans/similar-chars.md)；一課分成幾篇、古典詩做接句（[D-183](../../../docs/decisions.md#d-183-國語一課分成幾篇古典詩做接句)），預設到 v0.7，古典詩只用自編的題目試過（[試用紀錄](card-rules/trials.md) 2026-11-05） | 跑 L8 測跨課比對；字義與詞義重疊怎麼留等使用者決定後進下一版；中文朗讀 v1 不做（[D-205](../../../docs/decisions.md#d-205-中文朗讀-v1-不做留到第二階段)） | 使用者 | [預設草稿](card-rules/elementary-chinese.md)、[討論稿](<Claude Codex Discussion/2026-11-03-elementary-chinese-map.md>) |
-| 更新與相容 | 已定案（[D-149](../../../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](../../../docs/decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成；外掛內備份的第一部分（備份）隨 `0.2.0` 裝到正式使用的 vault，電腦上的外掛已自己做出第一份備份（2026-10-31，見已完成） | 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；還原畫面在 iPhone 看得到還原的結果（[A10](tasks/release-0.4.0.md)）；外掛的備份位置已換成更新命令用的資料夾（[D-162](../../../docs/decisions.md#d-162-更新命令的安裝前備份保留和外掛的備份放同一個資料夾)） | 下一版 | [外掛內備份任務說明](tasks/plugin-backup.md)、[還原任務說明](tasks/plugin-restore.md)、[規畫](plans/updates.md) |
-| 入口與目錄（第一批，[D-163](../../../docs/decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區)） | 已合併進 `main`，Codex L2 七輪後通過、Windows 實機通過，iPhone 通過（2026-11-03，[結果](tasks/iphone-test-2026-11.md)），隨 `0.3.0` 裝到正式使用的 vault（見已完成）；出處定在 [D-164](../../../docs/decisions.md#d-164-出處的寫法與讀法)、[D-169](../../../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](../../../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選) | 第二批（考試範圍，2026-11-05）、第四批（編輯畫面標示，2026-11-09）也已合併（見[已完成（封存）](../../../docs/archive/roadmap-completed.md)）；第三批（管理模式：批次暫停、改重要性、復原）照 D-163 第 1 點「第二批做完再決定要不要進 v1」，還沒決定 | 使用者 | [任務說明](tasks/entry-and-catalog.md)、[第二批](tasks/exam-scope.md)、[第四批](tasks/edit-markup.md) |
-| AI 製卡最小版（使用者 2026-11-07：盡早開始用外掛最關鍵的一步） | 已合併進 `main`（2026-11-09，見已完成）：第一次製卡的手動接法：電腦填單元 → 複製提示 → 貼到自己的 AI 對話、附課本 → 貼回 → 檢查 → 存成草稿與快照 → 按「啟用」孩子才看得到；不需要 API 金鑰與 Capture。Windows 實機通過；Codex L2 七輪，第七輪通過。引言框的「加入」、加深與主動提示、訂閱接法、規則自訂版之後各自開任務（環節 8 第 10 條） | iPhone 草稿不出題、啟用後才出題通過（[A2](tasks/release-0.4.0.md)），隨 `0.4.0` 裝到正式 vault（2026-11-12，見已完成）；Claude 網頁等額度再試 | 額度 | [任務說明](tasks/ai-cards-mvp.md)、[L2 報告](<Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>) |
-| 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](../../../docs/decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
-| 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
-| 英文一字多義 | 規則已改（D-125） | 有多義字的真實教材時試用 | 新教材 | [D-125](../../../docs/decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
-| 英文的學習地圖與預設 | 方向定案（[D-193](../../../docs/decisions.md#d-193-英文的學習地圖詞是根句型是骨架)）：先做國中；每個字都開中翻英；不規則變化另立；文法第一次就做、打字，詞序用排序；容易混淆的字第一次就比；記憶錨點由 AI 預設加、只寫有連結的；一課分單字、文法兩篇。[英文預設](card-rules/english.md) v0.14 草稿：用翰林八上 L4、L5 試過，使用者定了試用找到的缺口，動詞的中翻英翻卡後列出變化，Sonnet 盲測 L5 一次（[trials.md](card-rules/trials.md)） | 打字與排序已合併進 `main`（2026-11-16，[PR #14](https://github.com/kuohappiness/Essence/pull/14)）；手機上的換行、句首大寫與朗讀等下一次 [iPhone 實機測試](backlog.md#v1-需要做的任務) | iPhone 實機 | [english.md](card-rules/english.md) |
-| AI 製卡第 2 批：加深這一節與主動提示 | 已合併進 `main`（2026-11-17，[PR #16](https://github.com/kuohappiness/Essence/pull/16)，[D-194](../../../docs/decisions.md#d-194-加深的主動提示記穩了三分之一就問按一下才做)、[D-209](../../../docs/decisions.md#d-209-加深第-2-批的六項選擇門檻二分之一課外-標法常錯兩次)，見已完成） | iPhone 併入下一次實機測試；延後的技術債見任務說明〈結果〉 | Claude、Codex | [任務說明](tasks/ai-cards-deepen.md)、[討論稿](<Claude Codex Discussion/2026-11-05-deepening-prompt.md>) |
+| 國小社會預設 | 實作中 | 試一課歷史、文化或公民類的單元，看每課目標量與要不要擋常識題 | 使用者 | [預設](card-rules/elementary-social.md) |
+| 國小國語預設 | 實作中 | 跑 L8 測跨課比對；字義與詞義重疊怎麼留等使用者決定 | 使用者 | [預設草稿](card-rules/elementary-chinese.md) |
+| 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
+| 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 
-第一個里程碑：W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（D-111），2026-10-27 達成（[檢查](<Claude Codex Discussion/2026-10-27-milestone-1-review.md>)已結案）。第二個里程碑：上線前，第一次升正式版 `0.4.0`，2026-11-12 裝到正式 vault；品質檢查見上表。下一個里程碑還沒定（[quality.md](../../../docs/agents/quality.md#里程碑)）。接下來照 D-111 的順序，從 [backlog 的 v1 任務](backlog.md#v1-需要做的任務)挑下一批。
+正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
+
+第一個里程碑：W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（D-111），2026-10-27 達成（[檢查](<Claude Codex Discussion/2026-10-27-milestone-1-review.md>)已結案）。第二個里程碑：上線前，第一次升正式版 `0.4.0`，2026-11-12 裝到正式 vault；品質檢查見〈等觸發點〉。下一個里程碑還沒定（[quality.md](../../../docs/agents/quality.md#里程碑)）。接下來照 D-111 的順序，從 [backlog 的 v1 任務](backlog.md#v1-需要做的任務)挑下一批。
+
+## 等觸發點
+
+觸發點到了才動的工作，不上白板。入口狀態是等觸發點的列由 `node tools/roadmap-sync.ts` 從狀態板搬過來，觸發點取入口的「下一步」；入口只有 D-ID、或連到沒有狀態行的紀錄的列手寫（[工作流程規範〈roadmap〉](../../../docs/agents/workflow.md#roadmap)）。
+
+| 工作 | 觸發點 | 入口 |
+|---|---|---|
+| 學習目標架構第三輪 | 兩三個新單元與段考到齊再跑；現在暫選 R3 | [D-132](../../../docs/decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
+| 製卡規則下一輪試用 | 有真實影片筆記時試用：看目標數量、共同成功判準、洩漏與放錯池 | [試用紀錄](card-rules/trials.md) |
+| 英文一字多義 | 有多義字的真實教材時試用（規則已改） | [D-125](../../../docs/decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
+| iCloud 雲端佔位檔 | 說明書開工時一起寫兩段說明與「電腦的 iCloud 要開著」，回頭查 iOS 的「移除下載」「保持下載」 | [任務說明](tasks/icloud-placeholders.md) |
+| 正式版的錯誤紀錄與回報 | 說明書開工時一起寫那幾句 | [任務說明](tasks/error-log.md) |
+| 第二次里程碑的品質檢查 | R8 剩下的「只刪自己建的」入口，照技術債表的觸發點 | [報告](<Claude Codex Discussion/2026-11-10-milestone-2-review.md>) |
+| 更新與相容 | 下一版發布時 | [規畫](plans/updates.md) |
+| AI 製卡最小版 | Claude 網頁額度夠時再試 §8 第 3 點 | [任務說明](tasks/ai-cards-mvp.md) |
 
 ## 路線圖
 
@@ -49,17 +57,12 @@ flowchart LR
 
 ## 已完成
 
-只留最近 10 列，一列一句約 80 字加連結；加新的一列時，把最舊的搬到[已完成（封存）](../../../docs/archive/roadmap-completed.md)的最上面，相對路徑改成以 `docs/archive/` 為基準（[D-099](../../../docs/decisions.md#d-099-文件精簡)、[D-141](../../../docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。加列時，[開發進度地圖](../../../docs/progress-map.md)裡對應那一項的符號也一起改。
+由工具產生：入口的狀態變成已合併或已結案時，`node tools/roadmap-sync.ts` 把那一列移到最上面（[D-217](../../../docs/decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）；不設列數上限、不搬去封存（[D-214](../../../docs/decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 5 點）。決定不列在這裡：白板的「最近定案」從決策紀錄產生。2026-11-21 以前搬走的列在[已完成（封存）](../../../docs/archive/roadmap-completed.md#已完成)。入口改成已合併時，[開發進度地圖](../../../docs/progress-map.md)裡對應那一項的符號也一起改。
 
 | 日期 | 工作 |
 |---|---|
 | 2026-11-21 | 三個外掛同一個 repo 的第二步 B 合併進 `main`：Cards 的文件搬進 `plugins/cards/docs/`，任務與討論稿搬進 `docs/`，轉錄稿格式拆到最上層的 `docs/transcript.md`；製卡規則送給 AI 的內容逐位元組不變；Codex L2 四輪（[PR #28](https://github.com/kuohappiness/Essence/pull/28)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 三個外掛同一個 repo 的第二步 A 合併進 `main`：Cards 的程式、測試與工具搬進 `plugins/cards/`，產品程式逐位元組不變；共用工具有自己的檢查與分派對象；Codex L2 四輪（[PR #27](https://github.com/kuohappiness/Essence/pull/27)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 正式 vault 升到 `0.6.0`（tag `v0.6.0`，`037b359`）：全詩順序卡、接句卡、英文的打字與排序、AI 製卡第 1～3 批與閱讀模式按「啟用」的修正；iPhone 必測 A1～A5 通過，兩台都換好，是 Cards 搬家的穩定基線（[清單](tasks/release-0.6.0.md)） |
-| 2026-11-20 | 狀態板變成畫面談定（[D-217](../../../docs/decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）：狀態只寫在入口的狀態行（狀態、下一步、等誰三欄），狀態板只手寫工作與入口，其餘與〈已完成〉由工具產生、commit 時比對一致；第二步 B 合併後上線（[主文](../../../docs/plans/workflow.md#狀態寫在兩個地方)） |
-| 2026-11-20 | 給其他專案的初始架構：一包可複製的檔案，放 Essence 的 `templates/project-starter/`，不提 Essence、一開始就小，開新專案時先看是不是最新；等 D-214、D-215 用過一段時間再整理（[D-216](../../../docs/decisions.md#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)） |
-| 2026-11-20 | 開發狀態留在 repo、GitHub Issues 等觸發點再試；〈已完成〉先唯讀核對、兩週沒問題再自動；重大討論第一輪 Claude 與 Codex 各自獨立回答；改不回來或跨外掛的才寫 D-ID；長文件只讀需要的那一段（[D-215](../../../docs/decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)） |
-| 2026-11-19 | 工作流程優化談定（[D-214](../../../docs/decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算)）：一件事一個現在位置，連結只手寫「來自」與「→ 下一站」，反方向由工具算；backlog、roadmap 分上下兩部分、狀態板加檢查；決定改到白板的「最近定案」；第二步 B 合併後上線（[主文](../../../docs/plans/workflow.md)） |
-| 2026-11-19 | 任務說明與討論稿的位置：都放進 `docs/` 底下，全域的在最上層、只講一個外掛的在那個外掛的 `docs/`；併進 Cards 搬家第二步的 B 一次搬，搬完文件檢查擋舊位置（[D-213](../../../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
 | 2026-11-18 | Claude 改成直接呼叫本機 Codex：`npm run codex` 照類型帶模型與等級、每輪新開、回覆末端附 token 與額度，不再請使用者轉貼；任務開始時分本機或雲端，雲端的 hook 裝相依，會影響做法的記憶搬進 repo（[D-212](../../../docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)） |
 | 2026-11-18 | 本機資料夾改名 `Essence` 完成：演練發現 app 的舊對話記著舊路徑、接不上，改成改名前收尾、交接寫進文件，用腳本改名並核對全部通過，新對話接手測試對得上（[D-211](../../../docs/decisions.md#d-211-本機資料夾也改名舊對話收尾後不接續)、[任務說明](../../../docs/tasks/local-folder-rename.md)） |
