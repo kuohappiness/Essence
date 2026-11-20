@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitEnv } from '../tools/git.ts';
+import { gitEnv, pluginRoot } from '../tools/git.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { Deck } from '../src/core/deck/index.ts';
 import { addTexts } from './helpers/add-cases.ts';
@@ -36,10 +36,12 @@ await state.close();
 `;
 async function oldRun(t: TestContext, tag: string, vault: Record<string, string>): Promise<{ decks: Record<string, Seen[]>; blocked: string[] }> {
   const dir = await tempFolder(t, `essence-${tag}-`);
-  git(root, 'clone', '-q', '--no-checkout', root, dir);
+  // 從 repo 的根 clone：Cards 搬進 plugins/cards/ 之後，clone 子資料夾在 checkout 之前就失敗（D-208 第二步 §A5）。
+  git(root, 'clone', '-q', '--no-checkout', git(root, 'rev-parse', '--show-toplevel'), dir);
   git(dir, 'checkout', '-q', tag);
-  await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
-  const out = execFileSync(process.execPath, ['--input-type=module', '-e', SCRIPT, JSON.stringify(vault), tag.slice(1)], { cwd: dir, env, encoding: 'utf8' });
+  const cards = join(dir, pluginRoot(dir, tag));
+  await symlink(join(root, 'node_modules'), join(cards, 'node_modules'), 'junction');
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', SCRIPT, JSON.stringify(vault), tag.slice(1)], { cwd: cards, env, encoding: 'utf8' });
   return JSON.parse(out) as { decks: Record<string, Seen[]>; blocked: string[] };
 }
 

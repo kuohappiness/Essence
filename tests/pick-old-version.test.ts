@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gitEnv } from '../tools/git.ts';
+import { gitEnv, pluginRoot } from '../tools/git.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry } from '../src/core/study/index.ts';
 import { PICK_NEEDS } from '../src/core/version/index.ts';
@@ -40,10 +40,12 @@ await state.close();
 interface OldRun { today: string[]; decks: string[]; blocked: { decks: string[]; targets: string[]; all: boolean }; fill: boolean; save: { kind: string; reason?: string }; text: string }
 async function oldClone(t: TestContext): Promise<string> {
   const dir = await tempFolder(t, 'essence-v030-');
-  git(root, 'clone', '-q', '--no-checkout', root, dir);
+  // 從 repo 的根 clone：Cards 搬進 plugins/cards/ 之後，clone 子資料夾在 checkout 之前就失敗（D-208 第二步 §A5）。
+  git(root, 'clone', '-q', '--no-checkout', git(root, 'rev-parse', '--show-toplevel'), dir);
   git(dir, 'checkout', '-q', 'v0.3.0');
-  await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
-  return dir;
+  const cards = join(dir, pluginRoot(dir, 'v0.3.0'));
+  await symlink(join(root, 'node_modules'), join(cards, 'node_modules'), 'junction');
+  return cards;
 }
 async function oldVersion(t: TestContext, vault: Record<string, string>, path: string): Promise<OldRun> {
   const dir = await oldClone(t);

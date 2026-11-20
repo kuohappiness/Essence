@@ -9,7 +9,7 @@ import { SETTINGS_FILE } from '../src/core/settings/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import type { AdapterInput } from './compare/adapter.ts';
 import { diffSnapshots, gateLines } from './compare/snapshot.ts';
-import { git, gitEnv } from './git.ts';
+import { git, gitEnv, pluginRoot } from './git.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
 const run = promisify(execFile);
@@ -43,17 +43,22 @@ const npmCi = async (dir: string): Promise<void> => {
   await shell('npm ci --ignore-scripts --no-audit --no-fund', { cwd: dir, env: gitEnv() });
 };
 
-/** 一個版本：開 worktree、裝相依、在自己的 Node 程序跑轉接器；結束後拿掉 worktree。接不上就是 ok: false。 */
+/**
+ * 一個版本：開 worktree、裝相依、在自己的 Node 程序跑轉接器；結束後拿掉 worktree。接不上就是 ok: false。
+ * 版號、裝相依的資料夾與交給轉接器的程式根，都照那個版本自己的 Cards 根（D-208 第二步 §A5：搬家前後不同）。
+ */
 async function side(root: string, ref: string, input: string, work: string, install: (dir: string) => Promise<void>, timeout: number): Promise<Side> {
   const commit = git(root, ['rev-parse', '--verify', ref + '^{commit}']);
-  const version = (JSON.parse(git(root, ['show', commit + ':manifest.json'])) as { version: string }).version;
+  const at = pluginRoot(root, commit);
+  const version = (JSON.parse(git(root, ['show', `${commit}:${at === '.' ? '' : at + '/'}manifest.json`])) as { version: string }).version;
   const build = version + '+' + git(root, ['rev-parse', '--short', commit]);
   const dir = join(work, commit.slice(0, 12));
   const output = join(work, commit.slice(0, 12) + '.json');
   git(root, ['worktree', 'add', '--detach', dir, commit]);
+  const cards = join(dir, at);
   try {
-    await install(dir);
-    try { await run(process.execPath, [ADAPTER, dir, input, output], { cwd: dir, env: gitEnv(), maxBuffer: 64 * 1024 * 1024, timeout }); }
+    await install(cards);
+    try { await run(process.execPath, [ADAPTER, cards, input, output], { cwd: cards, env: gitEnv(), maxBuffer: 64 * 1024 * 1024, timeout }); }
     catch (error) { return { commit, build, result: { ok: false, reason: '轉接器沒有跑完：' + (error as Error).message } }; }
     return { commit, build, result: JSON.parse(await readFile(output, 'utf8')) as AdapterResult };
   } finally {

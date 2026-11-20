@@ -13,3 +13,29 @@ export function gitEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv 
 export function git(root: string, args: string[]): string {
   return execFileSync('git', args, { cwd: root, env: gitEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
+
+/** 一個版本的 Cards 在 repo 裡的位置（D-208 第 8 點）：搬家前在根目錄，搬家後在 plugins/cards/。 */
+export type PluginRoot = '.' | 'plugins/cards';
+const MANIFESTS: Record<string, PluginRoot> = { 'manifest.json': '.', 'plugins/cards/manifest.json': 'plugins/cards' };
+
+/**
+ * ref 那個 commit 的 Cards 根（repo 相對）。只有一個位置有 manifest.json、而且 id 是 essence-cards 才算；兩個都有、
+ * 都沒有、id 不對、不是 JSON 一律丟錯，不猜（D-208 第二步 §A5）。
+ * ls-tree 要加 --full-tree：不加時路徑照執行的資料夾算，從 tools/ 或 plugins/cards/ 跑會回 0 筆。
+ * 不用 cat-file -e 判斷：路徑不在與 commit 不在都回 128，分不出來。
+ */
+export function pluginRoot(root: string, ref: string): PluginRoot {
+  const fail = (why: string): Error => Error(`判不出 ${ref} 的外掛根：${why}`);
+  let commit: string;
+  try { commit = git(root, ['rev-parse', '--verify', '--quiet', ref + '^{commit}']); } catch { throw fail('找不到這個 commit'); }
+  const listed = git(root, ['ls-tree', '--full-tree', commit, '--', ...Object.keys(MANIFESTS)]).split('\n').filter(Boolean)
+    .map(line => { const [meta, path] = line.split('\t'); return { type: meta.split(' ')[1], path }; });
+  if (listed.length === 0) throw fail('根目錄與 plugins/cards/ 都沒有 manifest.json');
+  if (listed.length > 1) throw fail('根目錄與 plugins/cards/ 都有 manifest.json');
+  const [{ type, path }] = listed;
+  if (type !== 'blob') throw fail(`${path} 不是檔案`);
+  let id: unknown;
+  try { id = (JSON.parse(git(root, ['show', `${commit}:${path}`])) as { id?: unknown }).id; } catch { throw fail(`${path} 不是 JSON`); }
+  if (id !== 'essence-cards') throw fail(`${path} 的 id 是 ${JSON.stringify(id)}，不是 essence-cards`);
+  return MANIFESTS[path];
+}

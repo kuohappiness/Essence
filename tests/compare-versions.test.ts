@@ -1,6 +1,6 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
-import { gitEnv } from '../tools/git.ts';
+import { gitEnv, pluginRoot } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
@@ -161,13 +161,17 @@ const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
 const linkModules = (dir: string): Promise<void> => symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
 
-/** 真正部署過的版本（tag）：clone 到暫存資料夾，不動這個 repo 的 worktree 清單。沒有 tag 時失敗，不跳過（CI 的 checkout 要 fetch-depth: 0）。 */
+/**
+ * 真正部署過的版本（tag）：clone 到暫存資料夾，不動這個 repo 的 worktree 清單。沒有 tag 時失敗，不跳過（CI 的 checkout 要 fetch-depth: 0）。
+ * 回傳那一版的 Cards 根；從 repo 的根 clone（D-208 第二步 §A5：Cards 搬進 plugins/cards/ 之後，clone 子資料夾在 checkout 之前就失敗）。
+ */
 async function deployed(t: TestContext, tag = 'v0.2.0'): Promise<string> {
   const dir = await tempFolder(t, 'essence-deployed-');
-  git(root, 'clone', '-q', '--no-checkout', root, dir);
+  git(root, 'clone', '-q', '--no-checkout', git(root, 'rev-parse', '--show-toplevel'), dir);
   git(dir, 'checkout', '-q', tag);
-  await linkModules(dir);
-  return dir;
+  const cards = join(dir, pluginRoot(dir, tag));
+  await linkModules(cards);
+  return cards;
 }
 /** 現在的程式改幾個字之後的複本：讀取能力不同、接不上的版本。 */
 async function patched(t: TestContext, path: string, ...pairs: string[]): Promise<string> {
@@ -607,6 +611,7 @@ function sameShape(out: unknown, good: unknown, key: string): void {
 
 void test('被比較的版本回傳的每個位置換成每一種不對的值：不是拒絕，就是形狀對、經過 JSON 不變（Codex 第四次審查 F5 之後，不再逐項補）', async t => {
   // 假的版本：每個函式回傳測試給的值，一個程序跑完所有組合。正常的值要出一份有具體內容的比較資料，否則全部拒絕也算過。
+  // 外掛根的分類（D-208 第二步 §A5）：直接交給轉接器的程式根，不經過 compareVersions 的外掛根判斷，manifest 沒有 id 也不影響。
   const dir = await tempFolder(t, 'essence-fake-');
   const method = (group: string, name: string): string => `${name}: () => globalThis.fake.${group}.${name},`;
   const { state: stateValues, study: studyValues } = fakeGood();
@@ -696,6 +701,7 @@ void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘�
 });
 
 void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 commit 是零差異，轉接器接不上是「無法比較」，報告寫在備份旁邊', async t => {
+  // 外掛根的分類（D-208 第二步 §A5）：舊根，Cards 放在暫存 repo 的根目錄；新根與判不出的案例在下一個測試。
   const repo = await tempFolder(t, 'essence-repo-');
   await cp(join(root, 'src'), join(repo, 'src'), { recursive: true });
   for (const name of ['manifest.json', 'package.json']) await cp(join(root, name), join(repo, name));
@@ -740,6 +746,38 @@ void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 comm
   const hung = await compareVersions({ backup, old: first, new: 'HEAD', root: repo, install, now: () => NOW + 2000, timeout: 2000 });
   assert.equal(hung.comparable, false);
   assert.match(hung.new.result.ok ? '' : hung.new.result.reason, /轉接器沒有跑完/);
+  assert.equal(git(repo, 'worktree', 'list').split('\n').length, 1);
+});
+
+void test('D-208 第二步 §A5 發布前比較跨過搬家：舊版在根目錄、新版在 plugins/cards/，各照自己的根；判不出根就停下、不開 worktree', async t => {
+  // 外掛根的分類：舊根（第一個 commit）、新根（git mv 之後）、判不出（兩個位置都有 manifest）。
+  const repo = await tempFolder(t, 'essence-moved-');
+  await cp(join(root, 'src'), join(repo, 'src'), { recursive: true });
+  for (const name of ['manifest.json', 'package.json']) await cp(join(root, name), join(repo, name));
+  await writeFile(join(repo, '.gitignore'), 'node_modules\n');
+  git(repo, 'init', '-q');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-q', '-m', 'old root');
+  const old = git(repo, 'rev-parse', 'HEAD');
+  await mkdir(join(repo, 'plugins/cards'), { recursive: true });
+  for (const name of ['src', 'manifest.json', 'package.json']) git(repo, 'mv', name, 'plugins/cards/' + name);
+  git(repo, 'commit', '-q', '-m', 'moved');
+  const moved = git(repo, 'rev-parse', 'HEAD');
+  const vault = await makeVault(t, files);
+  const backup = (await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 })).path;
+  const installed: string[] = [];
+  const install = (dir: string): Promise<void> => { installed.push(dir.replaceAll('\\', '/')); return symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction'); };
+  const result = await compareVersions({ backup, old, new: moved, root: repo, install, now: () => NOW });
+  assert.deepEqual([result.old.result.ok, result.new.result.ok, result.comparable, result.differences], [true, true, true, []]);
+  assert.equal(result.old.build.split('+')[0], result.new.build.split('+')[0], '版號從各自的 manifest 讀');
+  assert.equal(installed.length, 2);
+  assert.ok(installed[0].endsWith('/' + old.slice(0, 12)), installed[0]);
+  assert.ok(installed[1].endsWith('/' + moved.slice(0, 12) + '/plugins/cards'), installed[1]);
+  await cp(join(repo, 'plugins/cards/manifest.json'), join(repo, 'manifest.json'));
+  git(repo, 'add', 'manifest.json');
+  git(repo, 'commit', '-q', '-m', 'both');
+  const both = git(repo, 'rev-parse', 'HEAD');
+  await assert.rejects(compareVersions({ backup, old, new: both, root: repo, install, now: () => NOW + 1000 }), new RegExp('判不出 ' + both + ' 的外掛根：根目錄與 plugins/cards/ 都有 manifest\\.json'));
   assert.equal(git(repo, 'worktree', 'list').split('\n').length, 1);
 });
 
