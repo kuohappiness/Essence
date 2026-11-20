@@ -201,10 +201,11 @@ export function entryTools(root: string, compare: Dispatch['compare']): Set<stri
 /**
  * require 的路徑 Node 可能載入的檔（L2 第二輪）：寫的路徑本身，加上 CommonJS 依序補的副檔名與資料夾的 index。
  * 不知道 Node 會停在哪一個，全部算入口：不存在的路徑不會出現在改動裡，多算只會多跑檢查。資料夾 package.json 的 main 不算。
+ * 先去掉結尾的斜線再組合（L2 第三輪 R10：posix.normalize 留著 './worker/' 的斜線，原本拼成 tools/worker//index.js，和 Git 的路徑對不上）。
  */
 function nodeCandidates(target: string): string[] {
-  const suffixes = ['', '.js', '.json', '.node', '/index.js', '/index.json', '/index.node'];
-  return suffixes.map(suffix => target + suffix);
+  const path = target.replace(/\/+$/, '');
+  return [path, ...['.js', '.json', '.node'].map(extension => path + extension), ...['index.js', 'index.json', 'index.node'].map(name => posix.join(path, name))];
 }
 
 /** 嵌進 main.js 的規則檔表（ai-rules 的特例）。 */

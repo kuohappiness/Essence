@@ -48,6 +48,7 @@ const BASE: Record<string, string> = {
   'tools/check-docs.ts': '\n', 'tools/codex.ts': '\n', 'tools/package.json': '{}\n', 'tools/package-lock.json': '{}\n',
   'tools/check-local-paths.ts': '\n', 'tools/a.ts': 'export {};\n', 'tools/y.ts': '\n', 'tools/x.mjs': '\n',
   'tools/new-entry.ts': '\n', 'tools/start.cjs': '\n', 'tools/worker.cjs': '\n', 'tools/start.cts': '\n', 'tools/worker.js': '\n',
+  'tools/worker/index.js': '\n',
   // 入口：hook 呼叫的程式與它 import 到的檔。
   'tools/hooks.ts': "import { dispatch } from './dispatch.ts';\n",
   'tools/dispatch.ts': "import { helper } from './a.ts';\n",
@@ -196,6 +197,15 @@ const CASES: Case[] = [
       await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
     },
     change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
+  },
+  // L2 第三輪 R10：資料夾結尾有斜線。
+  {
+    name: 'hook 跑 node tools/start.cjs、它 require(\'./worker/\')（Node 載入 worker/index.js），這次只改 tools/worker/index.js',
+    prepare: async e => {
+      await wire('tools/start.cjs', "require('./worker/');\n")(e);
+      await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
+    },
+    change: edit('tools/worker/index.js'), preCommit: ALL, ci: ALL,
   },
   {
     name: 'hook 已經直接跑 node tools/start.cts，這次只改它',
