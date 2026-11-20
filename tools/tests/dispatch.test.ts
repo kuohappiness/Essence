@@ -46,6 +46,7 @@ const BASE: Record<string, string> = {
   [`${C}tools/build.mjs`]: '\n', [`${C}package-lock.json`]: '{}\n',
   'tools/check-docs.ts': '\n', 'tools/codex.ts': '\n', 'tools/package.json': '{}\n', 'tools/package-lock.json': '{}\n',
   'tools/check-local-paths.ts': '\n', 'tools/a.ts': 'export {};\n', 'tools/y.ts': '\n', 'tools/x.mjs': '\n',
+  'tools/new-entry.ts': '\n', 'tools/start.cjs': '\n', 'tools/worker.cjs': '\n',
   // 入口：hook 呼叫的程式與它 import 到的檔。
   'tools/hooks.ts': "import { dispatch } from './dispatch.ts';\n",
   'tools/dispatch.ts': "import { helper } from './a.ts';\n",
@@ -148,6 +149,20 @@ const CASES: Case[] = [
     name: 'check.yml 的 cards job 已經直接跑 node tools/x.mjs，這次只改 tools/x.mjs',
     prepare: wire('.github/workflows/check.yml', 'jobs:\n  cards:\n    steps:\n      - run: node tools/x.mjs\n'),
     change: edit('tools/x.mjs'), preCommit: ALL, ci: ALL,
+  },
+  // 第二步 L2 R3：接線已經在，只改下游的檔。
+  {
+    name: 'hooks.ts 在同一行的第二個敘述 import ./new-entry.ts，這次只改 tools/new-entry.ts',
+    prepare: wire('tools/hooks.ts', "import { dispatch } from './dispatch.ts'; import './new-entry.ts';\n"),
+    change: edit('tools/new-entry.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: 'hook 跑 node tools/start.cjs、它 require(\'./worker.cjs\')，這次只改 tools/worker.cjs',
+    prepare: async e => {
+      await wire('tools/start.cjs', "const worker = require('./worker.cjs');\nworker.run();\n")(e);
+      await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
+    },
+    change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
   },
   {
     name: '兩用：check.yml 的 cards job 也直接跑共用檢查 tools/check-docs.ts，這次只改它',
@@ -377,6 +392,22 @@ void test('§A3 分派表：本 repo 的檢查入口（hook、check.yml、外掛
   // 2026-11-19 的實況（§A3）：入口有這幾支；check-docs、白板、codex 等落第 7 條。
   for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/ci-gate.ts', 'tools/check-local-paths.ts']) assert.ok(entries.has(path), path);
   for (const path of ['tools/check-docs.ts', 'tools/progress-board.ts', 'tools/roadmap-board.ts', 'tools/codex.ts']) assert.ok(!entries.has(path), path);
+});
+
+void test('§A3 分派表：import 的正規式認得同一行第二個敘述的 import 與 require，字串裡的不算（第二步 L2 R3）', () => {
+  const samples: [string, string[]][] = [
+    ["run(); import './new-entry.ts';\n", ['./new-entry.ts']],
+    ["import { a } from './a.ts'; import b from \"../b.mjs\";\n", ['../b.mjs', './a.ts']],
+    ["const worker = require('./worker.cjs');\n", ['./worker.cjs']],
+    ["module.exports = { w: require( \"../w.js\" ) };\n", ['../w.js']],
+    ["const s = 'run(); import \"./not.ts\"';\nconst r = \"require('./not.cjs')\";\n", []],
+    ["// require('./comment.cjs');\n", []],
+  ];
+  for (const [text, expected] of samples) {
+    assert.deepEqual([...relativeImports(text)].sort(), expected, text);
+    const typescript = [...new Set(ts.preProcessFile(text, true, true).importedFiles.map(f => f.fileName))].sort();
+    assert.deepEqual(typescript, expected, 'preProcessFile：' + text);
+  }
 });
 
 void test('§A3 分派表：import 的正規式和 TypeScript 的 preProcessFile 取到的一樣（tools/ 與 helper 的每個檔）', async () => {

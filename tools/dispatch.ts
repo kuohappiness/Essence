@@ -136,22 +136,22 @@ function comparedTexts(root: string, compare: Dispatch['compare'], wanted: (path
 }
 
 /**
- * 一個檔的相對 import（import、export … from、動態 import、import '…'）。dispatch 不用 npm 套件，所以用正規式；
+ * 一個檔的相對 import（import、export … from、動態 import、import '…'、require(…)）。dispatch 不用 npm 套件，所以用正規式；
  * tools/tests/dispatch.test.ts 對 tools/ 與 tests/helpers 的每個檔和 ts.preProcessFile 的結果比過。
  */
 export function relativeImports(text: string): string[] {
   // 先拿掉註解（說明裡寫的 import 範例不算）；行註解只認前面不是引號或冒號的 //，網址與字串裡的不算。
   const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
   const found = new Set<string>();
-  // 靜態的 import、export … from 只認行首開始的敘述（多行的 import 最後一行是 `} from`）：字串裡寫的範例不算。
-  const pattern = /^[ \t]*(?:(?:import|export)\b[^'"\n;]*?\bfrom\s*|import\s+|\}[^'"\n;]*?\bfrom\s*)(['"])(\.{1,2}\/[^'"\n]+)\1|\bimport\s*\(\s*(['"])(\.{1,2}\/[^'"\n]+)\3\s*\)/gm;
+  // 靜態的 import、export … from：行首，或同一行 ; 之後的下一個敘述（多行的 import 最後一行是 `} from`）。
+  // 動態 import 與 require 可以在行中間（第二步 L2 R3：hook 跑 .cjs、它再 require 下游的檔）。
+  const pattern = /(^|;)[ \t]*(?:(?:import|export)\b[^'"\n;]*?\bfrom\s*|import\s+|\}[^'"\n;]*?\bfrom\s*)(['"])(\.{1,2}\/[^'"\n]+)\2|(?<![.\w$])(?:import|require)\s*\(\s*(['"])(\.{1,2}\/[^'"\n]+)\4\s*\)/gm;
   for (const match of code.matchAll(pattern)) {
-    if (match[2] !== undefined) found.add(match[2]);
-    else {
-      // 動態 import 可以在行中間；同一行前面的引號（"、'、`）有一種是單數時，它在字串裡（例如測試的範例），不算。
-      const before = code.slice(code.lastIndexOf('\n', match.index) + 1, match.index).replace(/\\./g, '');
-      if (['"', "'", '`'].every(quote => before.split(quote).length % 2 === 1)) found.add(match[4]);
-    }
+    const path = match[3] ?? match[5];
+    if (match[3] !== undefined && match[1] === '') { found.add(path); continue; }
+    // 不在行首的：同一行前面的引號（"、'、`）有一種是單數時，它在字串裡（例如測試的範例），不算。
+    const before = code.slice(code.lastIndexOf('\n', match.index) + 1, match.index).replace(/\\./g, '');
+    if (['"', "'", '`'].every(quote => before.split(quote).length % 2 === 1)) found.add(path);
   }
   return [...found];
 }
@@ -176,7 +176,7 @@ function toolPaths(text: string, base: string | undefined): string[] {
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
  */
 export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
-  const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|mjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
+  const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
     path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^plugins\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
