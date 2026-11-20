@@ -207,15 +207,113 @@ void test('暫存區：入口轉態後沒同步就擋、同步並 stage 後通�
   assert.equal(sync().status, 0);
   git(['add', 'docs/roadmap.md']);
   assert.equal(sync('--check', '--staged').status, 0);
-  // 手寫的〈已完成〉列（暫存區有、HEAD 沒有、上線之後的日期）擋下；舊日期的列手改不擋。
+  // 手寫的〈已完成〉列（暫存區有、HEAD 沒有）擋下；舊的列改了文字也算新的列（L2 R3：沒有上線日的例外）。
   const current = await read('docs/roadmap.md');
   await add('docs/roadmap.md', current.replace('|---|---|\n| 2026-11-25', '|---|---|\n| 2026-11-26 | 手寫的完成 |\n| 2026-11-25'));
   const handwritten = sync('--check', '--staged');
   assert.equal(handwritten.status, 1);
   assert.match(handwritten.stderr, /〈已完成〉新加的列要由工具產生.*格式不是/);
   await add('docs/roadmap.md', current.replace('| 2026-11-20 | 舊的一列 |', '| 2026-11-20 | 舊的一列，改個字 |'));
-  assert.equal(sync('--check', '--staged').status, 0);
+  assert.match(sync('--check', '--staged').stderr, /〈已完成〉新加的列要由工具產生.*格式不是/);
   // 工具格式、但「完成」那一句和入口不一樣也擋。
   await add('docs/roadmap.md', current.replace('**甲**：做完', '**甲**：做完了'));
   assert.match(sync('--check', '--staged').stderr, /和入口 docs\/tasks\/a\.md 的「完成」那一句不一樣/);
+});
+
+void test('L2 R2〈已完成〉新的列照 HEAD 核對：漏搬、重複、日期與名稱不對都擋；只改連結目標的舊列與重新開工放行', async t => {
+  const NEW_DONE = '〈已完成〉新加的列要由工具產生（入口的狀態改成已合併或已結案，再跑 node tools/roadmap-sync.ts）：';
+  const { add, git, read, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/tasks/b.md', entry('狀態：實作中｜下一步：y｜等誰：Claude'));
+  const board = ['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |', '| 乙 | 實作中 | y | Claude | [任務](tasks/b.md) |'];
+  await add('docs/roadmap.md', roadmap(board));
+  commit();
+  // 入口改成已合併、手動刪掉狀態板那一列、沒有完成列：擋（Codex 重現的那一種）。
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap([board[1]]));
+  assert.equal(check().stderr.split('\n').find(line => line.startsWith('docs/')),
+    'docs/roadmap.md:16  入口 docs/tasks/a.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts');
+  // 同步產生的列：通過。
+  const row = `| ${TODAY} | **甲**：做完（已合併，[入口](tasks/a.md)） |`;
+  const old = '| 2026-11-20 | 舊的一列 |';
+  await add('docs/roadmap.md', roadmap(board));
+  assert.equal(sync().status, 0);
+  assert.equal(await read('docs/roadmap.md'), roadmap([board[1]], [], [row, old]));
+  git(['add', 'docs/roadmap.md']);
+  assert.equal(check().status, 0, check().stderr);
+  // 工具的列換成兩筆手寫的：日期、名稱不對，同一份入口兩筆新列。
+  const fake = '| 2026-11-21 | **甲改名**：做完（已合併，[入口](tasks/a.md)） |';
+  await add('docs/roadmap.md', roadmap([board[1]], [], [fake, fake, old]));
+  assert.deepEqual(check().stderr.split('\n').filter(line => line.startsWith('docs/')), [
+    `docs/roadmap.md:20  ${NEW_DONE}日期要是 ${TODAY}（入口收尾的那天）`,
+    `docs/roadmap.md:20  ${NEW_DONE}工作名稱要和 HEAD 狀態板的「甲」一樣`,
+    `docs/roadmap.md:21  ${NEW_DONE}日期要是 ${TODAY}（入口收尾的那天）`,
+    `docs/roadmap.md:21  ${NEW_DONE}工作名稱要和 HEAD 狀態板的「甲」一樣`,
+    `docs/roadmap.md:21  ${NEW_DONE}入口 docs/tasks/a.md 在 docs/roadmap.md:20 已經有一筆新的完成列`,
+  ]);
+  // 手寫列的日期早於上線那天也擋（L2 R3：沒有上線日的例外）。
+  await add('docs/roadmap.md', roadmap([board[1]], [], [row, '| 2026-11-19 | 手寫的完成 |', old]));
+  assert.match(check().stderr, new RegExp(`docs/roadmap\\.md:21  ${NEW_DONE.replace(/[()]/g, '\\$&')}格式不是`));
+  // commit 甲的完成；舊的列再抄一筆（同一個入口、同一天）：擋。
+  await add('docs/roadmap.md', roadmap([board[1]], [], [row, old]));
+  commit('2026-11-25T10:00:00+08:00');
+  await add('docs/roadmap.md', roadmap([board[1]], [], [row, row, old]));
+  assert.match(check().stderr, /docs\/roadmap\.md:21  .*入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:20 已經有同一天的完成列/);
+  // 甲重新開工、入口改名：舊的完成列只改入口的連結目標，放行。
+  git(['mv', 'docs/tasks/a.md', 'docs/tasks/a2.md']);
+  await add('docs/tasks/a2.md', entry('狀態：實作中｜下一步：再做｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | 再做 | Claude | [任務](tasks/a2.md) |', board[1]], [], [row.replace('tasks/a.md', 'tasks/a2.md'), old]));
+  assert.equal(check().status, 0, check().stderr);
+});
+
+void test('L2 R3 合併時新的完成列的日期只要不晚於今天；不是合併時同樣的內容要是收尾那天', async t => {
+  const { add, git, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  commit();
+  git(['branch', '-M', 'main']);
+  git(['checkout', '-q', '-b', 'feature']);
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap([], [], ['| 2026-11-23 | **甲**：做完（已合併，[入口](tasks/a.md)） |', '| 2026-11-20 | 舊的一列 |']));
+  commit('2026-11-23T10:00:00+08:00');
+  git(['checkout', '-q', 'main']);
+  await add('docs/other.md', '# 別的\n');
+  commit('2026-11-24T10:00:00+08:00');
+  git(['merge', '-q', '--no-ff', '--no-commit', 'feature']);
+  assert.equal(check().status, 0, check().stderr);
+  git(['merge', '--abort']);
+  // 不是合併：入口在這次 commit 才結束，日期要是今天。
+  git(['checkout', 'feature', '--', 'docs/tasks/a.md', 'docs/roadmap.md']);
+  assert.match(check().stderr, new RegExp(`docs/roadmap\\.md:19  .*日期要是 ${TODAY}`));
+  // 上線前開的分支手寫的完成列，合併時照樣擋，訊息寫出修法。
+  git(['reset', '-q', '--hard']);
+  git(['checkout', '-q', '-b', 'old', 'main~1']);
+  await add('docs/roadmap.md', roadmap([], [], ['| 2026-11-24 | 甲做完了 |', '| 2026-11-20 | 舊的一列 |']));
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  commit('2026-11-24T10:00:00+08:00');
+  git(['checkout', '-q', 'main']);
+  git(['merge', '-q', '--no-ff', '--no-commit', 'old']);
+  assert.match(check().stderr, /docs\/roadmap\.md:19  〈已完成〉新加的列要由工具產生（入口的狀態改成已合併或已結案，再跑 node tools\/roadmap-sync\.ts）：格式不是/);
+});
+
+void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
+  const { add, git, sync, commit } = await repo(t);
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | x | x | x | [任務](tasks/a.md) |']));
+  await add('plugins/cards/docs/roadmap.md', roadmap([], ['| 甲 | x | [任務](../../../docs/tasks/a.md) |']));
+  const both = sync();
+  assert.equal(both.status, 1);
+  assert.match(both.stderr, /plugins\/cards\/docs\/roadmap\.md:14  入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:9 也有一列：同一份入口只能在一份 roadmap 有一列/);
+  await add('plugins/cards/docs/roadmap.md', roadmap([]));
+  assert.equal(sync().status, 0);
+  git(['add', 'docs/roadmap.md']);
+  commit();
+  // 結束後在另一份 roadmap 也抄一筆完成列：擋。
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  assert.equal(sync().status, 0);
+  git(['add', 'docs/roadmap.md']);
+  await add('plugins/cards/docs/roadmap.md', roadmap([], [], [`| ${TODAY} | **甲**：做完（已合併，[入口](../../../docs/tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']));
+  assert.match(sync('--check', '--staged').stderr, /plugins\/cards\/docs\/roadmap\.md:19  .*入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:19 已經有一筆新的完成列/);
 });
