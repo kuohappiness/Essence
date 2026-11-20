@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步 A：L2 獨立審查（給 Codex）
 
-狀態：第一輪待審（2026-11-20）
+狀態：第二輪待審（2026-11-20；第一輪的報告與回應見〈第二輪〉開頭的連結）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -97,3 +97,49 @@
 - 只審查與回報，不改檔；可以在隔離的暫存 repo 或 clone 重現。不要 push、不要開 PR、不要動 `main` 的設定（分支保護、必過檢查）；需要在 GitHub 上實際跑的，寫成探針步驟交給 Claude。不要碰 iCloud 裡的任何 vault（測試 vault 也不要）。
 - 每項發現寫：哪一軸（規格／規範與設計）、觸發條件、預期／實際、影響、位置、證據（已重現／靜態推斷／待驗證）、**真實路徑會不會發生**與發生機率、建議處理。可以回報「規格本身有漏洞」。
 - 報告寫在 `Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md`，標題下第一行寫狀態；頭尾寫待審 commit、審查範圍、測試結果與沒驗的項目及原因。
+
+## 第二輪
+
+第一輪（Codex，`c298cf1`）回報 R1～R5，Claude 逐項核對都成立：R1、R2、R3、R5 修，R4 記成 B 的開工條件（腳本只在 B 再用）。報告與逐項的回應（真實、修之前、修之後三欄，判斷與修正的 commit）在 [`Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md`](<../Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>)〈第一輪｜Claude 回應〉。這一輪只審修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-2a`（已 push），本機 worktree `D:\程式開發\Essence-step2a`。沒有未提交的修改（`docs/syntax.md` 同第一輪）。`main` 仍在 `1153ba8`。
+- 只審 `c298cf15c03591c7bdc421a2c0ba87116446c85e..<最後的 commit>` 的差異與受影響的路徑，不必整包重審。新的 commit（由舊到新，一項發現一個）：
+  - `caefd63` R1 PR 的 plan 也照合併樹分派
+  - `63b0c70` R5 對照表的路徑以 repo 根為基準
+  - `62595e2` R2 命令列的相對路徑照叫 `npm run` 的資料夾算
+  - `e01d466` R3 入口相依認同一行的 import、`require` 與 `.cjs`
+  - `c0234f1` 第一輪的報告與回應；R4 記進任務說明 §B0 第 4 項
+  - 最後一個是這一節所在的 commit
+- 看差異：`git diff c298cf15c03591c7bdc421a2c0ba87116446c85e <最後的 commit>`；逐個：`git log --reverse -p c298cf15c03591c7bdc421a2c0ba87116446c85e..<最後的 commit>`。最後的 commit 是 `git log -1 --format=%H -- tasks/one-repo-step-2-review.md`。
+
+### 受影響的路徑
+
+- R1：`tools/ci-gate.ts` 的 `endpoints`、`plan`（只有 `pull_request` 事件多一組合併樹的分派；push、`workflow_dispatch`、`merge_group` 不變）。plan 的輸出格式不變，`compare` 多一段「合併樹 x..y」，gate 照舊只讀旗標與理由。
+- R5：`plugins/cards/tools/build.mjs` 寫的 `main.js.map`（正式與 dev 建置都寫）；讀它的 `plugins/cards/tools/locate.ts` 沒改。
+- R2：七個命令列入口的參數解析（`install-vault`、`backup`、`restore`、`update-vault`、`compare-versions`、`export-compare`、`bench`）。被別的工具 import 的函式介面沒改；`update-vault` 內部呼叫 `backup`、`install` 走函式，不經命令列。
+- R3：`tools/dispatch.ts` 的 `relativeImports` 與入口遞迴；呼叫端是 `entries()`（第 6 條：pre-commit、pre-merge-commit、CI 的 plan 都用）。
+- R4：只改文件。
+
+### 實作者自己選的做法（第二輪）
+
+1. R1 不另外讀 PR 的 base 分支，直接用 GitHub 給的合併 commit（`GITHUB_SHA`）：它就是 job checkout 的樹。合併 commit 必須正好兩個 parent、第二個是 PR 的 head，對不上（例如 Actions 換了合併方式、或有人手動觸發時給的不是合併 commit）就跑全部。兩組分派取聯集（任一邊要跑就跑），跳過的理由兩邊都要有；聯集只會讓結果多跑，不會比只看分岔點少。
+2. R2 用 `INIT_CWD`，而且只在 `npm_lifecycle_event` 是這支工具自己的 script 時才用：npm 11.6.2 每次執行都把 `INIT_CWD` 設成叫 npm 的資料夾、子程序會繼承（`@npmcli/config/lib/set-envs.js:58`），所以 `npm test` 底下的測試再直接叫 `node tools/install.ts` 時，不能被外層的 `INIT_CWD` 帶偏。沒採用另一個建議（拒絕相對路徑）：會改掉在 `plugins/cards/` 裡 `npm run install-vault -- ../…` 這種現有用法，而且 `quality.md` 的寫法也要跟著改；`INIT_CWD` 讓兩種位置都回到「照你打指令的地方算」。`--config` 是相對 vault 的設定資料夾，不是檔案系統路徑，沒改。
+3. R3 的靜態 import 認同一行 `;` 之後的敘述與 `require(…)`；不在行首的先確認不在字串裡（沿用原本動態 import 的判斷）。沒有改用 TypeScript 的 `preProcessFile`：`dispatch.ts` 不用 npm 套件（檔頭：CI 的分派 job 與 hook 不必先安裝就能跑），所以照舊用正規式；改成一組樣本同時餵兩邊、斷言取到的相同，當作獨立驗收。
+4. R5 只改新建置寫出的對照表；搬家前存的對照表相對當時的根（也就是 repo 根），照舊對，`locate` 不用分新舊。
+
+### 驗證方式
+
+- 回歸測試都先寫，修之前跑過是失敗的：
+  - R1：`tools/tests/ci-gate.test.ts`「§4 比較端點：PR 也看合併樹（第二步 L2 R1）…」：在暫存 repo 做出搬家前的分支只改 `tools/install.ts`、`main` 已搬家、真的合併 commit；預期 `tools,cards`，Cards 的理由提到 `plugins/cards/tools/install.ts`；合併 commit 的 parent 對不上 → 全部。修之前是 `tools`。原本兩個 PR 測試改用真的合併 commit（原本的 `merge-sha` 是假值，照新規則會跑全部）。
+  - R5：`plugins/cards/tests/build.test.ts` 與 `locate.test.ts`：對照表的 `sources` 是 `plugins/cards/src/…`，`locate` 回傳的路徑在 repo 裡找得到檔（`existsSync`）。修之前回 `src/…`。
+  - R2：`plugins/cards/tests/cli-path.test.ts`：單元測試（注入環境變數）與真的 npm：暫存的 `top/plugins/cards` 套件，從 `top` 用 `npm --prefix plugins/cards run probe -- vault` → `top/vault`；在套件裡 → 套件的 `vault`；套件的另一個 script 再叫 `npm run probe` 時照它自己那一層。修之前第一種解到套件裡。
+  - R3：`tools/tests/dispatch.test.ts` 兩個分派案例（`hooks.ts` 同一行第二個敘述 `import './new-entry.ts'`，只改 `new-entry.ts`；hook 跑 `node tools/start.cjs`、它 `require('./worker.cjs')`，只改 `worker.cjs`）→ 全部；一組 `relativeImports` 的樣本（`require`、同一行、字串與註解裡的不算），每個樣本也和 `ts.preProcessFile` 對過。修之前兩個案例都只跑共用工具。
+- 每個 commit 都經過 pre-commit 的分派與完整檢查（R3 改到入口，三個外掛與共用工具全部跑）。
+- GitHub：R1 的探針（照第一輪的建議，從 `ecb85f9` 開分支只改 `tools/install.ts`，對 `c0234f1` 開 draft [PR #26](https://github.com/kuohappiness/Essence/pull/26)）：GitHub 判有衝突（`mergeable` false、`dirty`，關掉重開再算一次也一樣），沒有建合併 commit，`pull_request` 的 run 沒跑，合併條件的 gate 也就不會過。本機 Git 2.52 的 `merge-tree` 合得乾淨（改名限制調到 10 也一樣）。所以在 GitHub 上，這種分支要先在本機把 A 合進來才能合併；合進來之後分岔點就在搬家後，原本的分派就對。R1 的修正留著，GitHub 為什麼判衝突沒查出原因，判得出合併時照樣有效；記進任務說明〈平台事實〉。`c0234f1` 的 push run [44695210758](https://github.com/kuohappiness/Essence/actions/runs/44695210758) 七個 job 都成功。這一節所在的 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：R4 等 B 開工時修與驗收；雲端 session（第 A11 項）照第一輪〈驗證方式〉。
+
+### 回報
+
+照第一輪〈回報與權限〉。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。報告接在同一份討論稿的最後，加〈第二輪｜Codex 報告〉一節。

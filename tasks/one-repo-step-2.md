@@ -322,6 +322,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 | ESLint 的 flat config、knip 的設定、`tsconfig.json` 的 `include` 都以設定檔所在的資料夾為基準，整份搬進 `plugins/cards/` 不用改寫法 | §A6 的 commit 跑 `npm run check` | 成立：`7637a8c` 的 pre-commit 與 CI 都通過，只搬檔、沒改寫法 |
 | `plugins/cards/tools/*.ts` 從 `plugins/cards/node_modules` 找到相依；Cards 的工具用了只在 `tools/` 的相依時會失敗（不會默默借到） | 拿掉 `tools/node_modules` 跑 Cards 的檢查（CI 的 cards job 就是這樣） | 成立：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) 的 cards job 只在 `plugins/cards` 裝相依，檢查、建置都過 |
 | 讀舊 tag 的測試（舊版是根目錄的外掛根）借 `plugins/cards/node_modules` 跑得起來 | 驗收第 A8 項 | 成立（2026-11-20，Windows 本機與 CI） |
+| GitHub 對搬家前開、只改舊路徑 `tools/install.ts` 的 PR 能不能建合併 commit（L2 R1） | 從 `ecb85f9` 開分支只改 `tools/install.ts`，對 `c0234f1` 開 draft PR（[PR #26](https://github.com/kuohappiness/Essence/pull/26)） | 不能：GitHub 判有衝突（`mergeable` false、`dirty`，關掉重開再算一次也一樣），沒有合併 commit，`pull_request` 的 run 沒跑；本機 Git 2.52 的 `merge-tree` 合得乾淨（改名限制調到 10 也一樣）。這種分支在 GitHub 上要先在本機把 A 合進來；R1 的修正留著，對 GitHub 判得出合併的情況照樣有效 |
 | 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 合併前已驗（`c298cf1`，〈A 的進度〉第 11 項）；合併後待驗 |
 | GitHub 上的 Codex 審查讀不讀 `plugins/cards/AGENTS.md` | 沒有探針；§B1 把〈Code Review Rules〉留在最上層，不依賴它 | 不依賴 |
 

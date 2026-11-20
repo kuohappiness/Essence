@@ -1,6 +1,6 @@
 # D-208 第二步 A｜Codex L2 審查
 
-狀態：第一輪：Codex 回報 R1～R5；Claude 修 R1、R2、R3、R5，R4 記成 B 的開工條件；第二輪待送
+狀態：第一輪：Codex 回報 R1～R5；Claude 修 R1、R2、R3、R5，R4 記成 B 的開工條件；第二輪待審
 
 ## 先讀這裡
 
