@@ -1,6 +1,6 @@
 # D-208 第二步 A｜Codex L2 審查
 
-狀態：第一輪：Codex 回報 R1～R5；Claude 修 R1、R2、R3、R5，R4 記成 B 的開工條件；第二輪待審
+狀態：第二輪：Codex 回報三項（R6～R8），Claude 都修；第三輪待審
 
 ## 先讀這裡
 
@@ -103,3 +103,69 @@
 
 - Cards 的完整測試：Codex 的沙箱裡 esbuild 存取被拒，88 個失敗是環境。Claude 在 `7262ed8` 跑過 `npm run check`（2900 個全過），CI 的 Linux 2898 過、2 個只在 Windows 的跳過（任務說明〈A 的進度〉第 18 項）。修正後的 commit 也都經過 pre-commit 的完整檢查。
 - 建置逐位元組相同：Claude 在 `83af5c5` 與 `288fc3d` 各比過（第 3 項、§A7 第 4 項）。R5 只改外部的對照表，不影響這一項。
+
+## 第二輪｜Codex 報告
+
+2026-11-20，Codex（gpt-6.2-sol、high、workspace-write），待審 `c7d5493`。原文（本機路徑的連結改成 repo 相對路徑；三項發現原文沒有編號，Claude 的回應依序叫 R6、R7、R8）：
+
+狀態：待修。建議合併前修正 1 項 P2，另有 2 項 P3 分派漏判。
+
+待審 commit 為 `c7d5493a5efea576c69cc3540bc922ef7ccf9fce`。本輪只查 `c298cf1..c7d5493` 的修正與受影響的呼叫路徑。
+
+### 發現
+
+#### P2｜R2 修正引入｜空 vault 參數會把目前資料夾當成安裝目標
+
+- **規格軸，已重現。** `cliPath('')` 會回傳目前資料夾，經由 `npm run` 則回傳呼叫 npm 的資料夾。原本空字串交給 `realpath` 時會報 `ENOENT`。修正後，命令列省略了有效路徑，安裝與備份卻仍會執行。cli-path.ts（`plugins/cards/tools/cli-path.ts:10`） · install.ts（`plugins/cards/tools/install.ts:169`） · backup.ts（`plugins/cards/tools/backup.ts:73`）
+- **證據與影響。** 在沒有 `.obsidian` 的暫存資料夾，備妥一份雜湊相符的測試產物，分別用 `npm --prefix <Cards 套件> run install-vault -- "" --release 9.9.9` 和直接執行 Node 入口測試。`c298cf1` 兩種都以 `ENOENT` 結束，寫入 0 個檔案。`c7d5493` 兩種都成功建立三個外掛檔，並在 `community-plugins.json` 啟用外掛。另以含自編辨識文字的暫存 vault 跑 `backup`，同樣從拒絕空路徑變成成功寫出 ZIP，解開後確認內容來自目前資料夾。
+- **真實路徑與處理。** 呼叫腳本把空變數加引號傳入時會觸發。平常使用完整路徑，機率低，但會對未指定的資料夾寫檔。建議合併前在共用入口拒絕空的檔案系統路徑，保留明確傳入 `.` 的用法，並以實際 CLI 驗證拒絕後沒有寫入。
+
+#### P3｜延續 R3｜同一行前面的字串含撇號時，仍會漏掉合法的 `import`
+
+- **規格軸，已重現。** 暫存 repo 的 hook 執行 `start.mjs`，其中一行是 `console.log("it's ready"); import './worker.mjs';`。只改 `worker.mjs` 後，Node 確實載入新版，TypeScript `preProcessFile` 也找到 `./worker.mjs`。分派的引號計數把雙引號字串內的撇號當成未閉合的單引號，讓 `--staged` 和 `--range --ci` 都命中第 7 條，只跑共用工具。把 `"it's ready"` 換成 `'ready'`，兩邊就命中第 6 條、全部跑。dispatch.ts（`tools/dispatch.ts:142`） · 任務規格 §A3（`tasks/one-repo-step-2.md:115`）
+- **真實路徑與處理。** 目前的接線未觸發。未來把合法的 `import` 接在同一行的字串敘述後面，而且這次只改下游檔時會漏跑外掛檢查，機率低。建議用同一組測試涵蓋單引號、雙引號、反引號及跳脫字元的組合。無法可靠辨識時，保守分派全部。
+
+#### P3｜延續 R3｜CommonJS 能載入的檔案仍有兩種漏判
+
+- **規格軸，已重現。** 在暫存 repo 逐案實跑 Node，只改被載入的下游檔。`.cjs` 入口用 `require('./worker.cjs')` 時，`--staged` 和 `--range --ci` 都命中第 6 條。以下兩種寫法也確實載入新版下游檔，但兩種分派模式都命中第 7 條，只跑共用工具。dispatch.ts（`tools/dispatch.ts:163`）
+  - `start.cjs` 用 `require('./worker')` 載入 `worker.js`。掃描找到 `./worker`，遞迴只比對字面路徑，沒有對到 Node 實際載入的 `worker.js`。
+  - hook 直接執行 `node tools/start.cts`，再由它 `require('./worker.cjs')`。`.cts` 已加入遞迴可讀的副檔名，直接入口的掃描仍漏掉它。
+- **真實路徑與處理。** 現有接線未使用這兩種寫法，近期機率低。現有獨立驗收也沿用相同的副檔名清單和字面路徑，兩邊可能一起漏掉。建議讓驗收以 Node 實際載入的檔為準，覆蓋直接入口與下游解析。若決定只支援明寫副檔名的接線，應在新增接線時由檢查擋下其他寫法。dispatch.test.ts（`tools/tests/dispatch.test.ts:353`）
+
+### 本輪驗證
+
+- **R1。** 本機用實際 Git 合併 commit 重跑搬家案例，分派結果為 `tools,cards`。另用一個有效但第二個 parent 與 PR head 不符的合併 commit，確認四個對象全部安排。GitHub API 顯示 PR #26 為 `mergeable: false`、`dirty`，沒有合併 SHA。待審 commit 的 push run 七個 job 全部成功。[PR #26](https://github.com/kuohappiness/Essence/pull/26) · [Actions run 44698482939](https://github.com/kuohappiness/Essence/actions/runs/44698482939)
+- **R2。** 從 repo 根以 `npm --prefix plugins/cards run backup -- review-vault --to review-backups` 執行。repo 根與 Cards 套件內各放了同名暫存 vault。ZIP 寫到 repo 根指定的目錄，解開後確認內容來自 repo 根的 vault。原有兩個 CLI 路徑測試也通過。
+- **R4。** §B0 第 4 項已把修腳本和驗收樣本列為 B 的開工條件。用搬家 commit 的 26 組路徑對照在待審樹執行 `--check`，結果為 0 個待改連結。任務說明 §B0（`tasks/one-repo-step-2.md:228`）
+- **R5。** 固定建置版本，使用同一份來源分別跑修正前後的建置器。正式版與開發版的 `main.js` 各自逐位元組相同。新版 `locate` 能把兩種建置都定位至 repo 中的 `plugins/cards/src/core/errors/log.ts:172`。另以含正確雜湊的舊格式對照表樣本確認，`src/core/errors/log.ts` 仍可讀，並能在搬家前的 commit 找到。
+- **本機檢查。** Windows、Git 2.52、Node 24.13.0、npm 11.6.2。共用工具的 `npm run check` 與 `npm run self-check` 通過，測試 162 過、0 失敗、1 個因 Windows 檔名不能含換行而跳過。Cards 的型別、lint、knip 通過。完整測試在暫存 clone 中為 2,545 過、88 失敗，輸出多次出現 esbuild 讀取上層目錄被拒。
+
+**待驗證**：Cards 本機全套測試仍受暫存路徑權限影響。R1 的 GitHub `pull_request` 實跑缺少可合併的探針。R4 的腳本修正驗收留在 B 開工時。A11 合併後的雲端 session 依任務留待合併後。審查暫存檔已刪除，repo 的追蹤檔案未修改。
+
+## 第二輪｜Claude 回應
+
+2026-11-20 Claude（Opus 5.5）。三項逐一在 `c7d5493` 核對，都成立，都修（一項一個 commit，先寫會失敗的回歸測試，修之前跑過是失敗的）。R1 的 GitHub 探針沒有可合併的結果（GitHub 判衝突），第二輪請求已寫明，記在任務說明〈平台事實〉。
+
+### R6 空字串的路徑被當成目前的資料夾（R2 修正引入）
+
+- **真實／修之前／修之後**：命令列給空字串的 vault，應該停下、什麼都不寫（R2 之前 `realpath('')` 報 `ENOENT`）。修之前 `cliPath('')` 回目前的資料夾（經 `npm run` 時是叫 npm 的資料夾），安裝與備份照做；修之後丟錯「命令列給的路徑是空的；要用目前的資料夾請寫 .」，明寫的 `.` 照舊。
+- **發生條件與機率**：呼叫的腳本把空變數加引號傳進來。平常用完整路徑，低；但會寫進沒指定的資料夾。
+- **修法**：`cliPath` 收到空字串就丟錯。所有命令列入口都經過它，一處擋住。
+- **動到什麼**：`plugins/cards/tools/cli-path.ts`；`plugins/cards/tests/cli-path.test.ts` 加兩個測試：`cliPath('')` 兩種環境都丟錯、`.` 照舊；真的跑 `install-vault.mjs "" --release 9.9.9` 與 `backup.ts "" --to out`，都以「空的」結束、暫存資料夾裡沒有任何檔。修之前第一個測試沒丟錯，第二個測試的安裝停在別的錯（找不到 9.9.9），不是空路徑。
+- commit：`9ec207b`。
+
+### R7 前面的字串含撇號，同一行的 import 漏認（延續 R3）
+
+- **真實／修之前／修之後**：`console.log("it's ready"); import './new-entry.ts';`，只改 `new-entry.ts`，該全部跑。修之前分別數三種引號，撇號被當成沒關上的單引號，只跑共用工具；修之後全部。
+- **修法**：照順序走過那一行到 import 之前的字，用堆疊記目前在哪一種引號裡：字串裡的別種引號與跳脫的字不算；模板字串的 `${…}` 裡是程式（裡面的 `require` 算），對應的 `}` 回到模板字串。
+- **和 TypeScript 不同的一處**：模板字串 `${…}` 裡的 `require`，Node 執行時會載入，`preProcessFile` 不收。照 Node 算（多算只會多跑檢查），測試裡另外斷言兩邊的差別。
+- **動到什麼**：`tools/dispatch.ts` 的 `insideString`；`tools/tests/dispatch.test.ts` 加一個分派案例與五個樣本（雙引號裡的撇號、跳脫的引號、模板字串後面的 `require`、字串裡的 `require` 不算；模板字串裡的另外斷言）。
+- commit：`27a3d3e`。
+
+### R8 CommonJS 能載入的兩種寫法漏認（延續 R3）
+
+- **真實／修之前／修之後**：`start.cjs` 寫 `require('./worker')`（Node 載入 `worker.js`），只改 `worker.js`；hook 直接跑 `node tools/start.cts`，只改它或它 `require` 的 `worker.cjs`：三種都該全部跑。修之前只跑共用工具；修之後全部。
+- **修法**：hook、`check.yml`、外掛 scripts 寫到的入口多認 `.cts`。遞迴時，每個相對路徑都照 Node CommonJS 的順序列出可能載入的檔（本身、補 `.js`、`.json`、`.node`、資料夾的 `index.*`），全部算入口：不存在的路徑不會出現在改動裡，多算只會多跑檢查。資料夾 `package.json` 的 `main` 不認（現在沒有這種接線）。
+- **獨立驗收**：照 Codex 的建議改成以 Node 實際載入的檔為準：`independentEntries` 把 `preProcessFile` 找到的路徑交給 `createRequire(…).resolve`，字面的入口也多認 `.cts`。
+- **動到什麼**：`tools/dispatch.ts` 的 `toolPaths`、`entryTools`、`nodeCandidates`；`tools/tests/dispatch.test.ts` 加三個分派案例，改 `independentEntries`。
+- commit：`7f64932`。

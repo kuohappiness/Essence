@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步 A：L2 獨立審查（給 Codex）
 
-狀態：第二輪待審（2026-11-20；第一輪的報告與回應見〈第二輪〉開頭的連結）
+狀態：第三輪待審（2026-11-20；報告與回應見〈第二輪〉開頭連結的討論稿）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -143,3 +143,42 @@
 ### 回報
 
 照第一輪〈回報與權限〉。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。報告接在同一份討論稿的最後，加〈第二輪｜Codex 報告〉一節。
+
+## 第三輪
+
+第二輪（Codex，`c7d5493`）回報三項，Claude 的回應依序叫 R6（P2，R2 修正引入）、R7、R8（P3，延續 R3），逐項核對都成立，都修。報告與回應在討論稿〈第二輪｜Codex 報告〉〈第二輪｜Claude 回應〉。這一輪只審修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-2a`（已 push）。沒有未提交的修改（`docs/syntax.md` 同第一輪）。`main` 仍在 `1153ba8`。
+- 只審 `c7d5493a5efea576c69cc3540bc922ef7ccf9fce..<最後的 commit>`。新的 commit（由舊到新，一項發現一個）：
+  - `9ec207b` R6 命令列給空字串的路徑就停下
+  - `27a3d3e` R7 分派照一行裡的字串狀態判斷，不再分別數引號
+  - `7f64932` R8 入口遞迴照 Node CommonJS 會載入的檔，入口多認 `.cts`；獨立驗收改用 `require.resolve`
+  - 最後一個是這一節所在的 commit（第二輪的報告與回應、這一節）
+- 看差異：`git diff c7d5493a5efea576c69cc3540bc922ef7ccf9fce <最後的 commit>`；最後的 commit 是 `git log -1 --format=%H -- tasks/one-repo-step-2-review.md`。
+
+### 受影響的路徑
+
+- R6：`cliPath` 的所有呼叫端（第一輪 R2 列的七個命令列入口）。只多擋空字串，其他輸入的結果不變。
+- R7、R8：`tools/dispatch.ts` 的 `relativeImports`、`toolPaths`、`entryTools`；呼叫端照第一輪（第 6 條：pre-commit、pre-merge-commit、CI 的 plan）。入口集合只會變大，不會變小。
+
+### 實作者自己選的做法（第三輪）
+
+1. R6 只擋空字串，不擋只有空白的字串：`resolve('  ')` 是目前資料夾底下一個叫兩個空白的路徑，不是目前的資料夾（Windows、Node 24.13 實測：`realpath`、`stat`、在它底下寫檔都報 `ENOENT`）。擋在 `cliPath` 一處，不在每個入口各寫一次。
+2. R7 用一行內的字串狀態（引號與模板字串 `${}` 的堆疊），不跨行：跨行的模板字串裡，行首的 `import` 會被算進去（多算，只會多跑檢查；第一輪起就是這樣，和 `preProcessFile` 的逐檔比對照舊相同）。模板字串 `${…}` 裡的 `require` 照 Node 算，和 `preProcessFile` 不同，測試裡另外斷言。
+3. R8 不實際查檔案存不存在，把 Node 可能載入的路徑全部算入口：查存在要多讀一次樹，而不存在的路徑不會出現在改動裡。資料夾 `package.json` 的 `main` 不認：現在沒有這種接線，要認得讀 JSON 與再一層解析。
+
+### 驗證方式
+
+- 回歸測試都先寫，修之前跑過是失敗的：
+  - R6：`plugins/cards/tests/cli-path.test.ts`「L2 第二輪 cliPath：空字串的路徑丟錯，`.` 照舊」「L2 第二輪：install-vault、backup 的命令列給空字串的 vault 就停下，資料夾裡什麼都沒寫」。修之前前者沒丟錯；後者的安裝停在找不到 9.9.9，不是空路徑（Codex 用雜湊對得上的產物重現了真的寫入）。
+  - R7：`tools/tests/dispatch.test.ts` 的分派案例「hooks.ts 同一行前面是 console.log("it's ready")、再 import ./new-entry.ts…」與樣本測試。修之前停在 `console.log("it's ready"); import './apostrophe.ts';`。
+  - R8：三個分派案例（`require('./worker')` 載入 `worker.js`；hook 跑 `start.cts`、它 `require('./worker.cjs')`；hook 直接跑 `start.cts`，只改它）。修之前三個都只跑共用工具。
+- 每個 commit 都經過 pre-commit 的分派與完整檢查（R7、R8 改到入口，全部跑）。
+- GitHub：這一節所在的 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：同第二輪（R4 等 B；雲端 session 合併後在 `main` 再一次；R1 在 GitHub 上沒有可合併的探針）。
+
+### 回報（第三輪）
+
+照第一輪〈回報與權限〉。延續的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」，發現請編號（接著 R9）。報告接在同一份討論稿的最後，加〈第三輪｜Codex 報告〉一節。
