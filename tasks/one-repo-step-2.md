@@ -381,4 +381,6 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 合併（2026-11-20）：[PR #27](https://github.com/kuohappiness/Essence/pull/27) 用合併 commit 進 `main`（`414f64c`）。PR 的 run [44725273932](https://github.com/kuohappiness/Essence/actions/runs/44725273932) 七個 job 都成功，plan 同時照分岔點（`ecb85f9..7d6ab0c`）與 GitHub 的合併樹（`1153ba8..412cb2d`）分派，R1 的程式路徑在 GitHub 上實際走過。合併後：主資料夾快轉到 `414f64c`，`tools/`、`plugins/cards/` 各 `npm ci`；第 14 項：Pages 的 run [44725918720](https://github.com/kuohappiness/Essence/actions/runs/44725918720) 成功，`roadmap.html`、`progress-map-list.html`、`index.html` 都回 200，`roadmap.html` 有正式 vault 的 `0.6.0`；backlog、roadmap 兩列與 L2 的兩個已知的限制（R11、R12）在 `main` 改了；`docs/progress-map.md` 的本機預覽指令改成 `node tools/progress-board.ts`（§A8 漏改的）。
 
-還沒做的驗收：第 11 項合併後在 `main` 的雲端 session。根目錄留下的 `main.js`、`styles.css`、`node_modules/` 等使用者決定再搬。
+根目錄留下的舊產物（使用者 2026-11-20 選搬走）：`main.js`、`styles.css`、`node_modules/` 搬到 `D:程式開發Essence Cards Backup搬家前根目錄的建置產物 2026-11-20`，兩個檔的雜湊相同、`node_modules` 15740 個項目都在；搬走後 `git status` 只剩 `docs/syntax.md` 的換行差異，`npm --prefix tools run check` 通過。`.local/` 留在原處。
+
+還沒做的驗收：第 11 項合併後在 `main` 的雲端 session。
