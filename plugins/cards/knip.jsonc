@@ -2,8 +2,6 @@
   // Cards 的 knip 設定；共用工具在最上層的 tools/ 有自己的一份（tools/knip.jsonc，D-208 第二步 §A2）。
   "entry": ["src/main.ts", "tests/**/*.test.ts", "tools/*.mjs"],
   "project": ["src/**/*.{ts,tsx}", "tests/**/*.ts", "tools/*.ts", "tools/compare/*.ts"],
-  // 搬家前共用工具也在 tools/，由 tools/knip.jsonc 查；§A6 搬家時刪掉這一段。
-  "ignore": ["tools/{check-docs,check-local-paths,check-plugin-imports,check-skill-mirror,ci-gate,codex,dispatch,hooks,progress-board,progress-board-canvas,progress-board-data,progress-board-list,roadmap-board}.ts", "tools/{secretlint,run-knip}.mjs"],
   // React、react-dom、Motion 由 W6 的畫面（src/ui/）使用。
   // @emnapi/core、@emnapi/runtime 是 Linux 上 knip 的 wasm 解析器需要的 peer；Windows 的 npm install 會把它們從 lock 刪掉，讓 CI 的 npm ci 失敗，所以明列為開發相依。
   // electron 由 Obsidian 電腦版在執行時提供（D-148，只有 src/desktop/ 用），不裝進 node_modules。

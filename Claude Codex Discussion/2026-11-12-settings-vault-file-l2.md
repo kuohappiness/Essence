@@ -7,31 +7,31 @@
 
 ## R1（P2）執行中失去設定檔，排程仍把本機備用值標成已知
 
-**規格｜store 已重現，觀察行影響為靜態推斷。** 先正常載入上限 45，再刪除設定檔並重讀。預期保留 45 排程、`known:false`、暫停四種設定的觀察。實際保留 45 且出現缺檔提示，`known` 仍為 `true`。`load()` 回 `undefined`，store 的 `refresh()` 只呼叫 `announce()`，保留舊的 `known`。設定值不變也不會通知 state。之後正常的觀察路徑仍會帶入設定值，例如跨換日時 `fresh() → observe() → observations()`，若跨學期，可能補記 `semester`。測試已有「這次見過、之後不見」，只斷言值與提示。見 [任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)、[設定檔讀取](../src/core/settings/file.ts#L143)、[store 採用及重讀](../src/core/settings/store.ts#L113)、[外掛監看及接線](../src/main.ts#L557)、[觀察行閘門](../src/state/index.ts#L479)、[換日觀察](../src/state/index.ts#L682)、[現有測試](../tests/settings-file.test.ts#L331)。
+**規格｜store 已重現，觀察行影響為靜態推斷。** 先正常載入上限 45，再刪除設定檔並重讀。預期保留 45 排程、`known:false`、暫停四種設定的觀察。實際保留 45 且出現缺檔提示，`known` 仍為 `true`。`load()` 回 `undefined`，store 的 `refresh()` 只呼叫 `announce()`，保留舊的 `known`。設定值不變也不會通知 state。之後正常的觀察路徑仍會帶入設定值，例如跨換日時 `fresh() → observe() → observations()`，若跨學期，可能補記 `semester`。測試已有「這次見過、之後不見」，只斷言值與提示。見 [任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)、[設定檔讀取](../plugins/cards/src/core/settings/file.ts#L143)、[store 採用及重讀](../plugins/cards/src/core/settings/store.ts#L113)、[外掛監看及接線](../plugins/cards/src/main.ts#L557)、[觀察行閘門](../plugins/cards/src/state/index.ts#L479)、[換日觀察](../plugins/cards/src/state/index.ts#L682)、[現有測試](../plugins/cards/tests/settings-file.test.ts#L331)。
 
-**真實路徑。** 使用者把檔案刪除或改名就能觸發，Obsidian 的刪除及改名事件會通知該路徑。iCloud 真把新路徑改名仍待實機驗證。另以內容 `{` 重讀，實際同樣保留 `known:true`，而且缺檔提示為 false。任務 §1、§3 區分內容無效與路徑不存在，D-201 第 5 點及末段則把整份讀不懂也納入保護。合併前應確認兩種狀態的提示與觀察行規則，並保留「重新建立」只在缺檔時能寫的限制。補同次執行內「有效 → 不可用 → 有效」的接線測試。見 [監看事件](../src/obsidian/files.ts#L133)、[設定頁提示](../src/obsidian/settings.ts#L140)、[D-201 第 5 點及代價](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)。
+**真實路徑。** 使用者把檔案刪除或改名就能觸發，Obsidian 的刪除及改名事件會通知該路徑。iCloud 真把新路徑改名仍待實機驗證。另以內容 `{` 重讀，實際同樣保留 `known:true`，而且缺檔提示為 false。任務 §1、§3 區分內容無效與路徑不存在，D-201 第 5 點及末段則把整份讀不懂也納入保護。合併前應確認兩種狀態的提示與觀察行規則，並保留「重新建立」只在缺檔時能寫的限制。補同次執行內「有效 → 不可用 → 有效」的接線測試。見 [監看事件](../plugins/cards/src/obsidian/files.ts#L133)、[設定頁提示](../plugins/cards/src/obsidian/settings.ts#L140)、[D-201 第 5 點及代價](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)。
 
 ## R2（P2）重新建立可能覆蓋剛同步回來的設定檔
 
-**規格｜重新建立已重現，外掛還原為靜態推斷。** 本機確認值為 45，按「重新建立」，store 輪到時讀到缺檔。令上限 75 的設定檔在之後的 `loadData()` 等待中出現。預期保留 75、回 `changed`。實際回 `saved`，把 75 覆蓋成 45。呼叫鏈為 `recreate → store.restore(base) → save → await loadData → Files.modify`。最後的 `edit` 忽略實際內容與 `exists`，而 Obsidian adapter 看見檔案已在時會走 `vault.process` 覆寫。外掛還原也有同一缺口。它在檢查目標雜湊後還會讀舊檔並經 `save()` 再讀一次，中途到達的目標內容可被舊底稿覆蓋，包含應保留的未知欄位。讀回核對只會確認最後寫入的結果。見 [任務 §3、§4](../tasks/settings-vault-file.md#3-設定檔不見時)、[重新建立及寫入](../src/core/settings/file.ts#L163)、[store 還原](../src/core/settings/store.ts#L187)、[Obsidian 寫入](../src/obsidian/files.ts#L90)、[外掛還原核對](../src/obsidian/restore.ts#L242)。
+**規格｜重新建立已重現，外掛還原為靜態推斷。** 本機確認值為 45，按「重新建立」，store 輪到時讀到缺檔。令上限 75 的設定檔在之後的 `loadData()` 等待中出現。預期保留 75、回 `changed`。實際回 `saved`，把 75 覆蓋成 45。呼叫鏈為 `recreate → store.restore(base) → save → await loadData → Files.modify`。最後的 `edit` 忽略實際內容與 `exists`，而 Obsidian adapter 看見檔案已在時會走 `vault.process` 覆寫。外掛還原也有同一缺口。它在檢查目標雜湊後還會讀舊檔並經 `save()` 再讀一次，中途到達的目標內容可被舊底稿覆蓋，包含應保留的未知欄位。讀回核對只會確認最後寫入的結果。見 [任務 §3、§4](../tasks/settings-vault-file.md#3-設定檔不見時)、[重新建立及寫入](../plugins/cards/src/core/settings/file.ts#L163)、[store 還原](../plugins/cards/src/core/settings/store.ts#L187)、[Obsidian 寫入](../plugins/cards/src/obsidian/files.ts#L90)、[外掛還原核對](../plugins/cards/src/obsidian/restore.ts#L242)。
 
 **真實路徑。** 同步可以在按下按鈕後把設定檔送回，也可以在還原等 I/O 時送入另一台新版的有效設定，不需要修改格式或混用舊版。實際 iCloud 的交錯待驗。這是「重新建立」與「還原」明訂的寫前保證。建議在檔案實際寫入處重驗不存在或原內容，並補確認後才到檔的回歸案例。
 
 ## R3（P2）CLI 還原採用過期的舊檔基準，卻回報已還原
 
-**規格｜在 Windows 隔離目錄以 `makePlan → applyPlan` 已重現。延續格式查核第 4 節，涉及 `d85d129`。** 來源要還原上限 60，目的地設定檔上限 45、`legacy` 為 30，目的地 `data.json` 上限也是 30。在 `--apply` 重算計畫後、寫暫存檔時，將目的地舊檔改為 15。照 §4，應看到當前有效值已從 45 改為 15 並跳過。實際回「已還原」，寫出上限 60、`legacy.capMinutes:30`，新版重讀疊成 15。重算計畫及 `settingsBytes()` 共用先前的 `loaded.current`，暫存檔改名前只核對目標檔雜湊，寫完也只核對位元組。見 [任務 §4](../tasks/settings-vault-file.md#4-還原與備份格式查核)、[格式查核第 4 節](2026-11-12-settings-vault-file-format-review.md#4-還原值比對與目的地)、[CLI 重算計畫](../tools/restore.ts#L170)、[改名前與寫後核對](../tools/restore.ts#L213)、[CLI 取舊檔基準](../tools/restore.ts#L286)。
+**規格｜在 Windows 隔離目錄以 `makePlan → applyPlan` 已重現。延續格式查核第 4 節，涉及 `d85d129`。** 來源要還原上限 60，目的地設定檔上限 45、`legacy` 為 30，目的地 `data.json` 上限也是 30。在 `--apply` 重算計畫後、寫暫存檔時，將目的地舊檔改為 15。照 §4，應看到當前有效值已從 45 改為 15 並跳過。實際回「已還原」，寫出上限 60、`legacy.capMinutes:30`，新版重讀疊成 15。重算計畫及 `settingsBytes()` 共用先前的 `loaded.current`，暫存檔改名前只核對目標檔雜湊，寫完也只核對位元組。見 [任務 §4](../tasks/settings-vault-file.md#4-還原與備份格式查核)、[格式查核第 4 節](2026-11-12-settings-vault-file-format-review.md#4-還原值比對與目的地)、[CLI 重算計畫](../plugins/cards/tools/restore.ts#L170)、[改名前與寫後核對](../plugins/cards/tools/restore.ts#L213)、[CLI 取舊檔基準](../plugins/cards/tools/restore.ts#L286)。
 
 **真實路徑。** `v0.4.0` 設定頁會把 15 這類合法值寫進 `data.json`，CLI 要求關閉本機 Obsidian 也無法阻止別台舊版或 iCloud 寫入。重現用 CLI 的寫入替身固定時序，備份、計畫、磁碟寫入與重讀都走實際程式。建議在寫入前重讀舊檔，用同一份內容核對有效值和產生 `legacy`，並驗證 `--apply` 期間才到的變更。
 
 ## R4（P2）逾時的舊讀取會把本機最後確認值改回去
 
-**規格｜公開設定檔與 store 介面已重現。** 讓第一筆讀到上限 45 後卡在 `loadData()`。等 store 的五秒讀取逾時，再重讀新的設定檔並採用上限 75。此時 store 與本機確認值都是 75。再放行第一筆，預期兩處都保留 75，實際 store 仍為 75，本機確認值卻被改成 45。舊讀取的結果雖然沒有經 store 採用，`load()` 在回傳前已執行 `remember()`。如果接著檔案不見，重開時 `seed` 或執行中按「重新建立」會取到 45。這也讓「本機備用值」與畫面當時的值不一致。見 [設定檔的確認副作用](../src/core/settings/file.ts#L131)、[載入時記值](../src/core/settings/file.ts#L155)、[store 逾時與晚到處理](../src/core/settings/store.ts#L87)、[啟動用本機確認值](../src/core/settings/store.ts#L140)、[任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)。
+**規格｜公開設定檔與 store 介面已重現。** 讓第一筆讀到上限 45 後卡在 `loadData()`。等 store 的五秒讀取逾時，再重讀新的設定檔並採用上限 75。此時 store 與本機確認值都是 75。再放行第一筆，預期兩處都保留 75，實際 store 仍為 75，本機確認值卻被改成 45。舊讀取的結果雖然沒有經 store 採用，`load()` 在回傳前已執行 `remember()`。如果接著檔案不見，重開時 `seed` 或執行中按「重新建立」會取到 45。這也讓「本機備用值」與畫面當時的值不一致。見 [設定檔的確認副作用](../plugins/cards/src/core/settings/file.ts#L131)、[載入時記值](../plugins/cards/src/core/settings/file.ts#L155)、[store 逾時與晚到處理](../plugins/cards/src/core/settings/store.ts#L87)、[啟動用本機確認值](../plugins/cards/src/core/settings/store.ts#L140)、[任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)。
 
 **真實路徑。** 一般檔與舊檔的讀取都經 I/O，既有 store 已明確處理逾時後才回來的呼叫。具體順序用延遲 Promise 重現，真機上發生的頻率待驗。建議讓本機確認值只跟隨 store 真正採用的新檔讀取，補晚到、重讀及缺檔的連續案例。
 
 ## R5（P2）帶 BOM 的舊檔在還原與外掛載入被算成不同的值
 
-**規格｜解析差異已重現，Windows Obsidian 行為沿用既有宿主查核。** 設定檔上限 45、`legacy` 上限 30，舊檔為 UTF-8 BOM 加上 `{"capMinutes":15}`。用 Obsidian 的 `loadData` 解析方式重現，外掛採用 45，因舊檔解析失敗。還原的 `settingsNow` 透過預設 `TextDecoder` 的 `parseData` 先去除 BOM，採用 15。同一套計算也用在備份來源，因而可能把備份當時未生效的 15 寫成有效設定，或省略本來應出現的設定差異。發布前比較器已保留 BOM 並交給各版解析，這條路徑仍得到外掛的結果。見 [還原設定值](../src/core/backup/plan.ts#L83)、[位元組解析](../src/core/settings/saved.ts#L89)、[外掛 loadData 接線](../src/main.ts#L158)、[比較器保留 BOM](../tools/compare-versions.ts#L76)、[先前的 Obsidian 宿主查核 F5](2026-11-09-settings-page-l2.md)。
+**規格｜解析差異已重現，Windows Obsidian 行為沿用既有宿主查核。** 設定檔上限 45、`legacy` 上限 30，舊檔為 UTF-8 BOM 加上 `{"capMinutes":15}`。用 Obsidian 的 `loadData` 解析方式重現，外掛採用 45，因舊檔解析失敗。還原的 `settingsNow` 透過預設 `TextDecoder` 的 `parseData` 先去除 BOM，採用 15。同一套計算也用在備份來源，因而可能把備份當時未生效的 15 寫成有效設定，或省略本來應出現的設定差異。發布前比較器已保留 BOM 並交給各版解析，這條路徑仍得到外掛的結果。見 [還原設定值](../plugins/cards/src/core/backup/plan.ts#L83)、[位元組解析](../plugins/cards/src/core/settings/saved.ts#L89)、[外掛 loadData 接線](../plugins/cards/src/main.ts#L158)、[比較器保留 BOM](../plugins/cards/tools/compare-versions.ts#L76)、[先前的 Obsidian 宿主查核 F5](2026-11-09-settings-page-l2.md)。
 
 **真實路徑。** `v0.4.0` 的正常設定頁沒有寫 BOM 的路徑。外部編輯器另存的舊檔可帶 BOM，而備份規格會原樣保留其位元組。建議讓兩邊的舊檔解析沿用相同邊界，補「備份原值 → 還原 → 外掛重讀」的例子，並涵蓋備份只有舊檔的情形。見 [syntax §8](../docs/syntax.md#8-備份檔)、[原設定規格的 BOM 驗收](../tasks/settings-page.md)。
 
@@ -40,7 +40,7 @@
 - 待審 `79b59226446ece67b2f51fa325a1e162cf23226c`，範圍 `9b2c133..79b5922`。`git diff --check 9b2c133..79b5922` 通過。
 - Windows 沙箱外執行 `npm.cmd run check`，exit 0。型別、ESLint、knip、secretlint、本機路徑、skill 副本、文件檢查全部通過，測試 2,603 通過、0 失敗、0 跳過。
 - 使用 Windows Node v24.13.0 的 stdin 在記憶體跑缺檔、損毀檔、重新建立交錯、晚到讀取和 BOM；用隔離的暫存 vault 跑 CLI 還原交錯。探針中的斷言確認上述實際結果。
-- 靜態核對新版設定頁與重新建立經 `store → createSettingsFile.save → Files.modify` 寫新檔，外掛還原經同一 store，CLI 還原從計畫取目的地。這幾條路徑都沒有寫 `data.json` 的呼叫。核對備份與更新快照掃描 `Essence Cards/`，以及 `v0.4.0` 的 `isDeckPath`、`isLogPath` 與 `loadData/saveData`，新檔不進舊版卡組或紀錄。舊還原的兩列行為沿用格式查核以發布版計畫器驗出的結果。見 [備份掃描](../src/core/backup/take.ts#L61)、[更新快照](../tools/update-vault.ts#L105)、[舊還原查核](2026-11-12-settings-vault-file-format-review.md#2-040-讀取與跨版本還原)。
+- 靜態核對新版設定頁與重新建立經 `store → createSettingsFile.save → Files.modify` 寫新檔，外掛還原經同一 store，CLI 還原從計畫取目的地。這幾條路徑都沒有寫 `data.json` 的呼叫。核對備份與更新快照掃描 `Essence Cards/`，以及 `v0.4.0` 的 `isDeckPath`、`isLogPath` 與 `loadData/saveData`，新檔不進舊版卡組或紀錄。舊還原的兩列行為沿用格式查核以發布版計畫器驗出的結果。見 [備份掃描](../plugins/cards/src/core/backup/take.ts#L61)、[更新快照](../plugins/cards/tools/update-vault.ts#L105)、[舊還原查核](2026-11-12-settings-vault-file-format-review.md#2-040-讀取與跨版本還原)。
 - 未實機重跑 V1～V4，也未操作 Windows Obsidian、iPhone 或 iCloud 的缺檔、混用、還原交錯或實際退版。實作者的 V1 使用 `0.4.0+f645c66`、V2～V4 使用 `0.4.0+e9d2d50`，見 [任務實機結果](../tasks/settings-vault-file.md#結果)。本輪驗證使用隔離資料，正式及測試 vault 未使用。
 
 ## Claude 回應（第一輪）
@@ -157,7 +157,7 @@ R6～R8、R10 同意並修好；R9 不修，理由在下面。一項一個 commi
 
 ### R11（P2，延續第一輪 R3，第二輪 R6 修正擴大間隔）命令列只核對寫入的檔案，仍可能把不同的有效設定回報為「已還原」
 
-**規格｜Windows 隔離 vault 已重現。** 備份上限 60，目的地設定檔上限 45、`legacy.capMinutes` 30，目的地 `data.json` 上限 30。透過 `applyPlan` 的 `scan` 替身，在暫存檔寫好後的第二次 `data.json` 讀取先取得真正的磁碟位元組，再把同一檔案改為 15，讓這次讀取交回先前取得的 30。命令列接著核對設定檔與暫存檔身分並改名。實際回「已還原」，磁碟是上限 60、`legacy.capMinutes` 30，但用同一套 `settingsNow` 重讀兩檔，有效上限為 15。寫前已偵測到有效值不同時應跳過。已經寫入才發現不同時，應回報寫入後的有效設定與備份有差異。現行寫後核對只比設定檔雜湊。見 [D-201 第 1、6 點](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)、[任務 §4](../tasks/settings-vault-file.md#4-還原與備份格式查核)、[CLI 改名前的兩次核對與寫後回報](../tools/restore.ts#L250)。
+**規格｜Windows 隔離 vault 已重現。** 備份上限 60，目的地設定檔上限 45、`legacy.capMinutes` 30，目的地 `data.json` 上限 30。透過 `applyPlan` 的 `scan` 替身，在暫存檔寫好後的第二次 `data.json` 讀取先取得真正的磁碟位元組，再把同一檔案改為 15，讓這次讀取交回先前取得的 30。命令列接著核對設定檔與暫存檔身分並改名。實際回「已還原」，磁碟是上限 60、`legacy.capMinutes` 30，但用同一套 `settingsNow` 重讀兩檔，有效上限為 15。寫前已偵測到有效值不同時應跳過。已經寫入才發現不同時，應回報寫入後的有效設定與備份有差異。現行寫後核對只比設定檔雜湊。見 [D-201 第 1、6 點](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)、[任務 §4](../tasks/settings-vault-file.md#4-還原與備份格式查核)、[CLI 改名前的兩次核對與寫後回報](../plugins/cards/tools/restore.ts#L250)。
 
 **真實路徑。** `0.4.0` 可正常把每日上限改成 15，本機關閉 Obsidian 時，另一台舊版和 iCloud 仍可更新 `data.json`。最後一次讀到舊檔快照後，到改名還要查目標資料夾的連結、讀設定檔、查暫存檔身分。這次用替身固定順序，備份、計畫、兩檔的讀寫、改名和有效值核對均使用實際程式。iCloud 實機的時序與頻率待驗。
 
@@ -165,10 +165,10 @@ R6～R8、R10 同意並修好；R9 不修，理由在下面。一項一個 commi
 
 ### 修正核對
 
-- **R6 原順序通過。** 在最後一次 `scan(data.json)` 中改目的地設定檔，`applyPlan` 回「跳過」、保留 75，並收掉暫存檔。另在這次 `scan` 注入 `EIO`，回「失敗」、原設定檔不動，暫存檔也清掉。設定列寫暫存檔前與改名前各走一次 `scan` 讀舊檔，`ENOENT` 仍轉為缺檔，其他錯誤走該列的失敗路徑。卡組的全庫掃描仍走原本的 `occupied`。見 [CLI 寫入流程](../tools/restore.ts#L216)、[讀取與錯誤分類](../tools/restore.ts#L309)。
-- **R7 原順序通過。** 外掛由 `createRestore` 以同一組 `now`、`data` 比對有效值並建立 `restoreBase`，store 把這組 `WriteCheck` 經 `main.ts` 交給 `save`。探針在 `loadData` 期間替換設定檔，舊檔五欄沒變，原文核對仍回 `changed`、零次寫入。兩份檔都變時，舊檔核對先回 `changed`，零次 `modify`。如果舊檔直到 `modify` 才從 30 改成 15，外掛寫出 60，讀回疊成 15，回 `failed`。還原用 `dropLegacy` 的底，重新建立用空底且只傳 `expect: null`，設定頁一般存檔不傳 `WriteCheck`。接線測試的 `setData` 讓同一時點的檔案位元組與 `loadData` 一致，仍涵蓋壞檔、缺檔、其他列受還原保護與寫入逾時。R7 新接線測試在排進隊伍後才改兩份資料，確實保留兩次讀取間的變動。見 [外掛還原接線](../src/obsidian/restore.ts#L242)、[設定檔寫入](../src/core/settings/file.ts#L205)、[store 還原及讀回](../src/core/settings/store.ts#L230)、[接線測試](../tests/main-wiring.test.ts#L794)。
-- **R8 原順序通過。** 前一筆重讀確認 75、設定檔再度消失時，排隊中的重新建立才取到 75。`now.values ?? backup` 決定同一份寫入與讀回預期，回 `saved`，確認值也維持 75。外掛還原未提供 `values`，仍用備份。若新檔在重新建立的缺檔檢查後才到，`expect: null` 仍會在 `modify` 擋住。見 [重新建立回歸測試](../tests/settings-file.test.ts#L375)、[store 還原及讀回](../src/core/settings/store.ts#L230)。
-- **R9 維持 P3。** 用設定檔與 store 的公開介面重跑，逾時的含 NUL 回覆會讓提示由顯示變為隱藏。上限仍是 45、`known=false`、寫入零次。再走設定頁 `display()` 呼叫的 `reload()`，缺檔讀取完成後提示回來。使用者若讓設定頁一直開著，可能誤以為檔已回來，這個畫面問題仍成立。考量重開設定頁即可恢復，沒有資料寫入或排程值退回，這輪同意按已知限制處理。見 [設定頁重讀](../src/obsidian/settings.ts#L134)、[提示狀態更新](../src/core/settings/file.ts#L181)。
+- **R6 原順序通過。** 在最後一次 `scan(data.json)` 中改目的地設定檔，`applyPlan` 回「跳過」、保留 75，並收掉暫存檔。另在這次 `scan` 注入 `EIO`，回「失敗」、原設定檔不動，暫存檔也清掉。設定列寫暫存檔前與改名前各走一次 `scan` 讀舊檔，`ENOENT` 仍轉為缺檔，其他錯誤走該列的失敗路徑。卡組的全庫掃描仍走原本的 `occupied`。見 [CLI 寫入流程](../plugins/cards/tools/restore.ts#L216)、[讀取與錯誤分類](../plugins/cards/tools/restore.ts#L309)。
+- **R7 原順序通過。** 外掛由 `createRestore` 以同一組 `now`、`data` 比對有效值並建立 `restoreBase`，store 把這組 `WriteCheck` 經 `main.ts` 交給 `save`。探針在 `loadData` 期間替換設定檔，舊檔五欄沒變，原文核對仍回 `changed`、零次寫入。兩份檔都變時，舊檔核對先回 `changed`，零次 `modify`。如果舊檔直到 `modify` 才從 30 改成 15，外掛寫出 60，讀回疊成 15，回 `failed`。還原用 `dropLegacy` 的底，重新建立用空底且只傳 `expect: null`，設定頁一般存檔不傳 `WriteCheck`。接線測試的 `setData` 讓同一時點的檔案位元組與 `loadData` 一致，仍涵蓋壞檔、缺檔、其他列受還原保護與寫入逾時。R7 新接線測試在排進隊伍後才改兩份資料，確實保留兩次讀取間的變動。見 [外掛還原接線](../plugins/cards/src/obsidian/restore.ts#L242)、[設定檔寫入](../plugins/cards/src/core/settings/file.ts#L205)、[store 還原及讀回](../plugins/cards/src/core/settings/store.ts#L230)、[接線測試](../plugins/cards/tests/main-wiring.test.ts#L794)。
+- **R8 原順序通過。** 前一筆重讀確認 75、設定檔再度消失時，排隊中的重新建立才取到 75。`now.values ?? backup` 決定同一份寫入與讀回預期，回 `saved`，確認值也維持 75。外掛還原未提供 `values`，仍用備份。若新檔在重新建立的缺檔檢查後才到，`expect: null` 仍會在 `modify` 擋住。見 [重新建立回歸測試](../plugins/cards/tests/settings-file.test.ts#L375)、[store 還原及讀回](../plugins/cards/src/core/settings/store.ts#L230)。
+- **R9 維持 P3。** 用設定檔與 store 的公開介面重跑，逾時的含 NUL 回覆會讓提示由顯示變為隱藏。上限仍是 45、`known=false`、寫入零次。再走設定頁 `display()` 呼叫的 `reload()`，缺檔讀取完成後提示回來。使用者若讓設定頁一直開著，可能誤以為檔已回來，這個畫面問題仍成立。考量重開設定頁即可恢復，沒有資料寫入或排程值退回，這輪同意按已知限制處理。見 [設定頁重讀](../plugins/cards/src/obsidian/settings.ts#L134)、[提示狀態更新](../plugins/cards/src/core/settings/file.ts#L181)。
 - **R10 通過。** D-201 第 2、5 點與 syntax §10 對齊為未確認過且設定檔不存在時先讀舊檔、兩檔都沒有才用預設。任務 §2、§3 與 store 對齊為讀不懂回 `undefined`、維持現值與 `known`，已確認後缺檔回 `MISSING`、維持現值並把 `known` 降為 false。見 [D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)、[syntax §10](../docs/syntax.md#10-設定)、[任務 §2](../tasks/settings-vault-file.md#2-讀與寫)。
 
 ### 驗證與範圍
@@ -200,19 +200,19 @@ R11 同意並修好；R9 照第三輪的結論記成已知限制。
 
 ### R11 修正核對
 
-- **原順序通過。** 在 Windows 隔離 vault 執行真正的 `node tools/restore.ts … --apply …`，用 I/O 替身讓改名前最後一次 `data.json` 讀到 30 後，磁碟才更新為 15。命令列保留已寫的設定檔（上限 60、`legacy.capMinutes` 30），有效上限是 15，輸出「失敗」、「設定檔寫進去了」、「重跑 --plan」，退出碼為 1，且沒有留下還原暫存檔。另跑新計畫，現在值列出 15。改名後的舊檔重讀若丟出 `EIO`，會印出錯誤和同樣的下一步，退出碼也是 1。R6 的改名前目標檔晚到測試仍回「跳過」並保留新檔。見 [CLI 改名與核對](../tools/restore.ts#L252)、[CLI 輸出與退出碼](../tools/restore.ts#L375)、[R6、R11 回歸測試](../tests/restore.test.ts#L357)。
-- **穩定資料沒有誤判。** 隔離測試中的目的地 `data.json` 不存在、JSON 格式損壞，或是有效物件但有讀不懂的欄位，三種都回「已還原」，有效上限是 60，舊檔保持原樣。備份的五欄帶有不合法物件、學期缺另一欄和顯式 `null` 時，原值照還原並核對成功，目的地未知欄位也保留。既有測試確認帶 BOM 的舊檔與外掛一致視為讀不懂。設定資料夾無法辨認的穩定情況可產生計畫，但 `--apply` 在還原前備份檢查外掛 manifest 時即停止。見 [備份前置檢查](../tools/backup.ts#L45)、[設定寫入與重讀](../tools/restore.ts#L311)、[五欄比法](../src/core/settings/saved.ts#L105)。
-- **R9 文件對得上第三輪重現。** 任務 §3 記下 5 秒逾時、檔被移走、晚到的是讀不懂的內容、提示收起而手上值與 `known` 維持、沒有寫入，以及重開設定頁會重讀。實際要先有較新的缺檔讀取完成並顯示提示，晚到的舊讀取才會把提示收起。backlog 已記下同一限制和處理方式。這輪核對文件和第三輪的重現紀錄。見 [任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)、[backlog 已知限制](../docs/backlog.md#已知的限制)、[提示更新順序](../src/core/settings/file.ts#L193)。
+- **原順序通過。** 在 Windows 隔離 vault 執行真正的 `node tools/restore.ts … --apply …`，用 I/O 替身讓改名前最後一次 `data.json` 讀到 30 後，磁碟才更新為 15。命令列保留已寫的設定檔（上限 60、`legacy.capMinutes` 30），有效上限是 15，輸出「失敗」、「設定檔寫進去了」、「重跑 --plan」，退出碼為 1，且沒有留下還原暫存檔。另跑新計畫，現在值列出 15。改名後的舊檔重讀若丟出 `EIO`，會印出錯誤和同樣的下一步，退出碼也是 1。R6 的改名前目標檔晚到測試仍回「跳過」並保留新檔。見 [CLI 改名與核對](../plugins/cards/tools/restore.ts#L252)、[CLI 輸出與退出碼](../plugins/cards/tools/restore.ts#L375)、[R6、R11 回歸測試](../plugins/cards/tests/restore.test.ts#L357)。
+- **穩定資料沒有誤判。** 隔離測試中的目的地 `data.json` 不存在、JSON 格式損壞，或是有效物件但有讀不懂的欄位，三種都回「已還原」，有效上限是 60，舊檔保持原樣。備份的五欄帶有不合法物件、學期缺另一欄和顯式 `null` 時，原值照還原並核對成功，目的地未知欄位也保留。既有測試確認帶 BOM 的舊檔與外掛一致視為讀不懂。設定資料夾無法辨認的穩定情況可產生計畫，但 `--apply` 在還原前備份檢查外掛 manifest 時即停止。見 [備份前置檢查](../plugins/cards/tools/backup.ts#L45)、[設定寫入與重讀](../plugins/cards/tools/restore.ts#L311)、[五欄比法](../plugins/cards/src/core/settings/saved.ts#L105)。
+- **R9 文件對得上第三輪重現。** 任務 §3 記下 5 秒逾時、檔被移走、晚到的是讀不懂的內容、提示收起而手上值與 `known` 維持、沒有寫入，以及重開設定頁會重讀。實際要先有較新的缺檔讀取完成並顯示提示，晚到的舊讀取才會把提示收起。backlog 已記下同一限制和處理方式。這輪核對文件和第三輪的重現紀錄。見 [任務 §3](../tasks/settings-vault-file.md#3-設定檔不見時)、[backlog 已知限制](../docs/backlog.md#已知的限制)、[提示更新順序](../plugins/cards/src/core/settings/file.ts#L193)。
 
 ### R12（P3，延續 R11）寫後重讀期間換了設定檔，仍可能回「已還原」
 
-**規格｜Windows 隔離 vault 已重現。** 改名與雜湊核對已完成，第二次設定檔讀取取得上限 60 的位元組後，讓設定檔換成上限 75，再把 60 的快照交回，`data.json` 全程維持 30。預期寫後核對若遇到設定檔再變，操作者會知道現在值與備份不同。實際使用先讀到的 60 和隨後讀到的舊檔比對，輸出「已還原」、退出碼 0，當下磁碟有效值已是 75。把同一更新提前到雜湊讀取後、第二次設定檔讀取前，CLI 能偵測差異並以 1 結束，但把原因歸給舊版裝置，儘管 `data.json` 沒變。兩個順序都保留 75，影響是結果或原因讓操作者誤判。見 [寫後雜湊、讀回與訊息](../tools/restore.ts#L258)、[重讀順序](../tools/restore.ts#L320)。
+**規格｜Windows 隔離 vault 已重現。** 改名與雜湊核對已完成，第二次設定檔讀取取得上限 60 的位元組後，讓設定檔換成上限 75，再把 60 的快照交回，`data.json` 全程維持 30。預期寫後核對若遇到設定檔再變，操作者會知道現在值與備份不同。實際使用先讀到的 60 和隨後讀到的舊檔比對，輸出「已還原」、退出碼 0，當下磁碟有效值已是 75。把同一更新提前到雜湊讀取後、第二次設定檔讀取前，CLI 能偵測差異並以 1 結束，但把原因歸給舊版裝置，儘管 `data.json` 沒變。兩個順序都保留 75，影響是結果或原因讓操作者誤判。見 [寫後雜湊、讀回與訊息](../plugins/cards/tools/restore.ts#L258)、[重讀順序](../plugins/cards/tools/restore.ts#L320)。
 
 **真實路徑與發生機率。** 要用這版的 CLI 還原設定，且另一台支援新版設定檔的裝置存檔後剛好同步到本機，或另一個程序同時更新該檔。錯報成功的時窗從寫後第二次讀到設定檔的位元組起，到讀完 `data.json` 並判定結果為止，通常是一次舊檔路徑檢查與磁碟讀取的時間，未量測 iCloud 實機時序。錯歸因的時窗介於兩次寫後設定檔讀取之間。即使全裝置都升新版，設定檔仍會同步，兩種交錯估計極低。建議依 D-202 記成已知限制，不擋合併。還原期間可暫停其他裝置的設定修改，需確認時可重跑 `--plan`。
 
 ### R13（P3，R11 修正引入）新增的設定檔重讀會沿著剛換上的 junction 讀取
 
-**邊界｜Windows 隔離 vault 已重現。** 寫入和雜湊核對取得位元組後，將 `Essence Cards` 移到隔離 vault 外的同一個暫存根目錄，再用 junction 接回原路徑。預期新增重讀沿用 CLI 的路徑檢查，拒絕經由連結讀檔並回報設定檔已寫。實際 `settingsAt` 直接透過 `bytesOf` 讀設定檔，探針確認第二次讀檔經過 junction，CLI 輸出「已還原」、退出碼 0。這次讀到的是移出去的原檔，沒有經由該連結寫入。對照組把 `data.json` 的上層換成 junction，新增重讀會拒絕、說明設定檔已寫並以 1 結束。見 [改名前路徑檢查與寫後重讀](../tools/restore.ts#L253)、[兩條路徑的重讀](../tools/restore.ts#L320)、[連結檢查](../src/desktop/io.ts#L73)。
+**邊界｜Windows 隔離 vault 已重現。** 寫入和雜湊核對取得位元組後，將 `Essence Cards` 移到隔離 vault 外的同一個暫存根目錄，再用 junction 接回原路徑。預期新增重讀沿用 CLI 的路徑檢查，拒絕經由連結讀檔並回報設定檔已寫。實際 `settingsAt` 直接透過 `bytesOf` 讀設定檔，探針確認第二次讀檔經過 junction，CLI 輸出「已還原」、退出碼 0。這次讀到的是移出去的原檔，沒有經由該連結寫入。對照組把 `data.json` 的上層換成 junction，新增重讀會拒絕、說明設定檔已寫並以 1 結束。見 [改名前路徑檢查與寫後重讀](../plugins/cards/tools/restore.ts#L253)、[兩條路徑的重讀](../plugins/cards/tools/restore.ts#L320)、[連結檢查](../plugins/cards/src/desktop/io.ts#L73)。
 
 **真實路徑與發生機率。** 要用含 R11 的 CLI 還原設定，且同時有本機程序在取得寫後雜湊的位元組後、下一次設定檔讀取前，把實體目錄換成 junction。沒有證據顯示平常的 Obsidian 設定操作或 iCloud 同步會做這種替換。估計極低，建議依 D-202 記成已知限制，不擋合併。避免在 CLI 還原時搬移資料夾或更換連結。
 

@@ -8,7 +8,7 @@ import { createErrorLog, errorLogPath, ERROR_FOLDER, maybeOwn, isErrorLogPath } 
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // 正式版的錯誤紀錄（D-155、tasks/error-log.md §1）：記錄器只靠 Files；預期值取自 syntax.md §9 的範例與自編的字串。
-const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const syntax = readFileSync(new URL('../../../docs/syntax.md', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const section = syntax.slice(syntax.indexOf('## 9. 錯誤紀錄'));
 const examples = /```\n紀錄\/錯誤\/(.+)\n\n([^]*?)\n```/.exec(section);
 if (!examples) throw Error('syntax.md §9 的範例不見了');

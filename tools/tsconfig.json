@@ -14,9 +14,5 @@
     "skipLibCheck": true
   },
   "include": ["*.ts", "tests/**/*.ts"],
-  // 搬家前 tools/ 裡還有 Cards 的工具（tools/dispatch.ts 的 CARDS_TOOL），它們用 Cards 的相依，由 Cards 的檢查管；§A6 搬走後刪這一段。
-  "exclude": [
-    "backup.ts", "bench-study.ts", "compare-versions.ts", "compare", "exam-reminder.ts", "export-compare.ts", "git.ts",
-    "install.ts", "locate.ts", "node-files.ts", "restore.ts", "update-vault.ts", "vault-io.ts", "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

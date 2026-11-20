@@ -6,6 +6,10 @@ import { access, mkdtemp, mkdir, writeFile, readFile, chmod, rm, symlink, unlink
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CARDS } from '../dispatch.ts';
+
+/** 暫存 repo 裡 Cards 的路徑前綴，照真的分派表放（D-208 第二步 §A6）。 */
+const C = CARDS === '.' ? '' : CARDS + '/';
 
 void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與文件的 commit 都擋', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-hooks-'));
@@ -18,7 +22,7 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與
   const isolated = { cwd: root, env };
   await run('git', ['init', '-q'], isolated);
   await mkdir(join(root, '.githooks'));
-  await mkdir(join(root, 'src'));
+  await mkdir(join(root, C, 'src'), { recursive: true });
   await mkdir(join(root, 'tools'));
   const original = (await readFile(new URL('../../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
   const hook = join(root, '.githooks/pre-commit');
@@ -30,11 +34,11 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與
   await shell(pkg.scripts.preprepare, inTools);
   await shell(pkg.scripts.prepare, inTools);
   assert.equal(await readFile(hook, 'utf8'), original);
-  await writeFile(join(root, 'src/probe.ts'), 'export {};\n');
-  await run('git', ['add', '--', 'src/probe.ts'], isolated);
+  await writeFile(join(root, C, 'src/probe.ts'), 'export {};\n');
+  await run('git', ['add', '--', `${C}src/probe.ts`], isolated);
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
-  await run('git', ['rm', '--cached', '--', 'src/probe.ts'], isolated);
+  await run('git', ['rm', '--cached', '--', `${C}src/probe.ts`], isolated);
   await writeFile(join(root, 'doc.md'), '文件\n');
   await run('git', ['add', '--', 'doc.md'], isolated);
   await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
@@ -77,7 +81,7 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
     await chmod(hook, 0o755);
   }
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
-  // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查（分派表：根目錄的 .md 是 Cards 的相關測試，沒有測試寫到就跳過）。
+  // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查（分派表：最上層的 .md 是 Cards 與共用工具的相關測試，沒有測試寫到就跳過）。
   await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
   await writeFile(join(root, 'b.md'), '# B\n');
   await run('git', ['add', '--', 'a.md', 'b.md'], isolated);
@@ -183,16 +187,16 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
   await run('git', ['config', 'core.quotepath', 'true'], isolated);
-  await mkdir(join(root, 'src'));
+  await mkdir(join(root, C, 'src'), { recursive: true });
   if (scenario === '移出 src 的改名') {
     await mkdir(join(root, 'docs'));
-    await writeFile(join(root, 'src/x.ts'), 'export {};\n');
-    await run('git', ['add', '--', 'src/x.ts'], isolated);
+    await writeFile(join(root, C, 'src/x.ts'), 'export {};\n');
+    await run('git', ['add', '--', `${C}src/x.ts`], isolated);
     await run('git', commit, isolated);
-    await run('git', ['mv', 'src/x.ts', 'docs/x.ts'], isolated);
+    await run('git', ['mv', `${C}src/x.ts`, 'docs/x.ts'], isolated);
   } else {
-    await writeFile(join(root, 'src/中文.ts'), 'export {};\n');
-    await run('git', ['add', '--', 'src/中文.ts'], isolated);
+    await writeFile(join(root, C, 'src/中文.ts'), 'export {};\n');
+    await run('git', ['add', '--', `${C}src/中文.ts`], isolated);
   }
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
@@ -258,9 +262,9 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
   await git(['commit', '-q', '-m', 'base']);
   await git(['config', 'core.hooksPath', '.githooks']);
   await git(['checkout', '-q', '-b', 'code']);
-  await mkdir(join(repo, 'src'));
-  await writeFile(join(repo, 'src/x.ts'), 'export {};\n');
-  await git(['add', '--', 'src/x.ts']);
+  await mkdir(join(repo, C, 'src'), { recursive: true });
+  await writeFile(join(repo, C, 'src/x.ts'), 'export {};\n');
+  await git(['add', '--', `${C}src/x.ts`]);
   await git(['commit', '-q', '-m', 'code']);
   const code = (await git(['rev-parse', 'HEAD'])).stdout.trim();
   await git(['checkout', '-q', '-b', 'docs', 'main']);
@@ -319,8 +323,8 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
-  // hook 只看 tools/ 與根目錄的 node_modules 在不在；邏輯（tools/hooks.ts）與分派表照真的複製，共用檢查換成什麼都不做的替身，不 stage。
-  await mkdir(join(root, 'node_modules'));
+  // hook 只看 tools/ 與 Cards 資料夾的 node_modules 在不在；邏輯（tools/hooks.ts）與分派表照真的複製，共用檢查換成什麼都不做的替身，不 stage。
+  await mkdir(join(root, C, 'node_modules'), { recursive: true });
   await mkdir(join(root, 'tools/node_modules'), { recursive: true });
   for (const name of ['hooks.ts', 'dispatch.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
@@ -333,21 +337,22 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   await writeFile(hook, (await readFile(new URL('../../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
-  // Cards 的檢查在暫存內容的副本跑（§10）：package.json 與測試檔要 stage；都在分派表的 Cards 範圍（根目錄的 package.json、tests/）。
+  // Cards 的檢查在暫存內容的副本跑（§10）：package.json 與測試檔要 stage；都在分派表的 Cards 範圍（Cards 資料夾的 package.json、tests/）。
+  // 檢查在 Cards 的資料夾跑，所以 check 寫的路徑相對它。
   const check = 'node -e "console.log(\'NODE_OPTIONS=\' + process.env.NODE_OPTIONS)" && node --test tests/probe.test.mjs';
-  await writeFile(join(root, 'package.json'), JSON.stringify({ private: true, scripts: { check } }));
+  await writeFile(join(root, C, 'package.json'), JSON.stringify({ private: true, scripts: { check } }));
   const probe = "import test from 'node:test';\nvoid test('probe-pass', () => {});\n";
-  await mkdir(join(root, 'tests'));
-  await writeFile(join(root, 'tests/probe.test.mjs'), probe);
-  await mkdir(join(root, 'src'));
-  await writeFile(join(root, 'src/probe.ts'), 'export {};\n');
-  await run('git', ['add', '--', 'package.json', 'tests/probe.test.mjs', 'src/probe.ts'], isolated);
+  await mkdir(join(root, C, 'tests'));
+  await writeFile(join(root, C, 'tests/probe.test.mjs'), probe);
+  await mkdir(join(root, C, 'src'));
+  await writeFile(join(root, C, 'src/probe.ts'), 'export {};\n');
+  await run('git', ['add', '--', `${C}package.json`, `${C}tests/probe.test.mjs`, `${C}src/probe.ts`], isolated);
   const passed = await run('git', commit, isolated);
   assert.match(passed.stdout + passed.stderr, /NODE_OPTIONS=--max-old-space-size=1024 --test-reporter=dot\n/);
   assert.doesNotMatch(passed.stdout + passed.stderr, /probe-pass/);
-  await writeFile(join(root, 'tests/probe.test.mjs'), probe + "void test('probe-fail', () => { throw new Error('probe failure message'); });\n");
-  await writeFile(join(root, 'src/probe.ts'), 'export const changed = 1;\n');
-  await run('git', ['add', '--', 'tests/probe.test.mjs', 'src/probe.ts'], isolated);
+  await writeFile(join(root, C, 'tests/probe.test.mjs'), probe + "void test('probe-fail', () => { throw new Error('probe failure message'); });\n");
+  await writeFile(join(root, C, 'src/probe.ts'), 'export const changed = 1;\n');
+  await run('git', ['add', '--', `${C}tests/probe.test.mjs`, `${C}src/probe.ts`], isolated);
   await assert.rejects(run('git', commit, isolated), (error: unknown) => {
     const { code, stdout, stderr } = error as { code: unknown; stdout: string; stderr: string };
     assert.equal(code, 1);

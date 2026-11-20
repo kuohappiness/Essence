@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { check } from '../../src/core/ai/index.ts';
+import { check } from '../../plugins/cards/src/core/ai/index.ts';
 
 export { check };
 

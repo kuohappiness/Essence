@@ -65,7 +65,10 @@ void test('§A5 外掛根：只有一個位置有 id 對的 manifest 才算，�
 void test('§A5 外掛根：這個 repo 的 HEAD 是 Cards 現在所在的資料夾，v0.6.0 在根目錄', t => {
   const cards = fileURLToPath(new URL('..', import.meta.url));
   const top = git(cards, ['rev-parse', '--show-toplevel']);
-  assert.equal(pluginRoot(cards, 'HEAD'), relative(top, cards).replaceAll('\\', '/') || '.');
+  let same = true;
+  try { git(cards, ['diff', '--cached', '--quiet', 'HEAD', '--', ':/manifest.json', ':/plugins/cards/manifest.json']); } catch { same = false; }
+  if (same) assert.equal(pluginRoot(cards, 'HEAD'), relative(top, cards).replaceAll('\\', '/') || '.');
+  else t.diagnostic('HEAD 的 manifest 和暫存區不同（搬家的 commit 本身）：HEAD 那一項由下一個 commit 驗');
   let tagged = true;
   try { git(cards, ['rev-parse', '--verify', '--quiet', 'refs/tags/v0.6.0']); } catch { tagged = false; }
   if (!tagged) { t.skip('沒有 v0.6.0 的 tag（淺層 clone）'); return; }

@@ -19,8 +19,8 @@ export type Target = (typeof TARGETS)[number];
 export type Run = 'full' | 'related' | 'skip';
 export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
 
-/** Cards 的資料夾：搬家前在根目錄（第二步 §A6 換成 plugins/cards）。 */
-export const CARDS: string = '.';
+/** Cards 的資料夾（D-208 第二步 §A6 搬進來）。 */
+export const CARDS: string = 'plugins/cards';
 /** 對象的資料夾（相對 repo 的根）。 */
 export const folder = (target: Target) => (target === 'tools' ? 'tools' : target === 'cards' ? CARDS : `plugins/${target}`);
 /** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
@@ -48,10 +48,6 @@ const CORE_ENTRIES = ['tools/dispatch.ts', 'tools/hooks.ts', 'tools/ci-gate.ts']
 /** 其他共用工具（第 7 條）：tools/ 底下其他的檔，加上下面這些。 */
 const SHARED_TOOL_FILES = new Set(['.claude/settings.json', 'experiments/tools/decisions-index.mjs', '.secretlintrc.json']);
 
-/** 搬家前 Cards 在根目錄的工具與設定（第 11 條，§A6 刪）。 */
-const CARDS_TOOL = /^tools\/(build\.mjs|build\.d\.mts|install[^/]*|backup\.ts|restore\.ts|compare[^/]*|update-vault\.ts|locate\.ts|vault-io\.ts|node-files\.ts|git\.ts|exam-reminder\.ts|bench-study\.ts|export-compare\.ts|knip\.mjs)$|^tools\/compare\//;
-const CARDS_CONFIG = new Set(['manifest.json', 'package.json', 'package-lock.json', 'tsconfig.json', 'eslint.config.js', 'knip.jsonc']);
-
 /**
  * 共用規格的登錄表（第 8 條）：兩個以上外掛都讀的最上層檔案；外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
  * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/syntax.md 時）。
@@ -61,17 +57,15 @@ export const SHARED_SPECS: Record<string, Partial<Record<Plugin, Run>>> = {
   'docs/syntax.md': { cards: 'related', capture: 'full' },
 };
 
-const cardsAtRoot = CARDS === '.';
-
 export const RULES: Rule[] = [
   { id: 1, name: '子模組（gitlink）', matches: (_, c) => c.oldMode === '160000' || c.newMode === '160000', effect: () => 'blocked' },
   {
     // Cards 只改文件時照舊只跑相關測試（技術債「外掛只改文件也跑完整檢查」對 Cards 的完成條件，§A3）。
     id: 2, name: 'Cards 資料夾裡的文件',
-    matches: path => !cardsAtRoot && path.startsWith(prefix('cards')) && (lower(path).endsWith('.md') || path.startsWith(prefix('cards') + 'docs/')),
+    matches: path => path.startsWith(prefix('cards')) && (lower(path).endsWith('.md') || path.startsWith(prefix('cards') + 'docs/')),
     effect: () => ({ cards: 'related' }),
   },
-  { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => !cardsAtRoot && path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
+  { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
     id: 4, name: 'Capture、Mindboard 的資料夾', matches: under('plugins/capture/', 'plugins/mindboard/'),
     effect: path => ({ [path.startsWith('plugins/capture/') ? 'capture' : 'mindboard']: 'full' }),
@@ -80,11 +74,6 @@ export const RULES: Rule[] = [
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
-  },
-  {
-    // 搬家前 Cards 的程式、工具與設定在根目錄；排在共用工具那一條前面（tools/ 裡的 Cards 工具不算共用工具）。§A6 刪。
-    id: 11, name: 'Cards 的程式與設定（搬家前在根目錄）', effect: () => ({ cards: 'full' }),
-    matches: path => cardsAtRoot && (under('src/', 'tests/')(path) || CARDS_TOOL.test(path) || CARDS_CONFIG.has(path)),
   },
   {
     id: 7, name: '其他共用工具', effect: () => ({ tools: 'full' }),

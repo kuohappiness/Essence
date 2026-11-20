@@ -5,7 +5,7 @@ import { boxBatch, boxOf, findItem, introBoxes, refOf, suspectOf } from '../src/
 
 // tasks/ai-cards-add.md §1：引言框裡的項目、按下去時在最新的文字裡重新找。只用 syntax.md 的例子與自編的內容。
 
-const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
+const syntax = readFileSync(new URL('../../../docs/syntax.md', import.meta.url), 'utf8');
 /** syntax §2-9 的草稿例子，換成存草稿後的樣子（候選已配好 ID、加進已有的轉成連結），前面加上屬性。 */
 const saved = (): string => {
   const at = syntax.indexOf('### 2-9');

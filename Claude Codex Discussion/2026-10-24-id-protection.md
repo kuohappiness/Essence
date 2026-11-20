@@ -106,7 +106,7 @@
 - 只在**有題目的明確目標之首行**辨識，且只有一個無歧義的完整候選時才沿用並提示。行內程式碼、公式、跳脫字元與連結內容不參與辨識；不從題目行、補充、資料或 implicit 題目拿 ID 當目標 ID，維持 D-089 第 9 條。
 - 有兩個候選，或行中候選與行尾 ID 不同時，列為該目標的身分衝突，保留原文，不自動挑一個或再配第三個。`^k3m9x2abc` 也不能截出前六碼冒充原 ID。
 - 把這個保留格式明寫成語法容錯，而不是聲稱能辨識文字的真正用途。要原樣講解此格式的正文用行內程式碼表示。正常的編輯防護仍須讓家長不用理解這條規則。
-- 不直接把共用的 `stripId` 改成「任何地方都抓行中 ID」：[`parse.ts`](../src/core/deck/parse.ts) 的目標與題目都會呼叫它；若一併套用，可能刪掉題目／答案的正文並改變指紋。目標標題的容錯要有自己的適用範圍。
+- 不直接把共用的 `stripId` 改成「任何地方都抓行中 ID」：[`parse.ts`](../plugins/cards/src/core/deck/parse.ts) 的目標與題目都會呼叫它；若一併套用，可能刪掉題目／答案的正文並改變指紋。目標標題的容錯要有自己的適用範圍。
 
 **不採用我的做法的代價**：完全不容錯，單純在 ID 後補字就會斷開紀錄，iPhone 也無法讀出原目標；無限制地抓六碼，則可能吞掉正文、改掉題目指紋或錯接紀錄。受限容錯仍接受保留語法與字面文字可能重疊的代價，不保證零誤認。
 
@@ -196,7 +196,7 @@
 3. 有歧義時保留證據，局部停止自動身分修改；不把排程錯接或靜默重設包成「已修復」。提示用「這個學習目標的進度連結需要處理」，不用要求家長辨認隨機碼。
 4. 分別回報「本機身分有效」「本機寫回完成」「同步狀態未知」；不把按鈕成功等同遠端同步成功或所有舊進度都已恢復。
 
-還有一個可直接修正的 W5 規格缺口：§3-6 的 `taken` 只收 `history.reviews` 與 `changes`，但 [`mergeHistory`](../src/core/study/history.ts) 會移除被 undo 的作答。某個已刪目標的唯一作答被取消後，它的舊 ID 便可能再次被配出。我用固定亂數重現了這條路徑。我的做法是讓「新配碼避開的歷史 ID」包含原始合法紀錄中曾出現的 `lt`，不受 undo 影響；這只是在防止重用，不授權把該 ID 找回給任何目標。完全沒有留過紀錄、已從所有可見筆記消失的碼，現有資料仍無法列出；若要保證它也永不重用，須另討論持久的已用 ID 清單，不能聲稱目前的 `taken` 已做到。
+還有一個可直接修正的 W5 規格缺口：§3-6 的 `taken` 只收 `history.reviews` 與 `changes`，但 [`mergeHistory`](../plugins/cards/src/core/study/history.ts) 會移除被 undo 的作答。某個已刪目標的唯一作答被取消後，它的舊 ID 便可能再次被配出。我用固定亂數重現了這條路徑。我的做法是讓「新配碼避開的歷史 ID」包含原始合法紀錄中曾出現的 `lt`，不受 undo 影響；這只是在防止重用，不授權把該 ID 找回給任何目標。完全沒有留過紀錄、已從所有可見筆記消失的碼，現有資料仍無法列出；若要保證它也永不重用，須另討論持久的已用 ID 清單，不能聲稱目前的 `taken` 已做到。
 
 如果兩段不同歷史最後留下完全相同的檔案與複習紀錄，例如「誤刪 ID」和「故意刪掉後重建同題」，目前資料就無法區分。要再提高外部破壞的救回能力，必須增加可追溯的修改／還原證據，另外討論成本；不能只多加一個指紋條件就承諾全自動正確。這次優先刪掉全庫猜測找回與一般化的歷史系統，不擴大 v1。
 
@@ -288,7 +288,7 @@ Obsidian 的 `registerEditorExtension`、CodeMirror 的 replacement decoration�
 
 ### 4. 放進 W5 時，不能繼續沿用「建置只能外部引用 obsidian」的限制
 
-這是鎖定方案落地時缺的一項接法調整。[`tools/build.mjs`](../tools/build.mjs) 現在只把 `obsidian` 設為 external，並拒絕其他 external；W5 的驗收也沿用這一條。直接加入 CodeMirror 匯入會把另一份 CodeMirror 打進外掛；改成使用 Obsidian 提供的 CodeMirror，又會被目前的建置檢查擋住。
+這是鎖定方案落地時缺的一項接法調整。[`tools/build.mjs`](../plugins/cards/tools/build.mjs) 現在只把 `obsidian` 設為 external，並拒絕其他 external；W5 的驗收也沿用這一條。直接加入 CodeMirror 匯入會把另一份 CodeMirror 打進外掛；改成使用 Obsidian 提供的 CodeMirror，又會被目前的建置檢查擋住。
 
 應依 [Obsidian 官方 sample plugin 的建置設定](https://raw.githubusercontent.com/obsidianmd/obsidian-sample-plugin/master/esbuild.config.mjs)，讓實際用到的 `@codemirror/state`、`@codemirror/view` 等由宿主提供，調整相依宣告及建置白名單與驗收；只開必要項目，不放寬成任意 external。否則可能因兩份 CodeMirror 的類別／extension 身分不一致而載入失敗。這屬 W5 接法的必要補充，本次不改程式或其他規格。
 

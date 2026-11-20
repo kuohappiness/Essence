@@ -64,6 +64,9 @@ jobs:
     needs: plan
     if: needs.plan.outputs.cards == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/cards
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,12 +76,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            tools/package-lock.json
-      # Cards 的檢查也跑共用檢查與 plugin-imports，兩邊都要裝。
-      - run: npm ci
-        working-directory: tools
+          cache-dependency-path: plugins/cards/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm run build

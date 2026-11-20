@@ -3,11 +3,6 @@
   // hooks.ts 由 .githooks 直接用 node 執行、沒有程式 import 它，另外列；測試另外列（沒列時測試用到的匯出會被報成沒用到）。
   "entry": ["*.mjs", "hooks.ts", "tests/**/*.test.ts"],
   "project": ["*.{ts,mjs}", "tests/**/*.ts"],
-  // 搬家前 tools/ 裡還有 Cards 的工具（tools/dispatch.ts 的 CARDS_TOOL），由 Cards 的 knip 管；§A6 搬走後刪這一段。
-  "ignore": [
-    "backup.ts", "bench-study.ts", "build.mjs", "compare-versions.ts", "exam-reminder.ts", "export-compare.ts", "git.ts",
-    "install.ts", "locate.ts", "restore.ts", "update-vault.ts", "vault-io.ts"
-  ],
   // secretlint 的 recommend preset 由 .secretlintrc.json 動態載入（secretlint 本身由 secretlint.mjs import）。
   // @emnapi/core、@emnapi/runtime 是 Linux 上 knip 的 wasm 解析器需要的 peer（同 Cards 的 knip.jsonc）。
   "ignoreDependencies": ["@secretlint/secretlint-rule-preset-recommend", "@emnapi/core", "@emnapi/runtime"]

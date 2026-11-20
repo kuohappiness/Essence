@@ -13,11 +13,17 @@ import { access, appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, sy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CARDS } from '../dispatch.ts';
 
 const run = promisify(execFile);
 const shell = promisify(exec);
 const SOURCE = fileURLToPath(new URL('../..', import.meta.url));
 const TOOLS_MODULES = join(SOURCE, 'tools/node_modules');
+// Cards 的資料夾照分派表（D-208 第二步 §A6）：替身放在那裡，不靠 clone 的版面（hook 裡 clone 的是 HEAD，搬家的 commit 時還是舊的）。
+const C = CARDS === '.' ? '' : CARDS + '/';
+const WHERE = CARDS === '.' ? '根目錄' : C;
+const UP = C.split('/').filter(Boolean).map(() => '../').join('');
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 // 路徑拆開寫：分派表照路徑字串找相關測試，寫成一整串會讓改那份文件時也跑這個測試。
 const SYNTAX = 'docs/' + 'syntax.md';
 const PRODUCT = 'docs/' + 'product.md';
@@ -74,9 +80,11 @@ async function clone(t: test.TestContext) {
     await copyFile(join(SOURCE, path), join(repo, path));
   }
   await writeFile(join(repo, 'mark.mjs'), MARK);
-  const pkg = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
-  pkg.scripts.check = 'node mark.mjs cards';
-  await writeFile(join(repo, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
+  // Cards 的 package.json 用這次要驗的那份（有相依，沒裝時 hook 要擋），check 換成記號。
+  const pkg = JSON.parse(await readFile(join(SOURCE, C, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+  pkg.scripts.check = `node ${UP}mark.mjs cards`;
+  await mkdir(join(repo, C), { recursive: true });
+  await writeFile(join(repo, C, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
   for (const plugin of ['capture', 'mindboard']) {
     await mkdir(join(repo, 'plugins', plugin), { recursive: true });
     await writeFile(join(repo, 'plugins', plugin, 'package.json'), JSON.stringify({ name: `essence-${plugin}`, private: true, scripts: { check: `node ../../mark.mjs ${plugin}` } }, null, 2) + '\n');
@@ -85,10 +93,11 @@ async function clone(t: test.TestContext) {
   const toolsPkg = JSON.parse(await readFile(join(repo, 'tools/package.json'), 'utf8')) as { scripts: Record<string, string> };
   toolsPkg.scripts['self-check'] = 'node ../mark.mjs tools';
   await writeFile(join(repo, 'tools/package.json'), JSON.stringify(toolsPkg, null, 2) + '\n');
-  for (const path of (await git(repo, 'ls-files', '-z', '--', 'tests', 'tools/tests')).split('\0').filter(path => path.endsWith('.test.ts'))) {
+  for (const path of (await git(repo, 'ls-files', '-z', '--', 'tests', `${C}tests`, 'tools/tests')).split('\0').filter(path => path.endsWith('.test.ts'))) {
     await writeFile(join(repo, path), 'export {};\n');
   }
-  await writeFile(join(repo, 'tests/syntax-stub.test.ts'), [
+  await mkdir(join(repo, C, 'tests'), { recursive: true });
+  await writeFile(join(repo, C, 'tests/syntax-stub.test.ts'), [
     `// 讀 ${SYNTAX} 的測試替身`,
     "import { appendFileSync } from 'node:fs';",
     "appendFileSync(String(process.env.ESSENCE_MARKS), 'cards-related\\n');",
@@ -141,8 +150,8 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   const c = await clone(t);
   const { repo, git, commit, put } = c;
 
-  // 1. 只改 Mindboard：根目錄沒有 node_modules 也能 commit。
-  await assert.rejects(access(join(repo, 'node_modules')), { code: 'ENOENT' });
+  // 1. 只改 Mindboard：Cards 的資料夾沒有 node_modules 也能 commit。
+  await assert.rejects(access(join(repo, C, 'node_modules')), { code: 'ENOENT' });
   await put('plugins/mindboard/src/a.ts', 'export const a = 1;\n');
   await put('plugins/mindboard/src/b.ts', 'export const b = 1;\n');
   await git(repo, 'add', '--', 'plugins/mindboard/src');
@@ -150,22 +159,22 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
   assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）通過$/);
-  await assert.rejects(access(join(repo, 'node_modules')), { code: 'ENOENT' });
+  await assert.rejects(access(join(repo, C, 'node_modules')), { code: 'ENOENT' });
 
-  // 2. 只改 Cards：沒有根目錄的 node_modules 擋下，裝過（空的 node_modules）才跑。
-  await put('src/hook-probe.ts', 'export const probe = 1;\n');
-  await git(repo, 'add', '--', 'src/hook-probe.ts');
+  // 2. 只改 Cards：Cards 的資料夾沒有 node_modules 擋下，裝過（空的 node_modules）才跑。
+  await put(`${C}src/hook-probe.ts`, 'export const probe = 1;\n');
+  await git(repo, 'add', '--', `${C}src/hook-probe.ts`);
   r = await commit(['-m', 'cards only']);
   assert.equal(r.ok, false);
-  assert.match(r.out, /Cards 要檢查，先在根目錄執行 npm ci/);
+  assert.match(r.out, new RegExp(`Cards 要檢查，先在${escaped(WHERE)}執行 npm ci`));
   assert.deepEqual(r.marks, []);
-  await mkdir(join(repo, 'node_modules'));
-  await writeFile(join(repo, 'node_modules/keep.txt'), '副本借用時不能被刪\n');
+  await mkdir(join(repo, C, 'node_modules'));
+  await writeFile(join(repo, C, 'node_modules/keep.txt'), '副本借用時不能被刪\n');
   r = await commit(['-m', 'cards only']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['cards']);
-  await access(join(repo, 'node_modules/keep.txt'));
-  assert.match(lastLine(r.out), /Capture：照分派表跳過（這次改的路徑都不是它的：src\/hook-probe\.ts）；Mindboard：照分派表跳過（/);
+  await access(join(repo, C, 'node_modules/keep.txt'));
+  assert.match(lastLine(r.out), new RegExp(`Capture：照分派表跳過（這次改的路徑都不是它的：${escaped(C)}src/hook-probe\\.ts）；Mindboard：照分派表跳過（`));
 
   // 3. 改轉錄稿格式：Cards 跑讀到它的測試，Capture 完整檢查。
   await appendFile(join(repo, SYNTAX), '\n');
@@ -253,8 +262,8 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
 
   // 相關測試照這次 commit 的內容選（L2 R2）。寫到轉錄稿格式的測試替身在暫存區，工作樹裡改成沒寫到：照樣選到、跑了。
   // Cards 要跑：放一個空的 node_modules 當作裝過。
-  await mkdir(join(repo, 'node_modules'));
-  const stub = 'tests/syntax-stub.test.ts';
+  await mkdir(join(repo, C, 'node_modules'));
+  const stub = `${C}tests/syntax-stub.test.ts`;
   const stubText = await readFile(join(repo, stub), 'utf8');
   await put(stub, 'export {};\n');
   await appendFile(join(repo, SYNTAX), '\n');
@@ -264,14 +273,14 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   assert.deepEqual(r.marks, ['capture', 'cards-related']);
   await put(stub, stubText);
   // 工作樹新加、沒 stage 的測試寫到這次改的文件：不選它（副本裡沒有它，選到就會擋下可以 commit 的文件）。
-  await put('tests/unstaged.test.ts', `// ${PRODUCT}\nprocess.exit(1);\n`);
+  await put(`${C}tests/unstaged.test.ts`, `// ${PRODUCT}\nprocess.exit(1);\n`);
   await appendFile(join(repo, PRODUCT), '\n');
   await git(repo, 'add', '--', PRODUCT);
   r = await commit(['-m', 'product, unstaged test']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, []);
   assert.match(lastLine(r.out), /Cards：照分派表跳過（沒有測試寫到 docs\/product\.md）/);
-  await rm(join(repo, 'tests/unstaged.test.ts'));
+  await rm(join(repo, C, 'tests/unstaged.test.ts'));
 
   // 只 stage 一份 skill、工作樹的兩份剛好一致：共用檢查讀暫存區，擋下。
   for (const copy of SKILL_COPIES) await appendFile(join(repo, copy, SKILL), '\n補一行。\n');

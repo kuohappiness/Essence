@@ -16,7 +16,7 @@ function assignIds(text: string, options: AssignOptions) { deckCases.add(text); 
 function setTargetId(text: string, line: number, id: string | null) { deckCases.add(text); return setId(text, line, id); }
 function setDeckStatus(text: string, value: '啟用' | '暫停') { deckCases.add(text); return setStatus(text, value); }
 
-const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
+const syntax = readFileSync(new URL('../../../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
 /** 文件裡縮排在清單項目底下的程式碼區塊：去掉共同的縮排。 */
 function indentedFences(text: string, lang = ''): string[] {
@@ -283,7 +283,7 @@ void test('D-089 #13 typed 保留大小寫，僅清格式與頭尾空白', () =>
 
 // W6 §0-1（D-122）：中翻英的答案格照 | 拆開成好幾個正確答案；answer 與題目指紋照舊用整個答案格。
 void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案、answer 與指紋和拆開之前相同', () => {
-  const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
+  const english = readFileSync(new URL('../../../docs/card-rules/english.md', import.meta.url), 'utf8');
   const sources = [
     // 只看中翻英這個例子：§2-3 的比較卡另外測；英文規則裡文法的 ` | ` 例子（D-193）程式還沒認「文法」結尾，接上時另外測。
     ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown').filter(text => text.includes('made up his mind | made his mind up')),

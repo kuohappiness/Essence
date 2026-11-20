@@ -60,6 +60,8 @@ const BASE: Record<string, string> = {
   [SYNTAX]: '# S\n', [DECISIONS]: '# D\n', [ENGLISH]: '# E\n', [PRODUCT]: '# P\n',
   'NOTES.MD': '# N\n', [SKILL]: '# Q\n', '.gitignore': 'node_modules/\n',
   'plugins/capture/README.md': '# C\n', 'plugins/capture/package.json': '{ "scripts": { "check": "node -e 1" } }\n',
+  // git mv 不建目的資料夾：搬到 plugins/capture/docs/ 的例子要它已經在。
+  'plugins/capture/docs/backlog.md': '# B\n',
   'plugins/mindboard/docs/backlog.md': '# B\n',
   'plugins/mindboard/a.ts': 'export {};\n', 'plugins/mindboard/b.ts': 'export {};\n', 'plugins/mindboard/Case.ts': 'export {};\n',
   'plugins/mindboard/src/old.ts': 'export {};\n',

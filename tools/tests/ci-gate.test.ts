@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gate, gitIn, plan, summary, type Event } from '../ci-gate.ts';
+import { CARDS } from '../dispatch.ts';
 
 const run = promisify(execFile);
 const GATE = fileURLToPath(new URL('../ci-gate.ts', import.meta.url));
@@ -179,10 +180,12 @@ async function history(t: test.TestContext) {
     return git('rev-parse', 'HEAD');
   };
   git('init', '-q', '-b', 'main');
-  const start = await commit('src/a.ts', 'export const a = 1;\n');
-  const main1 = await commit('src/b.ts', 'export const b = 1;\n');
+  // Cards 的檔照分派表的資料夾放（D-208 第二步 §A6）。
+  const C = CARDS === '.' ? '' : CARDS + '/';
+  const start = await commit(`${C}src/a.ts`, 'export const a = 1;\n');
+  const main1 = await commit(`${C}src/b.ts`, 'export const b = 1;\n');
   git('checkout', '-q', '-b', 'feature', start);
-  const cards1 = await commit('src/a.ts', 'export const a = 2;\n');
+  const cards1 = await commit(`${C}src/a.ts`, 'export const a = 2;\n');
   const mindboard1 = await commit('plugins/mindboard/a.ts', 'export const m = 1;\n');
   git('checkout', '-q', '-b', 'only', start);
   const only = await commit('plugins/mindboard/b.ts', 'export const m = 2;\n');

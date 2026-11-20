@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseDeck } from '../src/core/deck/index.ts';
 
 // 草稿工具的比較卡檢查（tasks/question-type-seam.md §10）：每個情況一份稿，固定代碼、行號與退出碼。只有不符、提醒的稿退出碼是 0，AI 交稿前才真的擋得住錯誤。
-const TOOL = fileURLToPath(new URL('../experiments/t4/check-syntax.mjs', import.meta.url));
+const TOOL = fileURLToPath(new URL('../../../experiments/t4/check-syntax.mjs', import.meta.url));
 type Found = [level: string, line: number, code: string];
 function run(t: TestContext, draft: string): { exit: number | null; all: Found[]; pick: Found[]; output: string } {
   const dir = mkdtempSync(join(tmpdir(), 'check-syntax-'));

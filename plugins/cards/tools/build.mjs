@@ -9,9 +9,9 @@ import { RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 /**
  * AI 製卡的規則檔從哪裡算：src/core/ai/rules.ts 的表寫的是 repo 根目錄算的路徑，從 Cards 的根往上幾層就是 repo 的根
- * （D-208 第二步 §A5：Cards 搬進 plugins/cards/ 時改成 '../..'，表不用改）。
+ * （D-208 第二步 §A5、§A6：Cards 在 plugins/cards/，往上兩層；表不用改）。
  */
-export const RULES_FROM_ROOT = '.';
+export const RULES_FROM_ROOT = '../..';
 // 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
 const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
 /** D-148：只有電腦專用的資料夾能用 Node 與 Electron，而且只能用明列的這幾個（不放寬全域的 external）。 */

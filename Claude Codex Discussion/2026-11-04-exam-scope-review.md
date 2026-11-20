@@ -16,11 +16,11 @@
 
 ### R3 [P1] 舊操作可以存進或提前結束另一場考試
 
-**規格｜同路徑換檔已重現，排隊交錯為靜態推斷｜真實路徑：會，同步換檔及短時間連按可走到。** 先載入 A.md，ID `aaaaaa`，範圍自然 2-1。在 state 尚未讀到同步通知時，把 A.md 換成 ID `cccccc`、範圍自然 4。舊表單的「加 2-2」走 `State.setExam` 回 `done`，磁碟與 `set: exam` 紀錄都把 2-2 加給 `cccccc`。預期是 `blocked: changed`，磁碟和紀錄不變。UI 只比路徑，實際回呼只驗空、壞或已結束，沒有核對身分。 `endExam` 走同一入口，會替換入的考試寫提前結束。另外 UI 的路徑檢查在呼叫前，state 排隊後才重選，若前一筆寫完讓另一份接手，晚到的舊操作可以直接落到另一個路徑。需要在排隊執行時核對表單預期選擇，進入寫入回呼後再以最新內容驗身分；仍要保留同一份範圍上別人改過的無關行。分支 `claude/exam-scope-c0f437` 的 `src/ui/ExamScope.tsx`（0ffb078，ExamScope.tsx:76–100） · [state/index.ts:425–435、654–664](../src/state/index.ts) · 分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（0ffb078，state/exam.ts:153–166） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §2-4、§6）
+**規格｜同路徑換檔已重現，排隊交錯為靜態推斷｜真實路徑：會，同步換檔及短時間連按可走到。** 先載入 A.md，ID `aaaaaa`，範圍自然 2-1。在 state 尚未讀到同步通知時，把 A.md 換成 ID `cccccc`、範圍自然 4。舊表單的「加 2-2」走 `State.setExam` 回 `done`，磁碟與 `set: exam` 紀錄都把 2-2 加給 `cccccc`。預期是 `blocked: changed`，磁碟和紀錄不變。UI 只比路徑，實際回呼只驗空、壞或已結束，沒有核對身分。 `endExam` 走同一入口，會替換入的考試寫提前結束。另外 UI 的路徑檢查在呼叫前，state 排隊後才重選，若前一筆寫完讓另一份接手，晚到的舊操作可以直接落到另一個路徑。需要在排隊執行時核對表單預期選擇，進入寫入回呼後再以最新內容驗身分；仍要保留同一份範圍上別人改過的無關行。分支 `claude/exam-scope-c0f437` 的 `src/ui/ExamScope.tsx`（0ffb078，ExamScope.tsx:76–100） · [state/index.ts:425–435、654–664](../plugins/cards/src/state/index.ts) · 分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（0ffb078，state/exam.ts:153–166） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §2-4、§6）
 
 ### R4 [P2] 一份範圍檔卡住，另一份已讀到仍不能排進今天
 
-**規格｜已重現｜真實路徑：會，iCloud 佔位檔的讀取可能不返回。** 用 `createMemoryFiles.holdRead(B)` 壓住第二份，A 和自然 2-1 卡組可讀。 `ready()` 約 2.0 秒返回、`unread()` 有 B、寫範圍被擋，這些符合規格。A 卻沒有進 `exam()`，自然卡的 `inExam` 是 false；釋放 B 後才選到 A、`inExam` 變 true。預期暫用 A，顯示另有一份不可讀。 `createExamFiles` 分開了卡組與範圍讀取，但同批範圍仍在 `Promise.allSettled` 後一次交付。若 B 長時間不回來，A 的考前優先和保持率都漏掉，後續範圍通知也排在 B 後面。補一份可讀、一份一直 pending、卡組和紀錄照常的測試；讓已完成的讀取可交付，並保留晚到結果的世代保護。[state/reads.ts:108–121、132–179](../src/state/reads.ts) · 分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（0ffb078，state/exam.ts:65–109） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4 第 274 行）
+**規格｜已重現｜真實路徑：會，iCloud 佔位檔的讀取可能不返回。** 用 `createMemoryFiles.holdRead(B)` 壓住第二份，A 和自然 2-1 卡組可讀。 `ready()` 約 2.0 秒返回、`unread()` 有 B、寫範圍被擋，這些符合規格。A 卻沒有進 `exam()`，自然卡的 `inExam` 是 false；釋放 B 後才選到 A、`inExam` 變 true。預期暫用 A，顯示另有一份不可讀。 `createExamFiles` 分開了卡組與範圍讀取，但同批範圍仍在 `Promise.allSettled` 後一次交付。若 B 長時間不回來，A 的考前優先和保持率都漏掉，後續範圍通知也排在 B 後面。補一份可讀、一份一直 pending、卡組和紀錄照常的測試；讓已完成的讀取可交付，並保留晚到結果的世代保護。[state/reads.ts:108–121、132–179](../plugins/cards/src/state/reads.ts) · 分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（0ffb078，state/exam.ts:65–109） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4 第 274 行）
 
 ### R5 [P2] 等寫入逾時後，舊回呼仍可落盤且沒有考試紀錄
 
@@ -40,7 +40,7 @@
 
 ### R9 [P2] 前景一直開著跨過 04:00，倒數與表單維持前一日
 
-**規格｜已重現｜真實路徑：會，入口或表單保持可見、沒有新檔案通知時。** 使用真正 `openEntry`、React/happy-dom 和可控時鐘，10/29 03:59:59 看 10/28 的考試，入口寫「今天考試」、保持率 0.9。跨 04:00 後 `State.today()` 已回 0.8，入口仍寫「今天考試」，手動 `handle.refresh()` 後才消失。同樣讓表單保留 10/27 的輸入，10/28 04:00 後不出現日期已過的灰字，手動刷新才出現。現有測試每次改時鐘就直接呼叫 `handle.refresh()`，只驗重畫後的字。預期開著跨界也刷新，並且表單確定時用最新複習日決定成功通知。入口只訂資料／可見性事件，前景換日無來源。補不用手動 refresh 的換日測試，並驗背景回來及關閉時解除排程。[entry-host.tsx:45–73](../src/ui/entry-host.tsx) · 分支 `claude/exam-scope-c0f437` 的 `src/ui/ExamScope.tsx`（0ffb078，ExamScope.tsx:71–96、130） · 分支 `claude/exam-scope-c0f437` 的 `tests/exam-ui.test.ts`（0ffb078，exam-ui.test.ts:425–438） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4、§6、§7）
+**規格｜已重現｜真實路徑：會，入口或表單保持可見、沒有新檔案通知時。** 使用真正 `openEntry`、React/happy-dom 和可控時鐘，10/29 03:59:59 看 10/28 的考試，入口寫「今天考試」、保持率 0.9。跨 04:00 後 `State.today()` 已回 0.8，入口仍寫「今天考試」，手動 `handle.refresh()` 後才消失。同樣讓表單保留 10/27 的輸入，10/28 04:00 後不出現日期已過的灰字，手動刷新才出現。現有測試每次改時鐘就直接呼叫 `handle.refresh()`，只驗重畫後的字。預期開著跨界也刷新，並且表單確定時用最新複習日決定成功通知。入口只訂資料／可見性事件，前景換日無來源。補不用手動 refresh 的換日測試，並驗背景回來及關閉時解除排程。[entry-host.tsx:45–73](../plugins/cards/src/ui/entry-host.tsx) · 分支 `claude/exam-scope-c0f437` 的 `src/ui/ExamScope.tsx`（0ffb078，ExamScope.tsx:71–96、130） · 分支 `claude/exam-scope-c0f437` 的 `tests/exam-ui.test.ts`（0ffb078，exam-ui.test.ts:425–438） · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4、§6、§7）
 
 
 
@@ -48,11 +48,11 @@
 
 ### R10 [P3] 重排用的鍵與實際單元、考試身分不一致
 
-**規格｜已重現｜真實路徑：會，手改編號大小寫或同內容換成不同 ID。** `L1` 改 `l1`，兩者 `codeKey` 相同，`today()` 卻換了物件，代表重排；接著只把 ID 從 `aaaaaa` 改 `bbbbbb`，`today()` 沒換物件。§4 說單元身分等價時只在必要時通知，選定身分變才重排。現況前者多算，後者少做約定的重排，目前沒有重現出卡順序因此錯誤。修正 R3 核對考試身分時可一併釐清排程鍵和畫面鍵，補等價字形、不同身分同內容、改名同身分的對照。[state/index.ts:400–421](../src/state/index.ts) · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4）
+**規格｜已重現｜真實路徑：會，手改編號大小寫或同內容換成不同 ID。** `L1` 改 `l1`，兩者 `codeKey` 相同，`today()` 卻換了物件，代表重排；接著只把 ID 從 `aaaaaa` 改 `bbbbbb`，`today()` 沒換物件。§4 說單元身分等價時只在必要時通知，選定身分變才重排。現況前者多算，後者少做約定的重排，目前沒有重現出卡順序因此錯誤。修正 R3 核對考試身分時可一併釐清排程鍵和畫面鍵，補等價字形、不同身分同內容、改名同身分的對照。[state/index.ts:400–421](../plugins/cards/src/state/index.ts) · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope.md`（e6d3040，任務 §4）
 
 ### R11 [P3] 安裝工具先看日期錯誤，已結束考試的舊副本仍會觸發提醒
 
-**規格｜已重現｜真實路徑：會，同 ID 的舊同步副本還留著手改的壞日期時。** A 為 `aaaaaa`，已提前結束；B 同 ID，未同步到結束欄，開始日是 `10/28`。外掛排除整組；`examReminder` 卻在選定之前掃到 B，回 `unreadable` 和 `needsOk: true`，安裝流程會要求額外確認。這和審查請求所列「同一個識別碼的舊副本不算」不一致。建議有可靠身分且已結束的副本先排除，再保守提醒無法判斷的活躍檔或讀不到的檔。另測只有分類／空範圍但有日期的檔是否應產生安裝提醒，明訂提醒要跟候選的 `usable` 一致或刻意更保守。[exam-reminder.ts:24–41](../tools/exam-reminder.ts) · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope-review.md`（e6d3040，審查請求，實作者選擇第 8 點）
+**規格｜已重現｜真實路徑：會，同 ID 的舊同步副本還留著手改的壞日期時。** A 為 `aaaaaa`，已提前結束；B 同 ID，未同步到結束欄，開始日是 `10/28`。外掛排除整組；`examReminder` 卻在選定之前掃到 B，回 `unreadable` 和 `needsOk: true`，安裝流程會要求額外確認。這和審查請求所列「同一個識別碼的舊副本不算」不一致。建議有可靠身分且已結束的副本先排除，再保守提醒無法判斷的活躍檔或讀不到的檔。另測只有分類／空範圍但有日期的檔是否應產生安裝提醒，明訂提醒要跟候選的 `usable` 一致或刻意更保守。[exam-reminder.ts:24–41](../plugins/cards/tools/exam-reminder.ts) · 分支 `claude/exam-scope-c0f437` 的 `tasks/exam-scope-review.md`（e6d3040，審查請求，實作者選擇第 8 點）
 
 ## 對照與驗證
 
@@ -143,11 +143,11 @@ Codex 第二輪在這份回應寫好之前就跑了（待審 `424e9a9`），讀�
 
 ### R13 [P2] 已知有範圍檔正在讀，仍可對暫定的考試提前結束
 
-**規格｜已重現｜真實路徑：會，另一台新增範圍的通知已到、讀取尚未返回時。** A 開始日 10/22，正常載入後收到 B 的新增通知。B 開始日 10/21，照規則應優先。用 `holdRead(B)` 等到 B 的讀取已開始、卡住判定還沒到，呼叫 `endExam`。實際 `unread()=[]`、回 `done` 並在 A 寫入提前結束，B 回來後接手。§2-4 要求還在讀就不寫，預期回 blocked 且 A 原文、紀錄都不動。 `examWrite` 只檢查首次 `settled` 和 `unread`，前者不會回到 false，後者在卡住門檻前未加入 B。建議區分已知有未完成的範圍讀取及已發布的選定結果，並測初次載入後才收到通知、讀取前的 debounce、讀取正在執行和讀完後重試。這個門檻應只擋範圍寫入。位置見 [state/index.ts:425–435](../src/state/index.ts) · [state/reads.ts:123–143、154–163、238–239](../src/state/reads.ts)。
+**規格｜已重現｜真實路徑：會，另一台新增範圍的通知已到、讀取尚未返回時。** A 開始日 10/22，正常載入後收到 B 的新增通知。B 開始日 10/21，照規則應優先。用 `holdRead(B)` 等到 B 的讀取已開始、卡住判定還沒到，呼叫 `endExam`。實際 `unread()=[]`、回 `done` 並在 A 寫入提前結束，B 回來後接手。§2-4 要求還在讀就不寫，預期回 blocked 且 A 原文、紀錄都不動。 `examWrite` 只檢查首次 `settled` 和 `unread`，前者不會回到 false，後者在卡住門檻前未加入 B。建議區分已知有未完成的範圍讀取及已發布的選定結果，並測初次載入後才收到通知、讀取前的 debounce、讀取正在執行和讀完後重試。這個門檻應只擋範圍寫入。位置見 [state/index.ts:425–435](../plugins/cards/src/state/index.ts) · [state/reads.ts:123–143、154–163、238–239](../plugins/cards/src/state/reads.ts)。
 
 ### R14 [P2] 關閉已返回，未達逾時的範圍寫入仍會追加紀錄
 
-**規格｜已重現｜真實路徑：會，存檔途中重載或停用外掛時。** 延遲 `Files.modify` 的完成回報，讓提前結束已進入回呼但未達寫入逾時，先呼叫 `state.close()`。 `close()` 已返回、歷史沒有考試變更。釋放原寫入後，原呼叫回 `done`，舊 state 在關閉後追加一筆 exam 紀錄。新程式只在「先逾時」的分支檢查 `life.closed`，正常完成路徑仍呼叫 `record`。這與修正說明的關閉後不寫紀錄不一致，重載後舊 state 也可能和新 state 同時寫同一裝置的紀錄檔。應驗關閉前後成功、失敗、尚未進回呼與已進回呼，確保 `close()` 之後不再啟動舊 writer。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`424e9a9`，157–180、214–246 行）。[state/index.ts:676–686](../src/state/index.ts)
+**規格｜已重現｜真實路徑：會，存檔途中重載或停用外掛時。** 延遲 `Files.modify` 的完成回報，讓提前結束已進入回呼但未達寫入逾時，先呼叫 `state.close()`。 `close()` 已返回、歷史沒有考試變更。釋放原寫入後，原呼叫回 `done`，舊 state 在關閉後追加一筆 exam 紀錄。新程式只在「先逾時」的分支檢查 `life.closed`，正常完成路徑仍呼叫 `record`。這與修正說明的關閉後不寫紀錄不一致，重載後舊 state 也可能和新 state 同時寫同一裝置的紀錄檔。應驗關閉前後成功、失敗、尚未進回呼與已進回呼，確保 `close()` 之後不再啟動舊 writer。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`424e9a9`，157–180、214–246 行）。[state/index.ts:676–686](../plugins/cards/src/state/index.ts)
 
 ### R15 [P2] YAML 會改變識別碼，壞檔與正常副本仍可能分組不同
 
@@ -214,7 +214,7 @@ Codex 第二輪在這份回應寫好之前就跑了（待審 `424e9a9`），讀�
 
 ### R17 [P2] `drain` 回報完成後，新通知仍可能讓寫入採用舊選擇（R13）
 
-**規格｜已重現｜真實路徑：會，範圍寫入與同步通知的非同步回呼交錯時。** 載入開始日 10/22 的 A，呼叫 `endExam({path: A, id: 'aaaaaa'})`。同一個事件輪次用 `queueMicrotask` 送開始日 10/21 的 B 新增通知。該通知排在 `drain` 判定沒有待讀之後、`await exam.drain` 的續行之前。實際回 `done`，A 被寫入提前結束，稍後讀到 B 才換成 B。預期通知既然已到，就等 B 讀完，然後因選到另一份而回 `changed`，A 與紀錄維持原樣。現有續行只查 `unread`，已收到通知但尚未執行的 B 不在其中。建議把「現在是否還有待讀」再放到寫入准入的最後一個同步區段檢查，並補通知夾在完成和續行之間的測試。既有「通知先到」及「已讀到或卡住」案例已通過。[state/index.ts:427–438](../src/state/index.ts) · [state/reads.ts:123–143、239](../src/state/reads.ts)。另見分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`d10eb02`，159–169 行）。
+**規格｜已重現｜真實路徑：會，範圍寫入與同步通知的非同步回呼交錯時。** 載入開始日 10/22 的 A，呼叫 `endExam({path: A, id: 'aaaaaa'})`。同一個事件輪次用 `queueMicrotask` 送開始日 10/21 的 B 新增通知。該通知排在 `drain` 判定沒有待讀之後、`await exam.drain` 的續行之前。實際回 `done`，A 被寫入提前結束，稍後讀到 B 才換成 B。預期通知既然已到，就等 B 讀完，然後因選到另一份而回 `changed`，A 與紀錄維持原樣。現有續行只查 `unread`，已收到通知但尚未執行的 B 不在其中。建議把「現在是否還有待讀」再放到寫入准入的最後一個同步區段檢查，並補通知夾在完成和續行之間的測試。既有「通知先到」及「已讀到或卡住」案例已通過。[state/index.ts:427–438](../plugins/cards/src/state/index.ts) · [state/reads.ts:123–143、239](../plugins/cards/src/state/reads.ts)。另見分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`d10eb02`，159–169 行）。
 
 ### R18 [P2] 仍完整的合法 ID 行可能因另一屬性損壞而失去分組（R15）
 
@@ -288,9 +288,9 @@ Codex 第二輪在這份回應寫好之前就跑了（待審 `424e9a9`），讀�
 | 成功 | 已選 B，`unread=[]` | 擋舊操作，A 原文與紀錄不變 | `done`，A 有提前結束，紀錄新增 A |
 | 拒絕 | 仍用 A，`unread=[B]` | 擋未知狀態下的寫入，A 原文與紀錄不變 | `done`，A 有提前結束，紀錄新增 A |
 
-`drain` 的同步 `decide` 封住了第三輪的續行空隙。後段只問 `reads.waiting(path)`，成功的 B 已離開待讀，失敗的 B 被這個查詢刻意排除，兩種都繞過防線。回呼內還要重核對別份是否不可讀，以及目前選定的身分是否仍是此次操作的目標，並保留同檔最新文字的檢查。既有測試在 B 通知之後立刻放行，沒有等 B 讀完。另以替身驗證 B **仍在待讀**時確實擋下，原操作沒有紀錄，讀到 B 後下一筆可正常結束 B 並只記 B。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`9049073`，160–170、241–253 行）。[state/index.ts:427–438](../src/state/index.ts) · [state/reads.ts:239](../src/state/reads.ts)
+`drain` 的同步 `decide` 封住了第三輪的續行空隙。後段只問 `reads.waiting(path)`，成功的 B 已離開待讀，失敗的 B 被這個查詢刻意排除，兩種都繞過防線。回呼內還要重核對別份是否不可讀，以及目前選定的身分是否仍是此次操作的目標，並保留同檔最新文字的檢查。既有測試在 B 通知之後立刻放行，沒有等 B 讀完。另以替身驗證 B **仍在待讀**時確實擋下，原操作沒有紀錄，讀到 B 後下一筆可正常結束 B 並只記 B。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`9049073`，160–170、241–253 行）。[state/index.ts:427–438](../plugins/cards/src/state/index.ts) · [state/reads.ts:239](../plugins/cards/src/state/reads.ts)
 
-同路徑通知與新建撞名換後綴的回歸測試通過。新建的這段時間差可能多出一份，既有檔的內容仍受撞名保護，選定照既有規則，接受實作者列出的代價。edit 回呼檢查和產出新文字之間沒有應用層 `await`。回呼返回後的磁碟與跨裝置時序由 `Files.modify`／Obsidian 管理，這輪未在 iCloud 實機重現。[Obsidian Files:75–81](../src/obsidian/files.ts)
+同路徑通知與新建撞名換後綴的回歸測試通過。新建的這段時間差可能多出一份，既有檔的內容仍受撞名保護，選定照既有規則，接受實作者列出的代價。edit 回呼檢查和產出新文字之間沒有應用層 `await`。回呼返回後的磁碟與跨裝置時序由 `Files.modify`／Obsidian 管理，這輪未在 iCloud 實機重現。[Obsidian Files:75–81](../plugins/cards/src/obsidian/files.ts)
 
 ### R22 [P2] 壞屬性回退會把多行備註裡的對照表當成檔案 ID（R18）
 
@@ -362,7 +362,7 @@ Codex 第二輪在這份回應寫好之前就跑了（待審 `424e9a9`），讀�
 
 **規格｜已重現｜真實路徑：會，家長在一台裝置按提前結束，另一台或外部編輯器在 Obsidian 進入讀改寫回呼之前同步了同一檔的日期。** 10/20 載入兩份範圍。A 原定 10/22，B 原定 10/24～25，當下選 A。在 A 的 `endExam` 已呼叫 `Files.modify`、edit 回呼尚未執行時，將 A 的同路徑、同識別碼內容改成 10/26～27，並送出檔案通知。按新日期，現在應選 B。放行回呼，實際回 `done`，把 `提前結束: 2026-10-20` 寫到 10/26～27 的 A，並新增一筆期間為 10/26～27 的提前結束紀錄。推到 10/26，B 已自然到期，A 也不再生效。使用同樣的延期檔與 B 做對照、沒有這筆提前結束時，10/26 正確選 A。
 
-預期回呼用最新的 A 內容核對選定，發現現在應選 B 後回 `changed`，不替已延期的 A 寫入結束欄和紀錄。實際是 `modify` 的 hold 讓 A 的通知留在待讀，`reads.waiting(path)` 排除 A，`admit()` 只問已採用的快取；稍後才解析回呼給的 `latest`，只檢查 ID 相同。這會永久取消延期後應生效的範圍，並留下錯誤的考試歷史。建議用回呼拿到的最新 A 參與選定，單純改註解、範圍行或仍不影響選定的日期變動可照既有合併規則寫。補一個保留同一 ID、同一路徑、只因最新日期換了選定的回歸。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`1a7d61b`，185–196、244–253 行）。[state/index.ts:386、427–443](../src/state/index.ts)
+預期回呼用最新的 A 內容核對選定，發現現在應選 B 後回 `changed`，不替已延期的 A 寫入結束欄和紀錄。實際是 `modify` 的 hold 讓 A 的通知留在待讀，`reads.waiting(path)` 排除 A，`admit()` 只問已採用的快取；稍後才解析回呼給的 `latest`，只檢查 ID 相同。這會永久取消延期後應生效的範圍，並留下錯誤的考試歷史。建議用回呼拿到的最新 A 參與選定，單純改註解、範圍行或仍不影響選定的日期變動可照既有合併規則寫。補一個保留同一 ID、同一路徑、只因最新日期換了選定的回歸。位置是分支 `claude/exam-scope-c0f437` 的 `src/state/exam.ts`（`1a7d61b`，185–196、244–253 行）。[state/index.ts:386、427–443](../plugins/cards/src/state/index.ts)
 
 ### 驗證
 

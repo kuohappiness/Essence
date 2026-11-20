@@ -19,13 +19,13 @@
 | 只有第二批，尚無練習任務 §1 | 基準程式會掃整棵。單元檔可當無日期段考生效，連結範例會被讀成看不懂的行，不進排程。兩種的升版提醒都可顯示「日期未定」。YAML 壞了可引出段考日期錯誤或升版確認。只有 `小考日期` 的值寫錯、YAML 仍合法時，段考照樣忽略這個屬性。 |
 | 有練習任務 §1、尚無小考 | 按規格推斷，外掛、開發命令、升版工具都略過這一整棵，備份照收。既有段考檔若恰在保留路徑內，升版後也會被略過。 |
 
-**證據**　用自編檔呼叫基準的 `isExamPath`、`parseScope`、`chooseScope`、`examReminder`，並取 `v0.3.0:tools/exam-reminder.ts` 執行同樣的提醒探針。`v0.3.0` 外掛行為由 tag 原始碼確認。有 §1 的版本依規格推斷。參見 [`scope.ts`](../src/core/catalog/scope.ts)、[`read.ts`](../src/core/deck/read.ts)、[`update-vault.ts`](../tools/update-vault.ts)、[`exam-reminder.ts`](../tools/exam-reminder.ts)、[練習任務 §1](../tasks/quiz-practice.md#1-段考讀法跳過-考試範圍小考)。
+**證據**　用自編檔呼叫基準的 `isExamPath`、`parseScope`、`chooseScope`、`examReminder`，並取 `v0.3.0:tools/exam-reminder.ts` 執行同樣的提醒探針。`v0.3.0` 外掛行為由 tag 原始碼確認。有 §1 的版本依規格推斷。參見 [`scope.ts`](../plugins/cards/src/core/catalog/scope.ts)、[`read.ts`](../plugins/cards/src/core/deck/read.ts)、[`update-vault.ts`](../plugins/cards/tools/update-vault.ts)、[`exam-reminder.ts`](../plugins/cards/tools/exam-reminder.ts)、[練習任務 §1](../tasks/quiz-practice.md#1-段考讀法跳過-考試範圍小考)。
 
 **建議**　保留「第二批第一次發布前」的期限，並以實際裝出去的建置與執行的更新工具都含 §1 為驗收。時程趕不上就依既定拆法先交 §1。這個期限足以防止按預定發布順序混用時誤讀原位置的小考檔。若曾另裝第二批的開發建置，或從舊 checkout 跑更新工具，該讀取端仍會誤判。保留既有段考檔進出 `小考/` 的驗收。
 
 ## 3. 小考檔搬到段考資料夾
 
-**結論與證據**　已重現。把範例搬成 `Essence Cards/考試範圍/2026-11-05 小考.md`，`isExamPath` 仍接受，`scopePeriod` 回 `none`，`chooseScope` 在 `2026-11-06 04:00` 仍選到它，`unitInScope` 命中 L3。加 `取消: 2026-11-04` 也一樣，段考只認 `提前結束`。它在沒有更優先的有效段考時會入選，有日期的有效候選優先，同為無日期時比路徑。入選後 [`state/index.ts`](../src/state/index.ts) 將相符目標交給 [`plan.ts`](../src/core/study/plan.ts) 排進段考優先佇列，保持率維持原值。[`entry.ts`](../src/review/entry.ts) 顯示普通的「日期未定」。既有 [`exam-state.test.ts`](../tests/exam-state.test.ts) 也驗證無日期範圍在跨日後仍進 `exam-new` 且維持原保持率。單靠 §1 的路徑排除仍會留下這條路。
+**結論與證據**　已重現。把範例搬成 `Essence Cards/考試範圍/2026-11-05 小考.md`，`isExamPath` 仍接受，`scopePeriod` 回 `none`，`chooseScope` 在 `2026-11-06 04:00` 仍選到它，`unitInScope` 命中 L3。加 `取消: 2026-11-04` 也一樣，段考只認 `提前結束`。它在沒有更優先的有效段考時會入選，有日期的有效候選優先，同為無日期時比路徑。入選後 [`state/index.ts`](../plugins/cards/src/state/index.ts) 將相符目標交給 [`plan.ts`](../plugins/cards/src/core/study/plan.ts) 排進段考優先佇列，保持率維持原值。[`entry.ts`](../plugins/cards/src/review/entry.ts) 顯示普通的「日期未定」。既有 [`exam-state.test.ts`](../plugins/cards/tests/exam-state.test.ts) 也驗證無日期範圍在跨日後仍進 `exam-new` 且維持原保持率。單靠 §1 的路徑排除仍會留下這條路。
 
 **建議**　保留 D-189 的資料夾規則，再用既有頂層 `小考日期` 鍵防搬錯。段考外掛、開發命令與升版提醒共用這個排除條件，在選範圍或判斷日期前略過能辨認的小考檔。檢查鍵是否存在，空值或日期錯字也擋。格式說明寫明搬回 `小考/` 即可恢復辨識，首版用這條防線即可。檔名和內文都可手改，用檔名的「小考」字樣會漏掉改名的檔。若鍵被刪掉或 YAML 壞到辨識不出鍵，位置與格式都不足以還原類型。驗收至少放合法、空值與錯字三份搬出的單元檔，並放一份合法無日期段考作對照，確認它仍生效。
 
@@ -33,24 +33,24 @@
 
 **結論與證據**　照寫 `取消: YYYY-MM-DD` 並留檔，到期從屬性日期算。取消日期記下哪個學習日按了取消，保留的小考日期足以推算自然到期。改期會覆寫前值，留下的檔案只能回答最後保存的日期、目標和取消日。D-115 第 3 點與 syntax §5 的 `set: exam` 明訂段考的回測歷史，D-189 的小考入口沒有這項用途。首版可省 `set: quiz`。參見 [D-115](../docs/decisions.md#d-115-回頭查要用的證據先收好)、[syntax §5](../docs/syntax.md#5-複習紀錄)。
 
-**建議**　補一條同識別碼規則。按目前文字，兩份複本共用 `q4m8t2`，取消排在前面的那份後，另一份仍符合生效條件，入口可能立刻換成舊副本。建議同 ID 代表同一次小考，先按 ID 收取消，再按目標選顯示的檔。同 ID 任何可讀的屬性區出現 `取消` 鍵就立即壓掉該組，即使取消值是空的或手改寫壞也保留取消意圖。壞到讀不出屬性區時走待修正，別從一般字串猜取消。屬性區可正常讀取時，這和 [`notEnded`](../src/core/catalog/scope.ts) 對段考副本的處理相同。不同 ID 是各自的小考，取消一份後可換到另一份，取消後再設要用新 ID。加同步舊副本晚到、缺 ID 的手寫檔及「取消與壞日期並存」的例子。另用同 ID、日期各為 11/5 與 11/7 的副本測 11/6 清晨 4 點。現文會換到 11/7 的副本，兩份檔案都沒有改期順序的證據。建議同 ID 的日期或目標互相矛盾時沿用待修正，請家長保留正確的那份。
+**建議**　補一條同識別碼規則。按目前文字，兩份複本共用 `q4m8t2`，取消排在前面的那份後，另一份仍符合生效條件，入口可能立刻換成舊副本。建議同 ID 代表同一次小考，先按 ID 收取消，再按目標選顯示的檔。同 ID 任何可讀的屬性區出現 `取消` 鍵就立即壓掉該組，即使取消值是空的或手改寫壞也保留取消意圖。壞到讀不出屬性區時走待修正，別從一般字串猜取消。屬性區可正常讀取時，這和 [`notEnded`](../plugins/cards/src/core/catalog/scope.ts) 對段考副本的處理相同。不同 ID 是各自的小考，取消一份後可換到另一份，取消後再設要用新 ID。加同步舊副本晚到、缺 ID 的手寫檔及「取消與壞日期並存」的例子。另用同 ID、日期各為 11/5 與 11/7 的副本測 11/6 清晨 4 點。現文會換到 11/7 的副本，兩份檔案都沒有改期順序的證據。建議同 ID 的日期或目標互相矛盾時沿用待修正，請家長保留正確的那份。
 
 ## 5. 單篇的連結與修復
 
 **結論與證據**　完整 vault 路徑是 Obsidian 支援的 Wikilink。Obsidian 內改名或搬動時，開啟自動更新會改寫已解析的內部連結，關閉時會詢問。唯讀檢查本機 Windows 1.15.0 的 `obsidian-1.15.0.asar`，預設設定是 `alwaysUpdateLinks:!1`，改名經 `runAsyncLinkUpdate`，有連結變更時按設定自動更新或開確認視窗。這個預設只核實到 Windows 這份程式。iPhone 的改名與搬動、用「檔案」App 改名後再同步，以及 Obsidian 實際改寫出的連結字面格式，仍待實測。參見 [Obsidian 內部連結](https://obsidian.md/help/links)、[檔案與連結設定](https://obsidian.md/help/settings#Automatically+update+internal+links)、[官方 CLI 的 move／rename](https://obsidian.md/help/cli#%60move%60)。
 
-**建議**　照 D-189 以完整路徑寫檔。D-081 的唯一檔名讓 `[[篇名]]` 在只搬資料夾時有優勢，改名仍仰賴 Obsidian 改寫，手動複製也可能產生重名。讀取時用 Obsidian 的連結解析能力，類似 [`sources.ts`](../src/ui/sources.ts) 傳入來源檔路徑的做法。完整路徑、相對路徑或檔名形式只在能確定指向一篇已知卡組時接受，重名無法確認時留在待修正。加家長可照做的例子「打開小考檔 → 在編輯模式把舊連結整段換掉 → 輸入 `[[`，從建議選新的篇名」。找不到已刪除的原篇時可取消或明確選一篇，點斷鏈可能建立空白筆記。驗收包含 Obsidian 改名、只搬資料夾、自動更新開／關且接受或拒絕，以及用建議清單修正後只練選中的那一篇。參見 [D-081](../docs/decisions.md#d-081-卡組屬性與檔名)、[Obsidian 的連結建議與未解析連結](https://obsidian.md/help/links)。
+**建議**　照 D-189 以完整路徑寫檔。D-081 的唯一檔名讓 `[[篇名]]` 在只搬資料夾時有優勢，改名仍仰賴 Obsidian 改寫，手動複製也可能產生重名。讀取時用 Obsidian 的連結解析能力，類似 [`sources.ts`](../plugins/cards/src/ui/sources.ts) 傳入來源檔路徑的做法。完整路徑、相對路徑或檔名形式只在能確定指向一篇已知卡組時接受，重名無法確認時留在待修正。加家長可照做的例子「打開小考檔 → 在編輯模式把舊連結整段換掉 → 輸入 `[[`，從建議選新的篇名」。找不到已刪除的原篇時可取消或明確選一篇，點斷鏈可能建立空白筆記。驗收包含 Obsidian 改名、只搬資料夾、自動更新開／關且接受或拒絕，以及用建議清單修正後只練選中的那一篇。參見 [D-081](../docs/decisions.md#d-081-卡組屬性與檔名)、[Obsidian 的連結建議與未解析連結](https://obsidian.md/help/links)。
 
 ## 6. 邊界與應補的測試
 
-**證據**　已用 Node 24.13.0 自編輸入跑過共用 `readDate` 與 `dayOf`。全形、三種分隔符、單位數月日與數字型緊湊日期都可正規化。混用分隔符、非閏年 2 月 29 日、缺年份、民國年、布林與清單會被拒絕。空字串回 `none`，小考層需轉成日期有問題。以 UTC+8 驗證隔天 `03:59:59.999` 與 `04:00:00.000` 落在不同學習日。參見 [`scope.ts`](../src/core/catalog/scope.ts)、[`time.ts`](../src/core/study/time.ts)。
+**證據**　已用 Node 24.13.0 自編輸入跑過共用 `readDate` 與 `dayOf`。全形、三種分隔符、單位數月日與數字型緊湊日期都可正規化。混用分隔符、非閏年 2 月 29 日、缺年份、民國年、布林與清單會被拒絕。空字串回 `none`，小考層需轉成日期有問題。以 UTC+8 驗證隔天 `03:59:59.999` 與 `04:00:00.000` 落在不同學習日。參見 [`scope.ts`](../plugins/cards/src/core/catalog/scope.ts)、[`time.ts`](../plugins/cards/src/core/study/time.ts)。
 
 | 測試面 | 建議補的驗收例子 |
 | --- | --- |
 | 日期與狀態 | 日期正規化後寫 `YYYY-MM-DD`。閏日、缺日期、空值、壞值與未關的 YAML 走各自的待修正結果。小考日前已顯示，當天與隔天 03:59:59.999 還生效，04:00 消失且不寫檔。用非零時區測邊界。取消立即生效，03:59 與 04:00 寫不同的學習日。 |
 | 內文 | 建議定義為恰好一個非空白實體行。結尾換行和空白行可略過，只有空白、額外標題、第二項、兩種目標混寫或單元範圍／分類都報寫法有問題。段考解析會略過標題，重用單元行讀法時小考仍要先驗證整份行數，並把 Wikilink 與單元分開判斷。加一個格式合法但對不到卡組的單元，確認與寫壞的訊息分開。 |
 | 副本與選擇 | 同 ID 取消時覆蓋稍後到達的舊副本。不同 ID 同目標選日期早者，同日比路徑，輸入順序互換結果不變。單元用正規化後的三欄比，單篇用解析後的卡組比。補一份同目標日期壞掉的檔與一份正常檔，正常檔仍可練，壞檔仍可見可修，避免排序時吞掉錯誤。 |
-| 寫回與撞名 | 原名及 ` 2` 已存在時取 ` 3`，既有檔（含空檔）逐字保留。段考的 `create` 以 `latest !== ''` 判撞名，而 Obsidian 的 `modify` 也會把不存在的檔交成 `''`。既有 [`exam-state.test.ts`](../tests/exam-state.test.ts) 明確驗收段考可寫入空檔。沿用鎖與回呼內核對的方式，建檔需分得出不存在與零位元組檔案。改期後檔名與屬性不同時照屬性生效，含手寫註解、引號與 CRLF 的檔只動指定日期行。手寫缺 ID 的首次寫入明列補 ID 是額外的改動。YAML 損壞或同路徑已換成不同 ID 時拒絕覆寫。參見 [`state/exam.ts`](../src/state/exam.ts)、[`obsidian/files.ts`](../src/obsidian/files.ts)。 |
+| 寫回與撞名 | 原名及 ` 2` 已存在時取 ` 3`，既有檔（含空檔）逐字保留。段考的 `create` 以 `latest !== ''` 判撞名，而 Obsidian 的 `modify` 也會把不存在的檔交成 `''`。既有 [`exam-state.test.ts`](../plugins/cards/tests/exam-state.test.ts) 明確驗收段考可寫入空檔。沿用鎖與回呼內核對的方式，建檔需分得出不存在與零位元組檔案。改期後檔名與屬性不同時照屬性生效，含手寫註解、引號與 CRLF 的檔只動指定日期行。手寫缺 ID 的首次寫入明列補 ID 是額外的改動。YAML 損壞或同路徑已換成不同 ID 時拒絕覆寫。參見 [`state/exam.ts`](../plugins/cards/src/state/exam.ts)、[`obsidian/files.ts`](../plugins/cards/src/obsidian/files.ts)。 |
 
 驗證：自編 Node 探針及基準程式的 `npm run check`（沙箱外）通過。
 

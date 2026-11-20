@@ -17,7 +17,7 @@
     "roadmap-board": "node roadmap-board.ts",
     "check": "npm run docs && npm run secretlint && npm run local-paths && npm run skills && npm run plugin-imports && npm run roadmap-board -- --check",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint -c eslint.shared.config.js .",
+    "lint": "eslint .",
     "knip": "node run-knip.mjs",
     "test": "node --test --test-concurrency=1 --test-timeout=600000 \"tests/**/*.test.ts\"",
     "self-check": "npm run typecheck && npm run lint && npm run knip && npm test"
