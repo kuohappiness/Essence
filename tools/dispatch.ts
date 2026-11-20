@@ -1,4 +1,4 @@
-// 分派表（D-208 第 5 點，tasks/one-repo-step-1.md §2；第二步 §A3 加共用工具）：照這次改到的路徑決定 commit 與 CI 檢查哪些對象。
+// 分派表（D-208 第 5 點，docs/tasks/one-repo-step-1.md §2；第二步 §A3 加共用工具、§B3 改登錄表與第 9 條）：照這次改到的路徑決定 commit 與 CI 檢查哪些對象。
 // hook 與 CI 只讀這一份。
 // 用法：
 //   node tools/dispatch.ts --staged [--ci] [--explain]               暫存區（pre-commit）
@@ -50,11 +50,11 @@ const SHARED_TOOL_FILES = new Set(['.claude/settings.json', 'experiments/tools/d
 
 /**
  * 共用規格的登錄表（第 8 條）：兩個以上外掛都讀的最上層檔案；外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
- * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/syntax.md 時）。
+ * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/transcript.md 時）。
  */
 export const SHARED_SPECS: Record<string, Partial<Record<Plugin, Run>>> = {
-  // 過渡期轉錄稿格式在 §1：Capture 寫、Cards 讀（D-208 第 6 點）。
-  'docs/syntax.md': { cards: 'related', capture: 'full' },
+  // 轉錄稿格式：Capture 寫、Cards 讀（D-208 第 6 點；第二步 B 從 syntax.md §1 搬出來）。
+  'docs/transcript.md': { cards: 'related', capture: 'full' },
 };
 
 export const RULES: Rule[] = [
@@ -84,9 +84,9 @@ export const RULES: Rule[] = [
     effect: path => ({ ...SHARED_SPECS[path], tools: 'related' }),
   },
   {
-    // tasks/、Claude Codex Discussion/ 是最上層（過渡期 Cards 與跨外掛）的任務說明與討論稿：規劃文件的 commit 不跑完整檢查。
+    // 任務與討論稿在 docs/ 底下（D-213）：規劃文件的 commit 不跑完整檢查。舊位置的 tasks/、Claude Codex Discussion/ 落第 10 條，文件檢查也擋。
     id: 9, name: '最上層的文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related', tools: 'related' }),
-    matches: path => under('docs/', 'tasks/', 'Claude Codex Discussion/', 'experiments/', '.claude/', '.agents/')(path)
+    matches: path => under('docs/', 'experiments/', '.claude/', '.agents/')(path)
       || (!path.includes('/') && lower(path).endsWith('.md')),
   },
   { id: 10, name: '以上都不是', matches: () => true, effect: () => 'all' },

@@ -1,5 +1,5 @@
 {
-  "說明": "國小國語預設 v0.1 用 Sol 跑翰林五上 L7（docs/card-rules/trials.md 2026-11-04）；程式只讀。提示與接法和第二輪的 R3、sol-plan 相同，最後接上預設。預設是 repo 外的複本：拿掉 elementary-chinese.md 開頭的狀態與待驗證（裡面的「估 35～45 個」會影響要量的目標數），本文一字不改；複本放在 --out 旁邊，路徑相對於 experiments/t4/arch/第二輪。這次沒有考題要凍結。對照組在 國小國語R3對照設定.json。",
+  "說明": "國小國語預設 v0.1 用 Sol 跑翰林五上 L7（plugins/cards/docs/card-rules/trials.md 2026-11-04）；程式只讀。提示與接法和第二輪的 R3、sol-plan 相同，最後接上預設。預設是 repo 外的複本：拿掉 elementary-chinese.md 開頭的狀態與待驗證（裡面的「估 35～45 個」會影響要量的目標數），本文一字不改；複本放在 --out 旁邊，路徑相對於 experiments/t4/arch/第二輪。這次沒有考題要凍結。對照組在 國小國語R3對照設定.json。",
   "不需考題凍結": true,
   "models": {
     "sol-plan": {"provider":"chatgpt-plan","model":"gpt-6.1-sol","baseUrl":"https://api.openai.com/v1","authentication":"Sign in with ChatGPT：dynamic_agent_client + PKCE；獨立本機憑證","outputLimit":null,"modelMaxOutputTokens":128000,"outputLimitNote":"方案預覽明文不接受 max_output_tokens；模型公開上限不代表方案路線的實際上限，留待 G3 預試。","documentation":["https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference","https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations","https://developers.openai.com/api/docs/models/gpt-6.1-sol"],"parameters":{"reasoning":{"effort":"high"},"store":false,"stream":true}}

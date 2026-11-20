@@ -1,4 +1,4 @@
-// 依 docs/syntax.md 檢查 AI 製卡交回的草稿，列出不符合的地方。規則本身在 src/core/ai/check.ts（AI 製卡的貼回檢查用同一份，tasks/ai-cards-mvp.md §4）；
+// 依 plugins/cards/docs/syntax.md 檢查 AI 製卡交回的草稿，列出不符合的地方。規則本身在 src/core/ai/check.ts（AI 製卡的貼回檢查用同一份，tasks/ai-cards-mvp.md §4）；
 // 這裡只剩命令列、樹狀輸出與自我測試。
 // 用法：node check-syntax.mjs <卡片.md>… [--transcript <轉錄稿.md>] [--unit 2-2] [--subject 自然] [--tree]
 //       node check-syntax.mjs --selftest

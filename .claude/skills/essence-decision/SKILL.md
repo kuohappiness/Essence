@@ -36,6 +36,6 @@ description: 把使用者明確同意的事寫成 Essence Cards 的 D-ID 決定�
    「曾考慮的做法」必寫，第一項是「不做」；有代價時一併寫，並寫出怎麼解決（D-177）。
 3. **處理舊決定**：被取代的，狀態行改成「已取代 → D-xxx」，不刪除；被修改的，在標題下第一行加「……見 D-xxx」。
 4. **更新索引**：新決定先在 `decisions-index.mjs` 的主題對照表加上 D-ID，再執行 `node experiments/tools/decisions-index.mjs`，再在索引補上新決定的一句話（程式會列出空著的）。舊決定被修改時，也更新它那一行的一句話。
-5. **同步其他文件**：依 `docs/architecture.md`〈repo 結構〉，更新受影響的 `product.md`、`architecture.md`、`syntax.md`、`roadmap.md`。`backlog.md` 裡對應的待決題目移除，任務與技術債做完也移除；定案但還沒做的任務留一行並連 D-ID；repo 裡連到被移除項目的連結改連 D-ID（D-143）。要改 `AGENTS.md` 時，先照它最後一節的五關檢查。
-6. **路線圖**：在受影響的外掛的 roadmap（Cards 與跨外掛的是 `docs/roadmap.md`，其他外掛是 `plugins/<外掛>/docs/roadmap.md`）「已完成」最上面加一列（一句、約 80 字，加連結）；超過 10 列把最舊的搬到 `docs/archive/roadmap-completed.md` 最上面，相對路徑改成以 `docs/archive/` 為基準。狀態板有變就更新那一列。
+5. **同步其他文件**：依 `docs/architecture.md`〈repo 結構〉，更新受影響的 `product.md`、`architecture.md`、`syntax.md`、`transcript.md`、`roadmap.md`（最上層與外掛各有一份的，改內容所在的那份）。`backlog.md` 裡對應的待決題目移除，任務與技術債做完也移除；定案但還沒做的任務留一行並連 D-ID；repo 裡連到被移除項目的連結改連 D-ID（D-143）。要改 `AGENTS.md` 時，先照它最後一節的五關檢查。
+6. **路線圖**：在受影響的外掛的 roadmap（`plugins/<外掛>/docs/roadmap.md`；跨外掛的記在 Cards 的那份，進度白板只讀那一份〈已完成〉）「已完成」最上面加一列（一句、約 80 字，加連結）；超過 10 列把最舊的搬到 `docs/archive/roadmap-completed.md` 最上面，相對路徑改成以 `docs/archive/` 為基準。狀態板有變就更新那一列。
 7. **Commit**：commit 訊息照 repo 慣例，例如 `docs: <做了什麼> (D-xxx)`。

@@ -15,15 +15,15 @@
 
 | 舊文件 | 現在看 |
 |---|---|
-| consensus.md | [decisions.md](../decisions.md)（仍有效的決定）、[backlog.md](../backlog.md#待重新確認的舊共識)（待重新確認） |
+| consensus.md | [decisions.md](../decisions.md)（仍有效的決定）、[backlog.md](../../plugins/cards/docs/backlog.md#待重新確認的舊共識)（待重新確認） |
 | tasks.md | [roadmap.md](../roadmap.md) |
-| ideas.md | [backlog.md](../backlog.md#點子收集箱) |
+| ideas.md | [backlog.md](../../plugins/cards/docs/backlog.md#點子收集箱) |
 | learning-blueprint.md、function-discussions.md、functions/ | [product.md](../product.md)、[architecture.md](../architecture.md) |
 | module-architecture.md、integration-contract.md | [architecture.md §3](../architecture.md#3-模組邊界-第-5-步) |
-| technical-roadmap.md、obsidian-ui-probe.md | [architecture.md §4～5](../architecture.md#4-平台與裝置-)、[roadmap.md](../roadmap.md) |
-| development-principles.md | [product.md §4](../product.md#4-產品原則-第-3-步)、[AGENTS.md](../../AGENTS.md) |
+| technical-roadmap.md、obsidian-ui-probe.md | [architecture.md §4～5](../../plugins/cards/docs/architecture.md#4-平台與裝置-)、[roadmap.md](../roadmap.md) |
+| development-principles.md | [product.md §4](../../plugins/cards/docs/product.md#4-產品原則-第-3-步)、[AGENTS.md](../../AGENTS.md) |
 | blueprints.md、diagrams/ | architecture.md 與 roadmap.md 中的 Mermaid 圖 |
-| references/ | [research/](../research/software.md)（原樣保留） |
+| references/ | [research/](../../plugins/cards/docs/research/software.md)（原樣保留） |
 
 ## 注意
 

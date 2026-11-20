@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, itemsOf, parseMap, percent, type Stage } from './progress-board-data.ts';
-import { BACKLOG, countDeferred } from './check-docs.ts';
+import { DEFERRED_BACKLOGS, countDeferred } from './check-docs.ts';
 import { renderCanvas } from './progress-board-canvas.ts';
 import { renderList } from './progress-board-list.ts';
 
@@ -40,7 +40,7 @@ function main(): void {
     process.exit(1);
   }
   const updated = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
-  const meta = { updated, commit: process.env.GITHUB_SHA, deferred: countDeferred(readFileSync(resolve(root, BACKLOG), 'utf8')) };
+  const meta = { updated, commit: process.env.GITHUB_SHA, deferred: DEFERRED_BACKLOGS.reduce((sum, file) => sum + countDeferred(readFileSync(resolve(root, file), 'utf8')), 0) };
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, LIST_PAGE), renderList(stages, meta));
   writeFileSync(join(out, BOARD_PAGE), renderCanvas(stages, meta));

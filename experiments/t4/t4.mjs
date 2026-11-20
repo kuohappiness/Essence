@@ -92,7 +92,7 @@ async function main() {
       : [values.transcript ? path.resolve(out, values.transcript) : path.join(out, slug(config.transcribe[0].model), '轉錄稿.md')];
     for (const source of sources) if (!(await exists(source))) { console.log(`cards：缺少 ${source}，跳過；轉錄成功後再重跑 cards`); return false; }
     // --prompt 換掉 prompts/cards.md，例如試不同的家長調整；--rules 換掉 science.md，例如一般知識的 general.md。
-    const system = (await Promise.all(['../../docs/card-rules/common.md', values.rules ? path.resolve(values.rules) : '../../docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
+    const system = (await Promise.all(['../../plugins/cards/docs/card-rules/common.md', values.rules ? path.resolve(values.rules) : '../../plugins/cards/docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
       .map(file => fs.readFile(path.resolve(ROOT, file), 'utf8')))).join('\n\n');
     const content = [];
     for (const source of sources) {
@@ -100,7 +100,7 @@ async function main() {
       content.push(textPart(notes ? `來源筆記「${path.basename(source, '.md')}」全文：\n${transcript}` : '轉錄稿全文：\n' + transcript));
       const references = [...new Set([...transcript.matchAll(/!\[\[([^\]\n]+)\]\]/g)].map(m => m[1].split('|')[0]))];
       for (const reference of references) {
-        // 正式的圖檔名含中文與空格（docs/syntax.md §1），只擋路徑與 Windows 不允許的字元。
+        // 正式的圖檔名含中文與空格（docs/transcript.md），只擋路徑與 Windows 不允許的字元。
         if (!/^[^\\/:*?"<>|]+\.png$/.test(reference) || reference.includes('..')) throw new Error('轉錄稿的圖片名稱無效，只接受圖資料夾內的 PNG 檔名');
         const file = path.join(path.dirname(source), '圖', reference);
         if (!(await exists(file))) throw new Error(`缺少轉錄稿引用的圖片 ${reference}`);

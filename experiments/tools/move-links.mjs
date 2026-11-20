@@ -4,14 +4,17 @@
 //   node experiments/tools/move-links.mjs [--check] [--plan <計畫.json>] [<舊路徑>=<新路徑> ...]
 //
 // 路徑是 repo 根目錄算的；資料夾的對照也套到底下每個檔（src=plugins/cards/src）。
-// 計畫檔（B 用）：{ "moves": [["舊", "新"], …], "pieces": { "拆出的新檔": "原檔" }, "split": { "原檔": { "default": "沒有錨點時去的檔", "anchors": { "錨點": "那一段現在在的檔" } } } }
+// 計畫檔（B 用）：{ "moves": [["舊", "新"], …], "pieces": { "拆出的新檔": "原檔" }, "split": { "原檔": { "default": "沒有錨點時去的檔", "anchors": { "錨點": "那一段現在在的檔" }, "stay": ["錨點"] } },
+//   "frozen": [{ "dir": "資料夾/", "marker": "標記" }] }（frozen：這個資料夾的檔，標記以下的連結不改，例如製卡規則送給 AI 的部分；
+//   stay：拆完後原檔也有同名一節的錨點，沒搬的檔連到它時留在原檔，例如最上層 backlog 的〈技術債〉放共用工具的）
 // - 連結目標用和 tools/check-docs.ts 同一個 Markdown 解析器（markdown-it，html: true）取：行內、引用式、角括號、自動連結都算，
 //   程式碼框、HTML 區塊與行內程式碼裡的不算。原文裡找到的每個候選位置，都要對得上解析器在同一段（同幾行）取到的連結，
 //   引用式定義要對得上解析器登記的定義；重疊的位置只改一次（R4：角括號網址被兩個寫法同時選到改壞過）。
 //   目的地可以在下一行（`](` 或 `]:` 之後換行），照改。
 // - 連結的意思以搬家前為準：從這個檔搬家前的位置（拆出的新檔是原檔的位置）解開，目標照對照換成新路徑；
 //   目標是拆開的原檔時，照錨點換到那一段現在在的檔。從現在的位置解得開、而且是同一個目標的不動，所以第二次執行不改任何字。
-//   兩種解法都存在卻是不同的檔，不猜、不改，列成「要人看」（結束碼 1）。
+//   兩種解法都存在卻是不同的檔：搬走或拆出的檔照搬家前的意思；沒搬的檔（原路徑搬走後又有同名的新檔）不猜、不改，列成「要人看」（結束碼 1）。
+//   搬走或拆出的檔裡只有照現在的位置解得到的連結，是搬家時照新位置寫的，不改。
 // - 錨點、查詢字串與結尾的斜線照留；拆開的原檔裡連到本頁、但那一段已搬走的錨點，換成新檔的錨點。
 // - 指到這個 repo（kuohappiness/Essence，舊名 Essence-Cards）`blob/main/`、`tree/main/` 的網址，路徑照對照換；別人的 repo 不動。
 // - 「存在」照 git 的索引（git ls-files）：搬家的 git mv 與拆出的新檔要先 git add。
@@ -153,13 +156,15 @@ function encodeLike(path, raw, angle) {
 }
 
 /** 目標是拆開的原檔時，照錨點換到那一段現在在的檔；沒有錨點去 default；表上沒有的照原檔。 */
-function splitter(split = {}) {
+// unmoved：連結所在的檔沒搬也不是拆出的；原檔的 stay 列的錨點（拆完後原檔也有同名的一節）對它們留在原檔。
+function splitter(split = {}, unmoved = false) {
   return (target, rest) => {
     const entry = split[target];
     if (!entry) return target;
     const hash = rest.indexOf('#');
     if (hash < 0) return entry.default ?? target;
     const anchor = decode(rest.slice(hash + 1)) ?? rest.slice(hash + 1);
+    if (unmoved && entry.stay?.includes(anchor)) return target;
     return entry.anchors?.[anchor] ?? entry.anchors?.[anchor.toLowerCase()] ?? target;
   };
 }
@@ -171,18 +176,22 @@ function splitter(split = {}) {
 export function rewrite(file, text, plan, exists) {
   const { forward, pieces = {} } = plan;
   const backward = plan.backward ?? (path => path);
-  const retarget = splitter(plan.split);
   const bom = text.startsWith('﻿') ? '﻿' : '';
   const crlf = text.includes('\r\n');
   const source = text.slice(bom.length).replace(/\r\n/g, '\n');
   const info = parsed(source);
   const mask = masked(source, info.tokens);
   const origin = pieces[file] ?? backward(file);
+  const retarget = splitter(plan.split, origin === file);
   const edits = [];
   const conflicts = [];
   const lineOf = start => source.slice(0, start).split('\n').length;
+  // 凍結的段落（例如製卡規則送給 AI 的部分：內容一變就是新版本）：標記以下的連結不改。
+  const freeze = (plan.frozen ?? []).find(rule => file.startsWith(rule.dir));
+  const frozenAt = freeze ? source.indexOf(freeze.marker) : -1;
   for (const candidate of confirmed(source, candidates(mask), info)) {
     const { start, end, angle, inner, kind } = candidate;
+    if (frozenAt >= 0 && start > frozenAt) continue;
     const unescaped = markdown.utils.unescapeAll(inner);
     const wrap = written => angle ? `<${written}>` : written;
     const url = REPO_URL.exec(unescaped);
@@ -218,11 +227,14 @@ export function rewrite(file, text, plan, exists) {
     const before = forward(resolveFrom(origin));
     const fromHere = exists(here) ? retarget(here, rest) : undefined;
     const fromBefore = exists(before) ? retarget(before, rest) : undefined;
-    if (fromHere !== undefined && fromBefore !== undefined && fromHere !== fromBefore) {
+    // 搬走或拆出的檔裡只有照現在的位置解得到的連結，是搬家時照新位置寫的（例如拆出的段落連回原檔留下的那一節），不改。
+    if (origin !== file && fromBefore === undefined) continue;
+    // 兩種解法都存在又不同：搬走或拆出的檔照搬家前的意思（寫的人當時指的是那裡）；沒搬的檔不猜，列成要人看。
+    if (fromHere !== undefined && fromBefore !== undefined && fromHere !== fromBefore && origin === file) {
       conflicts.push({ line: lineOf(start), link: inner, here: fromHere, before: fromBefore });
       continue;
     }
-    const target = fromHere ?? fromBefore;
+    const target = origin === file ? fromHere ?? fromBefore : fromBefore ?? fromHere;
     if (target === undefined) continue;
     const relativePath = rooted ? '/' + target : target === file && rest.startsWith('#') ? '' : (posix.relative(posix.dirname(file), target) || posix.basename(target));
     const written = (relativePath ? encodeLike(relativePath, rawPath, angle) + slash : '') + rest;
@@ -258,7 +270,7 @@ export function main(args, root = process.cwd()) {
     const parts = file.split('/');
     for (let i = 1; i <= parts.length; i++) paths.add(parts.slice(0, i).join('/'));
   }
-  const map = { ...mapper(moves), pieces: plan.pieces, split: plan.split };
+  const map = { ...mapper(moves), pieces: plan.pieces, split: plan.split, frozen: plan.frozen };
   let changed = 0;
   let review = 0;
   for (const file of files.filter(name => name.endsWith('.md'))) {

@@ -182,6 +182,17 @@ void test('B：連到拆開的原檔照錨點去新檔，沒有錨點去 default
   const piece = rewrite('plugins/cards/docs/syntax.md', cards, B_PLAN, bExists);
   assert.equal(piece.text, '## 0. 總覽\n\n[§1](../../../docs/transcript.md#1-轉錄稿)、[§2](#2-卡組筆記)、[規則](card-rules/x.md)、[決定](../../../docs/decisions.md#d-1)\n\n## 2. 卡組筆記\n');
   assert.deepEqual(rewrite('plugins/cards/docs/syntax.md', piece.text, B_PLAN, bExists).edits, []);
+  // 凍結的段落（製卡規則送給 AI 的部分）：標記以下的連結不改，標記以上照改。
+  const rule = '[決定](../decisions.md#d-1)\n\n<!-- 送 -->\n\n[決定](../decisions.md#d-1)\n';
+  const frozen = rewrite('plugins/cards/docs/card-rules/x.md', rule, { ...B_PLAN, frozen: [{ dir: 'plugins/cards/docs/card-rules/', marker: '<!-- 送 -->' }] }, bExists);
+  assert.equal(frozen.text, '[決定](../../../../docs/decisions.md#d-1)\n\n<!-- 送 -->\n\n[決定](../decisions.md#d-1)\n');
+  // stay：拆完後原檔也有同名的一節，沒搬的檔連到它留在原檔；拆出的新檔照錨點表。
+  const stayPlan = { ...B_PLAN, split: { 'docs/syntax.md': { ...B_PLAN.split['docs/syntax.md'], stay: ['0-總覽'] } } };
+  assert.equal(rewrite('docs/roadmap.md', '[總覽](syntax.md#0-總覽)\n', stayPlan, bExists).text, '[總覽](syntax.md#0-總覽)\n');
+  assert.equal(rewrite('docs/transcript.md', '[總覽](#0-總覽)\n', stayPlan, bExists).text, '[總覽](../plugins/cards/docs/syntax.md#0-總覽)\n');
+  // 拆的時候照新位置手寫、連回原檔留下的那一節：錨點表雖然說那一節搬到 Cards，也不改。
+  const handWritten = '見最上層的[〈總覽〉](../../../docs/syntax.md#0-總覽)\n';
+  assert.equal(rewrite('plugins/cards/docs/syntax.md', handWritten, B_PLAN, bExists).text, handWritten);
 
   const transcript = '## 1. 轉錄稿\n\n[總覽](#0-總覽)、[本頁](#1-轉錄稿)\n';
   assert.equal(rewrite('docs/transcript.md', transcript, B_PLAN, bExists).text, '## 1. 轉錄稿\n\n[總覽](../plugins/cards/docs/syntax.md#0-總覽)、[本頁](#1-轉錄稿)\n');
@@ -190,7 +201,7 @@ void test('B：連到拆開的原檔照錨點去新檔，沒有錨點去 default
   assert.equal(rewrite('docs/syntax.md', stub, B_PLAN, bExists).text, '## 0. 總覽\n\n搬到 [Cards](../plugins/cards/docs/syntax.md#0-總覽)。\n\n## 1. 轉錄稿\n\n搬到 [轉錄稿](transcript.md#1-轉錄稿)。\n');
 });
 
-void test('B：搬走的文件以搬家前的位置解；兩種解法是不同的檔就列成要人看、不改', () => {
+void test('B：搬走的文件以搬家前的位置解；兩種解法不同時搬走的照搬家前，沒搬的列成要人看', () => {
   const text = '[決定](../docs/decisions.md#d-1)、[w3](w3.md)、[規格](../docs/syntax.md#1-轉錄稿)、[b](b.md)\n';
   const result = rewrite('docs/tasks/a.md', text, B_PLAN, bExists);
   assert.equal(result.text, '[決定](../decisions.md#d-1)、[w3](../../plugins/cards/docs/tasks/w3.md)、[規格](../transcript.md#1-轉錄稿)、[b](b.md)\n');
@@ -202,9 +213,17 @@ void test('B：搬走的文件以搬家前的位置解；兩種解法是不同�
   assert.equal(moved.text, '[a](../../../../docs/tasks/a.md) 與 [舊的 b](../tasks/b.md)\n');
   assert.deepEqual(moved.conflicts, []);
   const both = existing([...B_FILES, 'docs/x.md', 'plugins/cards/docs/x.md']);
-  const conflict = rewrite('docs/tasks/a.md', '[x](../x.md)\n', { ...mapper([['tasks/a.md', 'docs/tasks/a.md'], ['x.md', 'plugins/cards/docs/x.md']]) }, both);
+  // 搬走的檔：現在的位置解成 docs/x.md、搬家前解成搬走的 x.md，照搬家前的意思；改完再跑不動。
+  const plan = mapper([['tasks/a.md', 'docs/tasks/a.md'], ['x.md', 'plugins/cards/docs/x.md']]);
+  const before = rewrite('docs/tasks/a.md', '[x](../x.md)\n', plan, both);
+  assert.equal(before.text, '[x](../../plugins/cards/docs/x.md)\n');
+  assert.deepEqual(before.conflicts, []);
+  assert.deepEqual(rewrite('docs/tasks/a.md', before.text, plan, both), { text: before.text, edits: [], conflicts: [] });
+  // 沒搬的檔：原路徑搬走後又有同名的新檔，不猜。
+  const again = existing(['docs/x.md', 'plugins/cards/docs/x.md', 'docs/y.md']);
+  const conflict = rewrite('docs/y.md', '[x](x.md)\n', mapper([['docs/x.md', 'plugins/cards/docs/x.md']]), again);
   assert.deepEqual(conflict.edits, []);
-  assert.deepEqual(conflict.conflicts, [{ line: 1, link: '../x.md', here: 'docs/x.md', before: 'plugins/cards/docs/x.md' }]);
+  assert.deepEqual(conflict.conflicts, [{ line: 1, link: 'x.md', here: 'docs/x.md', before: 'plugins/cards/docs/x.md' }]);
 });
 
 void test('main：在 repo 根目錄跑；--check 只列出、結束碼 1，寫完再 --check 是 0', t => {

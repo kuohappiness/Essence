@@ -10,7 +10,7 @@
 
 1. 先把 Essence 自己的流程優化談完、做完。
 2. 再以 Essence 當時的結論，寫一份給其他專案的初始決策流程架構（第一個用的是 ArchiSitus，在 Claude 雲端開發）。只做一次性的初始架構，各專案接手後自己迭代，Essence 不負責同步；通用規範裡不提 Essence，也不連回 Essence。
-3. 改到第二步 A、B 也會動的檔（skill、`docs/agents/`、文件檢查、`decisions-index.mjs`、architecture §9、plans/README），排在 [Cards 搬家第二步](../../tasks/one-repo-step-2.md) B 合併之後。只新增檔案的可以先做。
+3. 改到第二步 A、B 也會動的檔（skill、`docs/agents/`、文件檢查、`decisions-index.mjs`、architecture §9、plans/README），排在 [Cards 搬家第二步](../tasks/one-repo-step-2.md) B 合併之後。只新增檔案的可以先做。
 
 ## D-214 上線後的路線
 
@@ -60,7 +60,7 @@ docs/tasks/<任務>.md ……… 規格與驗收；開頭寫「來自 D-xxx」
 11. **「現行寫在哪」由工具從規範文件反推，決定不加這一行**：規範文件寫規則時本來就註明 D-ID，213 條裡 192 條（90%）已被 AGENTS.md、product、architecture、syntax、question-types、`docs/agents`、card-rules、ai-models、skill、外掛的 AGENTS.md 引用（2026-11-19 實測）。查詢工具輸出「現行寫在：檔案〈標題〉」；沒被引用的顯示「沒有規範文件引用」（多是一次性的動作，或決定本身就是規則）。新舊決定同一種方式，不會錯亂；規則搬家時出處跟著搬。比較過的做法：每條新決定手寫一行「現行：」，舊的沒有、新舊不一致，規則搬家時會過時。
 12. **新舊寫法用編號劃界**：新規則上線後寫的第一條決定起，用「來自」「修改 D-xxx」的寫法；之前的看狀態行。工作流程規範寫明分界的編號；查詢工具兩種都認、輸出同一種格式，AI 讀工具的輸出，不自己分辨。
 
-使用者 2026-11-20 再同意，已寫成 [D-215](../decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)（Fable 評估另一個專案的四項流程做法、[討論稿](<../../Claude Codex Discussion/2026-11-19-github-issues-state.md>) 第一輪各自獨立回答）：
+使用者 2026-11-20 再同意，已寫成 [D-215](../decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)（Fable 評估另一個專案的四項流程做法、[討論稿](<../Claude Codex Discussion/2026-11-19-github-issues-state.md>) 第一輪各自獨立回答）：
 
 13. **開發狀態留在 repo**，照 D-214 上線；GitHub Issues 等觸發點（上線後純狀態更新仍常衝突、接手找不到下一步）再用 3～5 件單一 PR 的新任務試行。
 14. **〈已完成〉分兩步**（已由 D-217 取代：〈已完成〉直接由工具產生）：先做唯讀核對（比對 roadmap、任務狀態行、PR，只列候選），連續兩週沒有要修的才改成工具產生。修改第 6 點。

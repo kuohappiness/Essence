@@ -21,7 +21,7 @@
 
 ## 開始工作前
 
-- 先讀 `docs/roadmap.md` 的「現在在哪裡」（[D-099](docs/decisions.md#d-099-文件精簡)）；其他文件看任務需要，照〈文件分工〉找。做 Capture 或 Mindboard 時，先讀 `plugins/<外掛>/AGENTS.md`。
+- 先讀最上層 `docs/roadmap.md` 的「現在在哪裡」（入口，[D-099](docs/decisions.md#d-099-文件精簡)）；做某個外掛時，先讀 `plugins/<外掛>/AGENTS.md`，再讀它的 roadmap。其他文件看任務需要，照〈文件分工〉找。
 - 查決定：已知 D-ID 用 `node experiments/tools/decisions-index.mjs D-xxx`；不知道時讀索引裡相關的主題。
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
@@ -34,7 +34,6 @@
 每一層放什麼、新文件放哪裡，見 [architecture.md〈repo 結構〉](docs/architecture.md#9-repo-結構-d-208)（[D-208](docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。
 
 - 同一類資訊只維護一份，其他地方用連結（[D-141](docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
-- 製卡規則的輸出格式要和 `docs/syntax.md` 一致。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。
 - 新點子先記進 `docs/backlog.md`，保留原意與來源。
 - roadmap 的「現在在哪裡」每件進行中的工作一列，不寫經過。
@@ -46,7 +45,7 @@
 
 - Claude 做架構判斷、文件維護與實作，包含規格清楚的機械式工作（[D-131](docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)）。
 - 模型、推理等級、什麼時候請 Codex 查核、卡關時怎麼升級，照 `docs/agents/quality.md`（[D-140](docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)、[D-144](docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。
-- 重大決策點先在 `Claude Codex Discussion/` 寫討論稿和 Codex 輪流回覆，雙方一致才交給使用者。
+- 重大決策點先在 `docs/Claude Codex Discussion/`（外掛專用的在外掛的 `docs/` 底下，[D-213](docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)）寫討論稿和 Codex 輪流回覆，雙方一致才交給使用者。
 - Codex 只查核與回報，修改由 Claude 做。
 
 ## 實作與 Git
@@ -60,7 +59,7 @@
 給 GitHub 上的 Codex 審查讀，是合併前的補充，不取代 L2（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端) 第 7 點）。
 
 - 用繁體中文回覆。
-- 標成 P1：寫進使用者筆記的格式（`docs/syntax.md`）被改壞或舊版外掛讀不到、學習目標 ID 或複習紀錄遺失或重複、排程（FSRS 與紀錄重播）算錯、寫回筆記不冪等、金鑰或個人資料進了 repo。
+- 標成 P1：寫進使用者筆記的格式（`plugins/cards/docs/syntax.md`、`docs/transcript.md`）被改壞或舊版外掛讀不到、學習目標 ID 或複習紀錄遺失或重複、排程（FSRS 與紀錄重播）算錯、寫回筆記不冪等、金鑰或個人資料進了 repo。
 - 只改文件的 PR，看壞掉的連結、狀態行，以及和 `docs/decisions.md` 矛盾的地方。
 
 ## 改這份檔案

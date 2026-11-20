@@ -13,7 +13,7 @@
 | [試作場說明](../README.md)的 T2、T3 兩節 | 要回答的問題 |
 | [D-051](../../docs/decisions.md#d-051-複習畫面用-react)、[D-052](../../docs/decisions.md#d-052-樣式用純-css)、[D-084](../../docs/decisions.md#d-084-回看上一張與滑動手勢)、[D-096](../../docs/decisions.md#d-096-顯示答案與複習畫面的細節) | 技術選擇、樣式規則、回看與滑動、複習畫面的細節 |
 | [樣式稿](../mockups/entry-and-reveal.html)的複習畫面：CSS 第 1～160 行附近的 `--*` 變數與 `.ec-*`，JS 的 `cardHTML`、`reviewHTML`、`diff`、`blankHTML`、`spellHTML`、`reveal`、`rate`、`back`、`fwd`、`say`、點擊與 touch 處理（約第 966～1012 行） | 畫面要照這份做；只照 `S.rv === 'A'`（文字按鈕）那條分支，B、C1、C2 是沒採用的方案 |
-| [出題語法 §5 複習紀錄](../../docs/syntax.md#5-複習紀錄) | 紀錄檔的格式 |
+| [出題語法 §5 複習紀錄](../../plugins/cards/docs/syntax.md#5-複習紀錄) | 紀錄檔的格式 |
 | `experiments/tts-probe/main.js` | 朗讀（`speechSynthesis`）在 Obsidian 裡的寫法 |
 | 2026-10-07 的舊原型：`git show a5b7c5f^:experiments/obsidian-ui-probe/main.js` | `ItemView`、`getResourcePath` 的用法，可參考，不必沿用 |
 
