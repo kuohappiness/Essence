@@ -62,6 +62,8 @@ interface Decision {
   summary?: string;
   /** 新寫法：「來自」「修改」「補充」段裡比自己小的 D-ID。 */
   upstream: string[];
+  /** 新寫法：所有「來自」段裡的 D-ID（upstream 的一部分；狀態行可以有好幾段「來自」，L2 R7）。 */
+  from: string[];
   /** 新寫法：「取代」段裡比自己小的 D-ID。 */
   replaces: string[];
   /** 新寫法：「來自」段裡不是 D-ID 錨點的連結目標（相對 docs/decisions.md）。 */
@@ -116,7 +118,7 @@ export function parseDecisions(source: string, boundary = BOUNDARY): Parsed {
     const decision: Decision = {
       id, num: num(id), name, anchor: anchorOf(id, name), body, metadata, legacy,
       date: DATE.exec(metadata)?.[0], symbol: /^(✅|🔁|💬|💡)(?:\s|$)/u.exec(metadata)?.[1],
-      upstream: [], replaces: [], sources: [],
+      upstream: [], from: [], replaces: [], sources: [],
     };
     if (legacy) return decision;
     const topic = TOPIC_LINE.exec(mask(body).replace(/\r/g, ''));
@@ -135,6 +137,7 @@ export function parseDecisions(source: string, boundary = BOUNDARY): Parsed {
       if (kind === '取代') decision.replaces.push(...older);
       else decision.upstream.push(...older);
       if (kind === '來自') {
+        decision.from.push(...older);
         for (const [, raw] of segment.matchAll(LINK)) {
           const href = raw.replace(/^<|>$/g, '');
           if (!href.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(href)) decision.sources.push(href);
@@ -142,6 +145,7 @@ export function parseDecisions(source: string, boundary = BOUNDARY): Parsed {
       }
     }
     decision.upstream = [...new Set(decision.upstream)];
+    decision.from = [...new Set(decision.from)];
     decision.replaces = [...new Set(decision.replaces)];
     return decision;
   });

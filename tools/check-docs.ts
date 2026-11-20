@@ -552,12 +552,8 @@ export function downstreamOf(texts: ReadonlyMap<string, string>, start: string):
         const from = resolveHref(DECISIONS, href);
         if (from) add(stationKey(from), here);
       }
-      // 「來自」另一條決定（「修改」「補充」不算：那是後續見，由決策查詢工具列）。
-      const segment = decision.metadata.split('｜').map(s => s.trim()).find(s => s.startsWith('來自'));
-      for (const [id] of segment?.matchAll(/D-\d+/g) ?? []) {
-        const from = parsed.byId.get(id);
-        if (from) add(`${DECISIONS}#${from.anchor}`, here);
-      }
+      // 每一段「來自」裡的另一條決定（「修改」「補充」不算：那是後續見，由決策查詢工具列；L2 R7）。
+      for (const id of decision.from) add(`${DECISIONS}#${parsed.byId.get(id)!.anchor}`, here);
     }
   }
 

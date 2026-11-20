@@ -516,6 +516,18 @@ void test('§B3 製卡規則整個資料夾搬走：表上的三列都要刪（L
 });
 
 // D-214 第 2、3 點：「→」與反過來的「來自」都是往下游的邊；拆分列出每一支，退回的循環停在退回到的那一站。
+void test('L2 R7 決定的狀態行有兩段「來自」：每一段的 D-ID 都是上游，鏈接得起來', () => {
+  const texts = new Map([
+    ['docs/tasks/other.md', ['# O', '', '狀態：已結案 → D-219｜完成：談定｜等誰：—', '', '→ [D-219](../decisions.md#d-219-新乙)（2026-11-03）', ''].join('\n')],
+    ['docs/tasks/next.md', ['# N', '', '狀態：實作中｜下一步：寫測試｜等誰：Claude', '', '來自：[D-219](../decisions.md#d-219-新乙)', ''].join('\n')],
+    ['docs/decisions.md', ['# 決策紀錄', '', '---', '',
+      '## D-218 新甲', '', '✅ 2026-11-02', '', '主題：協作與文件｜一句話：甲。', '',
+      '## D-219 新乙', '', '✅ 2026-11-03｜來自 [任務](tasks/other.md)｜來自 D-218', '', '主題：協作與文件｜一句話：乙。', ''].join('\n')],
+  ]);
+  assert.deepEqual(downstreamOf(texts, 'docs/decisions.md#d-218-新甲'), ['docs/tasks/next.md']);
+  assert.deepEqual(downstreamOf(texts, 'docs/tasks/other.md'), ['docs/tasks/next.md']);
+});
+
 void test('往下游的鏈：拆分、退回、backlog 的一站、決定來自決定', () => {
   const status = (state: string) => state === '實作中' ? '狀態：實作中｜下一步：寫測試｜等誰：Claude' : `狀態：${state}｜完成：做完了｜等誰：—`;
   const texts = new Map([
