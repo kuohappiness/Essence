@@ -72,6 +72,8 @@ docs/tasks/<任務>.md ……… 規格與驗收；開頭寫「來自 D-xxx」
 
 ## 搬完之後要做的事
 
+→ [tasks/workflow-impl.md](../tasks/workflow-impl.md)（2026-11-21）
+
 第二步 B 合併後：
 
 - 寫工作流程規範文件，architecture §9 與 plans/README 改成連過去（第 1 點）。
