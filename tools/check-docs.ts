@@ -427,8 +427,9 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     problems.push(...checkDeferred(doc, changed.has(doc.file) ? debtFor(doc.file) : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
-  // 規則檔整份拿掉或改名也要刪那一列，不然之後同名的新檔會被放過（第二輪）。repo 裡沒有製卡規則的資料夾時（測試的暫存 repo）不看。
-  const rulesHere = [...docs.keys()].some(file => file.startsWith(posix.dirname(Object.keys(FROZEN_RULES.links)[0] ?? '') + '/'));
+  // 規則檔整份拿掉或改名（連整個資料夾一起搬也算）也要刪那一列，不然之後同名的新檔會被放過（第二、三輪）。
+  // 只看 Cards 外掛在的 repo（有 manifest）：測試的暫存 repo 沒有，不看。
+  const rulesHere = tree.paths.has('plugins/cards/manifest.json');
   for (const [file, paths] of Object.entries(FROZEN_RULES.links)) {
     if (!docs.has(file)) {
       if (rulesHere) problems.push({ file, line: 0, target: file, reason: 'FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列' });

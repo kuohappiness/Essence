@@ -270,4 +270,9 @@ void test('B 的 L2 R2：同一段有同一個目標的純文字與真的連結�
   const referenced = rewrite('docs/x.md', reference, map, exists);
   assert.equal(referenced.text, '\\[literal](../src/a.ts) [ref][id]\n\n[id]: ../plugins/cards/src/a.ts\n');
   assert.deepEqual(referenced.conflicts, []);
+  // 第三輪：引用式連結（完整、折疊、圖片）後面緊接的括號是純文字，不改；拿掉定義再解析會把它看成行內連結。
+  for (const use of ['[shown][id]', '[id][]', '![圖][id]']) {
+    const text = `${use}(../src/a.ts)\n\n[id]: decisions.md\n`;
+    assert.deepEqual(rewrite('docs/x.md', text, map, exists), { text, edits: [], conflicts: [] }, use);
+  }
 });

@@ -78,6 +78,8 @@ function parsed(text) {
   const env = {};
   const tokens = markdown.parse(blank, env);
   const blocks = [];
+  // 定義照留（語法才會和整份解析的相同），目的地換成各自的佔位值：再解析時引用式連結的 href 是佔位值，只有行內連結與自動連結是真的目的地。
+  const placeholders = { references: Object.fromEntries(Object.entries(env.references ?? {}).map(([label, ref], i) => [label, { ...ref, href: `#move-links-reference-${i}` }])) };
   let map;
   for (const token of tokens) {
     // 表格儲存格的 inline 沒有行號，用所在那一列（tr_open）的。
@@ -86,8 +88,8 @@ function parsed(text) {
     // 同一列的儲存格併成一段。
     let block = blocks.at(-1);
     if (!block || block.from !== map[0] || block.to !== map[1]) blocks.push(block = { from: map[0], to: map[1], hrefs: new Map() });
-    // 只數行內連結與自動連結：不給定義再解析一次，引用式連結（目的地在定義那一行）就不算進這一段（B 的 L2 第二輪）。
-    for (const child of markdown.parseInline(token.content, {})[0]?.children ?? []) {
+    // 只數行內連結與自動連結：引用式連結（目的地在定義那一行）不算進這一段（B 的 L2 第二、三輪）。
+    for (const child of markdown.parseInline(token.content, structuredClone(placeholders))[0]?.children ?? []) {
       const href = child.type === 'link_open' ? child.attrGet('href') : child.type === 'image' ? child.attrGet('src') : null;
       if (href !== null) block.hrefs.set(href, (block.hrefs.get(href) ?? 0) + 1);
     }

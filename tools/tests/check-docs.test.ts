@@ -377,6 +377,7 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
   // elementary-social.md 在表上，這裡只連 ../decisions.md 與中文檔名的短規則（解析器取到的是百分比編碼）：試作場的其他三條沒用到，要刪。
   await add('experiments/t4/arch/短規則.md', '# 短規則\n');
   await add('plugins/cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
+  await add('plugins/cards/manifest.json', '{}\n');
   const social = (path: string) => 'plugins/cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
   // elementary-chinese.md 在表上但這裡沒有這份檔（像是改名或拿掉）：那一列要刪，之後同名的新檔才不會被放過（第二輪）。
   assert.deepEqual(run(), [
@@ -393,4 +394,14 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
     social('../../experiments/t4/arch/第二輪/五步.md'),
     social('../../experiments/t4/arch/第二輪/格式.md'),
   ]);
+});
+
+void test('§B3 製卡規則整個資料夾搬走：表上的三列都要刪（L2 第三輪）；沒有 Cards 的 manifest 的 repo 不看', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/x.md', '# X\n');
+  assert.deepEqual(run(), []);
+  await add('plugins/cards/manifest.json', '{}\n');
+  await add('plugins/cards/docs/rules/english.md', '# 英文\n');
+  const gone = (file: string) => `plugins/cards/docs/card-rules/${file}  plugins/cards/docs/card-rules/${file}  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列`;
+  assert.deepEqual(run(), [gone('elementary-chinese.md'), gone('elementary-social.md'), gone('english.md')]);
 });

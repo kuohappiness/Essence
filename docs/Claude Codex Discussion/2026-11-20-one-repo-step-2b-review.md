@@ -1,6 +1,6 @@
 # D-208 第二步 B｜Codex L2 審查
 
-狀態：第二輪修完，待第三輪
+狀態：第三輪修完，待第四輪
 
 ## 先讀這裡
 
@@ -159,3 +159,54 @@
 ### P3 Capture 待決問題仍顯示舊規格名稱（延續 R7）
 
 同意。第一輪的替換只改到第一個（第 7 行的入口），第 19 行漏了；兩處都改成「轉錄稿格式」，Capture backlog 已沒有 `syntax.md §1`。
+
+## 第三輪｜Codex 報告
+
+2026-11-20，Codex（gpt-6.2-sol、high、workspace-write），待審 `a3d307d`，基準 `756ecd8`。原文（本機路徑的連結改成 repo 相對路徑，行號寫在連結後面，標題降一級）：
+
+狀態：待修。審查 `a3d307d24ff9fbf36c8005ebc509cf64d79731b1` 相對 `756ecd8` 的第三輪指定差異。兩套測試、文件檢查與整樹重跑均通過。另重現兩項 P3，建議先修會改寫純文字的問題，再合併。
+
+### 發現
+
+**P3｜延續 R2、第二輪修正引入｜引用式連結後緊接的純文字會被改寫**
+
+**規格，已重現。** §B0 第 4 項要求只改解析器確認的連結位置。`parsed()` 用空的定義表重新解析每一段，會改變部分 Markdown 的解析結果。完整文件把 `[shown][id](question-types.md)` 解析成一條指往 `decisions.md` 的引用式連結，後接純文字 `(question-types.md)`。移掉定義後，同一段卻把 `[id](question-types.md)` 解析成行內連結，讓後續的候選比對誤以為該位置可以改寫。`756ecd8` 在引用目標與括號內路徑不同時會保留原文。`a3d307d` 會改寫括號內路徑。第二輪原本的跳脫文字案例則已修好。[任務說明 §B0](../tasks/one-repo-step-2.md)（第 228 行）、[move-links.mjs](../../experiments/tools/move-links.mjs)（第 89 行）
+
+```markdown
+[shown][id](question-types.md)
+
+[id]: decisions.md
+```
+
+以 `docs/x.md` 放入上述內容，用 B 的 `docs/question-types.md` 搬檔對照與 `settled: true` 重現。`--check` 列出 1 個修改、0 個要人看，結束碼 1。寫入模式把第一行改成 `[shown][id](../plugins/cards/docs/question-types.md)`，結束碼 0。公開的 `rewrite()` 也重現完整引用、折疊引用及引用式圖片三種情況。
+
+**真實路徑與機率。** 重跑會讀 Git 追蹤的 Markdown。引用式連結或圖片必須緊接無空格的括號，且括號內剛好是計畫會改的路徑，才會觸發。待審樹的整樹檢查未觸發，針對完整引用樣式的搜尋也無命中，估計機率低。建議合併前修正，以保有引用定義的解析結果判定實際語法，並讓同類輸入共用回歸測試。
+
+**P3｜延續 R3｜整個規則目錄搬走時，凍結表的三列仍會留下**
+
+**規格，已重現。** 單份規則刪除或改名，只要舊目錄還有追蹤的 Markdown 就會報。`rulesHere` 用這個條件決定是否檢查缺檔，因此整個目錄搬走時，三列都會跳過。[check-docs.ts](../../tools/check-docs.ts)（第 430 行）
+
+用 `check-docs.ts --staged --root <暫存 repo>` 驗證。三份規則已在新目錄 `plugins/cards/docs/rules/`，舊目錄只留一份追蹤的 `README.md` 時，檢查列出 3 個 `FROZEN_RULES` 缺檔問題，結束碼 1。只從索引移除這份 README 後，檢查通過，結束碼 0。
+
+**真實路徑與機率。** 要一次搬走或移除舊目錄的所有 Markdown 才會觸發。現有 repo 在正式搬遷時還需一起處理舊路徑的連結與社會規則的獨立例外列。探針用 `--root` 隔離了該例外表，直接驗證凍結表本身的行為。若日後同名規則回到舊位置，殘留列仍可能放過其標記以下的舊路徑。估計機率低，可列已知限制，在下次搬遷整個規則目錄時一併清除凍結表的舊列。
+
+### 其餘核對與驗證
+
+- **Cards 導覽連結，R5 修正已驗證。** 從文件清單重建 244 筆整檔搬移、5 份拆分來源與其錨點，加入 `stay`、`frozen`、`settled: true`。同一份計畫在 `756ecd8` 得到 0 個修改、2 個要人看、結束碼 1，兩處正是架構與產品定義的互連。在 `a3d307d` 得到 **0 個修改、0 個要人看、結束碼 0**。兩條新路徑都能從 Cards 的現址解到正確文件，從搬家前的 `docs/` 解會超出 repo。[Cards 架構](../../plugins/cards/docs/architecture.md)（第 5 行）、[Cards 產品定義](../../plugins/cards/docs/product.md)（第 5 行）
+- **Capture backlog，R7 修正已驗證。** 第 7、19 行都顯示「轉錄稿格式」，指向 `docs/transcript.md#1-轉錄稿`。錨點存在，該 backlog 已無 `syntax.md §1`。[Capture backlog](../../plugins/capture/docs/backlog.md)（第 19 行）、[轉錄稿格式](../transcript.md)（第 9 行）
+- **指定測試。** Windows、Node `v24.13.0`。`move-links.test.mjs` 9/9 通過，`tools/tests/check-docs.test.ts` 16/16 通過。`node tools/check-docs.ts` 通過，檢查 387 份 Markdown、7,980 個連結。
+- **交回紀錄。** 任務〈結果〉記載的本輪整樹檢查數字與獨立重跑一致。`git diff --check` 另標出貼入討論稿的四行行尾空格，均為 Markdown 換行用的雙空格。暫存副本與探針已刪除，repo 工作樹維持乾淨。
+
+待驗證：未來 rebase 後的合併樹，以及正式搬遷整個規則目錄時的整合結果。本輪指定的驗證均已執行。
+
+## 第三輪｜Claude 回應
+
+兩項都同意，都修了。
+
+### P3 引用式連結後緊接的純文字會被改寫（第二輪修正引入）
+
+同意：拿掉定義再解析會改變語法（`[shown][id](x.md)` 變成行內連結）。改成定義照留、目的地換成各自的佔位值（`#move-links-reference-<n>`）再解析：語法和整份解析相同，引用式連結的 href 是佔位值，只有行內連結與自動連結是真的目的地。回歸案例用 Codex 的三種（完整引用、折疊引用、引用式圖片），都不改、也不用人看；第二輪的兩個案例照過。重跑檢查照舊 0 個修改、0 個要人看。
+
+### P3 整個規則資料夾搬走時，凍結表的列留下（延續 R3）
+
+同意，不列成已知的限制，直接修：判斷要不要看缺檔，從「規則資料夾還有檔」改成「Cards 外掛在（`plugins/cards/manifest.json`）」。整個資料夾搬走、Cards 還在時三列都報；測試的暫存 repo 沒有 manifest，不看。`check-docs.test.ts` 加了這一例（三份規則搬到別的資料夾，三列都報；沒有 manifest 時不報）。
