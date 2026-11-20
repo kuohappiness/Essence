@@ -198,22 +198,67 @@ async function history(t: test.TestContext) {
   const mindboard1 = await commit('plugins/mindboard/a.ts', 'export const m = 1;\n');
   git('checkout', '-q', '-b', 'only', start);
   const only = await commit('plugins/mindboard/b.ts', 'export const m = 2;\n');
+  // GitHub 的 refs/pull/N/merge：base（main1）與 PR 的 head（only）的合併 commit。
+  git('checkout', '-q', '--detach', main1);
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'merge', '-q', '--no-ff', '--no-verify', '-m', 'pr', only);
+  const prMerge = git('rev-parse', 'HEAD');
+  git('checkout', '-q', 'only');
   git('update-ref', 'refs/remotes/origin/main', main1);
   git('tag', 'v0.0.1', only);
-  return { root, env, git, start, main1, cards1, mindboard1, only };
+  return { root, env, git, start, main1, cards1, mindboard1, only, prMerge };
 }
 
 const runs = (p: ReturnType<typeof plan>) => Object.entries(p.runs).filter(([, on]) => on).map(([name]) => name).join(',');
 
 void test('§4 比較端點：PR 用分岔點到 head，不用 base 的最新；base 前進改了 Cards、head 只改 Mindboard → 只有 Mindboard', async t => {
   const h = await history(t);
-  const event: Event = { name: 'pull_request', ref: 'refs/pull/1/merge', sha: 'merge-sha', payload: { pull_request: { base: { sha: h.main1 }, head: { sha: h.only } } } };
+  const event: Event = { name: 'pull_request', ref: 'refs/pull/1/merge', sha: h.prMerge, payload: { pull_request: { base: { sha: h.main1 }, head: { sha: h.only } } } };
   const p = plan(event, gitIn(h.root), h.root);
   assert.equal(runs(p), 'mindboard');
   assert.match(p.compare, new RegExp(`^${h.start}\\.\\.${h.only}`));
   assert.match(p.reasons.cards, /照分派表跳過/);
   // 缺 SHA：跑全部。
   assert.equal(runs(plan({ ...event, payload: {} }, gitIn(h.root), h.root)), 'tools,cards,capture,mindboard');
+});
+
+void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家前開的分支只改 tools/install.ts，合併後落在 plugins/cards/tools/ → Cards 也跑', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-ci-moved-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const write = async (path: string, text: string) => { await mkdir(dirname(join(root, path)), { recursive: true }); await writeFile(join(root, path), text); git('add', '--', path); };
+  git('init', '-q', '-b', 'main');
+  // 搬家前：Cards 的工具在 tools/。
+  await write('tools/install.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
+  git('commit', '-q', '--no-verify', '-m', 'before');
+  const before = git('rev-parse', 'HEAD');
+  git('checkout', '-q', '-b', 'old', before);
+  await write('tools/install.ts', 'export const a = 1;\nexport const b = 20;\nexport const c = 3;\n');
+  git('commit', '-q', '--no-verify', '-m', 'old branch');
+  const old = git('rev-parse', 'HEAD');
+  git('checkout', '-q', 'main');
+  await mkdir(join(root, 'plugins/cards/tools'), { recursive: true });
+  git('mv', 'tools/install.ts', 'plugins/cards/tools/install.ts');
+  git('commit', '-q', '--no-verify', '-m', 'move');
+  const moved = git('rev-parse', 'HEAD');
+  // GitHub 的 refs/pull/N/merge：第一個 parent 是 base，第二個是 PR 的 head。
+  git('checkout', '-q', '--detach', moved);
+  git('merge', '-q', '--no-ff', '--no-verify', '-m', 'merge', old);
+  const merge = git('rev-parse', 'HEAD');
+  assert.match(git('diff', '--name-only', moved, merge), /^plugins\/cards\/tools\/install\.ts$/);
+
+  const event: Event = { name: 'pull_request', ref: 'refs/pull/1/merge', sha: merge, payload: { pull_request: { base: { sha: moved }, head: { sha: old } } } };
+  const p = plan(event, gitIn(root), root);
+  assert.equal(runs(p), 'tools,cards');
+  assert.match(p.reasons.cards, /plugins\/cards\/tools\/install\.ts/);
+  assert.match(p.compare, new RegExp(`^${before}\\.\\.${old}.*${moved}\\.\\.${merge}`));
+  // 合併 commit 的第二個 parent 不是 PR 的 head、或不是合併 commit：對不上就跑全部。
+  for (const sha of [moved, 'merge-sha']) {
+    const all = plan({ ...event, sha }, gitIn(root), root);
+    assert.equal(runs(all), 'tools,cards,capture,mindboard', sha);
+    assert.match(all.reasons.cards, /合併 commit/);
+  }
 });
 
 void test('§4 比較端點：push 到 main 有 before 就比 before..sha；全是 0、clone 裡沒有、不是祖先都跑全部', async t => {
@@ -260,7 +305,7 @@ void test('§4 plan 的命令：寫 GITHUB_OUTPUT 的旗標、理由與比較的
   await writeFile(event, JSON.stringify({ pull_request: { base: { sha: h.main1 }, head: { sha: h.only } } }));
   const { stdout } = await run(process.execPath, [GATE, 'plan'], {
     cwd: h.root,
-    env: { ...h.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge', GITHUB_SHA: h.only, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summaryFile },
+    env: { ...h.env, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge', GITHUB_SHA: h.prMerge, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summaryFile },
     encoding: 'utf8',
   });
   const lines = (await readFile(output, 'utf8')).trim().split('\n');

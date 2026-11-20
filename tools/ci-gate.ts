@@ -16,7 +16,9 @@ export interface Event {
   sha: string;
   payload: { before?: string; pull_request?: { base?: { sha?: string }; head?: { sha?: string } } };
 }
-export type Endpoints = { kind: 'range'; base: string; head: string; why: string } | { kind: 'all'; why: string };
+/** merged：PR 的合併樹，GitHub 的合併 commit 對它第一個 parent 的差異，路徑是合併後實際改到的（第二步 L2 R1）。 */
+export type Endpoints = { kind: 'range'; base: string; head: string; why: string; merged?: Range } | { kind: 'all'; why: string };
+type Range = { base: string; head: string };
 /** 跑 git，失敗時回 undefined（找不到基點、不是祖先都算失敗）。 */
 export type Git = (args: string[]) => string | undefined;
 
@@ -27,7 +29,14 @@ export function endpoints(event: Event, git: Git): Endpoints {
     if (!base || !head) return { kind: 'all', why: 'PR 事件缺 base 或 head 的 SHA' };
     const fork = git(['merge-base', base, head]);
     if (!fork) return { kind: 'all', why: `找不到 PR 的分岔點（${base}、${head}）` };
-    return { kind: 'range', base: fork, head, why: 'PR：分岔點到 PR 的 head' };
+    // 分岔點到 head 是分支上的路徑；搬家前開的分支，改動在合併樹裡落到新路徑（tools/install.ts → plugins/cards/tools/install.ts）。
+    // 所以也看 GitHub 的合併 commit（GITHUB_SHA，第二個 parent 是 PR 的 head）對第一個 parent 的差異，兩邊的分派取聯集；對不上就跑全部。
+    const parents = git(['rev-list', '--parents', '-n', '1', event.sha])?.split(/\s+/).slice(1) ?? [];
+    const first = parents[0];
+    if (parents.length !== 2 || !first || parents[1] !== git(['rev-parse', '--verify', '--quiet', `${head}^{commit}`])) {
+      return { kind: 'all', why: `PR 的合併 commit（${event.sha}）的 parent 對不上 PR 的 head（${head}）` };
+    }
+    return { kind: 'range', base: fork, head, why: 'PR：分岔點到 PR 的 head', merged: { base: first, head: event.sha } };
   }
   if (event.name !== 'push') return { kind: 'all', why: `事件 ${event.name} 一律跑全部` };
   if (event.ref.startsWith('refs/tags/')) return { kind: 'all', why: 'push tag 一律跑全部' };
@@ -61,20 +70,29 @@ export function plan(event: Event, git: Git, root: string): Plan {
     compare: '全部', checkout, blocked: [],
   });
   if (ends.kind === 'all') return all(ends.why);
-  let changes;
-  try {
-    changes = readChanges(root, { kind: 'range', base: ends.base, head: ends.head });
-  } catch (error) {
-    return { ...all(`Git 讀不到 ${ends.base}..${ends.head} 的改動：${(error as Error).message.split('\n')[0]}`), compare: `${ends.base}..${ends.head}` };
+  const ranges: (Range & { label: string })[] = [{ base: ends.base, head: ends.head, label: '' }];
+  if (ends.merged) ranges.push({ ...ends.merged, label: '合併樹：' });
+  const compare = `${ends.base}..${ends.head}（${ends.why}）` + (ends.merged ? `；合併樹 ${ends.merged.base}..${ends.merged.head}` : '');
+  const results = [];
+  for (const range of ranges) {
+    let changes;
+    try {
+      changes = readChanges(root, { kind: 'range', base: range.base, head: range.head });
+    } catch (error) {
+      return { ...all(`Git 讀不到 ${range.base}..${range.head} 的改動：${(error as Error).message.split('\n')[0]}`), compare: `${range.base}..${range.head}` };
+    }
+    results.push({ label: range.label, result: dispatch(changes, { root, ci: true, compare: { kind: 'range', base: range.base, head: range.head } }) });
   }
-  const result = dispatch(changes, { root, ci: true, compare: { kind: 'range', base: ends.base, head: ends.head } });
   const runs = {} as Record<Target, boolean>;
   const reasons = {} as Record<Target, string>;
   for (const target of TARGETS) {
-    runs[target] = result.targets[target].run !== 'skip';
-    reasons[target] = result.targets[target].why;
+    // 任一邊要跑就跑，理由取要跑的那一邊；都不跑時取分支那一邊的理由。
+    const ran = results.find(r => r.result.targets[target].run !== 'skip');
+    const pick = ran ?? results[0];
+    runs[target] = Boolean(ran);
+    reasons[target] = pick.label + pick.result.targets[target].why;
   }
-  return { runs, reasons, compare: `${ends.base}..${ends.head}（${ends.why}）`, checkout, blocked: result.blocked };
+  return { runs, reasons, compare, checkout, blocked: [...new Set(results.flatMap(r => r.result.blocked))] };
 }
 
 export type JobResult = 'success' | 'failure' | 'cancelled' | 'skipped';
