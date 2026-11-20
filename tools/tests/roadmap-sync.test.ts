@@ -133,6 +133,25 @@ void test('入口一格兩個連結、入口不是新格式、同一份入口兩
   assert.equal(sync('--staged').status, 1);
 });
 
+void test('L2 R4 連結的路徑照原本的編碼改基準（%23、%20 不解開）；行內程式碼裡的連結不改，入口一格也不算', async t => {
+  const { root, add, read, sync } = await repo(t);
+  assert.deepEqual(moveText('[索引](../決策%23索引.md#一節)', 'docs/tasks/x.md', 'docs/roadmap.md'), { text: '[索引](決策%23索引.md#一節)' });
+  assert.deepEqual(moveText('[空白](../Claude%20Codex%20Discussion/d.md)', 'plugins/cards/docs/tasks/x.md', 'plugins/cards/docs/roadmap.md'),
+    { text: '[空白](Claude%20Codex%20Discussion/d.md)' });
+  assert.deepEqual(moveText('範例 `[入口](a.md)`、``[也是](a.md)``，[真的](a.md)', 'plugins/cards/docs/tasks/x.md', 'plugins/cards/docs/roadmap.md'),
+    { text: '範例 `[入口](a.md)`、``[也是](a.md)``，[真的](tasks/a.md)' });
+  // 同步寫出的 roadmap，文件檢查照樣找得到 %23 的檔。
+  await add('docs/決策#索引.md', '# 索引\n\n## 一節\n');
+  await add('docs/tasks/x.md', entry('狀態：實作中｜下一步：看 [索引](../決策%23索引.md#一節)｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | x | x | x | [任務](tasks/x.md) |']));
+  assert.equal(sync().status, 0);
+  assert.ok((await read('docs/roadmap.md')).includes('| 甲 | 實作中 | 看 [索引](決策%23索引.md#一節) | Claude | [任務](tasks/x.md) |'));
+  assert.deepEqual(checkDocs(root, { exceptions: [], legacy: 'all' }).problems.map(formatProblem).filter(p => p.startsWith('docs/roadmap.md')), []);
+  // 入口一格只有行內程式碼裡的連結：沒有入口。
+  await add('docs/roadmap.md', roadmap(['| 範例 | x | x | x | `[任務](tasks/x.md)` |']));
+  assert.match(sync().stderr, /docs\/roadmap\.md:9  入口一格要剛好一個連到 Markdown 檔的連結，現在有 0 個/);
+});
+
 void test('連結改寫：上一層、只有錨點、有空白的路徑、格子裡的直線；寫出的 roadmap 文件檢查與白板都讀得出來', async t => {
   const { root, add, read, sync } = await repo(t);
   const roadmapFile = 'plugins/cards/docs/roadmap.md';

@@ -72,11 +72,40 @@ function sectionsOf(text: string): Section[] {
   return sections;
 }
 
-/** 入口一格的連結：剛好一個連到 Markdown 檔的連結，回傳 repo 裡的路徑；其他回傳原因。 */
+/** 行內程式碼的範圍 [起, 迄)：照 CommonMark，n 個反引號開頭、下一串剛好 n 個反引號收尾；沒收尾的反引號是字（L2 R4）。 */
+function codeSpans(text: string): [number, number][] {
+  const spans: [number, number][] = [];
+  const opener = /(?<!\\)`+/g;
+  for (let open = opener.exec(text); open; open = opener.exec(text)) {
+    const closer = new RegExp(`(?<!\`)\`{${open[0].length}}(?!\`)`, 'g');
+    closer.lastIndex = open.index + open[0].length;
+    const close = closer.exec(text);
+    if (!close) continue;
+    spans.push([open.index, close.index + close[0].length]);
+    opener.lastIndex = close.index + close[0].length;
+  }
+  return spans;
+}
+
+/** 不在行內程式碼裡的行內連結（程式碼裡的是範例：不改寫，也不算入口）。 */
+function inlineLinks(text: string): RegExpExecArray[] {
+  const spans = codeSpans(text);
+  return [...text.matchAll(INLINE_LINK)].filter(m => !spans.some(([start, end]) => m.index >= start && m.index < end));
+}
+
+/** 檔名裡會被當成連結語法的字，照百分比編碼寫（路徑其他部分照原樣）。 */
+const encodePath = (path: string) => path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/\?/g, '%3F');
+
+/** 入口一格的連結：剛好一個連到 Markdown 檔的連結，回傳 repo 裡的路徑（解開編碼）；其他回傳原因。 */
 function entryOf(cell: string, roadmap: string): { path: string } | { error: string } {
-  const links = [...cell.matchAll(INLINE_LINK)].map(m => m[2].replace(/^<|>$/g, '')).filter(href => !isExternal(href));
+  const links = inlineLinks(cell).map(m => m[2].replace(/^<|>$/g, '')).filter(href => !isExternal(href));
   if (links.length !== 1) return { error: `入口一格要剛好一個連到 Markdown 檔的連結，現在有 ${links.length} 個` };
-  const path = decodeURIComponent(links[0].replace(/[?#].*$/, ''));
+  let path: string;
+  try {
+    path = decodeURIComponent(links[0].replace(/[?#].*$/, ''));
+  } catch {
+    return { error: `入口的連結 ${links[0]} 的百分比編碼不對` };
+  }
   if (!path.toLowerCase().endsWith('.md')) return { error: '入口要連到 Markdown 檔' };
   return { path: posix.normalize(posix.join(posix.dirname(roadmap), path)) };
 }
@@ -91,20 +120,29 @@ function statusLineOf(text: string): string | undefined {
   return line?.startsWith('狀態：') ? line.trim() : undefined;
 }
 
-/** 入口裡的文字搬進 roadmap：連結改成以 roadmap 為基準、只有錨點的接到入口檔、有空白的路徑用 <> 包；參照式連結報錯；| 跳脫。 */
+/**
+ * 入口裡的文字搬進 roadmap：連結改成以 roadmap 為基準、只有錨點的接到入口檔、有空白的路徑用 <> 包；參照式連結報錯；| 跳脫。
+ * 路徑照原本的編碼改基準，不解開（%23 解開會變成錨點，L2 R4）；行內程式碼裡的連結照原樣。
+ */
 export function moveText(text: string, entry: string, roadmap: string): { text: string } | { error: string } {
   if (REFERENCE_LINK.test(text)) return { error: '參照式連結（[文字][名稱]）搬不進 roadmap：入口的狀態行改用 [文字](路徑)' };
   const base = posix.dirname(roadmap);
-  const moved = text.replace(INLINE_LINK, (whole, label: string, raw: string) => {
+  const here = encodePath(entry);
+  let moved = '';
+  let last = 0;
+  for (const link of inlineLinks(text)) {
+    const [whole, label, raw] = link;
     const href = raw.replace(/^<|>$/g, '');
-    if (isExternal(href)) return whole;
+    if (isExternal(href)) continue;
     const hash = href.indexOf('#');
     const path = hash < 0 ? href : href.slice(0, hash);
     const anchor = hash < 0 ? '' : href.slice(hash);
-    const target = path ? posix.normalize(posix.join(posix.dirname(entry), decodeURIComponent(path))) : entry;
+    const target = path ? posix.normalize(posix.join(posix.dirname(here), path)) : here;
     const relative = posix.relative(base, target) + anchor;
-    return `[${label}](${/\s/.test(relative) ? `<${relative}>` : relative})`;
-  });
+    moved += text.slice(last, link.index) + `[${label}](${/\s/.test(relative) ? `<${relative}>` : relative})`;
+    last = link.index + whole.length;
+  }
+  moved += text.slice(last);
   return { text: moved.replace(/(?<!\\)\|/g, '\\|') };
 }
 
@@ -139,7 +177,7 @@ function doneDate(path: string, source: Source, today: string): string {
 
 /** 工具寫的〈已完成〉一列的「工作」格。 */
 const doneCell = (work: string, status: Status, text: string, entryCell: string) => {
-  const link = [...entryCell.matchAll(INLINE_LINK)].find(m => !isExternal(m[2].replace(/^<|>$/g, '')))!;
+  const link = inlineLinks(entryCell).find(m => !isExternal(m[2].replace(/^<|>$/g, '')))!;
   return `**${work.replace(/^\*\*(.*)\*\*$/, '$1')}**：${text}（${status.state}，[入口](${link[2]})）`;
 };
 const DONE_CELL = /^\*\*(.+?)\*\*：(.+)（(已合併|已結案)，\[入口\]\((<[^>]+>|[^)\s]+)\)）$/;
