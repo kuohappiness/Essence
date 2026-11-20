@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { cliPath } from './cli-path.ts';
 import { encodeEntry, formatTime, logPath, mergeHistory, nextCard, planToday, progress, readHistory, replay } from '../src/core/study/index.ts';
 import type { Card, DeckEntry, Pick, Rating, TodayInput } from '../src/core/study/index.ts';
 import { createState, type LoadTimings } from '../src/state/index.ts';
@@ -166,6 +167,7 @@ async function benchStudy(vault: string | undefined): Promise<void> {
 
 if (import.meta.main) {
   const { values } = parseArgs({ options: { vault: { type: 'string' } } });
-  if (values.vault !== undefined && !(await stat(values.vault)).isDirectory()) throw Error('--vault 必須是已存在的資料夾');
-  await benchStudy(values.vault);
+  const vault = values.vault === undefined ? undefined : cliPath(values.vault, 'bench');
+  if (vault !== undefined && !(await stat(vault)).isDirectory()) throw Error('--vault 必須是已存在的資料夾');
+  await benchStudy(vault);
 }

@@ -8,6 +8,7 @@ import type { BackupManifest } from '../src/core/backup/index.ts';
 import { EXAM_FOLDER, isExamPath } from '../src/core/catalog/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
+import { cliPath } from './cli-path.ts';
 import { compareVersions, LIMITS } from './compare-versions.ts';
 import { examReminder } from './exam-reminder.ts';
 import { git, gitEnv } from './git.ts';
@@ -228,7 +229,8 @@ if (import.meta.main) {
   if (positionals.length !== 1 || !!values.check === !!values.install || (values['exam-ok'] && !values.install)) {
     throw Error('用法：npm run update-vault -- <vault> --check [--to <備份資料夾>] [--config <設定資料夾>]\n　　　npm run update-vault -- <vault> --install [--exam-ok] [--config <設定資料夾>]');
   }
-  const options = { vault: positionals[0], config: values.config, to: values.to, examOk: values['exam-ok'] };
+  const path = (value: string): string => cliPath(value, 'update-vault');
+  const options = { vault: path(positionals[0]), config: values.config, to: values.to === undefined ? undefined : path(values.to), examOk: values['exam-ok'] };
   if (values.check) {
     const result = await checkUpdate(options);
     console.log(`考前提醒：${result.exam.message}`);

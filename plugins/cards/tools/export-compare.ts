@@ -7,9 +7,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { cliPath } from './cli-path.ts';
 
-const vault = process.argv[2];
-if (!vault || process.argv.length !== 3) throw Error('用法：npm run export-compare -- <vault>');
+if (!process.argv[2] || process.argv.length !== 3) throw Error('用法：npm run export-compare -- <vault>');
+const vault = cliPath(process.argv[2], 'export-compare');
 if (!(await stat(vault)).isDirectory()) throw Error('vault 必須是已存在的資料夾');
 
 const root = fileURLToPath(new URL('../', import.meta.url));

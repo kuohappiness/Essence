@@ -6,6 +6,7 @@ import { ESSENCE_ROOT, readBuild, takeBackup } from '../src/core/backup/index.ts
 import type { BackupManifest, BackupReader } from '../src/core/backup/index.ts';
 import { prepareFolder, writeBackup } from '../src/desktop/backup.ts';
 import { buildVersion } from './build.mjs';
+import { cliPath } from './cli-path.ts';
 import { defaultBackupFolder, listTree, pluginConfig, readError } from './vault-io.ts';
 import type { WriteNew } from './vault-io.ts';
 
@@ -69,7 +70,8 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
 if (import.meta.main) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { to: { type: 'string' }, config: { type: 'string' } } });
   if (positionals.length !== 1) throw Error('用法：npm run backup -- <vault> [--to <資料夾>] [--config <設定資料夾>]');
-  const result = await backupVault({ vault: positionals[0], to: values.to, config: values.config, by: 'backup' });
+  const path = (value: string): string => cliPath(value, 'backup');
+  const result = await backupVault({ vault: path(positionals[0]), to: values.to === undefined ? undefined : path(values.to), config: values.config, by: 'backup' });
   const bytes = result.manifest.files.reduce((sum, file) => sum + file.size, 0);
   console.log(`已備份：${result.path}（${result.manifest.files.length} 個檔，${bytes} bytes${result.attempts > 1 ? `，檔案在變，第 ${result.attempts} 次才穩定` : ''}）`);
   for (const path of result.manifest.absent) console.log('當時不存在：' + path);

@@ -1,12 +1,13 @@
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes, isPlainPath, readBuild } from '../src/core/backup/index.ts';
 import { readDecks } from '../src/core/deck/index.ts';
 import { readHistory } from '../src/core/study/index.ts';
 import { canRead } from '../src/core/version/index.ts';
 import { buildPlugin } from './build.mjs';
+import { cliPath } from './cli-path.ts';
 import { git } from './git.ts';
 import { createNodeFiles } from './node-files.ts';
 import { assertNoLinks, sameFileKey } from './vault-io.ts';
@@ -241,10 +242,10 @@ export async function main(args: readonly string[]): Promise<void> {
   const register = flag('--register-test');
   if (rest.length !== 1 || rest[0].startsWith('--') || [dev, register, release !== undefined].filter(Boolean).length > 1) throw Error(usage);
   if (register) {
-    console.log('測試 vault：\n' + (await registerTestVault(resolve(rest[0]))).join('\n'));
+    console.log('測試 vault：\n' + (await registerTestVault(cliPath(rest[0], 'install-vault'))).join('\n'));
     return;
   }
-  const result = await installVault({ vault: rest[0], dev, release, config });
+  const result = await installVault({ vault: cliPath(rest[0], 'install-vault'), dev, release, config });
   const kind = { dev: '開發版（測試 vault）', test: '正式建置（測試 vault）', release: '正式版' }[result.kind];
   console.log(`已安裝 Essence Cards ${result.build}：${kind}`);
 }

@@ -8,6 +8,7 @@ import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/
 import { decodeSettings, dropLegacy, encodeSettings, parseLoadData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
+import { cliPath } from './cli-path.ts';
 import { assertNoLinks, isOwn, leftBehind, listTree, platformName, pluginConfig, readError, removeOwn, sameFileKey, writeNew } from './vault-io.ts';
 import type { Identity, WriteNew } from './vault-io.ts';
 
@@ -362,16 +363,17 @@ if (import.meta.main) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     plan: { type: 'boolean' }, apply: { type: 'string' }, files: { type: 'string', multiple: true }, config: { type: 'string' }, to: { type: 'string' },
   } });
-  if (positionals.length !== 2 || !!values.plan === (values.apply !== undefined) || !(await exists(positionals[1]))) throw Error(usage);
+  const path = (value: string): string => cliPath(value, 'restore');
+  if (positionals.length !== 2 || !!values.plan === (values.apply !== undefined) || !(await exists(path(positionals[1])))) throw Error(usage);
   console.log(CLOSE_OBSIDIAN);
-  const options = { vault: positionals[0], backup: positionals[1], config: values.config, to: values.to };
+  const options = { vault: path(positionals[0]), backup: path(positionals[1]), config: values.config, to: values.to === undefined ? undefined : path(values.to) };
   if (values.plan) {
     const { plan: result, path, report: md } = await makePlan(options);
     const count = (action: PlannedFile['action']): number => result.files.filter(file => file.action === action).length;
     console.log(`還原計畫：${path}\n說明與差異：${md}`);
     console.log(`可以還原 ${count('restore')} 個、擋住 ${count('blocked')} 個、備份後才有的 ${count('keep')} 個；複習紀錄要補 ${result.logs.reduce((sum, log) => sum + log.lines.length, 0)} 行`);
   } else {
-    const result = await applyPlan({ ...options, plan: values.apply!, files: values.files });
+    const result = await applyPlan({ ...options, plan: path(values.apply!), files: values.files });
     console.log('還原前的備份：' + result.backup);
     for (const file of result.files) console.log(`${file.outcome}：${file.path}${file.reason ? '（' + file.reason + '）' : ''}`);
     for (const log of result.logs) console.log(`${log.outcome}：${log.path ?? log.source}（${log.lines} 行${log.reason ? '，' + log.reason : ''}）`);

@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { hashBytes, openBackup, PLUGIN_DATA } from '../src/core/backup/index.ts';
 import { SETTINGS_FILE } from '../src/core/settings/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
+import { cliPath } from './cli-path.ts';
 import type { AdapterInput } from './compare/adapter.ts';
 import { diffSnapshots, gateLines } from './compare/snapshot.ts';
 import { git, gitEnv, pluginRoot } from './git.ts';
@@ -142,7 +143,7 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
 if (import.meta.main) {
   const args = process.argv.slice(2);
   if (args.length !== 3) throw Error('用法：npm run compare-versions -- <備份檔> <舊 commit> <新 commit>');
-  const result = await compareVersions({ backup: args[0], old: args[1], new: args[2] });
+  const result = await compareVersions({ backup: cliPath(args[0], 'compare-versions'), old: args[1], new: args[2] });
   console.log(`報告：${result.report}`);
   console.log(result.comparable ? `差異 ${result.differences.length} 項` : '無法比較（理由在報告裡）');
 }
