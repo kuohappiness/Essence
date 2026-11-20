@@ -315,12 +315,12 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 | 建置版本不只在 `main.js` 第一行，也由 esbuild 的 `define` 寫進程式本體 | 讀程式：`tools/build.mjs:111`、`src/main.ts:524,610`（Codex 第一輪指出） | 成立：驗收第 A3 項改成固定版本比整份 |
 | `v0.2.0`～`v0.5.0` 的根目錄 `manifest.json` 有正確的 `id` 與版號 | Codex 第一輪 `git show <tag>:manifest.json` | 成立；`v0.6.0` 打 tag 後再看一次 |
 | 改 `docs/syntax.md` 時，經 `tests/helpers/add-cases.ts` 讀它的 `ai-add-move`、`ai-add-old-version` 選不到 | Codex 第一輪在 `de3438f` 呼叫 `dispatch()` | 成立（現在就有）：§A3 補 |
-| 一個 commit 搬約 390 個檔，`git diff -M` 全部認成改名，`git log --follow` 跨得過 | 演練的 clone（Windows、Git 2.52） | 待驗（驗收第 A2、A4 項） |
-| 搬家前從舊路徑開的分支，合併進搬家後的分支時改動落到新路徑 | §A7 第 5 項 | 待驗 |
-| esbuild 的 `absWorkingDir` 換成 `plugins/cards` 後，固定建置版本時 `main.js` 逐位元組相同（註解裡的路徑是相對的） | 驗收第 A3 項 | 待驗 |
-| ESLint 的 flat config、knip 的設定、`tsconfig.json` 的 `include` 都以設定檔所在的資料夾為基準，整份搬進 `plugins/cards/` 不用改寫法 | §A6 的 commit 跑 `npm run check` | 待驗 |
-| `plugins/cards/tools/*.ts` 從 `plugins/cards/node_modules` 找到相依；Cards 的工具用了只在 `tools/` 的相依時會失敗（不會默默借到） | 拿掉 `tools/node_modules` 跑 Cards 的檢查（CI 的 cards job 就是這樣） | 待驗 |
-| 讀舊 tag 的測試（舊版是根目錄的外掛根）借 `plugins/cards/node_modules` 跑得起來 | 驗收第 A8 項 | 待驗 |
+| 一個 commit 搬約 390 個檔，`git diff -M` 全部認成改名，`git log --follow` 跨得過 | 演練的 clone（Windows、Git 2.52） | 成立：`7637a8c` 379 個 R、沒有 D 加 A，`git log --follow` 都接得到（驗收第 A2、A4 項） |
+| 搬家前從舊路徑開的分支，合併進搬家後的分支時改動落到新路徑 | §A7 第 5 項 | 成立（2026-11-20，演練的 clone） |
+| esbuild 的 `absWorkingDir` 換成 `plugins/cards` 後，固定建置版本時 `main.js` 逐位元組相同（註解裡的路徑是相對的） | 驗收第 A3 項 | 成立：正式版與 dev 版都逐位元組相同（`83af5c5`、`288fc3d`） |
+| ESLint 的 flat config、knip 的設定、`tsconfig.json` 的 `include` 都以設定檔所在的資料夾為基準，整份搬進 `plugins/cards/` 不用改寫法 | §A6 的 commit 跑 `npm run check` | 成立：`7637a8c` 的 pre-commit 與 CI 都通過，只搬檔、沒改寫法 |
+| `plugins/cards/tools/*.ts` 從 `plugins/cards/node_modules` 找到相依；Cards 的工具用了只在 `tools/` 的相依時會失敗（不會默默借到） | 拿掉 `tools/node_modules` 跑 Cards 的檢查（CI 的 cards job 就是這樣） | 成立：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) 的 cards job 只在 `plugins/cards` 裝相依，檢查、建置都過 |
+| 讀舊 tag 的測試（舊版是根目錄的外掛根）借 `plugins/cards/node_modules` 跑得起來 | 驗收第 A8 項 | 成立（2026-11-20，Windows 本機與 CI） |
 | 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 待驗 |
 | GitHub 上的 Codex 審查讀不讀 `plugins/cards/AGENTS.md` | 沒有探針；§B1 把〈Code Review Rules〉留在最上層，不依賴它 | 不依賴 |
 
@@ -340,7 +340,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 ## 結果
 
-延後的測試：（實作後填）
+延後的測試：A 沒有延後的測試。
 
 ### A 的進度（2026-11-20）
 
@@ -352,14 +352,17 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 2 項：`<搬家>` 379 個 R、38 個 M、沒有 D 加 A；`src/` 每一行都是 R100，`git diff -M <搬家>^ 33fde4f -- src plugins/cards/src` 194 個檔、0 行改動。§A2 的 `e7130d4` 13 個 R。
 - 第 3 項：`<基準>` 與 `83af5c5` 正式版、dev 版的 `main.js` 逐位元組相同，`styles.css` 相同，`embedRules()` `deepEqual`（5 個科目）；`83af5c5` 預設建置的 `BUILD` 是 `0.6.0+83af5c5`。
 - 第 4 項：`<搬家>` 379 個、`e7130d4` 13 個，`git log --follow` 都接得到舊路徑與搬之前最後一次改它的 commit（不算合併 commit：`--follow` 不列合併）；`eslint-rules.test.ts` 檔頭寫拆出前的 commit `d7e2a0b`。
-- 第 5 項：只裝 `tools/` 的乾淨 clone（`33fde4f`，換行照 CI 用 LF）`npm run self-check` 通過，158 個測試、157 過、1 跳過（檔名有換行，只在 Linux）；14 個測試檔各自跑過、都有測試。逐檔比對：搬之前在 Cards 跑的那些測試檔，每個測試名稱搬之後都還在跑、結果都沒變；名稱不同的 33 個是規格裡的節號從 §2 改成 §A3，加上 `ci-gate` 摘要表頭「外掛」改「對象」。`quality.test.ts` 拆之前 20 個測試，拆之後 hook 的 7 個在 `tools/tests/`、ESLint 的 13 個在 Cards，每個名稱恰好一次、結果相同。在共用工具加一個沒用到的 export，`tools/` 的 knip 報出來，拿掉後通過。**還沒做**：CI 的 cards job 不裝 `tools/`（`check.yml` 已是如此，待 CI 實跑確認）。
+- 第 5 項：只裝 `tools/` 的乾淨 clone（`33fde4f`，換行照 CI 用 LF）`npm run self-check` 通過，158 個測試、157 過、1 跳過（檔名有換行，只在 Linux）；14 個測試檔各自跑過、都有測試。逐檔比對：搬之前在 Cards 跑的那些測試檔，每個測試名稱搬之後都還在跑、結果都沒變；名稱不同的 33 個是規格裡的節號從 §2 改成 §A3，加上 `ci-gate` 摘要表頭「外掛」改「對象」。`quality.test.ts` 拆之前 20 個測試，拆之後 hook 的 7 個在 `tools/tests/`、ESLint 的 13 個在 Cards，每個名稱恰好一次、結果相同。在共用工具加一個沒用到的 export，`tools/` 的 knip 報出來，拿掉後通過。CI 的 cards job 不裝 `tools/`：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) 的 cards job 在 `plugins/cards` 跑 `npm ci`（153 個套件），沒有裝 `tools/` 的步驟，檢查、建置、audit 都過。
 - 第 6 項：`dispatch.test.ts` 有 §A3 每一列與 import 範圍的案例；`hooks.test.ts` 原本缺「改 `.githooks/`：全部」、`ci-gate.test.ts` 原本缺 tools 旗標的成功與不合法，`7262ed8` 補上（hook 第 7 個情境：改 `.githooks/commit-msg`，四個對象都跑完整檢查），跑過都通過。
 - 第 8 項：`plugin-root.test.ts` 的暫存 repo 有只有根目錄、只有 `plugins/cards/`、兩個都有（其中一個 `id` 不對）、都沒有、`id` 不對、不是 JSON、`manifest.json` 是資料夾、找不到 commit 八種，從 repo 根與兩個子資料夾呼叫結果相同，丟錯的訊息都有 commit；`compare-versions.test.ts` 的「發布前比較跨過搬家」比根目錄的版本對 `plugins/cards` 的版本跑完；讀舊版 tag 的測試：`ai-add-old-version`（`v0.3.0`、`v0.5.0`）、`pick-old-version`（`v0.3.0`）和 `plugin-root` 一起跑，50 個都過；`compare-versions`（`v0.2.0`、`v0.4.0`）在 Cards 的完整檢查裡跑。
 - 第 17 項：`update-vault.test.ts` 的「升正式版的檢查」用替身讓三段各自失敗，三種都丟錯、只跑到失敗的那一段、備份資料夾是空的、沒有比較與安裝；10 個測試都過。實際的三段在 §A7 第 3 項的演練跑過。
-- 第 18 項（Windows 那一邊）：`7262ed8` 在 `plugins/cards/` 跑 `npm run check`（型別、lint、knip、測試）通過，2900 個測試全過、0 跳過，含讀 `v0.2.0`、`v0.4.0` 的 `compare-versions`；`tools/` 的完整檢查在 `7262ed8` 的 pre-commit 跑過（含 `hooks`、`dispatch`、`ci-gate`、`plugin-imports`）；第 7 項在 Windows 做。只在一邊跑的測試：`dispatch.test.ts` 的「檔名有換行」只在 Linux；`backup-desktop.test.ts` 的「所在的磁碟找不到」與 `backup.test.ts` 的 `\\?\` 長路徑只在 Windows。Linux 那一邊等 CI（第 12 項）。
+- 第 18 項（Windows 那一邊）：`7262ed8` 在 `plugins/cards/` 跑 `npm run check`（型別、lint、knip、測試）通過，2900 個測試全過、0 跳過，含讀 `v0.2.0`、`v0.4.0` 的 `compare-versions`；`tools/` 的完整檢查在 `7262ed8` 的 pre-commit 跑過（含 `hooks`、`dispatch`、`ci-gate`、`plugin-imports`）；第 7 項在 Windows 做。只在一邊跑的測試：`dispatch.test.ts` 的「檔名有換行」只在 Linux；`backup-desktop.test.ts` 的「所在的磁碟找不到」與 `backup.test.ts` 的 `\\?\` 長路徑只在 Windows。Linux 那一邊：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772)，cards job 2900 個測試、2898 過、跳過 2 個（「所在的磁碟找不到」只在 Windows；「F4 不分大小寫的檔案系統」在 Linux 的暫存資料夾區分大小寫時跳過），tools job 159 個全過（含「檔名有換行」）。
 - 第 7 項：暫存 clone 裡只放沒追蹤的樣本，`check-plugin-imports --staged` 看不到；stage 之後兩個都擋下（「跑出 plugins/cards/」「根目錄的程式不 import plugins/ 裡的外掛」）。樣本沒 commit。
 - 第 9 項：連結腳本 `--check` 要改 0 個；`git grep -nE "(\.\./)+src/" -- experiments ':!experiments/plugin'` 只剩連結腳本自己測試裡的範例字串。
 - 第 10 項：乾淨 clone 在 `plugins/cards/` `npm run build`、`update-vault --install` 的正式版流程存了 `main.js.map`；產生的檔都被忽略，`git status --porcelain` 是空的。
+- 第 12 項：A 分支 push 後的 run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) plan 是「全部」（比較 `ecb85f9..1bdc1ef`），plan、shared、tools、cards、capture、mindboard、gate 都成功。三個探針分支各從 `1bdc1ef` 只改一個檔、開 draft PR 合併到 A 的分支，看 `pull_request` 的 run，plan 比較的基點都是 `1bdc1ef`：只改 `plugins/cards/src/core/deck/parse.ts` → [44685340185](https://github.com/kuohappiness/Essence/actions/runs/44685340185) 只有 cards（加 plan、shared、gate），其餘 skipped；只改 `tools/check-docs.ts` → [44685345668](https://github.com/kuohappiness/Essence/actions/runs/44685345668) 只有 tools；只改 `docs/product.md` → [44685350055](https://github.com/kuohappiness/Essence/actions/runs/44685350055) cards 與 tools 都是完整檢查，capture、mindboard skipped。三個都綠；PR #23～#25 已關、探針分支已刪。
+- 第 13 項：`e7130d4`（§A2）與 `7637a8c`（`<搬家>`）各 push 一個探針分支，run [44683434100](https://github.com/kuohappiness/Essence/actions/runs/44683434100)、[44683434330](https://github.com/kuohappiness/Essence/actions/runs/44683434330) 七個 job 都成功；探針分支已刪。本機每個 commit 都經過 pre-commit。
+- 第 14 項（合併前的部分）：`<基準>` 與 `1bdc1ef` 各在乾淨的 worktree 跑 `node tools/progress-board.ts`、`node tools/roadmap-board.ts`，`index.html`、`progress-map-list.html`、`progress-map-board.html`、`roadmap.html` 四個檔逐行相同（產生時間剛好在同一分鐘）。合併後看 Pages 的 run。
 - 第 16 項：`id` 是 `essence-cards`，版號 `0.6.0` 和 `<基準>` 相同；`v0.1.0`～`v0.6.0` 指的 commit 和 GitHub 上的相同。
 
 §A7 演練（隔離的 clone 與演練 vault，都在本機暫存資料夾）：
@@ -372,4 +375,4 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 6 項通過：使用者在 iPhone 完全關掉再打開 Obsidian，「版本」顯示 `0.6.0+288fc3d9`。
 - 演練後還原：三個檔放回測試 vault，雜湊和另存的相同；Obsidian 完全關掉再打開，`version` 讀回 `0.6.0+4536a17`。測試 vault 的紀錄多了 D-149 的版本行（Windows 換版與換回、iPhone 載入各一行），其他沒動。
 
-還沒做的驗收：第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁），連同第 5 項的 cards job 不裝 `tools/`、第 18 項的 Linux；第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
+還沒做的驗收：第 11 項（雲端 session，合併前在 A 的分支、合併後在 `main` 各一次）、第 14 項合併後的 Pages、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
