@@ -73,6 +73,7 @@ Windows 不分大小寫、Linux 分：在 Windows 寫成 `apps/cards` 本機照�
 1. **一張表**：共用工具裡軟體代號 → 資料夾（`cards → apps/Cards` 等）只寫一處（例如 `tools/apps.ts`），`dispatch.ts`、`check-docs.ts`、`roadmap-board.ts`、`cloud-setup.mjs`（它不 import `tools/`，就照抄並用測試比對兩份相同）與測試都從這裡取。測試：表上每個資料夾都在 `git ls-files` 裡、大小寫完全相同；`apps/` 底下每個追蹤的資料夾都在表上。
 2. **擋 `plugins/` 再出現**：追蹤的檔路徑以 `plugins/` 開頭就報錯，訊息寫「改名後放 `apps/<軟體>/`（D-218）」。
 3. **擋大小寫不符的寫死路徑**：在程式（`tools/`、`apps/*/src`、`apps/*/tools`、`apps/*/tests`、`.claude/hooks/`、`.githooks/`、`.github/workflows/`、`experiments/` 的 `.ts`、`.mjs`、`.js`、`.json`、`.yml`）裡找 `apps/<名稱>`，名稱和表上某個資料夾只差大小寫就報錯；寫死的 `plugins/(cards|capture|mindboard)`（不分大小寫）也報錯。`plugins/essence-cards` 不算。
+   - **歷史路徑的例外**：跨版本的工具要認得改名前的外掛根（D-218〈代價〉），所以舊路徑在這幾處是對的：`apps/Cards/tools/git.ts` 的 `MANIFESTS`、它的測試（`plugin-root`、`compare-versions` 等讀舊版的測試）、`experiments/tools/move-links.mjs` 與 `move-links.test.mjs`（第二步搬家的範例）。例外逐檔列在檢查裡（不用資料夾萬用字元），表上的檔不存在或已經沒有舊路徑就報錯，例外才不會越積越多；之後要加例外，要在那一列寫理由。
 4. **TypeScript 的 import**：`apps/Cards/tsconfig.json`、`tools/tsconfig.json` 明寫 `"forceConsistentCasingInFileNames": true`（TypeScript 5.0 起預設就是 true，明寫是為了不靠預設）；Windows 上的探針見〈平台事實〉。
 5. **Markdown 連結**：`check-docs` 照 `git ls-files` 比對，大小寫不同算找不到；Windows 上的探針見〈平台事實〉。改連結的腳本會把 `apps/Cards/docs/card-rules/trials.md` 裡的 `../../../capture/docs/backlog.md` 改成 `../../../Capture/…`（只有大小寫不同的一例），驗收時看到它。
 
@@ -108,9 +109,9 @@ iPhone 不用測：外掛 ID、建置產物與 vault 格式都沒變（第 1 項
 2. **都是改名**：`git diff -M --name-status <搬家>^ <搬家>` 裡 `plugins/` 底下的每個檔都是一行 `R`，沒有 D 加 A；`git diff -M <搬家>^ <head> -- plugins/cards/src apps/Cards/src` 除了改名沒有內容差異（產品程式一行都沒改，§2 的 `rules.ts` 例外：只有路徑字串）。在有完整歷史的 checkout，抽每個資料夾至少 20 個檔跑 `git log --follow`，接得到 `plugins/` 的舊路徑與第二步之前的根目錄路徑。
 3. **檢查都過、不是空跑**：`apps/Cards/` 的 `npm run check`、`npm run build`，`tools/` 的 `npm run check` 與 `npm run self-check` 都通過，測試數和 `<基準>` 相同或多（多的是這次加的，列出名字）。
 4. **送出的規則不變**：`embedRules()` 在 `<基準>` 與 `<head>` 的結果 `deepEqual`；`ai-rules.test.ts` 挑到的規則檔數大於 0。
-5. **沒有殘留**：改連結的腳本 `--check` 是 0；`git grep -n -i -E "plugins/(cards|capture|mindboard)"` 只出現在 §4 列為紀錄的檔（決定、`docs/tasks/`、討論稿、archive、`move-links.test.mjs`），清單附在〈結果〉；`node tools/check-docs.ts` 通過。
+5. **沒有殘留**：改連結的腳本 `--check` 是 0；`git grep -n -i -E "plugins/(cards|capture|mindboard)"` 只出現在 §4 列為紀錄的檔（決定、`docs/tasks/`、討論稿、archive）與 §3 第 3 點的歷史路徑例外，清單附在〈結果〉；`node tools/check-docs.ts` 通過。
 6. **跨版本的外掛根**：§1 第 1 點的測試通過；讀 `v0.2.0`～`v0.5.0` 的舊版測試照常通過；§5 第 3 項跑完。
-7. **分派表**：`tools/tests/dispatch.test.ts` 把第一步、第二步的每一例換成新路徑照樣通過，另加：只改 `apps/Capture/a.ts` → 只有 Capture；新增 `apps/Portal/a.ts`（表上沒有）→ 全部；新增 `plugins/cards/a.ts` → §3 第 2 點擋下。
+7. **分派表**：`tools/tests/dispatch.test.ts` 把第一步、第二步的每一例換成新路徑照樣通過，另加：只改 `apps/Capture/a.ts` → 只有 Capture；新增 `apps/Portal/a.ts`（表上沒有）→ 全部；新增 `plugins/cards/a.ts` → §3 第 2 點擋下；例外表上的檔拿掉舊路徑、或表上的檔被刪 → 報錯。
 8. **大小寫的防線**（在暫存 repo 或 stage 後再拿掉，樣本不 commit）：`tools/` 裡寫 `'apps/cards/manifest.json'`、`check.yml` 寫 `working-directory: apps/cards`、Markdown 連到 `../apps/cards/AGENTS.md`、`apps/Cards/src/` 裡 import 大小寫不對的檔，四種各自被擋下（前兩種是 §3 第 3 點、第三種是 check-docs、第四種是 TypeScript）；在 **Windows** 本機也都擋下。
 9. **外掛邊界**：第二步驗收 A7 的兩例換成新路徑照樣擋下，再加 `apps/Capture/` 的程式 import `../Cards/src/core/files.ts`。
 10. **雲端**：合併前在這個分支、合併後在 `main` 各開一個新的雲端 session（只讀），開場訊息：`tools`、`apps/Cards` 是「`npm ci` 完成」，`apps/Capture`、`apps/Mindboard` 是「沒有相依，跳過」，Node 24、`core.hooksPath` 是 `.githooks`。兩次的訊息寫進〈結果〉。
