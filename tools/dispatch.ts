@@ -179,11 +179,11 @@ function insideString(line: string): boolean {
 
 /**
  * 文字裡寫到的 tools/… 程式檔（前面可以有 ../），照 base 資料夾解開成 repo 相對的路徑；解開後不在最上層 tools/ 的不算。
- * 只認程式（.ts、.mts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
+ * 只認程式（.ts、.mts、.cts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
  */
 function toolPaths(text: string, base: string | undefined): string[] {
   const found = new Set<string>();
-  for (const match of text.matchAll(/(?<![\w./-])((?:\.\.\/)*tools\/[\w./-]*\.(?:ts|mts|mjs|cjs|js))(?![\w.])/g)) {
+  for (const match of text.matchAll(/(?<![\w./-])((?:\.\.\/)*tools\/[\w./-]*\.(?:ts|mts|cts|mjs|cjs|js))(?![\w.])/g)) {
     // base 是 undefined：執行的資料夾不固定但都在 repo 裡（check.yml 的 job 可以設 working-directory），開頭的 ../ 一律回到 repo 的根。
     const path = base === undefined ? posix.normalize(match[1].replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, match[1]));
     if (path.startsWith('tools/') && !path.startsWith('tools/node_modules/')) found.add(path);
@@ -216,14 +216,24 @@ export function entryTools(root: string, compare: Dispatch['compare']): Set<stri
     const text = texts.get(file);
     if (text === undefined) continue;
     for (const name of relativeImports(text)) {
-      const target = posix.normalize(posix.join(posix.dirname(file), name));
-      if (target.startsWith('tools/') && !entries.has(target)) {
-        entries.add(target);
-        queue.push(target);
+      for (const target of nodeCandidates(posix.normalize(posix.join(posix.dirname(file), name)))) {
+        if (target.startsWith('tools/') && !entries.has(target)) {
+          entries.add(target);
+          queue.push(target);
+        }
       }
     }
   }
   return entries;
+}
+
+/**
+ * require 的路徑 Node 可能載入的檔（L2 第二輪）：寫的路徑本身，加上 CommonJS 依序補的副檔名與資料夾的 index。
+ * 不知道 Node 會停在哪一個，全部算入口：不存在的路徑不會出現在改動裡，多算只會多跑檢查。資料夾 package.json 的 main 不算。
+ */
+function nodeCandidates(target: string): string[] {
+  const suffixes = ['', '.js', '.json', '.node', '/index.js', '/index.json', '/index.node'];
+  return suffixes.map(suffix => target + suffix);
 }
 
 /** 嵌進 main.js 的規則檔表（ai-rules 的特例）。 */

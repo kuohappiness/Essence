@@ -6,7 +6,8 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, posix } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { CARDS, RULES, entryTools, relatedTests, relativeImports } from '../dispatch.ts';
@@ -46,7 +47,7 @@ const BASE: Record<string, string> = {
   [`${C}tools/build.mjs`]: '\n', [`${C}package-lock.json`]: '{}\n',
   'tools/check-docs.ts': '\n', 'tools/codex.ts': '\n', 'tools/package.json': '{}\n', 'tools/package-lock.json': '{}\n',
   'tools/check-local-paths.ts': '\n', 'tools/a.ts': 'export {};\n', 'tools/y.ts': '\n', 'tools/x.mjs': '\n',
-  'tools/new-entry.ts': '\n', 'tools/start.cjs': '\n', 'tools/worker.cjs': '\n',
+  'tools/new-entry.ts': '\n', 'tools/start.cjs': '\n', 'tools/worker.cjs': '\n', 'tools/start.cts': '\n', 'tools/worker.js': '\n',
   // 入口：hook 呼叫的程式與它 import 到的檔。
   'tools/hooks.ts': "import { dispatch } from './dispatch.ts';\n",
   'tools/dispatch.ts': "import { helper } from './a.ts';\n",
@@ -169,6 +170,28 @@ const CASES: Case[] = [
       await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
     },
     change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
+  },
+  // L2 第二輪：Node 實際載入的檔。不寫副檔名的 require 照 Node 的順序找到 worker.js；hook 直接跑 .cts。
+  {
+    name: 'hook 跑 node tools/start.cjs、它 require(\'./worker\')（Node 載入 worker.js），這次只改 tools/worker.js',
+    prepare: async e => {
+      await wire('tools/start.cjs', "require('./worker');\n")(e);
+      await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
+    },
+    change: edit('tools/worker.js'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: 'hook 跑 node tools/start.cts、它 require(\'./worker.cjs\')，這次只改 tools/worker.cjs',
+    prepare: async e => {
+      await wire('tools/start.cts', "require('./worker.cjs');\n")(e);
+      await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cts\n')(e);
+    },
+    change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: 'hook 已經直接跑 node tools/start.cts，這次只改它',
+    prepare: wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cts\n'),
+    change: edit('tools/start.cts'), preCommit: ALL, ci: ALL,
   },
   {
     name: '兩用：check.yml 的 cards job 也直接跑共用檢查 tools/check-docs.ts，這次只改它',
@@ -356,11 +379,14 @@ void test('§A3 分派表：本 repo 的相關測試照實際搜尋找得到（�
   assert.deepEqual(cards(PRODUCT), []);
 });
 
-/** 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，import 用 TypeScript 自己的 preProcessFile 往下找（和 dispatch 的正規式分開算）。 */
+/**
+ * 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，import 用 TypeScript 自己的 preProcessFile 往下找（和 dispatch 的正規式分開算）；
+ * 找到的路徑交給 Node 的 require.resolve，以 Node 實際載入的檔為準（L2 第二輪：不寫副檔名的 require）。
+ */
 async function independentEntries(): Promise<Set<string>> {
   const found = new Set(['tools/dispatch.ts', 'tools/hooks.ts', 'tools/ci-gate.ts']);
   const literal = (text: string, base: string | undefined) => {
-    for (const match of text.matchAll(/((?:\.\.\/)*tools\/[\w./-]+\.(?:ts|mts|mjs|cjs|js))\b/g)) {
+    for (const match of text.matchAll(/((?:\.\.\/)*tools\/[\w./-]+\.[cm]?[jt]s)\b/g)) {
       const path = base === undefined ? posix.normalize(match[1].replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, match[1]));
       if (path.startsWith('tools/')) found.add(path);
     }
@@ -379,7 +405,8 @@ async function independentEntries(): Promise<Set<string>> {
     try { text = await readFile(join(ROOT, file), 'utf8'); } catch { continue; }
     for (const { fileName } of ts.preProcessFile(text, true, true).importedFiles) {
       if (!fileName.startsWith('.')) continue;
-      const target = posix.normalize(posix.join(posix.dirname(file), fileName));
+      let target: string;
+      try { target = relative(ROOT, createRequire(join(ROOT, file)).resolve(fileName)).replaceAll('\\', '/'); } catch { continue; }
       if (target.startsWith('tools/') && !found.has(target)) { found.add(target); queue.push(target); }
     }
   }
