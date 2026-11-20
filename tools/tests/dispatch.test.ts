@@ -157,6 +157,12 @@ const CASES: Case[] = [
     change: edit('tools/new-entry.ts'), preCommit: ALL, ci: ALL,
   },
   {
+    // L2 第二輪：前面的字串裡有撇號，原本的引號計數把它當成沒關上的單引號。
+    name: 'hooks.ts 同一行前面是 console.log("it\'s ready")、再 import ./new-entry.ts，這次只改 tools/new-entry.ts',
+    prepare: wire('tools/hooks.ts', "import { dispatch } from './dispatch.ts';\nconsole.log(\"it's ready\"); import './new-entry.ts';\n"),
+    change: edit('tools/new-entry.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
     name: 'hook 跑 node tools/start.cjs、它 require(\'./worker.cjs\')，這次只改 tools/worker.cjs',
     prepare: async e => {
       await wire('tools/start.cjs', "const worker = require('./worker.cjs');\nworker.run();\n")(e);
@@ -399,6 +405,11 @@ void test('§A3 分派表：import 的正規式認得同一行第二個敘述的
     ["run(); import './new-entry.ts';\n", ['./new-entry.ts']],
     ["import { a } from './a.ts'; import b from \"../b.mjs\";\n", ['../b.mjs', './a.ts']],
     ["const worker = require('./worker.cjs');\n", ['./worker.cjs']],
+    // L2 第二輪：前面的字串裡有別種引號（撇號、跳脫的引號）不算沒關上；模板字串的 ${…} 裡是程式。
+    ["console.log(\"it's ready\"); import './apostrophe.ts';\n", ['./apostrophe.ts']],
+    ["log('say \"hi\"', 'don\\'t'); import './escaped.ts';\n", ['./escaped.ts']],
+    ["const s = `it's ${x}`; require('./after-template.cjs');\n", ['./after-template.cjs']],
+    ["const s = \"it's\" + 'require(\"./not2.cjs\")';\n", []],
     ["module.exports = { w: require( \"../w.js\" ) };\n", ['../w.js']],
     ["const s = 'run(); import \"./not.ts\"';\nconst r = \"require('./not.cjs')\";\n", []],
     ["// require('./comment.cjs');\n", []],
@@ -408,6 +419,9 @@ void test('§A3 分派表：import 的正規式認得同一行第二個敘述的
     const typescript = [...new Set(ts.preProcessFile(text, true, true).importedFiles.map(f => f.fileName))].sort();
     assert.deepEqual(typescript, expected, 'preProcessFile：' + text);
   }
+  // 模板字串 ${…} 裡的 require：Node 執行時會載入，preProcessFile 不收；照 Node 算（多算只會多跑檢查）。
+  assert.deepEqual(relativeImports("const s = `a ${require('./in-template.cjs')} b`;\n"), ['./in-template.cjs']);
+  assert.deepEqual(ts.preProcessFile("const s = `a ${require('./in-template.cjs')} b`;\n", true, true).importedFiles, []);
 });
 
 void test('§A3 分派表：import 的正規式和 TypeScript 的 preProcessFile 取到的一樣（tools/ 與 helper 的每個檔）', async () => {

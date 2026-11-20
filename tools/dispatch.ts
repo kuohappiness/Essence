@@ -149,11 +149,32 @@ export function relativeImports(text: string): string[] {
   for (const match of code.matchAll(pattern)) {
     const path = match[3] ?? match[5];
     if (match[3] !== undefined && match[1] === '') { found.add(path); continue; }
-    // 不在行首的：同一行前面的引號（"、'、`）有一種是單數時，它在字串裡（例如測試的範例），不算。
-    const before = code.slice(code.lastIndexOf('\n', match.index) + 1, match.index).replace(/\\./g, '');
-    if (['"', "'", '`'].every(quote => before.split(quote).length % 2 === 1)) found.add(path);
+    // 不在行首的：同一行前面還在字串裡（例如測試的範例）就不算。
+    if (!insideString(code.slice(code.lastIndexOf('\n', match.index) + 1, match.index))) found.add(path);
   }
   return [...found];
+}
+
+/**
+ * 一行的開頭到這裡，結束時是不是還在字串裡：照順序走過 '、"、`，字串裡的別種引號與跳脫的字不算（L2 第二輪：
+ * 原本分別數三種引號，"it's" 的撇號會被當成沒關上的單引號）。模板字串的 ${…} 裡是程式（裡面的 require 要算），
+ * 對應的 } 回到模板字串；用堆疊記巢狀。
+ */
+function insideString(line: string): boolean {
+  const stack: string[] = []; // 引號，或 '{'（模板字串的 ${ 裡、以及裡面的大括號）
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const top = stack.at(-1);
+    if (top === undefined || top === '{') {
+      if (char === '"' || char === "'" || char === '`') stack.push(char);
+      else if (top === '{' && char === '{') stack.push('{');
+      else if (top === '{' && char === '}') stack.pop();
+    } else if (char === '\\') i++;
+    else if (char === top) stack.pop();
+    else if (top === '`' && char === '$' && line[i + 1] === '{') { stack.push('{'); i++; }
+  }
+  const top = stack.at(-1);
+  return top !== undefined && top !== '{';
 }
 
 /**
