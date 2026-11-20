@@ -341,3 +341,29 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 ## 結果
 
 延後的測試：（實作後填）
+
+### A 的進度（2026-11-20 暫停時）
+
+分支 `claude/one-repo-step-2a`（本機 worktree `Essence-step2a`，還沒 push）。`<基準>` 是 `ecb85f9`；`<搬家>` 是 `7637a8c`（前一個 commit `36261e0` 先把 Cards 的 knip 設定改成搬家後的寫法，讓 `knip.jsonc` 在搬家的 commit 是 R068）；之後 `83af5c5`（§A3 的建置版本選項）、`33fde4f`（§A8 的文件）。每個 commit 都經過 pre-commit，分派那一行都在輸出裡。
+
+已驗的驗收項目（演練與驗收的腳本在本機的暫存資料夾，重開機可能清掉；結果以這裡為準）：
+
+- 第 1 項：`git ls-files src tests manifest.json package.json package-lock.json tsconfig.json eslint.config.js knip.jsonc` 是空的。
+- 第 2 項：`<搬家>` 379 個 R、38 個 M、沒有 D 加 A；`src/` 每一行都是 R100，`git diff -M <搬家>^ 33fde4f -- src plugins/cards/src` 194 個檔、0 行改動。§A2 的 `e7130d4` 13 個 R。
+- 第 3 項：`<基準>` 與 `83af5c5` 正式版、dev 版的 `main.js` 逐位元組相同，`styles.css` 相同，`embedRules()` `deepEqual`（5 個科目）；`83af5c5` 預設建置的 `BUILD` 是 `0.6.0+83af5c5`。
+- 第 4 項：`<搬家>` 379 個、`e7130d4` 13 個，`git log --follow` 都接得到舊路徑與搬之前最後一次改它的 commit（不算合併 commit：`--follow` 不列合併）；`eslint-rules.test.ts` 檔頭寫拆出前的 commit `d7e2a0b`。
+- 第 5 項（部分）：只裝 `tools/` 的乾淨 clone（`33fde4f`，換行照 CI 用 LF）`npm run self-check` 通過，158 個測試、157 過、1 跳過（檔名有換行，只在 Linux）；14 個測試檔各自跑過、都有測試。**還沒做**：和搬之前在 Cards 跑的逐檔測試數比對、`quality.test.ts` 拆前拆後的測試名稱比對、共用工具 knip 的探針、CI 的 cards job 不裝 `tools/`（check.yml 已是如此，待 CI 實跑確認）。
+- 第 7 項：暫存 clone 裡只放沒追蹤的樣本，`check-plugin-imports --staged` 看不到；stage 之後兩個都擋下（「跑出 plugins/cards/」「根目錄的程式不 import plugins/ 裡的外掛」）。樣本沒 commit。
+- 第 9 項：連結腳本 `--check` 要改 0 個；`git grep -nE "(\.\./)+src/" -- experiments ':!experiments/plugin'` 只剩連結腳本自己測試裡的範例字串。
+- 第 10 項：乾淨 clone 在 `plugins/cards/` `npm run build`、`update-vault --install` 的正式版流程存了 `main.js.map`；產生的檔都被忽略，`git status --porcelain` 是空的。
+- 第 16 項：`id` 是 `essence-cards`，版號 `0.6.0` 和 `<基準>` 相同；`v0.1.0`～`v0.6.0` 指的 commit 和 GitHub 上的相同。
+
+§A7 演練（隔離的 clone 與演練 vault，都在本機暫存資料夾）：
+
+- 第 1 項通過：搬家後的 `install-vault --release 0.6.0`，三個檔的雜湊和 `release.json` 相同。演練 vault 先拿掉一篇 `需要版本 9.9.9` 的 iPhone 測試卡組（它是用來測讀取閘門的，留著會照規則拒絕退版）。
+- 第 2 項通過：`v0.6.0` 的 `backup` 做的 ZIP，搬家後與 `v0.6.0` 的 `restore` 各還原一份複本（刪卡組 A、拿掉紀錄 R、改卡組 B、`--files` 只選 A）：計畫去掉 vault、建立時間、備份檔路徑後相同；A 和 ZIP 逐位元組相同；B 沒變；R 各恰好一筆、在符合 §5-3 的還原檔裡；還原檔內容相同；兩份複本逐檔相同。
+- 第 3 項通過：clone 改 `0.6.1`、打 tag（沒 push），`update-vault --check` 三段檢查都過、做了備份、發布前比較 `0.6.0+037b359f`（根目錄）對 `0.6.1+5d526d97`（`plugins/cards`）差異 0 項；`--install`（演練 vault 在考試期間，加了 `--exam-ok`）裝上 `0.6.1+5d526d97`，三個檔和 clone 的 `.local/releases/0.6.1/` 相同，卡組與紀錄 50 個檔逐檔沒變。過程中遇到的都是環境：clone 沒有測試 vault 的登錄時，本機路徑檢查把文件裡的測試 vault 名稱當成一般 vault；Windows 取出的 `syntax.md` 是 CRLF 讓 deck 測試失敗（clone 改 `core.autocrlf=false`）；升版時要一起改版號寫死的三個測試（照 `fb1a051` 的做法）。
+- 第 5 項通過：從 `<基準>` 改 `src/core/deck/parse.ts` 一行的分支，合併進 `33fde4f`，改動落在 `plugins/cards/src/core/deck/parse.ts`，沒有衝突。
+- 第 4、6 項**還沒做**：要開 Windows 版 Obsidian，但 `obsidian.json` 現在開著的是正式 vault，直接開會一起叫出它，要先問使用者；第 6 項要使用者的 iPhone。測試 vault 現在的開發版（`0.6.0+4536a17`，dev）三個檔已另存、雜湊記下，還沒動過測試 vault。
+
+還沒做的驗收：第 5 項的其餘部分、第 6 項（照 `tools/tests/` 現有案例核對）、第 8 項（`plugin-root.test.ts` 與跨版本的測試在 hook 裡已通過，待逐條對照）、第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁）、第 17、18 項、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
