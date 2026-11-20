@@ -16,7 +16,7 @@
 
 | 項目與影響 | 觸發點 | 完成條件 | 來源 |
 |---|---|---|---|
-| 外掛只改文件也跑完整檢查：`plugins/<外掛>/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；Capture、Mindboard 現在的檢查只印一行，不花時間 | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
+| 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `plugins/<外掛>/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
 
 ## 已知的限制
 
@@ -51,7 +51,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 - **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。已合併進 `main`（2026-11-18，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)），結果見[任務說明](tasks/one-repo-step-1.md)。
 - **轉錄稿格式**：第二步 B 就搬到最上層的 `docs/transcript.md`（使用者 2026-11-20 調整第 6 點的時機）；共用範例與相容檢查等第一個需要共同規格的 Capture 任務。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
-- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）進行中：搬檔已 commit（分支 `claude/serene-payne-bfeb06` 的 `495acf7`），驗收與 L2 做完，待合併。
+- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
 
 ## 歷史索引
 

@@ -68,6 +68,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-18 | 三個外掛同一個 repo 的第一步合併進 `main`：建 `plugins/capture/`、`plugins/mindboard/`，commit 與 CI 照改到的路徑分派各外掛的檢查（gate 是唯一結論），共用檢查自己一份套件、外掛之間不 import；Codex L2 四輪（[PR #21](https://github.com/kuohappiness/Essence/pull/21)、[任務說明](../tasks/one-repo-step-1.md)） |
 | 2026-11-17 | AI 製卡第 3 批合併進 `main`：英文製卡與加深送孩子已有的單字（名稱去掉方向、粗體與最後的全形括號），製卡與加深畫面多一個點選填空的勾選、每科記在這台電腦，送出的提示改成 `提示 v4`、`加深 v2`；Codex L2 兩輪（[任務說明](../../plugins/cards/docs/tasks/ai-cards-materials.md)、[PR #17](https://github.com/kuohappiness/Essence/pull/17)、[L2](<../../plugins/cards/docs/Claude Codex Discussion/2026-11-17-ai-cards-materials-l2.md>)） |
 | 2026-11-17 | 點選填空的勾選寫在送出提示的任務段，五科都收得到；加深也帶勾選，英文另外送學過的單字；預設國語、英文勾（[D-210](../decisions.md#d-210-點選填空的勾選寫在任務段加深也帶英文送學過的單字)） |
 | 2026-11-16 | L2 修正常帶出新問題：修之前寫機率、影響、修法與會動到什麼；正常會碰到或弄壞資料的一定修，極低或走不到的記成限制，其餘代價大的交使用者選；修法先收窄、最後才加機制（[D-207](../decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制)） |

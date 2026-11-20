@@ -53,6 +53,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-21 | 三個外掛同一個 repo 的第二步 B 合併進 `main`：Cards 的文件搬進 `plugins/cards/docs/`，任務與討論稿搬進 `docs/`，轉錄稿格式拆到最上層的 `docs/transcript.md`；製卡規則送給 AI 的內容逐位元組不變；Codex L2 四輪（[PR #28](https://github.com/kuohappiness/Essence/pull/28)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 三個外掛同一個 repo 的第二步 A 合併進 `main`：Cards 的程式、測試與工具搬進 `plugins/cards/`，產品程式逐位元組不變；共用工具有自己的檢查與分派對象；Codex L2 四輪（[PR #27](https://github.com/kuohappiness/Essence/pull/27)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 正式 vault 升到 `0.6.0`（tag `v0.6.0`，`037b359`）：全詩順序卡、接句卡、英文的打字與排序、AI 製卡第 1～3 批與閱讀模式按「啟用」的修正；iPhone 必測 A1～A5 通過，兩台都換好，是 Cards 搬家的穩定基線（[清單](tasks/release-0.6.0.md)） |
 | 2026-11-20 | 狀態板變成畫面談定（[D-217](../../../docs/decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）：狀態只寫在入口的狀態行（狀態、下一步、等誰三欄），狀態板只手寫工作與入口，其餘與〈已完成〉由工具產生、commit 時比對一致；第二步 B 合併後上線（[主文](../../../docs/plans/workflow.md#狀態寫在兩個地方)） |
@@ -62,4 +63,3 @@ flowchart LR
 | 2026-11-19 | 任務說明與討論稿的位置：都放進 `docs/` 底下，全域的在最上層、只講一個外掛的在那個外掛的 `docs/`；併進 Cards 搬家第二步的 B 一次搬，搬完文件檢查擋舊位置（[D-213](../../../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
 | 2026-11-18 | Claude 改成直接呼叫本機 Codex：`npm run codex` 照類型帶模型與等級、每輪新開、回覆末端附 token 與額度，不再請使用者轉貼；任務開始時分本機或雲端，雲端的 hook 裝相依，會影響做法的記憶搬進 repo（[D-212](../../../docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)） |
 | 2026-11-18 | 本機資料夾改名 `Essence` 完成：演練發現 app 的舊對話記著舊路徑、接不上，改成改名前收尾、交接寫進文件，用腳本改名並核對全部通過，新對話接手測試對得上（[D-211](../../../docs/decisions.md#d-211-本機資料夾也改名舊對話收尾後不接續)、[任務說明](../../../docs/tasks/local-folder-rename.md)） |
-| 2026-11-18 | 三個外掛同一個 repo 的第一步合併進 `main`：建 `plugins/capture/`、`plugins/mindboard/`，commit 與 CI 照改到的路徑分派各外掛的檢查（gate 是唯一結論），共用檢查自己一份套件、外掛之間不 import；Codex L2 四輪（[PR #21](https://github.com/kuohappiness/Essence/pull/21)、[任務說明](../../../docs/tasks/one-repo-step-1.md)） |
