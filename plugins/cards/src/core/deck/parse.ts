@@ -386,3 +386,4 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
   problems.sort((a, b) => a.line - b.line);
   return result();
 }
+// CI 探針（D-208 第二步驗收第 A12 項），不合併。
