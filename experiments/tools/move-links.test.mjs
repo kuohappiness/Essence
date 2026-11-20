@@ -275,4 +275,15 @@ void test('B 的 L2 R2：同一段有同一個目標的純文字與真的連結�
     const text = `${use}(../src/a.ts)\n\n[id]: decisions.md\n`;
     assert.deepEqual(rewrite('docs/x.md', text, map, exists), { text, edits: [], conflicts: [] }, use);
   }
+  // 第四輪：再解析時引用式連結沒有目的地（不是佔位字串），真的連結、本頁錨點怎麼寫都不會和它撞名。
+  const anchorPlan = { ...mapper([]), pieces: { 'docs/moved.md': 'docs/x.md' }, split: { 'docs/x.md': { anchors: { 'move-links-reference-0': 'docs/moved.md' } } } };
+  const anchorFiles = existing(['docs/x.md', 'docs/moved.md', 'docs/fixed.md']);
+  const mixed = '[shown][id] [real](#move-links-reference-0) \\[literal](#move-links-reference-0)\n\n[id]: fixed.md\n';
+  const collided = rewrite('docs/x.md', mixed, anchorPlan, anchorFiles);
+  assert.equal(collided.text, mixed);
+  assert.deepEqual(collided.conflicts.map(item => [item.line, item.ambiguous]), [[1, 'moved.md#move-links-reference-0'], [1, 'moved.md#move-links-reference-0']]);
+  for (const use of ['[shown][id]', '![圖][id]']) {
+    const text = `${use}(#move-links-reference-0)\n\n[id]: fixed.md\n`;
+    assert.deepEqual(rewrite('docs/x.md', text, anchorPlan, anchorFiles), { text, edits: [], conflicts: [] }, use);
+  }
 });

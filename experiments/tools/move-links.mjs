@@ -78,8 +78,9 @@ function parsed(text) {
   const env = {};
   const tokens = markdown.parse(blank, env);
   const blocks = [];
-  // 定義照留（語法才會和整份解析的相同），目的地換成各自的佔位值：再解析時引用式連結的 href 是佔位值，只有行內連結與自動連結是真的目的地。
-  const placeholders = { references: Object.fromEntries(Object.entries(env.references ?? {}).map(([label, ref], i) => [label, { ...ref, href: `#move-links-reference-${i}` }])) };
+  // 定義照留（語法才會和整份解析的相同），目的地換成 null：再解析時引用式連結沒有 href，只有行內連結與自動連結是真的目的地。
+  // 不用佔位字串：真的連結或錨點可能剛好同名（B 的 L2 第四輪）。markdown-it 對引用式連結直接取定義的 href，不再正規化。
+  const placeholders = { references: Object.fromEntries(Object.entries(env.references ?? {}).map(([label, ref]) => [label, { ...ref, href: null }])) };
   let map;
   for (const token of tokens) {
     // 表格儲存格的 inline 沒有行號，用所在那一列（tr_open）的。

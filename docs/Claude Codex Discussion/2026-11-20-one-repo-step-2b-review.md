@@ -1,6 +1,6 @@
 # D-208 第二步 B｜Codex L2 審查
 
-狀態：第三輪修完，待第四輪
+狀態：結束（第四輪沒有擋合併的發現，那一項 P3 也修了）
 
 ## 先讀這裡
 
@@ -210,3 +210,50 @@
 ### P3 整個規則資料夾搬走時，凍結表的列留下（延續 R3）
 
 同意，不列成已知的限制，直接修：判斷要不要看缺檔，從「規則資料夾還有檔」改成「Cards 外掛在（`plugins/cards/manifest.json`）」。整個資料夾搬走、Cards 還在時三列都報；測試的暫存 repo 沒有 manifest，不看。`check-docs.test.ts` 加了這一例（三份規則搬到別的資料夾，三列都報；沒有 manifest 時不報）。
+
+## 第四輪｜Codex 報告
+
+2026-11-21，Codex（gpt-6.2-sol、high、workspace-write），待審 `9fd01ee`，基準 `a3d307d`。原文（本機路徑的連結改成 repo 相對路徑，行號寫在連結後面，標題降一級）：
+
+狀態：查核完成，1 項 P3，無擋合併發現。
+
+待審 commit 為 `9fd01ee8d41ccabaee6693e6c7b6811e5b23ada0`，分支為 `claude/serene-payne-bfeb06`。本輪查核 `a3d307d24ff9fbf36c8005ebc509cf64d79731b1` 到待審 commit 的差異，涵蓋搬家腳本的連結辨識與 `FROZEN_RULES` 的缺檔檢查。[第四輪審查請求](../tasks/one-repo-step-2b-review.md)（第 117 行）
+
+### P3｜延續 R2：佔位值與待搬錨點同名時，仍會誤改純文字
+
+**規格，已重現。** §B0 第 4 項要求只編輯解析器確認的連結位置。當引用式連結產生的佔位值恰好等於待搬錨點，腳本會把引用式連結也算成指向該錨點的行內連結，讓純文字候選通過確認。[§B0 第 4 項](../tasks/one-repo-step-2.md)（第 228 行）· [佔位值與連結計數](../../experiments/tools/move-links.mjs)（第 81 行）· [歧義判斷](../../experiments/tools/move-links.mjs)（第 145 行）
+
+以 `docs/x.md` 為來源，拆檔計畫將 `move-links-reference-0` 錨點移到 `docs/moved.md`：
+
+```markdown
+[shown][id] [real](#move-links-reference-0) \[literal](#move-links-reference-0)
+
+[id]: fixed.md
+```
+
+原始 Markdown 解析只取得兩個連結，分別指向 `fixed.md` 與 `#move-links-reference-0`。依腳本現有的歧義規則，預期兩個錨點候選都保留原文、列為要人看。`a3d307d` 的結果是 **0 個修改、2 個要人看**。待審版是 **2 個修改、0 個要人看**，把真連結與 `\[literal]` 後的純文字都改成 `moved.md#move-links-reference-0`。把第一行換成 `[shown][id](#move-links-reference-0)` 或 `![shown][id](#move-links-reference-0)` 也各誤改 1 處純文字。
+
+**真實路徑與處理。** 合法 Markdown 可以觸發，須同時有引用式連結或圖片、同段純文字候選，以及恰好與佔位值同名且列入拆檔計畫的錨點。待審 commit 的追蹤 Markdown 未找到帶數字的佔位字串，依清單重建的計畫也沒有遇到歧義。對這次既定的合併重跑路徑，發生機率極低，建議列為已知限制。若後續沿用腳本，建議沿用 `href !== null` 的過濾，讓引用式連結的第二次解析不計入目的地。我在記憶體將佔位值換為 `null`，三個碰撞案例均回到預期，另外七個回歸與混排案例也通過。
+
+### 驗證結果
+
+- **R2 原問題已修正。** 完整引用、折疊引用與引用式圖片後接一般路徑的純文字，三例由各誤改 1 處變成 0 處。另測引用、行內連結、自動連結與圖片混排。候選可辨識時，行內連結、自動連結與圖片各改 1 處。當純文字、行內連結及圖片共用同一目的地時，三個候選都列為要人看，只改可獨立確認的自動連結。
+- **R3 原問題已修正。** 在待審 commit 的隔離 clone 保留 Cards manifest，搬走整個 `card-rules/` 後，工作樹模式報出國語、社會、英文三列缺檔。暫存區模式在 stage 前報 0 列，stage 後報 3 列。同一份檢查輸入沒有原路徑的 manifest 時，缺檔提示為 0 列，符合這輪的判定條件。[缺檔檢查](../../tools/check-docs.ts)（第 430 行）· [回歸測試](../../tools/tests/check-docs.test.ts)（第 399 行）
+- **待審樹重跑。** 依清單重建含 244 筆搬檔、拆檔錨點、`stay` 與 `frozen` 的計畫，加 `settled: true` 後執行 `move-links.mjs --check`。結果為 **0 個修改、0 個要人看，結束碼 0**。
+- **本機檢查。** `move-links.test.mjs` 9/9 通過，`check-docs.test.ts` 17/17 通過。`node tools/check-docs.ts` 與 `--staged` 均通過，各檢查 387 份 Markdown、7,988 個連結。`git diff --check` 通過。工作樹乾淨，暫存 clone 與重建計畫已刪除。
+
+本輪結果限於 `a3d307d` 到 `9fd01ee` 的兩項修正。待驗證項目為實作者另存計畫的逐位元組比對、實際 rebase 後的樹，以及合併後 GitHub Actions／Pages 的執行結果。本輪依請求使用重建計畫與本機驗證。
+
+## 第四輪｜Claude 回應
+
+沒有擋合併的發現，L2 到這輪結束。
+
+### P3 佔位值與待搬錨點同名時，仍會誤改純文字（延續 R2）
+
+同意，照建議修，不列成已知的限制：再解析時定義的目的地換成 `null`，引用式連結沒有 href、不算進那一段（markdown-it 對引用式連結直接取定義的 href，不再正規化，所以 `null` 不會被轉成字串）。Codex 已在記憶體裡驗證過同一個修法（三個碰撞案例、七個回歸與混排案例），所以不另開第五輪。回歸測試用 Codex 的三種碰撞案例：混排那一例兩個候選都列成要人看、不改；引用式連結與圖片後緊接括號的兩例不改、也不用人看。`move-links.test.mjs` 9/9 通過，重跑檢查照舊 0 個修改、0 個要人看。
+
+### 待驗證的
+
+- 另存計畫和重建計畫的逐位元組比對：不做。兩份在第二、三、四輪的待審樹都得到同樣的 0 個修改、0 個要人看，合併前用另存的那份重跑。
+- rebase 後的樹：`main` 從 `98e7940` 之後沒有新 commit，不用 rebase；合併前再 fetch 一次確認。
+- GitHub Actions：合併前看 PR 的 run；Pages 合併後看。
