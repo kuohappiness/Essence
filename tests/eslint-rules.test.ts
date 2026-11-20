@@ -1,4 +1,4 @@
-// ESLint 規則的測試，從 tests/quality.test.ts 拆出來（D-208 第二步 §A2）：留在 Cards，用 Cards 的 ESLint 設定跑；hook 的測試搬到 tools/tests/。
+// ESLint 規則的測試，從 tests/quality.test.ts 拆出來（D-208 第二步 §A2；拆之前的最後一版是 commit d7e2a0b，git log --follow 接得到 hook 那一半）：留在 Cards，用 Cards 的 ESLint 設定跑；hook 的測試搬到 tools/tests/。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
