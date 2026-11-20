@@ -5,6 +5,7 @@
 // - 舊的（編號小於 BOUNDARY）：主題在凍結的 LEGACY_TOPICS，一句話保留在現有索引；後續見從自己的狀態行往後找（狀態行提到、編號比自己大的）。
 // - 新的：條目裡寫一行「主題：…｜一句話：…」；狀態行用「｜」分段，「來自」「修改」「補充」「取代」開頭的段裡的 D-ID 是它的上游。
 //   舊決定的狀態行不再手改：工具從新決定反推它的後續見與已取代。
+import { fencedLines } from './fences.ts';
 
 /** 新寫法的第一條決定。合併工作流程上線的 PR 前，改成 origin/main 當時的最大號加一。 */
 export const BOUNDARY = 218;
@@ -84,8 +85,12 @@ const pad = (n: number | string) => `D-${String(n).padStart(3, '0')}`;
 const anchorOf = (id: string, name: string) => `${id} ${name}`.toLowerCase()
   .replace(/[^\p{L}\p{M}\p{N}_\s-]/gu, '').replace(/\s/g, '-');
 
-/** 程式碼區塊的內容換成空白，位置不變（區塊裡的「## D-」不算標題）。 */
-const mask = (text: string) => text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, block => block.replace(/[^\r\n]/g, ' '));
+/** 程式碼區塊的內容換成空白，位置不變（區塊裡的「## D-」不算標題）。圍欄的判斷和 section.ts 共用（fences.ts，L2 R10）。 */
+function mask(text: string): string {
+  const lines = text.split('\n');
+  const code = fencedLines(lines.map(line => line.replace(/\r$/, '')));
+  return lines.map((line, i) => (code[i] ? line.replace(/[^\r]/g, ' ') : line)).join('\n');
+}
 
 const DATE = /\b\d{4}-\d{2}-\d{2}(?:～(?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{2}))?(?=｜|\s|$)/;
 const LINK = /\[[^\]]*\]\((<[^>]*>|[^)\s]*)(?:\s+"[^"]*")?\)/g;
@@ -302,20 +307,13 @@ export function currentRefs(files: readonly { path: string; text: string }[]): M
   const found = new Map<string, Map<string, string[]>>();
   for (const { path, text } of [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
     let heading = '';
-    let fence: string | null = null;
-    for (const line of text.split(/\r?\n/)) {
-      const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-      if (fence) {
-        if (open && open[1][0] === fence[0] && open[1].length >= fence.length) fence = null;
-        continue;
-      }
-      if (open) {
-        fence = open[1];
-        continue;
-      }
+    const lines = text.split(/\r?\n/);
+    const code = fencedLines(lines);
+    for (const [i, line] of lines.entries()) {
+      // 程式碼區塊裡的 D-ID 是範例，不算引用。
+      if (code[i]) continue;
       const match = /^ {0,3}#{1,6}(?:[ \t]+(.*))?$/.exec(line);
       if (match) heading = titleOf(match[1] ?? '');
-      // 程式碼區塊裡的 D-ID 是範例，不算引用。
       for (const id of new Set(idsIn(line))) {
         const perFile = found.get(id) ?? new Map<string, string[]>();
         found.set(id, perFile);

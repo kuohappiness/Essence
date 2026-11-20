@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fencedLines } from './fences.ts';
 
 export interface Heading { level: number; title: string; line: number; end: number; chars: number }
 
@@ -21,14 +22,10 @@ export function plainTitle(raw: string): string {
 export function headings(text: string): Heading[] {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
   const found: Omit<Heading, 'end' | 'chars'>[] = [];
-  let fence: string | null = null;
+  // 圍欄的判斷和決策查詢共用（fences.ts，L2 R10）。
+  const code = fencedLines(lines);
   lines.forEach((line, i) => {
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (fence) {
-      if (open && open[1][0] === fence[0] && open[1].length >= fence.length && !line.trim().slice(open[1].length).trim()) fence = null;
-      return;
-    }
-    if (open) { fence = open[1]; return; }
+    if (code[i]) return;
     const match = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/.exec(line);
     if (match) found.push({ level: match[1].length, title: plainTitle(match[2] ?? ''), line: i + 1 });
   });
