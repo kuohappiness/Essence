@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findLocalPaths, genericRules, localRules } from '../tools/check-local-paths.ts';
+import { findLocalPaths, genericRules, localRules } from '../check-local-paths.ts';
 
 // 第二次里程碑檢查 R5：repo 公開，本機的帳號名、iCloud 路徑、vault 名稱不能進 repo。
 // 會被擋的例子用拼接寫，這個檔本身才不會被同一條檢查擋下；名字都是自編的。

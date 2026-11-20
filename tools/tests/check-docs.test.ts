@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../tools/check-docs.ts';
+import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../check-docs.ts';
 
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
 for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith('GIT_')) delete process.env[key];
@@ -250,7 +250,7 @@ void test('例外表只蓋掉逐項列出的連結；沒用到的例外要報', 
 
 void test('命令列：有問題時 exit code 1 並逐行列出，沒有時印摘要', async t => {
   const { root, add } = await repo(t);
-  const script = fileURLToPath(new URL('../tools/check-docs.ts', import.meta.url));
+  const script = fileURLToPath(new URL('../check-docs.ts', import.meta.url));
   await add('a.md', '# A\n\n[b](b.md)、[網站](https://example.com)\n');
   await add('b.md', '# B\n');
   assert.equal(execFileSync(process.execPath, [script, '--root', root], { encoding: 'utf8', stdio: 'pipe' }).trim(), '文件檢查通過（工作樹）：2 個 Markdown 檔、1 個連結；待補測與補做 0 列（backlog 技術債，D-195）');

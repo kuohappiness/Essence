@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { countDeferred } from '../tools/check-docs.ts';
-import { REDIRECT } from '../tools/progress-board.ts';
-import { renderCanvas } from '../tools/progress-board-canvas.ts';
-import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, parseMap, percent } from '../tools/progress-board-data.ts';
-import { renderList } from '../tools/progress-board-list.ts';
+import { countDeferred } from '../check-docs.ts';
+import { REDIRECT } from '../progress-board.ts';
+import { renderCanvas } from '../progress-board-canvas.ts';
+import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, parseMap, percent } from '../progress-board-data.ts';
+import { renderList } from '../progress-board-list.ts';
 
 const SAMPLE = `# 標題
 
@@ -26,7 +26,7 @@ const SAMPLE = `# 標題
 `;
 
 void test('progress-map.md 照格式寫，每一段都有模組與功能', () => {
-  const stages = parseMap(readFileSync(MAP, 'utf8'));
+  const stages = parseMap(readFileSync(new URL('../../' + MAP, import.meta.url), 'utf8'));
   assert.ok(stages.length >= 1);
   for (const stage of stages) {
     assert.ok(stage.description, `${stage.name} 沒有說明`);

@@ -1,78 +1,116 @@
-// 分派表（D-208 第 5 點，tasks/one-repo-step-1.md §2）：照這次改到的路徑決定 commit 與 CI 檢查哪些外掛。hook 與 CI 只讀這一份。
+// 分派表（D-208 第 5 點，tasks/one-repo-step-1.md §2；第二步 §A3 加共用工具）：照這次改到的路徑決定 commit 與 CI 檢查哪些對象。
+// hook 與 CI 只讀這一份。
 // 用法：
 //   node tools/dispatch.ts --staged [--ci] [--explain]               暫存區（pre-commit）
 //   node tools/dispatch.ts --range <base> <head> [--ci] [--explain]  比兩棵樹（CI、pre-merge-commit、〈第一批的紀錄〉）
-//   --ci：CI 的跑法，Cards 的「相關測試」升成「完整」。--explain：逐個路徑印出命中哪一條（給人看），不印 JSON。
+//   --ci：CI 的跑法，「相關測試」升成「完整」。--explain：逐個路徑印出命中哪一條（給人看），不印 JSON。
 // 輸出 JSON。不用 npm 套件：CI 的分派 job 與 hook 不必先安裝就能跑。
 // 結束碼：0 正常；1 有擋下的路徑（子模組）；2 Git 讀取失敗或參數錯（不能當成「沒有改動」）。
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
 export type Plugin = (typeof PLUGINS)[number];
-/** 完整：在外掛的資料夾跑 npm run check；相關測試（只有 Cards）：只跑寫到這些路徑的測試檔；跳過。 */
+/** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）與三個外掛。 */
+export const TARGETS = ['tools', ...PLUGINS] as const;
+export type Target = (typeof TARGETS)[number];
+/** 完整：在對象的資料夾跑完整檢查；相關測試（Cards 與共用工具）：只跑寫到這些路徑的測試檔；跳過。 */
 export type Run = 'full' | 'related' | 'skip';
-export const NAMES: Record<Plugin, string> = { cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
+export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
+
+/** Cards 的資料夾：搬家前在根目錄（第二步 §A6 換成 plugins/cards）。 */
+export const CARDS: string = '.';
+/** 對象的資料夾（相對 repo 的根）。 */
+export const folder = (target: Target) => (target === 'tools' ? 'tools' : target === 'cards' ? CARDS : `plugins/${target}`);
+/** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
+const prefix = (target: Target) => (folder(target) === '.' ? '' : folder(target) + '/');
 
 /** 一個改動：Git 的 raw diff 一行（--no-renames，改名是刪舊加新兩筆）。 */
 export interface Change { status: string; path: string; oldMode: string; newMode: string }
 
-type Effect = 'blocked' | 'all' | Partial<Record<Plugin, Run>>;
-interface Rule { id: number; name: string; matches: (path: string, change: Change) => boolean; effect: (path: string) => Effect }
+type Effect = 'blocked' | 'all' | Partial<Record<Target, Run>>;
+/** 比對時用的背景：檢查的入口（第 6 條），用到時才算。 */
+interface Context { entries: () => Set<string> }
+interface Rule { id: number; name: string; matches: (path: string, change: Change, ctx: Context) => boolean; effect: (path: string) => Effect }
 
 const lower = (path: string) => path.toLowerCase();
 const under = (...dirs: string[]) => (path: string) => dirs.some(dir => path.startsWith(dir));
 
-/** §1 列的共用工具（第 4 條）。tools/ 裡兩邊都沒列的新檔落到第 8 條，三個外掛都檢查。 */
-const SHARED_TOOL = /^tools\/(check-docs\.ts|secretlint\.mjs|check-local-paths\.ts|check-skill-mirror\.ts|progress-board[^/]*\.ts|roadmap-board\.ts|dispatch\.ts|hooks\.ts|ci-gate\.ts|check-plugin-imports\.ts)$/;
-const SHARED_INPUT = new Set(['experiments/tools/decisions-index.mjs', 'tools/package.json', 'tools/package-lock.json', '.secretlintrc.json', '.gitattributes', '.gitignore']);
-/** §1 列的 Cards 工具（第 6 條）。 */
+/**
+ * 決定別的檢查怎麼啟動、怎麼跑的檔（第 6 條的固定部分）。檢查的入口（hook、check.yml、外掛 scripts 寫到的 tools/ 檔與它們
+ * import 到的檔）由 entryTools 從這次比較的內容算，不手寫清單。
+ */
+const LAUNCH = new Set(['tools/package.json', '.gitattributes', '.gitignore']);
+const LAUNCH_DIRS = ['.githooks/', '.github/workflows/'];
+/** 一定算入口的三支：分派表本身、hook 與 CI 呼叫的程式。 */
+const CORE_ENTRIES = ['tools/dispatch.ts', 'tools/hooks.ts', 'tools/ci-gate.ts'];
+/** 其他共用工具（第 7 條）：tools/ 底下其他的檔，加上下面這些。 */
+const SHARED_TOOL_FILES = new Set(['.claude/settings.json', 'experiments/tools/decisions-index.mjs', '.secretlintrc.json']);
+
+/** 搬家前 Cards 在根目錄的工具與設定（第 11 條，§A6 刪）。 */
 const CARDS_TOOL = /^tools\/(build\.mjs|build\.d\.mts|install[^/]*|backup\.ts|restore\.ts|compare[^/]*|update-vault\.ts|locate\.ts|vault-io\.ts|node-files\.ts|git\.ts|exam-reminder\.ts|bench-study\.ts|export-compare\.ts|knip\.mjs)$|^tools\/compare\//;
 const CARDS_CONFIG = new Set(['manifest.json', 'package.json', 'package-lock.json', 'tsconfig.json', 'eslint.config.js', 'knip.jsonc']);
+
 /**
- * 共用規格的登錄表（第 5 條）：兩個以上外掛都讀的最上層檔案。第二步前新增的這類規格在這裡加一列；
- * 外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
+ * 共用規格的登錄表（第 8 條）：兩個以上外掛都讀的最上層檔案；外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
+ * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/syntax.md 時）。
  */
 export const SHARED_SPECS: Record<string, Partial<Record<Plugin, Run>>> = {
   // 過渡期轉錄稿格式在 §1：Capture 寫、Cards 讀（D-208 第 6 點）。
   'docs/syntax.md': { cards: 'related', capture: 'full' },
 };
 
+const cardsAtRoot = CARDS === '.';
+
 export const RULES: Rule[] = [
   { id: 1, name: '子模組（gitlink）', matches: (_, c) => c.oldMode === '160000' || c.newMode === '160000', effect: () => 'blocked' },
   {
-    id: 2, name: '外掛的資料夾', matches: under('plugins/capture/', 'plugins/mindboard/'),
+    // Cards 只改文件時照舊只跑相關測試（技術債「外掛只改文件也跑完整檢查」對 Cards 的完成條件，§A3）。
+    id: 2, name: 'Cards 資料夾裡的文件',
+    matches: path => !cardsAtRoot && path.startsWith(prefix('cards')) && (lower(path).endsWith('.md') || path.startsWith(prefix('cards') + 'docs/')),
+    effect: () => ({ cards: 'related' }),
+  },
+  { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => !cardsAtRoot && path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
+  {
+    id: 4, name: 'Capture、Mindboard 的資料夾', matches: under('plugins/capture/', 'plugins/mindboard/'),
     effect: path => ({ [path.startsWith('plugins/capture/') ? 'capture' : 'mindboard']: 'full' }),
   },
-  { id: 3, name: 'plugins/ 底下不認得的路徑', matches: under('plugins/'), effect: () => 'all' },
+  { id: 5, name: 'plugins/ 底下不認得的路徑', matches: under('plugins/'), effect: () => 'all' },
   {
-    id: 4, name: '共用的輸入', effect: () => 'all',
-    matches: path => SHARED_TOOL.test(path) || SHARED_INPUT.has(path) || path.startsWith('.githooks/') || path.startsWith('.github/workflows/'),
-  },
-  { id: 5, name: '共用規格（登錄表）', matches: path => Object.hasOwn(SHARED_SPECS, path), effect: path => SHARED_SPECS[path] },
-  {
-    id: 6, name: 'Cards 的程式與設定', effect: () => ({ cards: 'full' }),
-    matches: path => under('src/', 'tests/')(path) || CARDS_TOOL.test(path) || CARDS_CONFIG.has(path),
+    id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
+    matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
   },
   {
-    // tasks/、Claude Codex Discussion/ 是最上層（過渡期 Cards 與跨外掛）的任務說明與討論稿；任務說明 §2 的表漏列，
-    // 不列會落到第 8 條，每次規劃文件的 commit 都跑三個外掛的完整檢查（〈結果〉）。
-    id: 7, name: '文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related' }),
+    // 搬家前 Cards 的程式、工具與設定在根目錄；排在共用工具那一條前面（tools/ 裡的 Cards 工具不算共用工具）。§A6 刪。
+    id: 11, name: 'Cards 的程式與設定（搬家前在根目錄）', effect: () => ({ cards: 'full' }),
+    matches: path => cardsAtRoot && (under('src/', 'tests/')(path) || CARDS_TOOL.test(path) || CARDS_CONFIG.has(path)),
+  },
+  {
+    id: 7, name: '其他共用工具', effect: () => ({ tools: 'full' }),
+    matches: path => under('tools/', '.claude/hooks/')(path) || SHARED_TOOL_FILES.has(path),
+  },
+  {
+    id: 8, name: '共用規格（登錄表）', matches: path => Object.hasOwn(SHARED_SPECS, path),
+    effect: path => ({ ...SHARED_SPECS[path], tools: 'related' }),
+  },
+  {
+    // tasks/、Claude Codex Discussion/ 是最上層（過渡期 Cards 與跨外掛）的任務說明與討論稿：規劃文件的 commit 不跑完整檢查。
+    id: 9, name: '最上層的文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related', tools: 'related' }),
     matches: path => under('docs/', 'tasks/', 'Claude Codex Discussion/', 'experiments/', '.claude/', '.agents/')(path)
       || (!path.includes('/') && lower(path).endsWith('.md')),
   },
-  { id: 8, name: '以上都不是', matches: () => true, effect: () => 'all' },
+  { id: 10, name: '以上都不是', matches: () => true, effect: () => 'all' },
 ];
 
 export interface PathResult { status: string; path: string; rule: number; ruleName: string }
-export interface PluginResult { run: Run; tests: string[]; why: string }
+export interface TargetResult { run: Run; tests: string[]; why: string }
 export interface Dispatch {
   compare: { kind: 'staged' } | { kind: 'range'; base: string; head: string };
   ci: boolean;
   shared: true;
   blocked: string[];
-  plugins: Record<Plugin, PluginResult>;
+  targets: Record<Target, TargetResult>;
   paths: PathResult[];
 }
 
@@ -83,7 +121,7 @@ const git = (root: string, args: string[], input?: string) =>
 
 /**
  * 這次比較的內容裡，路徑合 wanted 的一般檔與內容（L2 R2）：staged 讀索引（hook 的環境裡就是這次 commit 用的索引，
- * git commit <路徑>、-a 的暫時索引也是），range 讀 head 的樹。不讀工作樹：沒 stage 的修改與新檔不影響選哪些測試。
+ * git commit <路徑>、-a 的暫時索引也是），range 讀 head 的樹。不讀工作樹：沒 stage 的修改與新檔不影響分派。
  */
 function comparedTexts(root: string, compare: Dispatch['compare'], wanted: (path: string) => boolean): Map<string, string> {
   // ls-files -s：「<mode> <物件> <stage>\t<路徑>」；ls-tree：「<mode> <型別> <物件>\t<路徑>」。
@@ -108,23 +146,108 @@ function comparedTexts(root: string, compare: Dispatch['compare'], wanted: (path
   return texts;
 }
 
-const RULES_FILE = 'src/core/ai/rules.ts';
+/**
+ * 一個檔的相對 import（import、export … from、動態 import、import '…'）。dispatch 不用 npm 套件，所以用正規式；
+ * tools/tests/dispatch.test.ts 對 tools/ 與 tests/helpers 的每個檔和 ts.preProcessFile 的結果比過。
+ */
+export function relativeImports(text: string): string[] {
+  // 先拿掉註解（說明裡寫的 import 範例不算）；行註解只認前面不是引號或冒號的 //，網址與字串裡的不算。
+  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const found = new Set<string>();
+  // 靜態的 import、export … from 只認行首開始的敘述（多行的 import 最後一行是 `} from`）：字串裡寫的範例不算。
+  const pattern = /^[ \t]*(?:(?:import|export)\b[^'"\n;]*?\bfrom\s*|import\s+|\}[^'"\n;]*?\bfrom\s*)(['"])(\.{1,2}\/[^'"\n]+)\1|\bimport\s*\(\s*(['"])(\.{1,2}\/[^'"\n]+)\3\s*\)/gm;
+  for (const match of code.matchAll(pattern)) {
+    if (match[2] !== undefined) found.add(match[2]);
+    else {
+      // 動態 import 可以在行中間；同一行前面的引號（"、'、`）有一種是單數時，它在字串裡（例如測試的範例），不算。
+      const before = code.slice(code.lastIndexOf('\n', match.index) + 1, match.index).replace(/\\./g, '');
+      if (['"', "'", '`'].every(quote => before.split(quote).length % 2 === 1)) found.add(match[4]);
+    }
+  }
+  return [...found];
+}
 
 /**
- * 寫到這些路徑的測試檔：照原本 pre-commit 的 grep -rlF --include='*.test.ts'，加上嵌進 main.js 的規則檔（rules.ts 的特例）。
- * 測試檔與 rules.ts 讀這次比較的內容（comparedTexts），和 hook 在副本裡跑的是同一份。
+ * 文字裡寫到的 tools/… 程式檔（前面可以有 ../），照 base 資料夾解開成 repo 相對的路徑；解開後不在最上層 tools/ 的不算。
+ * 只認程式（.ts、.mts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
  */
-export function relatedTests(root: string, compare: Dispatch['compare'], paths: string[]): string[] {
-  if (!paths.length) return [];
+function toolPaths(text: string, base: string | undefined): string[] {
   const found = new Set<string>();
-  const texts = comparedTexts(root, compare, path => (path.startsWith('tests/') && path.endsWith('.test.ts')) || path === RULES_FILE);
-  for (const [file, text] of texts) {
-    // 嵌進 main.js 的規則檔路徑寫在 rules.ts，測試只寫到其中一份；改哪一份都跑規則的測試（第二次里程碑檢查 R8）。
-    if (file === RULES_FILE) {
-      if (paths.some(path => text.includes(`'${path}'`))) found.add('tests/ai-rules.test.ts');
-    } else if (paths.some(path => text.includes(path))) found.add(file);
+  for (const match of text.matchAll(/(?<![\w./-])((?:\.\.\/)*tools\/[\w./-]*\.(?:ts|mts|mjs|cjs|js))(?![\w.])/g)) {
+    // base 是 undefined：執行的資料夾不固定但都在 repo 裡（check.yml 的 job 可以設 working-directory），開頭的 ../ 一律回到 repo 的根。
+    const path = base === undefined ? posix.normalize(match[1].replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, match[1]));
+    if (path.startsWith('tools/') && !path.startsWith('tools/node_modules/')) found.add(path);
   }
-  return [...found].sort();
+  return [...found];
+}
+
+/**
+ * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
+ * repo 底下，寫成 ../../tools/… 也解得開）與 plugins/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
+ * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
+ */
+export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
+  const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|mjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
+  const texts = comparedTexts(root, compare, path =>
+    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^plugins\/[^/]+\/package\.json$/.test(path) || isSource(path));
+  const entries = new Set<string>(CORE_ENTRIES);
+  for (const [path, text] of texts) {
+    if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);
+    else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined)) entries.add(tool);
+    else if (path.endsWith('package.json')) {
+      let scripts: Record<string, unknown> = {};
+      try { scripts = (JSON.parse(text) as { scripts?: Record<string, unknown> }).scripts ?? {}; } catch { /* 壞掉的 package.json 由外掛的檢查擋 */ }
+      for (const script of Object.values(scripts)) if (typeof script === 'string') for (const tool of toolPaths(script, posix.dirname(path))) entries.add(tool);
+    }
+  }
+  const queue = [...entries];
+  while (queue.length) {
+    const file = queue.pop()!;
+    const text = texts.get(file);
+    if (text === undefined) continue;
+    for (const name of relativeImports(text)) {
+      const target = posix.normalize(posix.join(posix.dirname(file), name));
+      if (target.startsWith('tools/') && !entries.has(target)) {
+        entries.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return entries;
+}
+
+/** 嵌進 main.js 的規則檔表（ai-rules 的特例）。 */
+const rulesFile = () => prefix('cards') + 'src/core/ai/rules.ts';
+
+/**
+ * 寫到這些路徑的測試檔（target 是 Cards 或共用工具）：照原本 pre-commit 的 grep -rlF --include='*.test.ts'。
+ * - 每個改到的路徑比兩種寫法：原路徑，與去掉 Cards 資料夾前綴的路徑（Cards 的測試從自己的資料夾寫路徑）；
+ * - 對象 tests/helpers/ 底下的檔寫到時，import 那個 helper 的測試也選（一層）；
+ * - Cards 另有規則檔表的特例：rules.ts 寫到的規則檔，改哪一份都跑 ai-rules 的測試（第二次里程碑檢查 R8）。
+ * 讀這次比較的內容（comparedTexts），和 hook 在副本裡跑的是同一份。回傳相對對象資料夾的路徑（交給 node --test）。
+ */
+export function relatedTests(root: string, compare: Dispatch['compare'], target: 'cards' | 'tools', paths: string[]): string[] {
+  if (!paths.length) return [];
+  const base = prefix(target);
+  const tests = base + 'tests/';
+  const helpers = tests + 'helpers/';
+  const cards = prefix('cards');
+  const variants = [...new Set(paths.flatMap(path => (cards && path.startsWith(cards) ? [path, path.slice(cards.length)] : [path])))];
+  const mentions = (text: string) => variants.some(path => text.includes(path));
+  const texts = comparedTexts(root, compare, path => (path.startsWith(tests) && path.endsWith('.ts')) || (target === 'cards' && path === rulesFile()));
+  const found = new Set<string>();
+  const usedHelpers = new Set<string>();
+  for (const [file, text] of texts) if (file.startsWith(helpers) && !file.endsWith('.test.ts') && mentions(text)) usedHelpers.add(file);
+  for (const [file, text] of texts) {
+    if (file === rulesFile()) {
+      if (variants.some(path => text.includes(`'${path}'`))) found.add(tests + 'ai-rules.test.ts');
+      continue;
+    }
+    if (!file.endsWith('.test.ts')) continue;
+    if (mentions(text)) found.add(file);
+    else if (usedHelpers.size && relativeImports(text).some(name => usedHelpers.has(posix.normalize(posix.join(posix.dirname(file), name))))) found.add(file);
+  }
+  return [...found].map(file => file.slice(base.length)).sort();
 }
 
 /** 顯示用：控制字元與換行跳脫，其餘照原樣。 */
@@ -136,44 +259,46 @@ function list(paths: string[], max = 3): string {
 }
 
 export function dispatch(changes: Change[], { root, ci, compare }: { root: string; ci: boolean; compare: Dispatch['compare'] }): Dispatch {
-  const runs: Record<Plugin, Run> = { cards: 'skip', capture: 'skip', mindboard: 'skip' };
-  const touched: Record<Plugin, string[]> = { cards: [], capture: [], mindboard: [] };
-  const related: string[] = [];
+  const runs: Record<Target, Run> = { tools: 'skip', cards: 'skip', capture: 'skip', mindboard: 'skip' };
+  const touched: Record<Target, string[]> = { tools: [], cards: [], capture: [], mindboard: [] };
+  const related: Record<'cards' | 'tools', string[]> = { cards: [], tools: [] };
   const blocked: string[] = [];
   const paths: PathResult[] = [];
+  let entries: Set<string> | undefined;
+  const ctx: Context = { entries: () => (entries ??= entryTools(root, compare)) };
   for (const change of changes) {
-    const rule = RULES.find(r => r.matches(change.path, change))!;
+    const rule = RULES.find(r => r.matches(change.path, change, ctx))!;
     paths.push({ status: change.status, path: change.path, rule: rule.id, ruleName: rule.name });
     const effect = rule.effect(change.path);
     if (effect === 'blocked') { blocked.push(change.path); continue; }
-    const wanted: Partial<Record<Plugin, Run>> = effect === 'all' ? { cards: 'full', capture: 'full', mindboard: 'full' } : effect;
-    for (const plugin of PLUGINS) {
-      let run = wanted[plugin];
+    const wanted: Partial<Record<Target, Run>> = effect === 'all' ? { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' } : effect;
+    for (const target of TARGETS) {
+      let run = wanted[target];
       if (!run) continue;
-      // CI 不花 token：根目錄（過渡期都是 Cards 的）有任何改動，Cards 跑完整檢查（保留 b63c1bb 只改文件也紅燈的後盾）。
+      // CI 不花 token：相關測試一律升成完整（保留 b63c1bb 只改文件也紅燈的後盾）。
       if (ci && run === 'related') run = 'full';
-      touched[plugin].push(change.path);
-      if (run === 'related') related.push(change.path);
-      if (RANK[run] > RANK[runs[plugin]]) runs[plugin] = run;
+      touched[target].push(change.path);
+      if (run === 'related' && (target === 'cards' || target === 'tools')) related[target].push(change.path);
+      if (RANK[run] > RANK[runs[target]]) runs[target] = run;
     }
   }
-  const plugins = {} as Record<Plugin, PluginResult>;
-  for (const plugin of PLUGINS) {
-    let run = runs[plugin];
+  const targets = {} as Record<Target, TargetResult>;
+  for (const target of TARGETS) {
+    let run = runs[target];
     let tests: string[] = [];
     let why: string;
-    if (run === 'full') why = `完整檢查（改到 ${list(touched[plugin])}）`;
-    else if (run === 'related') {
-      tests = relatedTests(root, compare, related);
-      if (tests.length) why = `相關測試（寫到 ${list(related)} 的 ${tests.length} 個測試檔）`;
+    if (run === 'full') why = `完整檢查（改到 ${list(touched[target])}）`;
+    else if (run === 'related' && (target === 'cards' || target === 'tools')) {
+      tests = relatedTests(root, compare, target, related[target]);
+      if (tests.length) why = `相關測試（寫到 ${list(related[target])} 的 ${tests.length} 個測試檔）`;
       else {
         run = 'skip';
-        why = `照分派表跳過（沒有測試寫到 ${list(related)}）`;
+        why = `照分派表跳過（沒有測試寫到 ${list(related[target])}）`;
       }
     } else why = changes.length ? `照分派表跳過（這次改的路徑都不是它的：${list(changes.map(c => c.path))}）` : '照分派表跳過（沒有改動）';
-    plugins[plugin] = { run, tests, why };
+    targets[target] = { run, tests, why };
   }
-  return { compare, ci, shared: true, blocked, plugins, paths };
+  return { compare, ci, shared: true, blocked, targets, paths };
 }
 
 /** 解析 git diff --raw -z --no-renames：每筆是「:舊mode 新mode 舊物件 新物件 狀態」，接著一個 NUL 與路徑。 */
@@ -210,7 +335,7 @@ export function explain(result: Dispatch): string {
   lines.push(`比較：${compare}${result.ci ? '（CI 的跑法）' : ''}`);
   if (result.blocked.length) lines.push(`擋下：${list(result.blocked)}（這個 repo 不支援子模組）`);
   lines.push('共用檢查：每次都跑');
-  for (const plugin of PLUGINS) lines.push(`${NAMES[plugin]}：${result.plugins[plugin].why}`);
+  for (const target of TARGETS) lines.push(`${NAMES[target]}：${result.targets[target].why}`);
   return lines.join('\n');
 }
 
@@ -233,7 +358,7 @@ export function main(args: string[], cwd = process.cwd()): number {
   let result: Dispatch;
   try {
     const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    // 相關測試也讀 Git（這次比較的內容），讀不到一樣不能當成沒有改動。
+    // 相關測試與入口也讀 Git（這次比較的內容），讀不到一樣不能當成沒有改動。
     result = dispatch(readChanges(root, compare), { root, ci, compare });
   } catch (error) {
     const stderr = (error as { stderr?: Buffer | string }).stderr?.toString().trim();

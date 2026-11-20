@@ -5,8 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 // 外掛架構檢查環節 9 結論第 1 條（Q1）。這兩個路徑寫在這裡，只改 hook 或設定的 commit，pre-commit 也會跑這個測試。
-const hook = fileURLToPath(new URL('../.claude/hooks/block-dangerous-git.mjs', import.meta.url));
-const settings = new URL('../.claude/settings.json', import.meta.url);
+const hook = fileURLToPath(new URL('../../.claude/hooks/block-dangerous-git.mjs', import.meta.url));
+const settings = new URL('../../.claude/settings.json', import.meta.url);
 
 function exitCode(stdin: string): Promise<number | null> {
   return new Promise((resolve, reject) => {

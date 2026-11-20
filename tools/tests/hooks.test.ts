@@ -3,7 +3,8 @@
 // commit 一次（這時還沒安裝 hook，不經過 hook），再在 clone 的 tools/ 跑安裝入口（npm run prepare：preprepare 換回 LF、
 // prepare 設 core.hooksPath）。乾淨的 clone 不繼承 core.hooksPath，所以記號檔出現就表示 hook 真的有跑。
 // tools/node_modules 借本 repo 那份（Windows 用 junction、Linux 用 symlink），清理前先拆連結，不會碰到本 repo 的 node_modules。
-// 替身：三個外掛的 check 換成寫記號檔的 mark.mjs（ESSENCE_FAIL 指定的會回非零）；Cards 的測試換成空檔，只留一個讀轉錄稿格式的替身。
+// 替身：三個外掛的 check 與共用工具的 self-check 換成寫記號檔的 mark.mjs（ESSENCE_FAIL 指定的會回非零）；Cards 與共用工具的測試
+// 換成空檔，只留一個讀轉錄稿格式的替身。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exec, execFile } from 'node:child_process';
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 const shell = promisify(exec);
-const SOURCE = fileURLToPath(new URL('..', import.meta.url));
+const SOURCE = fileURLToPath(new URL('../..', import.meta.url));
 const TOOLS_MODULES = join(SOURCE, 'tools/node_modules');
 // 路徑拆開寫：分派表照路徑字串找相關測試，寫成一整串會讓改那份文件時也跑這個測試。
 const SYNTAX = 'docs/' + 'syntax.md';
@@ -80,7 +81,11 @@ async function clone(t: test.TestContext) {
     await mkdir(join(repo, 'plugins', plugin), { recursive: true });
     await writeFile(join(repo, 'plugins', plugin, 'package.json'), JSON.stringify({ name: `essence-${plugin}`, private: true, scripts: { check: `node ../../mark.mjs ${plugin}` } }, null, 2) + '\n');
   }
-  for (const path of (await git(repo, 'ls-files', '-z', '--', 'tests')).split('\0').filter(path => path.endsWith('.test.ts'))) {
+  // 共用工具的完整檢查（第二步 §A2）也換成記號。
+  const toolsPkg = JSON.parse(await readFile(join(repo, 'tools/package.json'), 'utf8')) as { scripts: Record<string, string> };
+  toolsPkg.scripts['self-check'] = 'node ../mark.mjs tools';
+  await writeFile(join(repo, 'tools/package.json'), JSON.stringify(toolsPkg, null, 2) + '\n');
+  for (const path of (await git(repo, 'ls-files', '-z', '--', 'tests', 'tools/tests')).split('\0').filter(path => path.endsWith('.test.ts'))) {
     await writeFile(join(repo, path), 'export {};\n');
   }
   await writeFile(join(repo, 'tests/syntax-stub.test.ts'), [
@@ -144,7 +149,7 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   let r = await commit(['-m', 'mindboard only']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
-  assert.match(lastLine(r.out), /^分派表：共用檢查通過；Cards：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）通過$/);
+  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）通過$/);
   await assert.rejects(access(join(repo, 'node_modules')), { code: 'ENOENT' });
 
   // 2. 只改 Cards：沒有根目錄的 node_modules 擋下，裝過（空的 node_modules）才跑。
@@ -182,6 +187,14 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   r = await commit(['-m', 'move']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture', 'mindboard']);
+
+  // 6. 只改共用工具（第 7 條）：只跑共用工具的完整檢查，三個外掛都跳過（第二步 §A3）。
+  await appendFile(join(repo, 'tools/check-docs.ts'), '\n// 探針\n');
+  await git(repo, 'add', '--', 'tools/check-docs.ts');
+  r = await commit(['-m', 'shared tool']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['tools']);
+  assert.match(lastLine(r.out), /共用工具：完整檢查（改到 tools\/check-docs\.ts）通過；Cards：照分派表跳過/);
 
   // 外掛的檢查失敗就擋下，commit 不會進去。
   const head = await git(repo, 'rev-parse', 'HEAD');

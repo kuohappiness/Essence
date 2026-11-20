@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildPrompt, confirmationMessage, execArgs, isCostly, lastWeekly, PRESETS, resolvePreset, sessionIdFromLog, usageFromRollout, usageLine,
-} from '../tools/codex.ts';
+} from '../codex.ts';
 
 // D-212：Claude 直接呼叫本機 Codex 的腳本。實際執行 Codex 不在測試裡（要使用者的登入與額度），這裡測組參數與讀紀錄。
 

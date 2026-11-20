@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRoadmap, renderBoard } from '../tools/roadmap-board.ts';
+import { ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRoadmap, renderBoard } from '../roadmap-board.ts';
 
 const SAMPLE = `# 標題
 
@@ -34,7 +34,7 @@ const SAMPLE = `# 標題
 `;
 
 void test('docs/roadmap.md 讀得出進行中的工作、已完成與正式 vault 的版本', () => {
-  const roadmap = parseRoadmap(readFileSync(ROADMAP, 'utf8'));
+  const roadmap = parseRoadmap(readFileSync(new URL('../../' + ROADMAP, import.meta.url), 'utf8'));
   assert.ok(roadmap.works.length >= 1);
   assert.ok(roadmap.done.length >= 1);
   assert.match(roadmap.vault?.version ?? '', /^\d+\.\d+\.\d+$/);
@@ -135,7 +135,7 @@ void test('§8 外掛的 roadmap：只讀現在在哪裡，名稱前加外掛名
 void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析、不產生網頁，寫壞的外掛 roadmap 報檔案與行號；--staged 讀暫存區；私人資訊也擋', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-roadmap-board-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const script = fileURLToPath(new URL('../tools/roadmap-board.ts', import.meta.url));
+  const script = fileURLToPath(new URL('../roadmap-board.ts', import.meta.url));
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   const put = async (path: string, text: string) => {

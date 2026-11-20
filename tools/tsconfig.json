@@ -1,0 +1,22 @@
+{
+  // 共用工具自己的型別檢查（D-208 第二步 §A2）。設定照 Cards 的根目錄，只是沒有畫面（DOM、JSX）。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts", "tests/**/*.ts"],
+  // 搬家前 tools/ 裡還有 Cards 的工具（tools/dispatch.ts 的 CARDS_TOOL），它們用 Cards 的相依，由 Cards 的檢查管；§A6 搬走後刪這一段。
+  "exclude": [
+    "backup.ts", "bench-study.ts", "compare-versions.ts", "compare", "exam-reminder.ts", "export-compare.ts", "git.ts",
+    "install.ts", "locate.ts", "node-files.ts", "restore.ts", "update-vault.ts", "vault-io.ts", "node_modules"
+  ]
+}

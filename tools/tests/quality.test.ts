@@ -20,12 +20,12 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與
   await mkdir(join(root, '.githooks'));
   await mkdir(join(root, 'src'));
   await mkdir(join(root, 'tools'));
-  const original = (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
+  const original = (await readFile(new URL('../../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, original.replaceAll('\n', '\r\n'));
   await chmod(hook, 0o755);
   // 安裝入口在 tools/package.json（D-208 第一步 §1）：npm 在 tools/ 執行，從子資料夾設的相對 core.hooksPath 照樣以工作樹的根解讀。
-  const pkg = JSON.parse(await readFile(new URL('../tools/package.json', import.meta.url), 'utf8')) as { scripts: { preprepare: string; prepare: string } };
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: { preprepare: string; prepare: string } };
   const inTools = { ...isolated, cwd: join(root, 'tools') };
   await shell(pkg.scripts.preprepare, inTools);
   await shell(pkg.scripts.prepare, inTools);
@@ -57,23 +57,23 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
   await mkdir(join(root, 'tools'));
-  await symlink(fileURLToPath(new URL('../tools/node_modules', import.meta.url)), modules, 'junction');
+  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), modules, 'junction');
   // 本 repo 的例外表在這裡會變成「沒用到」，複製時清空。
-  const checker = await readFile(new URL('../tools/check-docs.ts', import.meta.url), 'utf8');
+  const checker = await readFile(new URL('../check-docs.ts', import.meta.url), 'utf8');
   const emptied = checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];');
   assert.notEqual(emptied, checker);
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
-  await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../tools/secretlint.mjs', import.meta.url), 'utf8'));
-  await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../.secretlintrc.json', import.meta.url), 'utf8'));
+  await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../secretlint.mjs', import.meta.url), 'utf8'));
+  await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../../.secretlintrc.json', import.meta.url), 'utf8'));
   // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製；兩份 skill 與 roadmap 的檢查換成替身（這裡沒有）。
   for (const name of ['check-local-paths.ts', 'hooks.ts', 'dispatch.ts', 'check-plugin-imports.ts']) {
-    await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
+    await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(root, 'tools', name), 'export {};\n');
   await mkdir(join(root, '.githooks'));
   for (const name of ['pre-commit', 'commit-msg']) {
     const hook = join(root, '.githooks', name);
-    await writeFile(hook, (await readFile(new URL('../.githooks/' + name, import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+    await writeFile(hook, (await readFile(new URL('../../.githooks/' + name, import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
     await chmod(hook, 0o755);
   }
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
@@ -196,7 +196,7 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   }
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
-  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await writeFile(hook, (await readFile(new URL('../../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
   await assert.rejects(run('git', commit, isolated), /先在 tools\/ 執行 npm ci/);
@@ -244,15 +244,15 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
   await mkdir(join(repo, '.githooks'));
   await mkdir(join(repo, 'tools'));
   const hook = join(repo, '.githooks/pre-merge-commit');
-  await writeFile(hook, (await readFile(new URL('../.githooks/pre-merge-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await writeFile(hook, (await readFile(new URL('../../.githooks/pre-merge-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
-  const checker = await readFile(new URL('../tools/check-docs.ts', import.meta.url), 'utf8');
+  const checker = await readFile(new URL('../check-docs.ts', import.meta.url), 'utf8');
   await writeFile(join(repo, 'tools/check-docs.ts'), checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];'));
   for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-plugin-imports.ts', '.secretlintrc.json']) {
-    await writeFile(join(repo, path), await readFile(new URL('../' + path, import.meta.url), 'utf8'));
+    await writeFile(join(repo, path), await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(repo, 'tools', name), 'export {};\n');
-  await symlink(fileURLToPath(new URL('../tools/node_modules', import.meta.url)), modules, 'junction');
+  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), modules, 'junction');
   await writeFile(join(repo, 'README.md'), '# R\n');
   await git(['add', '--', 'README.md']);
   await git(['commit', '-q', '-m', 'base']);
@@ -300,7 +300,7 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
 
 void test('兩個 hook 都只確認 tools/ 裝過再呼叫 tools/hooks.ts（分派表只有一份，不在 hook 裡各寫一份路徑）', async () => {
   for (const name of ['pre-commit', 'pre-merge-commit']) {
-    const text = await readFile(new URL('../.githooks/' + name, import.meta.url), 'utf8');
+    const text = await readFile(new URL('../../.githooks/' + name, import.meta.url), 'utf8');
     assert.match(text, new RegExp(`^exec node tools/hooks\\.ts ${name}$`, 'm'), name);
     assert.doesNotMatch(text, /grep -E/, name);
   }
@@ -323,14 +323,14 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   await mkdir(join(root, 'node_modules'));
   await mkdir(join(root, 'tools/node_modules'), { recursive: true });
   for (const name of ['hooks.ts', 'dispatch.ts']) {
-    await writeFile(join(root, 'tools', name), await readFile(new URL('../tools/' + name, import.meta.url), 'utf8'));
+    await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   }
   for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-plugin-imports.ts', 'roadmap-board.ts']) {
     await writeFile(join(root, 'tools', name), 'export {};\n');
   }
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
-  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await writeFile(hook, (await readFile(new URL('../../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
   await chmod(hook, 0o755);
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
   // Cards 的檢查在暫存內容的副本跑（§10）：package.json 與測試檔要 stage；都在分派表的 Cards 範圍（根目錄的 package.json、tests/）。

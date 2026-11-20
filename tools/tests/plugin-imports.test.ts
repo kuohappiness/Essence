@@ -7,10 +7,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkPackage, checkSource } from '../tools/check-plugin-imports.ts';
+import { checkPackage, checkSource } from '../check-plugin-imports.ts';
 
 const run = promisify(execFile);
-const CHECK = fileURLToPath(new URL('../tools/check-plugin-imports.ts', import.meta.url));
+const CHECK = fileURLToPath(new URL('../check-plugin-imports.ts', import.meta.url));
 
 const blocked = (path: string, code: string) => assert.equal(checkSource(path, code).length, 1, `${path}: ${code}`);
 const allowed = (path: string, code: string) => assert.deepEqual(checkSource(path, code), [], `${path}: ${code}`);

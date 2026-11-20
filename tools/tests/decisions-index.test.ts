@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const script = fileURLToPath(new URL('../experiments/tools/decisions-index.mjs', import.meta.url));
-const real = fileURLToPath(new URL('../docs/decisions.md', import.meta.url));
+const script = fileURLToPath(new URL('../../experiments/tools/decisions-index.mjs', import.meta.url));
+const real = fileURLToPath(new URL('../../docs/decisions.md', import.meta.url));
 const run = (...args: string[]) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
 const hash = async (path: string) => createHash('sha256').update(await readFile(path)).digest('hex');
 

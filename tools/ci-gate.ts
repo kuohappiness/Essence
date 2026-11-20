@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { NAMES, PLUGINS, dispatch, readChanges, shown, type Plugin } from './dispatch.ts';
+import { NAMES, TARGETS, dispatch, readChanges, shown, type Target } from './dispatch.ts';
 
 /** GitHub 的事件：名稱、ref、這次的 SHA 與事件的內容（GITHUB_EVENT_PATH）。 */
 export interface Event {
@@ -45,8 +45,8 @@ export function endpoints(event: Event, git: Git): Endpoints {
 }
 
 export interface Plan {
-  runs: Record<Plugin, boolean>;
-  reasons: Record<Plugin, string>;
+  runs: Record<Target, boolean>;
+  reasons: Record<Target, string>;
   compare: string;
   checkout: string;
   blocked: string[];
@@ -56,8 +56,8 @@ export function plan(event: Event, git: Git, root: string): Plan {
   const checkout = git(['rev-parse', 'HEAD']) ?? '（讀不到）';
   const ends = endpoints(event, git);
   const all = (why: string): Plan => ({
-    runs: { cards: true, capture: true, mindboard: true },
-    reasons: { cards: why, capture: why, mindboard: why },
+    runs: { tools: true, cards: true, capture: true, mindboard: true },
+    reasons: { tools: why, cards: why, capture: why, mindboard: why },
     compare: '全部', checkout, blocked: [],
   });
   if (ends.kind === 'all') return all(ends.why);
@@ -68,17 +68,17 @@ export function plan(event: Event, git: Git, root: string): Plan {
     return { ...all(`Git 讀不到 ${ends.base}..${ends.head} 的改動：${(error as Error).message.split('\n')[0]}`), compare: `${ends.base}..${ends.head}` };
   }
   const result = dispatch(changes, { root, ci: true, compare: { kind: 'range', base: ends.base, head: ends.head } });
-  const runs = {} as Record<Plugin, boolean>;
-  const reasons = {} as Record<Plugin, string>;
-  for (const plugin of PLUGINS) {
-    runs[plugin] = result.plugins[plugin].run !== 'skip';
-    reasons[plugin] = result.plugins[plugin].why;
+  const runs = {} as Record<Target, boolean>;
+  const reasons = {} as Record<Target, string>;
+  for (const target of TARGETS) {
+    runs[target] = result.targets[target].run !== 'skip';
+    reasons[target] = result.targets[target].why;
   }
   return { runs, reasons, compare: `${ends.base}..${ends.head}（${ends.why}）`, checkout, blocked: result.blocked };
 }
 
 export type JobResult = 'success' | 'failure' | 'cancelled' | 'skipped';
-export interface GateRow { plugin: string; run: string; reason: string; result: string; ok: boolean }
+export interface GateRow { target: string; run: string; reason: string; result: string; ok: boolean }
 export interface Gate { ok: boolean; rows: GateRow[]; problems: string[]; compare: string }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -88,7 +88,7 @@ const filled = (value: unknown): string | undefined => (typeof value === 'string
 const describe = (value: unknown) => (value === undefined ? '沒有' : typeof value === 'string' ? value : JSON.stringify(value));
 
 /**
- * needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, cards: { result }, … }。
+ * needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, tools: { result }, cards: { result }, … }。
  * 每個值都先查型別（L2 R4）：缺、空或型別錯的結果、旗標、比較端點與理由都列成問題，摘要不會因為型別錯拋錯。
  */
 export function gate(needsText: string | undefined): Gate {
@@ -122,33 +122,33 @@ export function gate(needsText: string | undefined): Gate {
     }
   }
   const rows: GateRow[] = [];
-  for (const plugin of PLUGINS) {
-    const flag = outputs[plugin];
-    const raw = job(plugin).result;
+  for (const target of TARGETS) {
+    const flag = outputs[target];
+    const raw = job(target).result;
     const result = filled(raw);
-    // 跳過一定有理由：每個外掛的理由都要是非空的字串。
-    const reason = filled(reasons[plugin]);
+    // 跳過一定有理由：每個對象的理由都要是非空的字串。
+    const reason = filled(reasons[target]);
     let ok = true;
     let run = flag === 'true' ? '跑' : flag === 'false' ? '不跑' : `不合法（${describe(flag)}）`;
     if (flag !== 'true' && flag !== 'false') {
       ok = false;
-      problems.push(`${NAMES[plugin]}：plan 的旗標不合法（${describe(flag)}）`);
+      problems.push(`${NAMES[target]}：plan 的旗標不合法（${describe(flag)}）`);
     } else if (!result) {
       ok = false;
-      problems.push(`${NAMES[plugin]}：job 沒有結果${raw === undefined ? '' : `（${describe(raw)}）`}`);
+      problems.push(`${NAMES[target]}：job 沒有結果${raw === undefined ? '' : `（${describe(raw)}）`}`);
     } else if (flag === 'true' && result !== 'success') {
       ok = false;
-      problems.push(result === 'skipped' ? `${NAMES[plugin]}：要跑卻跳過` : `${NAMES[plugin]}：要跑，結果是 ${result}`);
+      problems.push(result === 'skipped' ? `${NAMES[target]}：要跑卻跳過` : `${NAMES[target]}：要跑，結果是 ${result}`);
     } else if (flag === 'false' && result !== 'skipped') {
       ok = false;
-      problems.push(`${NAMES[plugin]}：不該跑卻跑了（${result}）`);
+      problems.push(`${NAMES[target]}：不該跑卻跑了（${result}）`);
     }
     if (!reason) {
       ok = false;
-      problems.push(`${NAMES[plugin]}：plan 沒有寫理由`);
+      problems.push(`${NAMES[target]}：plan 沒有寫理由`);
     }
     if (!planOk) run += '（plan 沒有成功）';
-    rows.push({ plugin: NAMES[plugin], run, reason: reason ?? '（沒有）', result: result ?? '沒有結果', ok });
+    rows.push({ target: NAMES[target], run, reason: reason ?? '（沒有）', result: result ?? '沒有結果', ok });
   }
   return { ok: problems.length === 0, rows, problems, compare: compare ?? '（plan 沒有輸出）' };
 }
@@ -159,8 +159,8 @@ export function summary(result: Gate): string {
   const lines = [
     `### 分派與把關：${result.ok ? '通過' : '沒通過'}`, '',
     `比較：${cell(result.compare)}`, '',
-    '| 外掛 | 跑不跑 | 理由 | 結果 |', '|---|---|---|---|',
-    ...result.rows.map(row => `| ${row.plugin} | ${cell(row.run)} | ${cell(row.reason)} | ${row.ok ? '' : '✗ '}${cell(row.result)} |`),
+    '| 對象 | 跑不跑 | 理由 | 結果 |', '|---|---|---|---|',
+    ...result.rows.map(row => `| ${row.target} | ${cell(row.run)} | ${cell(row.reason)} | ${row.ok ? '' : '✗ '}${cell(row.result)} |`),
   ];
   if (result.problems.length) lines.push('', ...result.problems.map(problem => `- ${cell(problem)}`));
   return lines.join('\n') + '\n';
@@ -196,9 +196,9 @@ export function main(args: string[]): number {
   if (args[0] === 'plan') {
     const root = gitIn(process.cwd())(['rev-parse', '--show-toplevel']) ?? process.cwd();
     const result = plan(readEvent(), gitIn(root), root);
-    const outputs = [...PLUGINS.map(plugin => `${plugin}=${result.runs[plugin]}`), `reasons=${JSON.stringify(result.reasons)}`, `compare=${result.compare.replace(/\n/g, ' ')}`];
+    const outputs = [...TARGETS.map(target => `${target}=${result.runs[target]}`), `reasons=${JSON.stringify(result.reasons)}`, `compare=${result.compare.replace(/\n/g, ' ')}`];
     write('GITHUB_OUTPUT', outputs.join('\n') + '\n');
-    const lines = [`比較：${result.compare}`, `checkout：${result.checkout}`, ...PLUGINS.map(plugin => `${NAMES[plugin]}：${result.runs[plugin] ? '跑' : '不跑'}，${result.reasons[plugin]}`)];
+    const lines = [`比較：${result.compare}`, `checkout：${result.checkout}`, ...TARGETS.map(target => `${NAMES[target]}：${result.runs[target] ? '跑' : '不跑'}，${result.reasons[target]}`)];
     console.log(lines.join('\n'));
     write('GITHUB_STEP_SUMMARY', ['### 分派', '', ...lines.map(line => `- ${line}`), ''].join('\n'));
     if (result.blocked.length) {

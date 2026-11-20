@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { checkMirror, COPIES, SHARED } from '../tools/check-skill-mirror.ts';
+import { checkMirror, COPIES, SHARED } from '../check-skill-mirror.ts';
 
 // 兩份副本都寫入同樣的檔案；個別測試再改其中一份。
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {

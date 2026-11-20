@@ -7,14 +7,14 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { relatedTests } from '../tools/dispatch.ts';
+import { relatedTests } from '../dispatch.ts';
 
 const run = promisify(execFile);
-const DISPATCH = fileURLToPath(new URL('../tools/dispatch.ts', import.meta.url));
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const DISPATCH = fileURLToPath(new URL('../dispatch.ts', import.meta.url));
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
-type Runs = { cards?: 'full' | 'related'; capture?: 'full'; mindboard?: 'full'; tests?: string[] };
-interface Result { blocked: string[]; plugins: Record<'cards' | 'capture' | 'mindboard', { run: string; tests: string[] }> }
+type Runs = { tools?: 'full' | 'related'; cards?: 'full' | 'related'; capture?: 'full'; mindboard?: 'full'; tests?: string[] };
+interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard', { run: string; tests: string[] }> }
 
 // 本 repo 的文件路徑用拼接寫：這份測試不讀那些文件，字面寫出來會被分派表當成它們的「相關測試」，改文件時白跑這份。
 const SYNTAX = 'docs/' + 'syntax.md';
@@ -31,7 +31,7 @@ const BASE: Record<string, string> = {
   'src/core/ai/rules.ts': `export const files = ['${ENGLISH}'];\n`,
   'tests/syntax-a.test.ts': `new URL('../${SYNTAX}', import.meta.url);\n`,
   'tests/nested/syntax-b.test.ts': `readFile('${SYNTAX}');\n`,
-  'tests/decisions-index.test.ts': `new URL('../${DECISIONS}', import.meta.url);\n`,
+  'tools/tests/decisions-index.test.ts': `new URL('../../${DECISIONS}', import.meta.url);\n`,
   'tests/deck.test.ts': `'../${ENGLISH}';\n`,
   'tests/helper.ts': `'${PRODUCT}';\n`,
   'tools/build.mjs': '\n', 'tools/check-docs.ts': '\n', 'tools/dispatch.ts': '\n', 'tools/package-lock.json': '{}\n',
@@ -69,14 +69,15 @@ async function setup(t: test.TestContext) {
 }
 
 const expected = (runs: Runs) => ({
-  cards: runs.cards ?? 'skip', capture: runs.capture ?? 'skip', mindboard: runs.mindboard ?? 'skip',
+  tools: runs.tools ?? 'skip', cards: runs.cards ?? 'skip', capture: runs.capture ?? 'skip', mindboard: runs.mindboard ?? 'skip',
   tests: runs.tests ?? [],
 });
 const actual = (result: Result) => ({
-  cards: result.plugins.cards.run, capture: result.plugins.capture.run, mindboard: result.plugins.mindboard.run,
-  tests: result.plugins.cards.tests,
+  tools: result.targets.tools.run, cards: result.targets.cards.run, capture: result.targets.capture.run, mindboard: result.targets.mindboard.run,
+  tests: result.targets.cards.tests,
 });
-const ALL: Runs = { cards: 'full', capture: 'full', mindboard: 'full' };
+const ALL: Runs = { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' };
+const DOC_CI: Runs = { cards: 'full', tools: 'full' };
 
 type Env = Awaited<ReturnType<typeof setup>>;
 interface Case { name: string; change: (e: Env) => Promise<void>; preCommit: Runs; ci: Runs; linuxOnly?: boolean }
@@ -96,24 +97,26 @@ const CASES: Case[] = [
   },
   { name: '改 src/core/files.ts', change: edit('src/core/files.ts'), preCommit: { cards: 'full' }, ci: { cards: 'full' } },
   { name: '改 tools/build.mjs', change: edit('tools/build.mjs'), preCommit: { cards: 'full' }, ci: { cards: 'full' } },
-  ...['tools/check-docs.ts', 'tools/dispatch.ts', 'tools/package-lock.json', '.githooks/pre-commit', '.github/workflows/check.yml', 'experiments/tools/decisions-index.mjs']
+  ...['tools/check-docs.ts', 'tools/package-lock.json', 'experiments/tools/decisions-index.mjs']
+    .map((path): Case => ({ name: `改 ${path}`, change: edit(path), preCommit: { tools: 'full' }, ci: { tools: 'full' } })),
+  ...['tools/dispatch.ts', '.githooks/pre-commit', '.github/workflows/check.yml']
     .map((path): Case => ({ name: `改 ${path}`, change: edit(path), preCommit: ALL, ci: ALL })),
   {
     name: `改 ${SYNTAX}`, change: edit(SYNTAX),
-    preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts'] }, ci: { cards: 'full', capture: 'full' },
+    preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts'] }, ci: { cards: 'full', capture: 'full', tools: 'full' },
   },
-  { name: `改 ${DECISIONS}`, change: edit(DECISIONS), preCommit: { cards: 'related', tests: ['tests/decisions-index.test.ts'] }, ci: { cards: 'full' } },
+  { name: `改 ${DECISIONS}`, change: edit(DECISIONS), preCommit: { tools: 'related' }, ci: DOC_CI },
   {
     name: `改 ${ENGLISH}`, change: edit(ENGLISH),
-    preCommit: { cards: 'related', tests: ['tests/ai-rules.test.ts', 'tests/deck.test.ts'] }, ci: { cards: 'full' },
+    preCommit: { cards: 'related', tests: ['tests/ai-rules.test.ts', 'tests/deck.test.ts'] }, ci: DOC_CI,
   },
   // tests/helper.ts 寫到 product.md，但不是 *.test.ts（照原本 pre-commit 的 --include='*.test.ts'）。
-  { name: `改 ${PRODUCT}（沒有測試寫到它）`, change: edit(PRODUCT), preCommit: {}, ci: { cards: 'full' } },
-  { name: '改根目錄的 NOTES.MD（大寫副檔名）', change: edit('NOTES.MD'), preCommit: {}, ci: { cards: 'full' } },
+  { name: `改 ${PRODUCT}（沒有測試寫到它）`, change: edit(PRODUCT), preCommit: {}, ci: DOC_CI },
+  { name: '改根目錄的 NOTES.MD（大寫副檔名）', change: edit('NOTES.MD'), preCommit: {}, ci: DOC_CI },
   // 最上層的任務說明與討論稿（過渡期是 Cards 與跨外掛的）：和 docs/ 一樣，規劃文件的 commit 不跑三個外掛的完整檢查。
-  { name: '改 tasks/x.md', change: edit('tasks/x.md'), preCommit: {}, ci: { cards: 'full' } },
-  { name: '改 Claude Codex Discussion/x.md（路徑有空白）', change: edit('Claude Codex Discussion/x.md'), preCommit: {}, ci: { cards: 'full' } },
-  { name: `改 ${SKILL}`, change: edit(SKILL), preCommit: {}, ci: { cards: 'full' } },
+  { name: '改 tasks/x.md', change: edit('tasks/x.md'), preCommit: {}, ci: DOC_CI },
+  { name: '改 Claude Codex Discussion/x.md（路徑有空白）', change: edit('Claude Codex Discussion/x.md'), preCommit: {}, ci: DOC_CI },
+  { name: `改 ${SKILL}`, change: edit(SKILL), preCommit: {}, ci: DOC_CI },
   { name: '刪 plugins/mindboard/src/old.ts', change: async e => { await e.git('rm', '-q', '--', 'plugins/mindboard/src/old.ts'); }, preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
   {
     name: 'git mv plugins/mindboard/a.ts plugins/capture/a.ts', change: async e => { await e.git('mv', 'plugins/mindboard/a.ts', 'plugins/capture/a.ts'); },
@@ -213,10 +216,10 @@ void test('§2 分派表：相關測試照這次比較的內容找（L2 R2）：
   await e.put('src/core/ai/rules.ts', 'export const files = [];\n');
   await e.put('tests/unstaged.test.ts', `'${DECISIONS}';\n`);
   for (const path of [SYNTAX, DECISIONS, ENGLISH]) await edit(path)(e);
-  const tests = ['tests/ai-rules.test.ts', 'tests/decisions-index.test.ts', 'tests/deck.test.ts', 'tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts'];
-  assert.deepEqual((await e.dispatch('--staged')).plugins.cards.tests, tests, '--staged');
+  const tests = ['tests/ai-rules.test.ts', 'tests/deck.test.ts', 'tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts'];
+  assert.deepEqual((await e.dispatch('--staged')).targets.cards.tests, tests, '--staged');
   await e.git('commit', '-q', '-m', 'docs');
-  assert.deepEqual((await e.dispatch('--range', e.base, 'HEAD')).plugins.cards.tests, tests, '--range');
+  assert.deepEqual((await e.dispatch('--range', e.base, 'HEAD')).targets.cards.tests, tests, '--range');
   // 反過來：head 的樹裡沒寫到（測試的修改先 commit 了），工作樹裡寫到也不選。
   await e.git('add', '--', 'tests/syntax-a.test.ts');
   await e.git('commit', '-q', '-m', 'stub');
@@ -225,12 +228,12 @@ void test('§2 分派表：相關測試照這次比較的內容找（L2 R2）：
   await e.git('add', '--', SYNTAX);
   await e.git('commit', '-q', '-m', 'syntax again');
   await e.put('tests/syntax-a.test.ts', `'${SYNTAX}';\n`);
-  assert.deepEqual((await e.dispatch('--range', stub, 'HEAD')).plugins.cards.tests, ['tests/nested/syntax-b.test.ts'], '--range 讀 head 的樹');
+  assert.deepEqual((await e.dispatch('--range', stub, 'HEAD')).targets.cards.tests, ['tests/nested/syntax-b.test.ts'], '--range 讀 head 的樹');
 });
 
 void test('§2 分派表：本 repo 的相關測試照實際搜尋找得到（文件的測試、規則檔的特例）', () => {
-  const related = (path: string) => relatedTests(ROOT, { kind: 'staged' }, [path]);
-  assert.ok(related(DECISIONS).includes('tests/decisions-index.test.ts'));
+  const related = (path: string) => relatedTests(ROOT, { kind: 'staged' }, 'cards', [path]);
+  assert.ok(relatedTests(ROOT, { kind: 'staged' }, 'tools', [DECISIONS]).includes('tests/decisions-index.test.ts'));
   const english = related(ENGLISH);
   assert.ok(english.includes('tests/deck.test.ts') && english.includes('tests/ai-rules.test.ts'), english.join(' '));
   // 這份測試自己不算：路徑用拼接寫。
