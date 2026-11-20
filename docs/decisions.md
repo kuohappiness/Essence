@@ -236,7 +236,7 @@
 | [D-208 三個外掛在同一個 repo 開發，每個外掛有自己的資料夾](#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) | 三個外掛在同一個 repo（改名 Essence）開發，各在 `plugins/` 有自己的 docs（任務與討論稿也放在裡面，D-213）；新外掛寫程式前先建，Cards 等穩定基線再搬；決定維持一份。 | 2026-11-17 | ✅ 後續見 [D-211](#d-211-本機資料夾也改名舊對話收尾後不接續)、[D-213](#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)、[D-216](#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)、[D-218](#d-218-plugins-改名-apps每個軟體的資料夾首字大寫) |
 | [D-211 本機資料夾也改名，舊對話收尾後不接續](#d-211-本機資料夾也改名舊對話收尾後不接續) | 本機資料夾也改名 `Essence`：改名前收尾、交接寫進文件，改名後開新對話；清掉 worktree 寫死的路徑，用腳本改名、核對，不過就退回。 | 2026-11-18 | ✅ |
 | [D-213 任務與討論稿放進 docs，外掛專用的放外掛的 docs](#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) | 任務說明與討論稿放在 `docs/` 底下：全域的在最上層，只講一個外掛的在 `plugins/<外掛>/docs/`；併進 Cards 搬家第二步的 B 一次搬，搬完擋舊位置。 | 2026-11-19 | ✅ |
-| [D-218 `plugins/` 改名 `apps/`，每個軟體的資料夾首字大寫](#d-218-plugins-改名-apps每個軟體的資料夾首字大寫) | `plugins/` 改名 `apps/`、首字大寫（`apps/Cards`、`apps/Capture`、`apps/Mindboard`，入口將來是 `apps/Portal`）；外掛 ID 與 vault 格式不變；軟體代號對資料夾只寫一張表，機械檢查擋大小寫不符；本機一個 PR、開工前查核與 L2。 | 2026-11-21 | ✅ |
+| [D-218 `plugins/` 改名 `apps/`，每個軟體的資料夾首字大寫](#d-218-plugins-改名-apps每個軟體的資料夾首字大寫) | `plugins/` 改名 `apps/`、首字大寫（`apps/Cards`、`apps/Capture`、`apps/Mindboard`，入口是 `apps/Portal`，第一份文件出現時建）；外掛 ID 與 vault 格式不變；軟體代號對資料夾只寫一張表，機械檢查擋大小寫不符；本機一個 PR、開工前查核與 L2。 | 2026-11-21 | ✅ |
 
 ### 協作與文件
 
@@ -6364,7 +6364,7 @@
 
 **決定**：
 
-1. **資料夾改名**：`plugins/` 改成 `apps/`，每個軟體的資料夾名首字大寫：`apps/Cards`、`apps/Capture`、`apps/Mindboard`。入口網站將來是 `apps/Portal`，照 D-208 第 5 點在寫第一行程式前才建，這次只在 [architecture.md〈repo 結構〉](architecture.md#9-repo-結構-d-208)寫位置。
+1. **資料夾改名**：`plugins/` 改成 `apps/`，每個軟體的資料夾名首字大寫：`apps/Cards`、`apps/Capture`、`apps/Mindboard`。入口網站是 `apps/Portal`：第一份文件出現時建資料夾（使用者 2026-11-21 要把網頁版討論裡入口網站的部分整理進 `apps/Portal/docs/`，和 D-208「`docs/` 第一份文件出現才建」同一個規則）；套件設定與檢查照 D-208 第 5 點，寫第一行程式前才建。
 2. **用詞**：資料夾這一層叫「軟體」（`apps/<軟體>/`）；Cards、Capture、Mindboard 本身仍是 Obsidian 外掛，講外掛才有的事（manifest、vault 裡的安裝）照舊叫外掛。D-208 寫的 `plugins/<外掛>/` 讀作 `apps/<軟體>/`；第 10 點「不互相 import」適用 `apps/` 底下每個軟體，含之後的 Portal。
 3. **不改**：外掛 ID `essence-cards`、vault 裡的 `.obsidian/plugins/essence-cards/`、套件名稱、tag、任何寫進 vault 的格式。
 4. **大小寫**：路徑一律照 git 追蹤的寫法。程式裡的軟體代號（`cards`、`capture`、`mindboard`）對到資料夾只寫在一張表，不用字串組；機械檢查擋大小寫不符的路徑，也擋改名後又出現的 `plugins/` 追蹤檔。

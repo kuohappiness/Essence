@@ -50,7 +50,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 - **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。已合併進 `main`（2026-11-18，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)），結果見[任務說明](tasks/one-repo-step-1.md)。
 - **轉錄稿格式**：第二步 B 就搬到最上層的 `docs/transcript.md`（使用者 2026-11-20 調整第 6 點的時機）；共用範例與相容檢查等第一個需要共同規格的 Capture 任務。
-- **`plugins/` 改名 `apps/`、首字大寫**：定案 [D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)（使用者 2026-11-21），[任務說明](tasks/rename-plugins-to-apps.md)；入口網站之後放 `apps/Portal/`。
+- **`plugins/` 改名 `apps/`、首字大寫**：定案 [D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)（使用者 2026-11-21），[任務說明](tasks/rename-plugins-to-apps.md)；入口網站放 `apps/Portal/`（第一份文件出現時建，網頁版的討論串在改名合併後寫）。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
 - **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
 
