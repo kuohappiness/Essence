@@ -123,7 +123,9 @@ export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root
     const map = JSON.parse(await readFile(outfile + '.map', 'utf8'));
     // esbuild 的 sources 相對輸出資料夾；輸出和 repo 在不同磁碟（例如暫存資料夾在 C:）時是 file: 網址。
     const absolute = source => source.startsWith('file:') ? fileURLToPath(source) : resolve(outdir, source);
-    map.sources = map.sources.map(source => relative(root, absolute(source)).replaceAll('\\', '/'));
+    // 相對 repo 的根（Cards 往上 RULES_FROM_ROOT），不是 Cards 的根：搬家後 locate 回的路徑才在 repo 裡找得到（第二步 L2 R5）。
+    // 搬家前保存的對照表是相對當時的根（就是 repo 的根），照舊對。
+    map.sources = map.sources.map(source => relative(resolve(root, RULES_FROM_ROOT), absolute(source)).replaceAll('\\', '/'));
     await rm(outfile + '.map');
     await mkdir(dirname(resolve(sourcemap)), { recursive: true });
     await writeFile(resolve(sourcemap), JSON.stringify(map));

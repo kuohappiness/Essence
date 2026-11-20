@@ -5,12 +5,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'esbuild';
+import { existsSync } from 'node:fs';
 import { hashBytes } from '../src/core/backup/index.ts';
 import { buildPlugin } from '../tools/build.mjs';
 import { locate } from '../tools/locate.ts';
+import { gitEnv } from '../tools/git.ts';
+import { repoPath } from './helpers/layout.ts';
+import { execFileSync } from 'node:child_process';
 
 // tasks/error-log.md §6（D-155 第 5 點）：錯誤紀錄的程式位置用保存的對照表對回原始碼；雜湊對不上就停。
 const root = fileURLToPath(new URL('../', import.meta.url));
+const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, env: gitEnv(), encoding: 'utf8' }).trim();
 
 /** 暫存的本機紀錄：一份真的正式建置（含對照表）存成 releases/9.9.9/。 */
 async function release(t: TestContext): Promise<{ local: string; folder: string; code: string }> {
@@ -40,7 +45,9 @@ void test('§6 locate：stack 的行:欄（1 起算）對回原始檔與行；st
   assert.ok(line > 0);
   const at = position(code, '"where":"limit"');
   const [found] = await locate('9.9.9', [at], local);
-  assert.equal(found.source, 'src/core/errors/log.ts');
+  // 回傳的是 repo 相對的路徑（第二步 L2 R5）：照它在 repo 裡找得到那個檔。
+  assert.equal(found.source, repoPath('src/core/errors/log.ts'));
+  assert.ok(existsSync(join(top, found.source)), found.source);
   assert.equal(found.line, line);
   assert.ok(found.text.includes('"where":"limit"'), found.text);
   const [frame] = await locate('9.9.9', [`at Xe (plugin:essence-cards:${at})`], local);

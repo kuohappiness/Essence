@@ -19,5 +19,8 @@ export function cardsIn(repo: string): string {
   return at;
 }
 
+/** Cards 裡的路徑寫成 repo 相對（對照表的 sources、locate 的回傳；第二步 L2 R5）。 */
+export const repoPath = (path: string): string => (CARDS_DIR === '.' ? '' : CARDS_DIR + '/') + path;
+
 /** .gitignore 裡指到 Cards 建置產物的寫法（從 repo 的根算）。 */
 export const cardsIgnore = (name: string): string => '/' + (CARDS_DIR === '.' ? '' : CARDS_DIR + '/') + name;

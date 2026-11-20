@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
 import { desktopViolations, RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
-import { cardsIn } from './helpers/layout.ts';
+import { cardsIn, repoPath } from './helpers/layout.ts';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 import { onPlatform } from './helpers/platform.ts';
 
@@ -224,7 +224,8 @@ void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相�
   assert.deepEqual(await tree(mapped), ['main.js', 'saved/main.js.map', 'styles.css'], '輸出資料夾裡沒有多一個 main.js.map');
   const map = JSON.parse(await readFile(target, 'utf8')) as { version: number; sources: string[]; sourcesContent: string[] };
   assert.equal(map.version, 3);
-  assert.ok(map.sources.includes('src/main.ts'), map.sources.slice(0, 5).join(', '));
+  // 相對 repo 的根，不是 Cards 的根（第二步 L2 R5：搬家後 Cards 在 plugins/cards/）。
+  assert.ok(map.sources.includes(repoPath('src/main.ts')), map.sources.slice(0, 5).join(', '));
   assert.ok(map.sources.every(source => !source.includes('\\') &&!source.startsWith('..')), '相對 repo、用 /');
   assert.equal(map.sourcesContent.length, map.sources.length);
 });
