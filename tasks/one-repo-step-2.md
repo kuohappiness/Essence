@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；〈待使用者決定〉第 1 題 2026-11-20 定案（B 就搬）
+狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../docs/decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；〈待使用者決定〉第 1 題 2026-11-20 定案（B 就搬）；A 已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)），驗收全部完成；B 待開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../docs/agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
@@ -323,7 +323,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 | `plugins/cards/tools/*.ts` 從 `plugins/cards/node_modules` 找到相依；Cards 的工具用了只在 `tools/` 的相依時會失敗（不會默默借到） | 拿掉 `tools/node_modules` 跑 Cards 的檢查（CI 的 cards job 就是這樣） | 成立：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) 的 cards job 只在 `plugins/cards` 裝相依，檢查、建置都過 |
 | 讀舊 tag 的測試（舊版是根目錄的外掛根）借 `plugins/cards/node_modules` 跑得起來 | 驗收第 A8 項 | 成立（2026-11-20，Windows 本機與 CI） |
 | GitHub 對搬家前開、只改舊路徑 `tools/install.ts` 的 PR 能不能建合併 commit（L2 R1） | 從 `ecb85f9` 開分支只改 `tools/install.ts`，對 `c0234f1` 開 draft PR（[PR #26](https://github.com/kuohappiness/Essence/pull/26)） | 不能：GitHub 判有衝突（`mergeable` false、`dirty`，關掉重開再算一次也一樣），沒有合併 commit，`pull_request` 的 run 沒跑；本機 Git 2.52 的 `merge-tree` 合得乾淨（改名限制調到 10 也一樣）。這種分支在 GitHub 上要先在本機把 A 合進來；R1 的修正留著，對 GitHub 判得出合併的情況照樣有效 |
-| 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 合併前已驗（`c298cf1`，〈A 的進度〉第 11 項）；合併後待驗 |
+| 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 成立：合併前（`c298cf1`）與合併後（`main` 的 `5afd46e`）各驗一次，〈A 的進度〉第 11 項 |
 | GitHub 上的 Codex 審查讀不讀 `plugins/cards/AGENTS.md` | 沒有探針；§B1 把〈Code Review Rules〉留在最上層，不依賴它 | 不依賴 |
 
 ## 待使用者決定
@@ -383,4 +383,6 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 根目錄留下的舊產物（使用者 2026-11-20 選搬走）：`main.js`、`styles.css`、`node_modules/` 搬到 `D:程式開發Essence Cards Backup搬家前根目錄的建置產物 2026-11-20`，兩個檔的雜湊相同、`node_modules` 15740 個項目都在；搬走後 `git status` 只剩 `docs/syntax.md` 的換行差異，`npm --prefix tools run check` 通過。`.local/` 留在原處。
 
-還沒做的驗收：第 11 項合併後在 `main` 的雲端 session。
+- 第 11 項（合併後）：使用者在 `main`（`5afd46e`）開新的雲端 session，2026-11-20 核對開場訊息：四個資料夾的結果、Node 24、`core.hooksPath` 和合併前相同。訊息原文同樣沒有存下來。
+
+A 的驗收全部完成。
