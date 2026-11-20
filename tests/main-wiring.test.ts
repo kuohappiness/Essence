@@ -15,7 +15,7 @@ import { onPlatform } from './helpers/platform.ts';
 // src/main.ts 的接線（W5 §4-1）：用共用的 obsidian 替身（tests/helpers/obsidian.ts）在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
 /** AI 製卡的規則組（tasks/ai-cards-mvp.md §1）：和真的建置一樣嵌進去。 */
-const cardRules = JSON.stringify(JSON.stringify(await embedRules(root)));
+const cardRules = JSON.stringify(JSON.stringify(await embedRules()));
 const bundle = async (dev: boolean, plugins: BuildPlugin[] = []) => (await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', plugins: [desktopOnly(root), ...plugins],
   external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: '"0.0.1+test"', CARD_RULES: cardRules },

@@ -8,7 +8,8 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
-import { desktopViolations, ruleFiles } from '../tools/build.mjs';
+import { desktopViolations, RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
+import { cardsIn } from './helpers/layout.ts';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 import { onPlatform } from './helpers/platform.ts';
 
@@ -25,18 +26,20 @@ async function tree(dir: string): Promise<string[]> {
 
 /**
  * 只有 tools/build.mjs、src/core 與給定 src 檔案的暫存專案；相依套件用 junction 指回 repo。建置要讀 AI 製卡的規則表（src/core/ai）
- * 與規則檔（tasks/ai-cards-mvp.md §1），所以 src/core 與規則檔一起複製。
+ * 與規則檔（tasks/ai-cards-mvp.md §1），所以 src/core 與規則檔一起複製。照真的 repo 的版面放（D-208 第二步 §A5）：規則檔在暫存 repo 的根，
+ * Cards 在 CARDS_DIR；回傳 Cards 的根。
  */
 async function project(t: TestContext, files: Record<string, string>): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'essence-build-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  await mkdir(join(dir, 'tools'));
+  const repo = await mkdtemp(join(tmpdir(), 'essence-build-'));
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  const dir = cardsIn(repo);
+  await mkdir(join(dir, 'tools'), { recursive: true });
   await copyFile(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
   await copyFile(join(root, 'manifest.json'), join(dir, 'manifest.json'));
   await cp(join(root, 'src/core'), join(dir, 'src/core'), { recursive: true });
   for (const path of ruleFiles()) {
-    await mkdir(dirname(join(dir, path)), { recursive: true });
-    await copyFile(join(root, path), join(dir, path));
+    await mkdir(dirname(join(repo, path)), { recursive: true });
+    await copyFile(join(root, RULES_FROM_ROOT, path), join(repo, path));
   }
   // Windows junction 不需要系統管理員權限，也不複製相依套件。
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');

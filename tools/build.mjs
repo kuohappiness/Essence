@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url';
 import { RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
+/**
+ * AI 製卡的規則檔從哪裡算：src/core/ai/rules.ts 的表寫的是 repo 根目錄算的路徑，從 Cards 的根往上幾層就是 repo 的根
+ * （D-208 第二步 §A5：Cards 搬進 plugins/cards/ 時改成 '../..'，表不用改）。
+ */
+export const RULES_FROM_ROOT = '.';
 // 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
 const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
 /** D-148：只有電腦專用的資料夾能用 Node 與 Electron，而且只能用明列的這幾個（不放寬全域的 external）。 */
@@ -76,13 +81,13 @@ export function ruleFiles() {
 ），嵌進 main.js（D-151 第 1 點）。
  * 表上的檔讀不到、標記找不到就建置失敗。
  */
-export async function embedRules(root = defaultRoot) {
+export async function embedRules(rulesRoot = resolve(defaultRoot, RULES_FROM_ROOT)) {
   const rules = {};
   for (const subject of RULE_SUBJECTS) {
     rules[subject.key] = [];
     for (const file of subject.files) {
       let raw;
-      try { raw = await readFile(resolve(root, file.path), 'utf8'); } catch (error) { throw Error(`AI 製卡的規則檔讀不到：${file.path}`, { cause: error }); }
+      try { raw = await readFile(resolve(rulesRoot, file.path), 'utf8'); } catch (error) { throw Error(`AI 製卡的規則檔讀不到：${file.path}`, { cause: error }); }
       const text = ruleText(raw, file);
       rules[subject.key].push({ name: file.name, version: file.version, text, sha256: createHash('sha256').update(text, 'utf8').digest('hex') });
     }
@@ -96,10 +101,11 @@ export async function embedRules(root = defaultRoot) {
  * （D-149 第 4 點：不只看 BUILD 有沒有 .dirty）。
  * sourcemap：對照表（main.js.map）另外寫到這個路徑（D-155 第 5 點）；用 esbuild 的 external，main.js 逐位元組不變、
  * 不加 sourceMappingURL。sources 改成相對 repo 根目錄，內容（sourcesContent）一起存，定位時不用那一版的原始碼。
+ * rulesRoot：規則檔的基準，預設是 root 往上 RULES_FROM_ROOT（測試的暫存專案可以另外指定）。
  */
-export async function buildPlugin({ root = defaultRoot, dev = false, outdir = root, sourcemap } = {}) {
+export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root, RULES_FROM_ROOT), dev = false, outdir = root, sourcemap } = {}) {
   const version = await buildVersion(root);
-  const rules = await embedRules(root);
+  const rules = await embedRules(rulesRoot);
   await mkdir(outdir, { recursive: true });
   const outfile = resolve(outdir, 'main.js');
   const result = await build({

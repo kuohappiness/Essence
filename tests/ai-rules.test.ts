@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPrompt, RULE_MARKER, RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
-import { embedRules, ruleFiles } from '../tools/build.mjs';
+import { buildPlugin, embedRules, RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
 
 // tasks/ai-cards-mvp.md §1：規則組嵌進外掛、記版號與雜湊。
 
@@ -33,10 +34,10 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
     social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.9'],
   });
   for (const path of ruleFiles().filter(path => path.startsWith('docs/'))) {
-    const text = await readFile(join(root, path), 'utf8');
+    const text = await readFile(join(root, RULES_FROM_ROOT, path), 'utf8');
     assert.equal(text.split(RULE_MARKER).length - 1, 1, path + ' 的標記');
   }
-  const rules = await embedRules(root);
+  const rules = await embedRules();
   for (const subject of RULE_SUBJECTS) {
     assert.deepEqual(rules[subject.key].map(rule => rule.name), subject.files.map(file => file.name));
     for (const rule of rules[subject.key]) {
@@ -51,7 +52,7 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
 
 void test('§3 社會的提示：規則寫的已有目標格式和任務段實際送出的相同（L2 規格核對）', async () => {
   const social = RULE_SUBJECTS.find(subject => subject.key === 'social')!;
-  const rules = (await embedRules(root)).social;
+  const rules = (await embedRules()).social;
   const prompt = buildPrompt({ subject: 'social', term: '小五上', unit: '2-2 人口', purpose: '準備段考', supplement: true, adjust: '', material: '' }, social, rules, [{ id: 'k3m9qa', name: '能說出台灣東部海岸的地形', source: '小五上 2-1 p.30', path: 'a.md', first: '台灣東部海岸是什麼地形？ :: 斷層海岸' }]);
   assert.ok(prompt.text.includes('收到的已有目標每項是 `ID 名稱｜出處｜第一題`'));
   assert.ok(!prompt.text.includes('名稱｜ID｜出處'));
@@ -62,4 +63,21 @@ void test('§1 建置：表上的檔讀不到就失敗，說出是哪一份', as
   const dir = await mkdtemp(join(tmpdir(), 'essence-rules-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   await assert.rejects(embedRules(dir), /AI 製卡的規則檔讀不到：experiments\/t4\/arch\/第二輪\/格式\.md/);
+});
+
+void test('D-208 第二步 §A5 規則檔的基準和 Cards 的根分開：預設是 repo 的根，buildPlugin 的 rulesRoot 可以另外指定', async t => {
+  const repo = resolve(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' }).trim());
+  assert.equal(resolve(root, RULES_FROM_ROOT), repo, '表上的路徑從 repo 的根算');
+  const expected = await embedRules(repo);
+  assert.deepEqual(await embedRules(), expected, '不給基準時用 repo 的根');
+  // 只有規則檔、沒有 Cards 程式的資料夾也讀得到：讀的是基準，不是 Cards 的根。
+  const copy = await mkdtemp(join(tmpdir(), 'essence-rules-root-'));
+  const empty = await mkdtemp(join(tmpdir(), 'essence-rules-empty-'));
+  t.after(async () => { await rm(copy, { recursive: true, force: true }); await rm(empty, { recursive: true, force: true }); });
+  for (const path of ruleFiles()) {
+    await mkdir(dirname(join(copy, path)), { recursive: true });
+    await copyFile(join(repo, path), join(copy, path));
+  }
+  assert.deepEqual(await embedRules(copy), expected);
+  await assert.rejects(buildPlugin({ root, rulesRoot: empty, outdir: empty }), /AI 製卡的規則檔讀不到/, 'buildPlugin 照 rulesRoot 讀');
 });

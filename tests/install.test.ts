@@ -8,7 +8,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes } from '../src/core/backup/index.ts';
 import { installVault, registerTestVault, releaseProblems } from '../tools/install.ts';
-import { ruleFiles } from '../tools/build.mjs';
+import { RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
+import { cardsIgnore, cardsIn } from './helpers/layout.ts';
 import type { InstallOptions } from '../tools/install.ts';
 import { makeVault, tempFolder } from './helpers/vault.ts';
 
@@ -34,25 +35,27 @@ const git = (dir: string, ...args: string[]): string =>
 /**
  * 暫存的 repo：src、tools/build.mjs、AI 製卡的規則檔、manifest.json、package.json，相依套件用 junction 指回；commit 後打 tag v0.0.1。
  * 版號固定是 0.0.1，不跟著真的 repo 升版（升到 0.1.0 時這裡的測試全部壞過）。
+ * 照真的 repo 的版面放（D-208 第二步 §A5）：規則檔在暫存 repo 的根，Cards 在 CARDS_DIR；dir 是 Cards 的根。
  */
 async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir: string; head: string }> {
-  const dir = await tempFolder(t, 'essence-repo-');
+  const top = await tempFolder(t, 'essence-repo-');
+  const dir = cardsIn(top);
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
-  await mkdir(join(dir, 'tools'));
+  await mkdir(join(dir, 'tools'), { recursive: true });
   await cp(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
   // 建置要讀 AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）。
   for (const path of ruleFiles()) {
-    await mkdir(dirname(join(dir, path)), { recursive: true });
-    await cp(join(root, path), join(dir, path));
+    await mkdir(dirname(join(top, path)), { recursive: true });
+    await cp(join(root, RULES_FROM_ROOT, path), join(top, path));
   }
   for (const name of ['manifest.json', 'package.json']) {
     const json = JSON.parse(await readFile(join(root, name), 'utf8')) as Record<string, unknown>;
     await writeFile(join(dir, name), JSON.stringify({ ...json, version: '0.0.1' }, null, 2) + '\n');
   }
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
-  await writeFile(join(dir, '.gitignore'), 'node_modules\n/main.js\n/styles.css\n.local/\n');
-  git(dir, 'init', '-q', '-b', 'main');
-  git(dir, 'add', '-A');
+  await writeFile(join(top, '.gitignore'), `node_modules\n${cardsIgnore('main.js')}\n${cardsIgnore('styles.css')}\n.local/\n`);
+  git(top, 'init', '-q', '-b', 'main');
+  git(top, 'add', '-A');
   git(dir, 'commit', '-q', '-m', 'release');
   if (tag) git(dir, 'tag', '-a', 'v0.0.1', '-m', '第一個正式版');
   return { dir, head: git(dir, 'rev-parse', 'HEAD') };
