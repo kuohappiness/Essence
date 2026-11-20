@@ -33,9 +33,10 @@ const SAMPLE = `# 標題
 | 2026-11-13 | 設定合併進 \`main\`，已在 0.5.0 |
 `;
 
-void test('最上層的入口讀得出進行中的工作；Cards 的 roadmap 讀得出已完成與正式 vault 的版本', () => {
+void test('最上層的入口讀得出來；Cards 的 roadmap 讀得出已完成與正式 vault 的版本', () => {
   const read = (file: string) => readFileSync(new URL('../../' + file, import.meta.url), 'utf8');
-  assert.ok(parseTopWorks(read(ROADMAP)).length >= 1);
+  // 最上層可以暫時沒有跨外掛的工作：空的狀態板合法，讀得出來就好（L2 R1）。
+  assert.doesNotThrow(() => parseTopWorks(read(ROADMAP)));
   const release = parseRelease(read(RELEASE_ROADMAP));
   assert.ok(release.done.length >= 1);
   assert.match(release.vault?.version ?? '', /^\d+\.\d+\.\d+$/);

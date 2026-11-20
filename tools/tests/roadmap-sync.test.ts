@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkDocs, formatProblem } from '../check-docs.ts';
-import { parsePluginWorks, parseRelease } from '../roadmap-board.ts';
+import { parsePluginWorks, parseRelease, parseTopWorks } from '../roadmap-board.ts';
 import { moveText } from '../roadmap-sync.ts';
 
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
@@ -316,4 +316,23 @@ void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列
   git(['add', 'docs/roadmap.md']);
   await add('plugins/cards/docs/roadmap.md', roadmap([], [], [`| ${TODAY} | **甲**：做完（已合併，[入口](../../../docs/tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']));
   assert.match(sync('--check', '--staged').stderr, /plugins\/cards\/docs\/roadmap\.md:19  .*入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:19 已經有一筆新的完成列/);
+});
+
+void test('L2 R1 最上層最後一列搬走：同步、暫存區檢查、文件檢查與白板都接受空的狀態板', async t => {
+  const { root, add, git, read, sync, commit } = await repo(t);
+  const top = (board: string[], done?: string[]) => roadmap(board, [], done).replace('開工只讀這一節。', '外掛的工作：[Cards](../plugins/cards/docs/roadmap.md#現在在哪裡)。');
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', top(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  await add('plugins/cards/docs/roadmap.md', roadmap([]));
+  commit();
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  assert.equal(sync().status, 0);
+  git(['add', 'docs/roadmap.md']);
+  assert.equal(await read('docs/roadmap.md'), top([], [`| ${TODAY} | **甲**：做完（已合併，[入口](tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']));
+  const check = sync('--check', '--staged');
+  assert.equal(check.status, 0, check.stderr);
+  assert.deepEqual(parseTopWorks(await read('docs/roadmap.md')), []);
+  assert.deepEqual(checkDocs(root, { staged: true, exceptions: [], legacy: 'all' }).problems.map(formatProblem).filter(p => p.includes('roadmap')), []);
+  const board = spawnSync(process.execPath, [fileURLToPath(new URL('../roadmap-board.ts', import.meta.url)), '--check', '--staged', '--root', root], { encoding: 'utf8' });
+  assert.equal(board.status, 0, board.stderr);
 });
