@@ -341,7 +341,8 @@ export function query(parsed: Parsed, ids: readonly string[], { deep = false, re
   if (deep) {
     const order = [...asked];
     for (let i = 0; i < order.length; i++) for (const id of links.get(order[i])!.next) if (!order.includes(id)) order.push(id);
-    return ['以下是原文與明示的後續條目（--deep），不等於完整的現行規則；實作以 product、architecture、syntax 與任務說明為準。', '',
+    // 開頭那句和舊工具逐字相同（純舊資料的輸出整份相同，L2 R11）。
+    return ['以下是原文與明示的後續條目，不等於完整的現行規則；實作以 product、architecture、syntax 與任務說明為準。', '',
       order.map(id => clean(byId.get(id)!.body)).join('\n\n')].join('\n');
   }
   const seen = new Set(asked);

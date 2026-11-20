@@ -78,7 +78,8 @@ void test('--deep 照改之前的行為：指定條目與狀態行明示的後�
   const before = await hash(path);
   const one = run('--file', path, 'D-001', '--deep');
   assert.equal(one.status, 0);
-  assert.match(one.stdout, /^以下是原文與明示的後續條目（--deep），不等於完整的現行規則/);
+  // 開頭那句和舊工具（experiments/tools/decisions-index.mjs，6b16b47）逐字相同（L2 R11）。
+  assert.ok(one.stdout.startsWith('以下是原文與明示的後續條目，不等於完整的現行規則；實作以 product、architecture、syntax 與任務說明為準。\n\n'));
   // D-099 那一行是 D-003 內文的程式碼區塊，跟著 D-003 印出，但不是一條決定。
   assert.deepEqual(headingsOf(one.stdout), ['D-001', 'D-002', 'D-003', 'D-099', 'D-004']);
   assert.match(one.stdout, /甲的內文。/);

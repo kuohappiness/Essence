@@ -221,6 +221,6 @@
 - **commit**（分支 `claude/workflow-impl-68afda`）：`6b16b47` `section`；`6a1b2b6` 決策查詢工具；`4a3cfc2` 文件分區與現有狀態板整理；`9e2b6d6` 狀態行解析、`roadmap-sync`、文件檢查與白板，接進 hook 與 `npm run check`；之後是規範的連結、skill 與 L2 請求。每個 commit 的 pre-commit 都通過；`9e2b6d6` 跑了共用檢查（`npm run check` 的各項，讀暫存區）與 tools 的 `npm run self-check`、Cards、Capture、Mindboard 的完整檢查。
 - **驗收 1～6、8、9**：各自的測試在 `tools/tests/`（`status-line`、`check-docs`、`roadmap-sync`、`roadmap-board`、`decisions-index`、`section`）；`node tools/roadmap-sync.ts --check` 在真的 repo 通過，不帶 `--check` 再跑一次不改任何字；文件檢查在真的 repo 通過；`check-skill-mirror` 通過。
 
-- **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,108 字（JavaScript 字元數，2026-11-21 的決策紀錄）；舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）印 50,100 字，和 `--deep` 只差開頭說明多的「（--deep）」。
+- **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,100 字（JavaScript 字元數，2026-11-21 的決策紀錄），和舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）的輸出逐位元組相同（L2 R11 之前開頭多「（--deep）」，已拿掉）。
 - **驗收 10**：白板在瀏覽器以 375×812 開，`document.documentElement.scrollWidth` 是 375，沒有元素超出右緣；「最近完成」與「最近定案」是兩個區塊。
 - **一次性搬移**（`4a3cfc2`）：四份 backlog 只剩〈待處理〉〈已轉出〉兩個二級標題，舊標題降一級，舊錨點都還對到同一個標題（一次性腳本比對）；技術債表的列沒動。三份 card-rules 的 AI 標記以下逐字相同。凍結清單收 224 份還是舊格式的狀態檔。封存的〈已完成〉補進五列只有決定的（D-213～D-217），另把放錯表的九列照日期搬進〈已完成〉。
