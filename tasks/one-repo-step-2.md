@@ -225,6 +225,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 1. A 已合併；〈待使用者決定〉第 1 題有答案。
 2. 用腳本產生**文件清單**（D-208 第 8 點「先列舊路徑、新路徑與引用處」），commit 進這份說明的附錄，再搬；清單是當下 `main` 的實況，所以在 B 開工時產生，不在這裡先寫死。每一份要搬的檔（或三份拆開的文件的每一段）一列，留在最上層的任務與討論稿也列（新路徑是 `docs/tasks/…`、`docs/Claude Codex Discussion/…`，D-213；這份說明自己也在內）：舊路徑、新路徑、搬法（整份 `git mv`、逐段拆出）、歸屬的理由，以及每一個引用處（來源檔:行、連到的錨點）。引用處除了 Markdown 連結，也含工具裡寫死的路徑（例如 `tools/check-docs.ts` 的 `BEFORE_D195` 與例外清單裡的 `tasks/w6-format-review-fixes.md`、`tasks/docs-architecture.md`、測試讀的路徑、`rules.ts` 的表）。
 3. D-208 第 9 點說例外只限「本 D-ID 所連遷移任務列出的路徑」：D-208 的第 8 點後面加一個連到這份說明的連結（只加連結，不改決定的內容）。
+4. 先修改連結的腳本（`experiments/tools/move-links.mjs`，A 的 L2 R4，[報告](<../Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>)）：編輯只落在解析器確認的連結位置、同一段不重複改（角括號的網址與引用式定義改壞過）；GitHub 網址只改這個 repo 的 owner；多行的連結目的地照改或明確列出不改。驗收：報告裡的樣本改完仍解析得到新位置、第二次執行不改任何字、別人的 repo 不動。A 用它改的 415 個連結不受影響（A 的待審樹 `--check` 是 0 個修改）。
 
 ### B1 歸屬規則
 
@@ -321,7 +322,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 | ESLint 的 flat config、knip 的設定、`tsconfig.json` 的 `include` 都以設定檔所在的資料夾為基準，整份搬進 `plugins/cards/` 不用改寫法 | §A6 的 commit 跑 `npm run check` | 成立：`7637a8c` 的 pre-commit 與 CI 都通過，只搬檔、沒改寫法 |
 | `plugins/cards/tools/*.ts` 從 `plugins/cards/node_modules` 找到相依；Cards 的工具用了只在 `tools/` 的相依時會失敗（不會默默借到） | 拿掉 `tools/node_modules` 跑 Cards 的檢查（CI 的 cards job 就是這樣） | 成立：A 分支的 push run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) 的 cards job 只在 `plugins/cards` 裝相依，檢查、建置都過 |
 | 讀舊 tag 的測試（舊版是根目錄的外掛根）借 `plugins/cards/node_modules` 跑得起來 | 驗收第 A8 項 | 成立（2026-11-20，Windows 本機與 CI） |
-| 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 待驗 |
+| 雲端 session 的 `CLAUDE_PROJECT_DIR` 是 repo 根，`cloud-setup.mjs` 在 `plugins/cards/` 跑得了 `npm ci` | 驗收第 A11 項（合併前在 A 的分支、合併後在 `main`，雲端） | 合併前已驗（`c298cf1`，〈A 的進度〉第 11 項）；合併後待驗 |
 | GitHub 上的 Codex 審查讀不讀 `plugins/cards/AGENTS.md` | 沒有探針；§B1 把〈Code Review Rules〉留在最上層，不依賴它 | 不依賴 |
 
 ## 待使用者決定
@@ -344,7 +345,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 ### A 的進度（2026-11-20）
 
-分支 `claude/one-repo-step-2a`（本機 worktree `Essence-step2a`，還沒 push）。`<基準>` 是 `ecb85f9`；`<搬家>` 是 `7637a8c`（前一個 commit `36261e0` 先把 Cards 的 knip 設定改成搬家後的寫法，讓 `knip.jsonc` 在搬家的 commit 是 R068）；之後 `83af5c5`（§A3 的建置版本選項）、`33fde4f`（§A8 的文件）。每個 commit 都經過 pre-commit，分派那一行都在輸出裡。
+分支 `claude/one-repo-step-2a`（本機 worktree `Essence-step2a`，已 push）。`<基準>` 是 `ecb85f9`；`<搬家>` 是 `7637a8c`（前一個 commit `36261e0` 先把 Cards 的 knip 設定改成搬家後的寫法，讓 `knip.jsonc` 在搬家的 commit 是 R068）；之後 `83af5c5`（§A3 的建置版本選項）、`33fde4f`（§A8 的文件）。每個 commit 都經過 pre-commit，分派那一行都在輸出裡。
 
 已驗的驗收項目（演練與驗收的腳本在本機的暫存資料夾，重開機可能清掉；結果以這裡為準）：
 
@@ -363,6 +364,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 12 項：A 分支 push 後的 run [44683399772](https://github.com/kuohappiness/Essence/actions/runs/44683399772) plan 是「全部」（比較 `ecb85f9..1bdc1ef`），plan、shared、tools、cards、capture、mindboard、gate 都成功。三個探針分支各從 `1bdc1ef` 只改一個檔、開 draft PR 合併到 A 的分支，看 `pull_request` 的 run，plan 比較的基點都是 `1bdc1ef`：只改 `plugins/cards/src/core/deck/parse.ts` → [44685340185](https://github.com/kuohappiness/Essence/actions/runs/44685340185) 只有 cards（加 plan、shared、gate），其餘 skipped；只改 `tools/check-docs.ts` → [44685345668](https://github.com/kuohappiness/Essence/actions/runs/44685345668) 只有 tools；只改 `docs/product.md` → [44685350055](https://github.com/kuohappiness/Essence/actions/runs/44685350055) cards 與 tools 都是完整檢查，capture、mindboard skipped。三個都綠；PR #23～#25 已關、探針分支已刪。
 - 第 13 項：`e7130d4`（§A2）與 `7637a8c`（`<搬家>`）各 push 一個探針分支，run [44683434100](https://github.com/kuohappiness/Essence/actions/runs/44683434100)、[44683434330](https://github.com/kuohappiness/Essence/actions/runs/44683434330) 七個 job 都成功；探針分支已刪。本機每個 commit 都經過 pre-commit。
 - 第 14 項（合併前的部分）：`<基準>` 與 `1bdc1ef` 各在乾淨的 worktree 跑 `node tools/progress-board.ts`、`node tools/roadmap-board.ts`，`index.html`、`progress-map-list.html`、`progress-map-board.html`、`roadmap.html` 四個檔逐行相同（產生時間剛好在同一分鐘）。合併後看 Pages 的 run。
+- 第 11 項（合併前）：使用者在分支 `c298cf1` 開新的雲端 session（只讀），2026-11-20 核對開場訊息：`tools`、`plugins/cards` 是「`npm ci` 完成」，`plugins/capture`、`plugins/mindboard` 是「沒有相依，跳過」；`node --version` 是 24 版；`core.hooksPath` 是 `.githooks`。訊息原文沒有存下來（內建瀏覽器沒登入 claude.ai，Claude 讀不到那個 session）。
 - 第 16 項：`id` 是 `essence-cards`，版號 `0.6.0` 和 `<基準>` 相同；`v0.1.0`～`v0.6.0` 指的 commit 和 GitHub 上的相同。
 
 §A7 演練（隔離的 clone 與演練 vault，都在本機暫存資料夾）：
@@ -375,4 +377,4 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 6 項通過：使用者在 iPhone 完全關掉再打開 Obsidian，「版本」顯示 `0.6.0+288fc3d9`。
 - 演練後還原：三個檔放回測試 vault，雜湊和另存的相同；Obsidian 完全關掉再打開，`version` 讀回 `0.6.0+4536a17`。測試 vault 的紀錄多了 D-149 的版本行（Windows 換版與換回、iPhone 載入各一行），其他沒動。
 
-還沒做的驗收：第 11 項（雲端 session，合併前在 A 的分支、合併後在 `main` 各一次）、第 14 項合併後的 Pages、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
+還沒做的驗收：第 11 項合併後在 `main` 的雲端 session、第 14 項合併後的 Pages、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
