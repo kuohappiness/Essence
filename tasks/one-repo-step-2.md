@@ -342,7 +342,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 
 延後的測試：（實作後填）
 
-### A 的進度（2026-11-20 暫停時）
+### A 的進度（2026-11-20）
 
 分支 `claude/one-repo-step-2a`（本機 worktree `Essence-step2a`，還沒 push）。`<基準>` 是 `ecb85f9`；`<搬家>` 是 `7637a8c`（前一個 commit `36261e0` 先把 Cards 的 knip 設定改成搬家後的寫法，讓 `knip.jsonc` 在搬家的 commit 是 R068）；之後 `83af5c5`（§A3 的建置版本選項）、`33fde4f`（§A8 的文件）。每個 commit 都經過 pre-commit，分派那一行都在輸出裡。
 
@@ -352,7 +352,11 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 2 項：`<搬家>` 379 個 R、38 個 M、沒有 D 加 A；`src/` 每一行都是 R100，`git diff -M <搬家>^ 33fde4f -- src plugins/cards/src` 194 個檔、0 行改動。§A2 的 `e7130d4` 13 個 R。
 - 第 3 項：`<基準>` 與 `83af5c5` 正式版、dev 版的 `main.js` 逐位元組相同，`styles.css` 相同，`embedRules()` `deepEqual`（5 個科目）；`83af5c5` 預設建置的 `BUILD` 是 `0.6.0+83af5c5`。
 - 第 4 項：`<搬家>` 379 個、`e7130d4` 13 個，`git log --follow` 都接得到舊路徑與搬之前最後一次改它的 commit（不算合併 commit：`--follow` 不列合併）；`eslint-rules.test.ts` 檔頭寫拆出前的 commit `d7e2a0b`。
-- 第 5 項（部分）：只裝 `tools/` 的乾淨 clone（`33fde4f`，換行照 CI 用 LF）`npm run self-check` 通過，158 個測試、157 過、1 跳過（檔名有換行，只在 Linux）；14 個測試檔各自跑過、都有測試。**還沒做**：和搬之前在 Cards 跑的逐檔測試數比對、`quality.test.ts` 拆前拆後的測試名稱比對、共用工具 knip 的探針、CI 的 cards job 不裝 `tools/`（check.yml 已是如此，待 CI 實跑確認）。
+- 第 5 項：只裝 `tools/` 的乾淨 clone（`33fde4f`，換行照 CI 用 LF）`npm run self-check` 通過，158 個測試、157 過、1 跳過（檔名有換行，只在 Linux）；14 個測試檔各自跑過、都有測試。逐檔比對：搬之前在 Cards 跑的那些測試檔，每個測試名稱搬之後都還在跑、結果都沒變；名稱不同的 33 個是規格裡的節號從 §2 改成 §A3，加上 `ci-gate` 摘要表頭「外掛」改「對象」。`quality.test.ts` 拆之前 20 個測試，拆之後 hook 的 7 個在 `tools/tests/`、ESLint 的 13 個在 Cards，每個名稱恰好一次、結果相同。在共用工具加一個沒用到的 export，`tools/` 的 knip 報出來，拿掉後通過。**還沒做**：CI 的 cards job 不裝 `tools/`（`check.yml` 已是如此，待 CI 實跑確認）。
+- 第 6 項：`dispatch.test.ts` 有 §A3 每一列與 import 範圍的案例；`hooks.test.ts` 原本缺「改 `.githooks/`：全部」、`ci-gate.test.ts` 原本缺 tools 旗標的成功與不合法，`7262ed8` 補上（hook 第 7 個情境：改 `.githooks/commit-msg`，四個對象都跑完整檢查），跑過都通過。
+- 第 8 項：`plugin-root.test.ts` 的暫存 repo 有只有根目錄、只有 `plugins/cards/`、兩個都有（其中一個 `id` 不對）、都沒有、`id` 不對、不是 JSON、`manifest.json` 是資料夾、找不到 commit 八種，從 repo 根與兩個子資料夾呼叫結果相同，丟錯的訊息都有 commit；`compare-versions.test.ts` 的「發布前比較跨過搬家」比根目錄的版本對 `plugins/cards` 的版本跑完；讀舊版 tag 的測試：`ai-add-old-version`（`v0.3.0`、`v0.5.0`）、`pick-old-version`（`v0.3.0`）和 `plugin-root` 一起跑，50 個都過；`compare-versions`（`v0.2.0`、`v0.4.0`）在 Cards 的完整檢查裡跑。
+- 第 17 項：`update-vault.test.ts` 的「升正式版的檢查」用替身讓三段各自失敗，三種都丟錯、只跑到失敗的那一段、備份資料夾是空的、沒有比較與安裝；10 個測試都過。實際的三段在 §A7 第 3 項的演練跑過。
+- 第 18 項（Windows 那一邊）：`7262ed8` 在 `plugins/cards/` 跑 `npm run check`（型別、lint、knip、測試）通過，2900 個測試全過、0 跳過，含讀 `v0.2.0`、`v0.4.0` 的 `compare-versions`；`tools/` 的完整檢查在 `7262ed8` 的 pre-commit 跑過（含 `hooks`、`dispatch`、`ci-gate`、`plugin-imports`）；第 7 項在 Windows 做。只在一邊跑的測試：`dispatch.test.ts` 的「檔名有換行」只在 Linux；`backup-desktop.test.ts` 的「所在的磁碟找不到」與 `backup.test.ts` 的 `\\?\` 長路徑只在 Windows。Linux 那一邊等 CI（第 12 項）。
 - 第 7 項：暫存 clone 裡只放沒追蹤的樣本，`check-plugin-imports --staged` 看不到；stage 之後兩個都擋下（「跑出 plugins/cards/」「根目錄的程式不 import plugins/ 裡的外掛」）。樣本沒 commit。
 - 第 9 項：連結腳本 `--check` 要改 0 個；`git grep -nE "(\.\./)+src/" -- experiments ':!experiments/plugin'` 只剩連結腳本自己測試裡的範例字串。
 - 第 10 項：乾淨 clone 在 `plugins/cards/` `npm run build`、`update-vault --install` 的正式版流程存了 `main.js.map`；產生的檔都被忽略，`git status --porcelain` 是空的。
@@ -366,4 +370,4 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 5 項通過：從 `<基準>` 改 `src/core/deck/parse.ts` 一行的分支，合併進 `33fde4f`，改動落在 `plugins/cards/src/core/deck/parse.ts`，沒有衝突。
 - 第 4、6 項**還沒做**：要開 Windows 版 Obsidian，但 `obsidian.json` 現在開著的是正式 vault，直接開會一起叫出它，要先問使用者；第 6 項要使用者的 iPhone。測試 vault 現在的開發版（`0.6.0+4536a17`，dev）三個檔已另存、雜湊記下，還沒動過測試 vault。
 
-還沒做的驗收：第 5 項的其餘部分、第 6 項（照 `tools/tests/` 現有案例核對）、第 8 項（`plugin-root.test.ts` 與跨版本的測試在 hook 裡已通過，待逐條對照）、第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁）、第 17、18 項、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
+還沒做的驗收：§A7 第 4、6 項；第 11～14 項（push 之後：雲端 session、GitHub 的探針 PR、過渡 commit 的 CI、進度網頁），連同第 5 項的 cards job 不裝 `tools/`、第 18 項的 Linux；第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
