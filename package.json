@@ -18,10 +18,9 @@
     "locate": "node tools/locate.ts",
     "lint": "eslint src tools tests",
     "knip": "node tools/knip.mjs",
-    "check": "npm run typecheck && npm run lint && npm run knip && npm --prefix tools run check && npm test",
+    "check": "npm run typecheck && npm run lint && npm run knip && npm test",
     "bench": "node tools/bench-study.ts",
-    "export-compare": "node tools/export-compare.ts",
-    "codex": "node tools/codex.ts"
+    "export-compare": "node tools/export-compare.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

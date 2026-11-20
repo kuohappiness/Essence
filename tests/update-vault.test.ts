@@ -9,7 +9,7 @@ import { hashBytes } from '../src/core/backup/index.ts';
 import type { BackupManifest } from '../src/core/backup/index.ts';
 import { examReminder } from '../tools/exam-reminder.ts';
 import { registerTestVault } from '../tools/install.ts';
-import { baseline, changedSince, checkUpdate, installUpdate } from '../tools/update-vault.ts';
+import { UPDATE_CHECKS, baseline, changedSince, checkUpdate, installUpdate } from '../tools/update-vault.ts';
 import type { UpdateOptions } from '../tools/update-vault.ts';
 import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
 
@@ -191,4 +191,30 @@ void test('考前提醒：搬出 小考/ 的小考檔（小考日期合法、空
   assert.equal(remind({ ...quizzes, d: scope('2026-10-25') }, now).kind, 'soon');
   // 屬性區壞到讀不出鍵：不猜，照段考的處理。
   assert.deepEqual(remind({ a: '---\n小考日期: [\n---\n' }, now).kind, 'unreadable');
+});
+
+void test('升正式版的檢查（D-208 第二步 §A1、驗收第 A17 項）：共用檢查、共用工具的完整檢查、Cards 的檢查都跑；任一段失敗就停，沒有備份、比較與安裝', async t => {
+  const tools = join(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, env, encoding: 'utf8' }).trim(), 'tools');
+  const expected = [[tools, 'check'], [tools, 'self-check'], [root, 'check']].map(([cwd, script]) => join(cwd, '.') + ' ' + script);
+  assert.deepEqual(UPDATE_CHECKS.map(step => step.name), ['共用檢查', '共用工具的完整檢查', 'Cards 的檢查']);
+  for (const [index, step] of UPDATE_CHECKS.entries()) {
+    const local = await tempFolder(t, 'essence-local-');
+    const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/main.js': '/*! Essence Cards build=0.0.1+' + short + ' dev=false */' });
+    await registerTestVault(vault, local);
+    const to = await tempFolder(t, 'essence-backup-');
+    const ran: string[] = [];
+    const later: string[] = [];
+    const options: UpdateOptions = { vault, local, to, seams: {
+      run: (cwd, script) => {
+        ran.push(join(cwd, '.') + ' ' + script);
+        return ran.length === index + 1 ? Promise.reject(Object.assign(Error('替身失敗'), { stdout: step.name + ' 的替身失敗' })) : Promise.resolve();
+      },
+      compare: () => { later.push('compare'); return Promise.reject(Error('不該比較')); },
+      install: () => { later.push('install'); return Promise.reject(Error('不該安裝')); },
+    } };
+    await assert.rejects(checkUpdate(options), new RegExp('^Error: ' + step.name + '（'));
+    assert.deepEqual(ran, expected.slice(0, index + 1), step.name);
+    assert.deepEqual(await readdir(to), [], step.name + '：還沒有備份');
+    assert.deepEqual(later, [], step.name);
+  }
 });

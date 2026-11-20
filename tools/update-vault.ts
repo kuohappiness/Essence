@@ -30,8 +30,8 @@ export interface UpdateOptions {
   offset?: (ms: number) => number;
   /** --install：考前 7 天內、考試期間或讀不到考試範圍時要有，維護的 AI 先問過使用者才加。 */
   examOk?: boolean;
-  /** 測試用：換掉 npm run check、發布前比較、安裝。 */
-  seams?: { check?: (root: string) => Promise<void>; compare?: typeof compareVersions; install?: typeof installVault };
+  /** 測試用：換掉整段檢查（check）或其中每一個 npm run（run）、發布前比較、安裝。 */
+  seams?: { check?: (root: string) => Promise<void>; run?: NpmRun; compare?: typeof compareVersions; install?: typeof installVault };
 }
 
 /** --check 記下的這一次：--install 用它確認還是同一個 vault、同一個 HEAD，而且資料沒變。 */
@@ -52,14 +52,32 @@ export interface CheckResult extends Omit<CheckRecord, 'created'> {
   notes: string;
 }
 
-const npmCheck = async (root: string): Promise<void> => {
-  try {
-    await shell('npm run check', { cwd: root, env: gitEnv(), maxBuffer: 64 * 1024 * 1024 });
-  } catch (error) {
-    const out = String((error as { stdout?: string }).stdout ?? '') + String((error as { stderr?: string }).stderr ?? '');
-    throw Error('npm run check 沒有通過：\n' + out.split('\n').slice(-40).join('\n'));
+type NpmRun = (cwd: string, script: string) => Promise<void>;
+const npmRun: NpmRun = async (cwd, script) => { await shell(`npm run ${script}`, { cwd, env: gitEnv(), maxBuffer: 64 * 1024 * 1024 }); };
+
+/**
+ * 升正式版前的檢查（D-208 第二步 §A1）：Cards 的 check 不再含共用檢查與共用工具的測試，所以三段都明確跑：
+ * tools/ 的 check（每次 commit 的共用檢查）與 self-check（共用工具的型別、lint、knip 與測試）、Cards 的 check。
+ * 照順序跑，任一段沒過就停；這時還沒開始備份、比較與安裝。
+ */
+export const UPDATE_CHECKS: readonly { where: 'tools' | 'cards'; script: string; name: string }[] = [
+  { where: 'tools', script: 'check', name: '共用檢查' },
+  { where: 'tools', script: 'self-check', name: '共用工具的完整檢查' },
+  { where: 'cards', script: 'check', name: 'Cards 的檢查' },
+];
+
+export async function runUpdateChecks(root: string, run: NpmRun = npmRun): Promise<void> {
+  const tools = join(git(root, ['rev-parse', '--show-toplevel']), 'tools');
+  for (const { where, script, name } of UPDATE_CHECKS) {
+    const cwd = where === 'tools' ? tools : root;
+    try {
+      await run(cwd, script);
+    } catch (error) {
+      const out = String((error as { stdout?: string }).stdout ?? '') + String((error as { stderr?: string }).stderr ?? '');
+      throw Error(`${name}（${cwd} 的 npm run ${script}）沒有通過：\n` + (out || (error as Error).message).split('\n').slice(-40).join('\n'));
+    }
   }
-};
+}
 
 /** 生效中的考試範圍的提醒；列不出或讀不到就是 unreadable，不當成沒有考試。讀內容之前就篩掉小考檔（D-189），讀不到的小考檔也不算。 */
 async function reminder(vault: string, now: number, offset: number): Promise<Reminder> {
@@ -128,7 +146,7 @@ async function snapshot(vault: string, config: string): Promise<Map<string, Uint
 const recordPath = (local: string): string => join(local, 'update-check.json');
 
 /**
- * `--check`（D-149 第 6 點、D-150 第 9 點；任務說明 1-5）：正式版的條件 → npm run check → 考前提醒 → 備份 → 發布前比較 →
+ * `--check`（D-149 第 6 點、D-150 第 9 點；任務說明 1-5）：正式版的條件 → 三段檢查（runUpdateChecks）→ 考前提醒 → 備份 → 發布前比較 →
  * 印出摘要，記下這次的備份與報告。登錄過的測試 vault 不查正式版的條件（演練用）。
  */
 export async function checkUpdate(options: UpdateOptions): Promise<CheckResult> {
@@ -143,7 +161,7 @@ export async function checkUpdate(options: UpdateOptions): Promise<CheckResult> 
     const { problems } = await releaseProblems(root);
     if (problems.length) throw Error('正式使用的 vault 只裝正式版，條件不符：\n- ' + problems.join('\n- '));
   }
-  await (options.seams?.check ?? npmCheck)(root);
+  await (options.seams?.check ?? (at => runUpdateChecks(at, options.seams?.run)))(root);
   const exam = await reminder(vault, now, offset);
   const made = await backupVault({ vault, to: options.to, config, by: 'update-vault', now: options.now, offset: options.offset });
   const zip = new Uint8Array(await readFile(made.path));

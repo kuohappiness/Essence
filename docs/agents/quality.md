@@ -8,7 +8,7 @@
 |---|---|
 | 規劃者 | Claude 的 Opus 5.5，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high。任務說明與決定先和「不做」比較（[D-153](../decisions.md#d-153-每個新決定與新任務先和不做比較)），討論稿請 Codex 專門站在「不做」那一方反駁，理由只能是優勢不明顯或代價解決不了（[D-177](../decisions.md#d-177-先問會不會明顯更好優勢明顯代價解決得了就該做)） |
 | 實作者 | Claude 的 Opus 5.5，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex，任務說明照 `tasks/w3.md` 寫，交回照 code-quality 的「實作交回」檢查（[D-168](../decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)） |
-| 獨立審查者（L2） | Codex（Sol），由 Claude 在本機用 `npm run codex` 呼叫，每次都是新 session（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)），不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
+| 獨立審查者（L2） | Codex（Sol），由 Claude 在本機用 `node tools/codex.ts` 呼叫，每次都是新 session（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)），不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus 5.5：L1 對照、核對 L2 的發現、合併 |
 
 成本：檢查不減；能交給自動檢查的就不靠人看。Claude 實作時的 L1 是自己對照規格，不算獨立審查，所以驗收條件要先寫成能用程式判斷的句子。困難的除錯照〈[卡關時的升級](#卡關時的升級)〉。
@@ -59,7 +59,7 @@
 
 請 Codex 查核時（不只 L2），寫明查什麼、讀哪些檔案、基準 commit 與驗收標準；L2 照 code-quality 的 `review.md`「審查請求範本」寫。
 
-呼叫 Codex（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：在本機 session 把請求寫進討論稿或審查報告，用背景執行 `npm run codex -- <類型> <請求檔> [--note <這一輪讀哪一節>]`，等完成的通知，不輪詢。類型與預設的模型、推理等級、沙箱在 `tools/codex.ts` 的 `PRESETS`。推理等級 xhigh 或 Astra 會用掉大量額度（預設的 `bug`、`escalate`，或用 `--effort`、`--model` 指定的都算）：先問使用者，同意了才加 `--confirmed`；沒加腳本不跑，印出要問的內容與上一輪記錄的週額度（使用者 2026-11-19）。回報存在 `.local/codex/`，原文附進同一份檔案的這一輪再核對；執行紀錄（`.log`）只在沒有回報時才讀。每次呼叫後，回覆末端附腳本印的 token 與額度那一行。xhigh 這類會跑很久的，先讓電腦保持喚醒。每一輪（第一輪、再審、討論稿的下一輪）都是新的 Codex session：沿用同一個對話時，上下文越來越長，每次呼叫都要重讀；2026-11-03 量到「入口與目錄第一批」沿用一個對話做 L2 七輪加討論三輪，那段時間 Codex 週額度上升 21 個百分點（表內各段合計 15，含同時段的其他對話；[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 1 點）。腳本找不到 Codex、登入過期或額度用完時，這一輪照舊請使用者手貼：交給使用者貼的文字第一行寫「新開一個 Codex 對話，推理等級：<等級>」。
+呼叫 Codex（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：在本機 session 把請求寫進討論稿或審查報告，用背景執行 `node tools/codex.ts <類型> <請求檔> [--note <這一輪讀哪一節>]`（在 repo 根目錄；請求檔的相對路徑照執行的資料夾算，所以不設 npm script），等完成的通知，不輪詢。類型與預設的模型、推理等級、沙箱在 `tools/codex.ts` 的 `PRESETS`。推理等級 xhigh 或 Astra 會用掉大量額度（預設的 `bug`、`escalate`，或用 `--effort`、`--model` 指定的都算）：先問使用者，同意了才加 `--confirmed`；沒加腳本不跑，印出要問的內容與上一輪記錄的週額度（使用者 2026-11-19）。回報存在 `.local/codex/`，原文附進同一份檔案的這一輪再核對；執行紀錄（`.log`）只在沒有回報時才讀。每次呼叫後，回覆末端附腳本印的 token 與額度那一行。xhigh 這類會跑很久的，先讓電腦保持喚醒。每一輪（第一輪、再審、討論稿的下一輪）都是新的 Codex session：沿用同一個對話時，上下文越來越長，每次呼叫都要重讀；2026-11-03 量到「入口與目錄第一批」沿用一個對話做 L2 七輪加討論三輪，那段時間 Codex 週額度上升 21 個百分點（表內各段合計 15，含同時段的其他對話；[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 1 點）。腳本找不到 Codex、登入過期或額度用完時，這一輪照舊請使用者手貼：交給使用者貼的文字第一行寫「新開一個 Codex 對話，推理等級：<等級>」。
 
 再審與討論稿的下一輪，那一節的開頭寫「這一輪只讀：本節、〈審查對象〉、上一輪的〈Claude 回應〉」（討論稿寫〈先讀這裡〉與這一輪的那一節），另外列出還沒結的發現 ID，以及這一輪可能碰到的已結發現與它們的驗收證據在哪一節；前幾輪預設不讀，需要時審查者照標題或發現 ID 只查相關的段落。新開的對話不記得前幾輪，沒寫就容易整份從頭讀（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 2 點）。
 
@@ -87,7 +87,7 @@ GitHub 上的 Codex 審查（[D-212](../decisions.md#d-212-claude-直接呼叫�
 [D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點。任務說明會改出題語法的解析、複習紀錄的欄位，或其他寫進使用者檔案的格式時：
 
 1. 規劃者寫好任務說明後，另寫查核請求 `tasks/<任務>-format-review.md`：只列格式那幾節、要對照的決定與 syntax.md 的章節、基準 commit；任務說明的開工條件寫明哪幾節要等查核。
-2. 用 `npm run codex -- format <請求檔>` 請 Codex 查（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：和已有的決定、syntax.md 有沒有矛盾；舊的資料與還沒更新的舊版外掛讀不讀得到；邊界情況有沒有寫清楚、能不能寫成測試。只回報，寫在 `Claude Codex Discussion/`。
+2. 用 `node tools/codex.ts format <請求檔>` 請 Codex 查（[D-212](../decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）：和已有的決定、syntax.md 有沒有矛盾；舊的資料與還沒更新的舊版外掛讀不讀得到；邊界情況有沒有寫清楚、能不能寫成測試。只回報，寫在 `Claude Codex Discussion/`。
 3. Claude 核對回報、改任務說明，再實作那幾節；任務的其他部分不用等。合併前的 L2 照舊。
 
 ## 卡關時的升級
@@ -95,8 +95,8 @@ GitHub 上的 Codex 審查（[D-212](../decisions.md#d-212-claude-直接呼叫�
 [D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 3 點、[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)。卡關的 bug 與重大決策走同一條路線。bug 是照 code-quality 的除錯做法，列出的假設都被推翻，或做不出能重現的指令；重大決策是 D-140 第 2 點那幾類（資料格式、模組邊界、要新增決定、製卡規則或學習地圖的設計）。依序：
 
 1. **Opus xhigh**：bug 從除錯做法的第 1 步再做一次；決策寫出問題、選項與各自的代價。規劃型的對話一開始就開 xhigh，中途不切。
-2. **Codex**（`npm run codex -- bug <請求檔>`，Sol、xhigh，先問使用者，同意了加 `--confirmed`；決策用 `discuss`）：bug 從頭查，只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**，Codex 只回報；決策把第 1 步寫成 `Claude Codex Discussion/` 的討論稿（D-106），Codex 回應，雙方一致後交使用者確認。
-3. **Fable 5.1 high，或 Codex 的 Astra**（`npm run codex -- escalate`，先用 low、必要時 `--effort medium`；都先問使用者）：前兩步都解不了，或兩家不一致又說不出誰對，才用；附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
+2. **Codex**（`node tools/codex.ts bug <請求檔>`，Sol、xhigh，先問使用者，同意了加 `--confirmed`；決策用 `discuss`）：bug 從頭查，只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**，Codex 只回報；決策把第 1 步寫成 `Claude Codex Discussion/` 的討論稿（D-106），Codex 回應，雙方一致後交使用者確認。
+3. **Fable 5.1 high，或 Codex 的 Astra**（`node tools/codex.ts escalate`，先用 low、必要時 `--effort medium`；都先問使用者）：前兩步都解不了，或兩家不一致又說不出誰對，才用；附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
 
 換 Claude 的模型要使用者做，Codex 那一步由 Claude 呼叫；每升一級都先跟使用者說一聲。找到根因後，回到除錯做法的第 5 步，由 Opus 修；決策定了就寫成 D-ID 或任務說明。
 
