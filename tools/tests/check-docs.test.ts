@@ -349,12 +349,19 @@ void test('§B3 舊位置：最上層或外掛根目錄的 tasks/、Claude Codex
   await add('tasks/a.md', '# 任務\n\n狀態：進行中\n');
   await add('Claude Codex Discussion/x.png', 'x');
   await add('plugins/capture/tasks/b.md', '# 任務\n\n狀態：進行中\n');
+  await add('plugins/mindboard/Claude Codex Discussion/c.md', '# 討論\n\n狀態：進行中\n');
   await add('docs/tasks/ok.md', '# 任務\n\n狀態：進行中\n');
   await add('docs/x/tasks/ok.md', '# 不是舊位置\n');
+  // 新位置照常查狀態行。
+  await add('docs/tasks/no-status.md', '# 任務\n\n建議模型：Opus\n');
+  await add('plugins/capture/docs/tasks/no-status.md', '# 任務\n\n建議模型：Opus\n');
   assert.deepEqual(run(), [
     'Claude Codex Discussion/x.png  docs/Claude Codex Discussion/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
     'plugins/capture/tasks/b.md  plugins/capture/docs/tasks/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
+    'plugins/mindboard/Claude Codex Discussion/c.md  plugins/mindboard/docs/Claude Codex Discussion/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
     'tasks/a.md  docs/tasks/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
+    'docs/tasks/no-status.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'plugins/capture/docs/tasks/no-status.md:3  狀態：  標題下第一個非空行沒有狀態',
   ]);
 });
 

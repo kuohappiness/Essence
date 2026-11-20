@@ -93,7 +93,7 @@ void test('根網址轉到清單頁', () => {
 void test('兩頁都寫出 v1 結案前待補測幾列；沒給數字就不寫（D-195）', () => {
   const stages = parseMap(SAMPLE);
   for (const render of [renderList, renderCanvas]) {
-    assert.match(render(stages, { updated: 'x', deferred: 3 }), /v1 結案前待補測 3 列（最上層與 Cards 的 backlog）/);
+    assert.match(render(stages, { updated: 'x', deferred: 3 }), /v1 結案前待補測 3 列（最上層與 Cards）/);
     assert.doesNotMatch(render(stages, { updated: 'x' }), /待補測/);
   }
 });

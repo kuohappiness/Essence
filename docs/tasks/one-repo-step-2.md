@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo：第二步，Cards 搬進 `plugins/cards/`（D-208 第 8 點，給 Claude，本機執行）
 
-狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；〈待使用者決定〉第 1 題 2026-11-20 定案（B 就搬）；A 已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)），驗收全部完成；B 開工（2026-11-20，分支 `claude/serene-payne-bfeb06`）：§B0 做完，[文件清單](one-repo-step-2-inventory.md)已 commit，接著搬檔
+狀態：規格寫好，開工前 Codex 查核四輪後雙方一致（[請求](one-repo-step-2-plan-review.md)、[報告與回應](<../Claude Codex Discussion/2026-11-19-one-repo-step-2-plan-review.md>)）；2026-11-19 照 [D-213](../decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs) 改 B：任務與討論稿搬進 `docs/` 底下（B 的 L2 一起看，沒有另外送查）；A 開工要等 `0.6.0` 裝好、iPhone 驗完；〈待使用者決定〉第 1 題 2026-11-20 定案（B 就搬）；A 已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)），驗收全部完成；B 開工（2026-11-20，分支 `claude/serene-payne-bfeb06`）：§B0 做完，[文件清單](one-repo-step-2-inventory.md)已 commit；搬檔已 commit（`495acf7`），驗收與 L2 進行中（〈結果〉的〈B 的進度〉）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（規劃與牽涉很多檔案的一致性檢查用 xhigh）。A 改到安裝、更新、備份、還原、跨版本比較的工具，也改 pre-commit、pre-merge-commit 與 CI，合併前做 L2；B 改分派表與文件檢查，合併前也做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)、第一步的做法）。
 
@@ -386,3 +386,31 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 11 項（合併後）：使用者在 `main`（`5afd46e`）開新的雲端 session，2026-11-20 核對開場訊息：四個資料夾的結果、Node 24、`core.hooksPath` 和合併前相同。訊息原文同樣沒有存下來。
 
 A 的驗收全部完成。
+
+### B 的進度（2026-11-20）
+
+分支 `claude/serene-payne-bfeb06`，從 `main` 的 `98e7940` 開出。`19a5520` 修改連結的腳本（§B0 第 4 項）；`894fa07` [文件清單](one-repo-step-2-inventory.md)與 D-208 第 8 點的連結（§B0 第 2、3 項）；`495acf7` 搬檔（§B1～§B4，以下稱 `<B 搬檔>`）：242 個 R、2 個要 `-M30%` 才認得的改名（見第 1 項）、11 個 A（拆出的新檔與 Cards 的 README、AGENTS.md、CLAUDE.md）、91 個 M。每個 commit 都經過 pre-commit；`<B 搬檔>` 的分派是共用工具與 Cards 都跑完整檢查，都通過。
+
+已驗的驗收項目（腳本在本機的暫存資料夾，另存一份在 session 的共用筆記資料夾；結果以這裡為準）：
+
+- 第 1 項：清單在 `894fa07` 先 commit。整份搬的 244 列，新路徑都在、舊路徑都不在；每一列 `git log --follow --name-only` 都有舊路徑，也有那個檔搬之前最後一次被改的 commit（不算合併 commit，同 A）。`plugins/cards/docs/plans/practice.md`、`updates.md` 兩份很短、每行很長，改連結後相似度 40%，要加 `-M30%`（清單沒有另外註明，記在這裡）。逐段拆出的段落：取 `894fa07` 的原段落和新位置比，連結目標換成佔位字串後相同，只有三段刻意改過：`product.md` 的〈3. 使用者與情境〉（目標使用者留最上層，Cards 那份連過去）、〈4. 產品原則〉（全專案的第 8 條與品質目標留最上層，Cards 那份連過去）、`backlog.md` 的〈v1 需要做的任務〉以下（技術債表前加一行連到最上層的技術債、多一列下面「實作者自己選的做法」第 1 點的技術債）。D-208 第 8 點連到這份說明（`894fa07`）。
+- 第 2 項：`node tools/check-docs.ts` 通過（385 個 Markdown 檔、7957 個連結）；文件檢查本身就是用 Markdown 解析器查每個連結的檔與錨點，舊路徑都不在了，連到舊路徑或拿掉的錨點都會報。例外是製卡規則送給 AI 的部分（第 1 點）。
+- 第 3 項：三份拆開的文件（加上 roadmap、backlog 共五份）搬家前每個 `##` 錨點在原檔都還在，被搬走的那一節都有一行連到新位置；`embedRules()` 用 `894fa07` 的規則檔內容算一次，和 `<B 搬檔>` 的 `deepEqual`（5 個科目、18 份規則的雜湊都相同）；`ai-rules.test.ts` 挑到的 Cards 規則檔 5 份。
+- 第 4 項：`tools/tests/dispatch.test.ts` 在本 repo 實際找：改 `plugins/cards/docs/syntax.md` 選到 `ai-add-move`、`ai-add-old-version`（經 helper）、`ai-add`、`deck`、`errors`、`lock`、`study` 七個；改 `docs/transcript.md` 分派到 Capture 的完整檢查、選到 Cards 的 `lock.test.ts`；舊的 `tasks/`、`Claude Codex Discussion/` 落第 10 條「全部」。`hooks.test.ts` 在乾淨 clone 改 `docs/transcript.md`，Cards 跑相關測試、Capture 跑完整檢查。
+- 第 5 項：搬走的已完成文件 106 份（狀態行是已完成、已合併、已結案），狀態行與全文在連結目標換成佔位字串後都和搬之前相同。
+- 第 6 項（合併前的部分）：本機產生 `index.html`、`progress-map-list.html`、`progress-map-board.html`、`roadmap.html`。`roadmap.html` 有 Cards 的列（前綴「Cards｜」）、正式 vault 的 `0.6.0`；待補測 5 列，都在 Cards 的 backlog（搬之前在最上層也是 5 列）。375px：三頁都沒有橫向捲動；畫布頁頂端那一列在 B 之前就超出 23px（右邊「畫布」按鈕被切掉一段），B 的說明字讓它再多 23px，改成「（最上層與 Cards）」之後那一列到 366px，整列看得到。合併後看 Pages 的 run。
+- 第 7 項：`check-docs.test.ts` 的「BEFORE_D195 也放過 Cards 的舊任務」：`plugins/cards/docs/tasks/w3.md` 放過、不在清單上的照查；Mindboard 的同名任務照查（第一步的測試照留）。
+- 第 8 項：`git ls-files tasks "Claude Codex Discussion" "plugins/*/tasks" "plugins/*/Claude Codex Discussion"` 是空的。`check-docs.test.ts` 的暫存 repo 在四種舊位置各放一個檔，都報、訊息有新位置；`docs/tasks/`、`plugins/capture/docs/tasks/` 沒有狀態行的照常報。
+- 檢查：`<B 搬檔>` 之前在工作樹跑 Cards 的 `npm run check`（2904 個測試全過）、`tools/` 的 `npm run check` 與 `npm run self-check`；self-check 原本 3 個失敗，修了再 commit（第 3 點與 `dispatch.test.ts` 一行註解）。
+- 第 9 項：L2 待送。
+
+實作者自己選的做法（規格沒寫到的）：
+
+1. **製卡規則送給 AI 的部分不改連結**：國語、社會、英文三份規則在 `<!-- 以下送給 AI -->` 以下有連到決定、試作場與討論稿的相對路徑；改了就是改送出的內容，嵌入的雜湊會變（D-151，驗收第 B3 項要相同）。那一段照搬之前的位置留著，文件檢查用 `FROZEN_RULES` 照搬家前的位置解（解不到照樣報），社會那份一條連到已搬走的討論稿的放進例外清單；Cards backlog 記一列技術債，下次改那份規則的版本時一起改。代價：在 Obsidian 或 GitHub 上點那幾條連結打不開。
+2. **改連結的腳本加三條**：拆出的新檔與整份搬的檔裡，連結先照搬之前的位置解，搬之前解不到、搬之後解得到的（手寫成新位置的）不動；`stay`：沒搬的檔裡連到拆開的原檔、指定錨點（backlog 的〈技術債〉〈已知的限制〉）的連結留在原檔，不跟著那一節的大部分去 Cards；`frozen`：上面第 1 點的範圍不改。合併前 rebase 之後要重跑，用另存的計畫檔（加了 `stay`），在 `<B 搬檔>` 上 `--check` 是 0 個修改。
+3. **連到資料夾的連結**（`../tasks/`、`../../../docs/research/` 這類）腳本不處理，手改。
+4. `tools/tests/hooks.test.ts` 的乾淨 clone：文件照本 repo 暫存區的檔案清單同步（多的刪、少的與每一份 `.md` 從工作樹複製）。搬檔的 commit 時 clone 的 HEAD 還是舊位置，新的文件檢查會擋，pre-commit 就過不了；之後的 commit 照樣有效。
+5. `experiments/t4/` 的腳本與設定檔裡的規則檔路徑改成新位置；那裡的自我測試要在 `experiments/t4/` 另外安裝相依，沒跑。
+6. 程式與測試註解裡寫到舊路徑的（例如 `tasks/one-repo-step-1.md §3`）是當時的紀錄，不改。
+
+本機留下的（不影響 repo）：工作樹裡 `tasks/`、`Claude Codex Discussion/`、`docs/card-rules/`、`docs/research/` 四個空資料夾（沒有追蹤）；`D:\Users\` 底下一份白板預覽（產生時 `--out` 給了相對路徑），請使用者刪。
