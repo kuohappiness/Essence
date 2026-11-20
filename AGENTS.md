@@ -21,8 +21,9 @@
 
 ## 開始工作前
 
-- 先讀最上層 `docs/roadmap.md` 的「現在在哪裡」（入口，[D-099](docs/decisions.md#d-099-文件精簡)）；做某個外掛時，先讀 `plugins/<外掛>/AGENTS.md`，再讀它的 roadmap。其他文件看任務需要，照〈文件分工〉找。
-- 查決定：已知 D-ID 用 `node experiments/tools/decisions-index.mjs D-xxx`；不知道時讀索引裡相關的主題。
+- 先讀最上層 `docs/roadmap.md` 的「現在在哪裡」（入口，[工作流程規範〈roadmap〉](docs/agents/workflow.md#roadmap)）；做某個外掛時，先讀 `plugins/<外掛>/AGENTS.md`，再讀它的 roadmap。其他文件看任務需要，照〈文件分工〉找。
+- 查決定：已知 D-ID 用 `node tools/decisions-index.ts D-xxx`；不知道時讀索引裡相關的主題。
+- 讀長文件（backlog、roadmap、quality.md、決策紀錄）只取需要的那一段：用 `node tools/section.ts <檔案> <標題>`，或先找標題的行號再讀那一段；入口文件只讀上面那一節（[工作流程規範](docs/agents/workflow.md#只讀需要的那一段)，[D-215](docs/decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)）。
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
@@ -36,7 +37,7 @@
 - 同一類資訊只維護一份，其他地方用連結（[D-141](docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。
 - 新點子先記進 `docs/backlog.md`，保留原意與來源。
-- roadmap 的「現在在哪裡」每件進行中的工作一列，不寫經過。
+- roadmap 的「現在在哪裡」怎麼寫，見[工作流程規範〈roadmap〉](docs/agents/workflow.md#roadmap)。
 - 做完的任務、討論稿與 plans 不刪不搬，只改標題下的狀態行（[D-143](docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 - 提到只在分支上的檔案時寫「分支 `x` 的 `path`（commit）」，不用相對連結。
 - 文件與給使用者的回覆（含進度短句、wrap_up、問題與按鈕）用繁體中文，commit 訊息照慣例用英文；英文名稱、程式識別字與必要引用保留原文（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）。
