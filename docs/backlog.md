@@ -99,6 +99,8 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 英文句子排序全部挖空時，中文提示是連到檔名有括號的筆記、或句號寫成字元參照，就不換行、第一格不顯示大寫 | 中文提示寫成 `[我累了。](note%20(1).md)` 或 `我累了&#12290;`，後面整句英文都挖空 | 只影響排版與句首大寫，格的順序與評分正確。避開：中文提示不用連結，或句首留一個英文字在格外 | 英文打字與排序 L2 第三輪的延續 R5（[報告](<../Claude Codex Discussion/2026-11-15-english-typed-order-review.md>)） |
 | 金鑰掃描的預設模式（`npm run check`、CI）讀工作樹：Git 取出檔案時的轉換會改到掃的內容 | `.gitattributes` 對含金鑰的文字檔設了 `working-tree-encoding`（例如 UTF-16）或 `filter`，而且這個 commit 沒經過 pre-commit（在 GitHub 網頁上直接改、沒裝 hook 的 clone）；這個 repo 現在只有 hook 的換行規則 | CI 讀 checkout 出來的檔，轉成 UTF-16 或被 filter 改過的金鑰對不上規則，CI 不擋。經過 pre-commit 的 commit 照常擋（`--staged` 讀索引的 blob，L2 R7）。避開：不對可能含金鑰的文字檔設編碼或 filter | [三個外掛併進同一個 repo 第一步的 L2](<../Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>) R7 的同一類、這次不改的（機制和 R7 相同，推斷，沒在 CI 實測） |
 | 卡組的「啟用」與目錄的暫停／恢復：按下確認到寫入之間切換分頁模式，或同一篇有兩個內容不同的編輯分頁，「還沒存進去的修改」的檢查可能沒擋到或多擋一次 | 按下確認後、寫進磁碟之前（平常是一次讀寫的時間，前一筆寫入卡住時才拉長），把同一篇切到編輯模式並打字，或從編輯模式切回閱讀模式；或同一篇在兩個視窗開在編輯模式、打字的同一瞬間按下 | 切到編輯模式並打字：狀態照改，Obsidian 1.15.1 把外部的修改合併進編輯器，打的字也留著，只是提示沒跳（Windows 探針 2026-11-19）。切回閱讀模式：這次沒寫，提示「剛剛改過，請再按一次」，再按一次就成功。不用避開 | [閱讀模式按「啟用」的 L2](<../Claude Codex Discussion/2026-11-19-activate-reading-mode-l2.md>) R1～R3（R1 是這次的修正帶出的，R2、R3 修正前就有） |
+| 分派表找入口相依時，區塊註解夾在 `require`／`import` 與括號或路徑之間，或區塊註解裡有不成對引號的 `from '…`，會少認那個相依 | 入口（hook、`check.yml`、外掛 scripts 叫的 `tools/` 檔）或 Cards 的測試檔這樣寫（`require /* … */ ('./x')`），之後只改它載入的下游工具或經 helper 讀的文件；現在的入口與測試都沒有這種寫法 | 該跑的外掛檢查被跳過（入口那一種 pre-commit 與 CI 都跳過；Cards 測試那一種 CI 照跑 Cards 的完整檢查）。入口那一種，`tools/tests/dispatch.test.ts` 的語法樹驗收在加入這種接線的 commit 會失敗。避開：註解不要夾在 `require(` 與路徑中間 | [三個外掛併進同一個 repo 第二步 A 的 L2](<../Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R11（R9 修正引入；再補一條判斷就是同一類的第四代，照 D-200 不加） |
+| 分派表把結尾有斜線的資料夾路徑（`require('./x/')`）旁邊同名的 `x.js` 也算成入口 | 入口這樣寫，同時有 `x/index.js` 與 `x.js`，只改 `x.js`；現在沒有這種接線 | 多跑三個外掛的檢查，不會少跑。不用避開 | [三個外掛併進同一個 repo 第二步 A 的 L2](<../Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R12（R10 修正引入） |
 | 外掛之間不 import 的檢查（`tools/check-plugin-imports.ts`）只看寫死的相對路徑：執行時才組出來的路徑、`tsconfig` 的 `paths`、打包工具的 alias、自訂 resolver 讓套件名稱指到別的外掛，都看不到 | 程式用字串組路徑再 import（`import('../../src/' + name)` 只取得到前段），或外掛設了 paths、alias、resolver | 這類跨外掛的引用不會被擋。避開：import 寫成固定的相對路徑；第一個用到 paths、alias 或 resolver 的外掛任務，把解析後不出外掛的邊界加進測試（外掛的 AGENTS.md 有寫） | [三個外掛併進同一個 repo 第一步 §6](../tasks/one-repo-step-1.md#6-外掛之間不-importtoolscheck-plugin-importsts)（設計時就知道的限制，不是 L2 找到的） |
 
 ### 待決問題
@@ -263,7 +265,7 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 - **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。已合併進 `main`（2026-11-18，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)），結果見[任務說明](../tasks/one-repo-step-1.md)。
 - **轉錄稿格式**：第一個需要共同規格的 Capture 任務搬到最上層 `docs/`（第 6 點）。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
-- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](../tasks/one-repo-step-2.md)寫好（2026-11-19）。
+- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](../tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）待做。
 
 ## 歷史索引
 
