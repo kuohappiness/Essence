@@ -15,6 +15,7 @@
     "plugin-imports": "node check-plugin-imports.ts",
     "progress-board": "node progress-board.ts",
     "roadmap-board": "node roadmap-board.ts",
+    "decisions": "node decisions-index.ts",
     "section": "node section.ts",
     "check": "npm run docs && npm run secretlint && npm run local-paths && npm run skills && npm run plugin-imports && npm run roadmap-board -- --check",
     "typecheck": "tsc --noEmit",

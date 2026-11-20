@@ -8,7 +8,7 @@
 
 ## 索引
 
-依主題分組，組內照編號排；正文照寫入的順序。「後續見」是後來修改或補充這一條的決定，要一起看。已知 D-ID 用 `node experiments/tools/decisions-index.mjs D-xxx` 印出原文與後續條目。新增決定時，先在 `experiments/tools/decisions-index.mjs` 的主題對照表加上 D-ID，再執行它，然後補上新決定的一句話。
+依主題分組，組內照編號排；正文照寫入的順序。「後續見」是後來修改或補充這一條的決定，要一起看。這張表由工具產生，不手改：已知 D-ID 用 `node tools/decisions-index.ts D-xxx` 查（預設只印一層，`--deep` 全印）；寫了新決定後執行 `node tools/decisions-index.ts` 重產。D-218 起的決定在條目裡寫「主題：…｜一句話：…」，狀態行寫「來自」「修改 D-xxx」，不改舊決定的狀態行（寫法見 [工作流程規範](agents/workflow.md#決定)）。
 
 ### 產品與範圍
 
