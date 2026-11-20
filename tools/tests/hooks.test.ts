@@ -35,6 +35,7 @@ const COPIED = [
   '.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json', 'tools/package.json',
   'tools/hooks.ts', 'tools/dispatch.ts', 'tools/check-docs.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts',
   'tools/check-skill-mirror.ts', 'tools/check-plugin-imports.ts', 'tools/roadmap-board.ts', 'tools/progress-board-data.ts',
+  'tools/decisions.ts', 'tools/status-line.ts', 'tools/roadmap-sync.ts',
 ];
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 

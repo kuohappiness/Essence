@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { RELEASE_ROADMAP, ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRelease, parseRoadmap, parseTopWorks, renderBoard } from '../roadmap-board.ts';
+import { RELEASE_ROADMAP, ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, mergeDone, parseDone, parsePluginWorks, parseRelease, parseRoadmap, parseTopWorks, recentDecisions, renderBoard } from '../roadmap-board.ts';
 
 const SAMPLE = `# 標題
 
@@ -86,6 +86,81 @@ void test('正式 vault 的版本先看「現在是」那句，沒有就看最�
 void test('已合併、還沒發布：比最新一次升版新、而且寫到 main 的列', () => {
   const { unreleased } = parseRoadmap(SAMPLE);
   assert.deepEqual(unreleased.map(d => d.date), ['2026-11-16']);
+});
+
+// D-217：〈已完成〉的列由 roadmap-sync 產生，格式是「**工作**：完成（狀態，[入口](…)）」。
+const generated = (date: string, work: string, state: string) => `| ${date} | **${work}**：做完了（${state}，[入口](tasks/${work}.md)） |`;
+
+void test('工具產生的「已合併」列算待發布（沒寫 main 也算），「已結案」不算', () => {
+  const source = SAMPLE.replace('| 2026-11-16 | 接句卡合併進 `main`：細節 |',
+    [generated('2026-11-22', '白板', '已合併'), generated('2026-11-21', '討論', '已結案'), '| 2026-11-16 | 接句卡合併進 `main`：細節 |'].join('\n'));
+  assert.deepEqual(parseRoadmap(source).unreleased.map(d => d.work.text), ['白板：做完了（已合併，入口）', '接句卡合併進 main：細節']);
+});
+
+void test('正式 vault：認得「正式 vault 升到」，和「現在是」那句取日期較新的，同一天以那句為準', () => {
+  const release = '| 2026-11-20 | **發版**：正式 vault 升到 `0.6.0`，tag `v0.6.0`（已結案，[入口](tasks/r.md)） |';
+  const withRelease = (stated: string) => SAMPLE.replace('正式使用的 vault 現在是 `0.5.0`（2026-11-14，見已完成）', stated)
+    .replace('| 2026-11-16 | 接句卡合併進 `main`：細節 |', `${generated('2026-11-21', '白板', '已合併')}\n${release}\n| 2026-11-16 | 接句卡合併進 \`main\`：細節 |`);
+  // 升版的列比那句新：用列的版本；比升版新的才是待發布（11-16 那列已經在 0.6.0 裡）。
+  const newer = parseRoadmap(withRelease('正式使用的 vault 現在是 `0.5.0`（2026-11-14）'));
+  assert.deepEqual(newer.vault, { version: '0.6.0', date: '2026-11-20' });
+  assert.deepEqual(newer.unreleased.map(d => d.date), ['2026-11-21']);
+  // 那句比較新（手動升版後還沒有任務列）：用那句。
+  assert.deepEqual(parseRoadmap(withRelease('正式使用的 vault 現在是 `0.6.1`（2026-11-21）')).vault, { version: '0.6.1', date: '2026-11-21' });
+  // 同一天：以那句為準。
+  assert.deepEqual(parseRoadmap(withRelease('正式使用的 vault 現在是 `0.5.9`（2026-11-20）')).vault, { version: '0.5.9', date: '2026-11-20' });
+});
+
+void test('最近完成合併每份 roadmap 的〈已完成〉：照日期新到舊，同一天照 roadmap 的順序與原本的順序；沒有表的那份是空的', () => {
+  const table = (rows: string[]) => `# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n${rows.join('\n')}\n`;
+  const top = parseDone(table(['| 2026-11-22 | 頂甲 |', '| 2026-11-20 | 頂乙 |']), ROADMAP);
+  const cards = parseDone(table(['| 2026-11-22 | 卡甲 |', '| 2026-11-21 | 卡乙 |', '| 2026-11-20 | 卡丙 |']), RELEASE_ROADMAP);
+  const empty = parseDone('# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n還沒有。\n', 'plugins/mindboard/docs/roadmap.md');
+  assert.deepEqual(empty, []);
+  assert.deepEqual(mergeDone([top, cards, empty]).map(d => d.work.text), ['頂甲', '卡甲', '卡乙', '頂乙', '卡丙']);
+  const html = renderBoard({ ...parseRoadmap(SAMPLE), done: mergeDone([top, cards]) }, '2026/11/22 10:00');
+  assert.ok(html.indexOf('頂甲') < html.indexOf('卡丙'));
+});
+
+// 分界是 D-218：D-218 起的是新寫法（有「來自」，算得出現在在哪）。
+const DECISIONS = ['# 決策紀錄', '', '## 索引', '', '| 決定 | 一句話 | 日期 | 狀態 |', '|---|---|---|---|',
+  ...['210', '212', '215', '216'].map(n => `| [D-${n} 舊${n}](#d-${n}-舊${n}) | 舊${n}的一句話。 | 2026-11-01 | ✅ |`), '', '---', '',
+  '## D-210 舊210', '', '✅ 2026-11-10', '',
+  '## D-211 舊211', '', '🔁 2026-11-12（待重新確認）', '',
+  '## D-212 舊212', '', '✅ 2026-11-15', '',
+  '## D-213 舊213', '', '✅ 2026-11-16', '',
+  '## D-214 舊214', '', '💡 2026-11-19（提案）', '',
+  '## D-215 舊215', '', '✅ 2026-11-20', '',
+  '## D-216 舊216', '', '✅ 2026-11-20', '',
+  '## D-217 舊217', '', '已取代 → [D-219](#d-219-新乙)｜2026-11-21', '',
+  '## D-218 新甲', '', '✅ 2026-11-21｜來自 [plans](plans/w.md)', '', '主題：協作與文件｜一句話：新甲的 `x` 一句話。', '',
+  '## D-219 新乙', '', '✅ 2026-11-20｜來自 [plans](plans/w.md)｜取代 [D-213](#d-213-舊213)', '', '主題：協作與文件｜一句話：新乙的一句話。', '',
+  '## D-220 新丙', '', '💬 2026-11-22｜來自 [plans](plans/w.md)', '', '主題：協作與文件｜一句話：還在談。', ''].join('\n');
+
+void test('最近定案：只取 ✅、沒被取代的最新 5 條，照日期再照編號新到舊；新寫法的加「現在在哪」與狀態值', () => {
+  const texts = new Map([
+    ['docs/decisions.md', DECISIONS],
+    ['docs/tasks/t.md', '# T\n\n狀態：實作中｜下一步：寫測試｜等誰：Claude\n\n來自：[D-218](../decisions.md#d-218-新甲)\n'],
+    ['docs/tasks/u.md', '# U\n\n狀態：已合併｜完成：先做的一半｜等誰：—\n\n來自：[D-218](../decisions.md#d-218-新甲)\n'],
+  ]);
+  const decided = recentDecisions(DECISIONS, texts);
+  // D-211 待重新確認、D-214 提案、D-220 討論中、D-213 被 D-219 取代、D-217 舊寫法的已取代：都不列。D-210 是第 6 條。
+  assert.deepEqual(decided.map(d => d.id), ['D-218', 'D-219', 'D-216', 'D-215', 'D-212']);
+  assert.deepEqual(decided.map(d => d.date), ['2026-11-21', '2026-11-20', '2026-11-20', '2026-11-20', '2026-11-15']);
+  assert.equal(decided[0].summary.text, '新甲的 x 一句話。');
+  assert.equal(decided[0].summary.html, '新甲的 <code>x</code> 一句話。');
+  assert.equal(decided[2].summary.text, '舊216的一句話。');
+  assert.match(decided[0].url, /docs\/decisions\.md#d-218-/);
+  assert.deepEqual(decided[0].now.map(x => [x.label, x.status]), [['docs/tasks/t.md', '實作中'], ['docs/tasks/u.md', '已合併']]);
+  assert.match(decided[0].now[0].url, /blob\/main\/docs\/tasks\/t\.md$/);
+  // 新寫法但還沒有下游、舊寫法：沒有「現在在哪」。
+  assert.deepEqual(decided[1].now, []);
+  assert.deepEqual(decided[2].now, []);
+  // 頁面：最近完成與最近定案分兩塊。
+  const html = renderBoard({ ...parseRoadmap(SAMPLE), decided }, '2026/11/22 10:00');
+  assert.match(html, /<section class="list" id="decided"><h2>最近定案<\/h2>/);
+  assert.ok(html.indexOf('最近完成') < html.indexOf('最近定案'));
+  assert.match(html, /現在在：<a href="[^"]*docs\/tasks\/t\.md"[^>]*>docs\/tasks\/t\.md<\/a>（實作中）/);
 });
 
 void test('等誰分組：去掉開頭的「等」、使用者排第一、空的歸「沒寫」', () => {

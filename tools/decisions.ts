@@ -7,7 +7,7 @@
 //   舊決定的狀態行不再手改：工具從新決定反推它的後續見與已取代。
 
 /** 新寫法的第一條決定。合併工作流程上線的 PR 前，改成 origin/main 當時的最大號加一。 */
-const BOUNDARY = 218;
+export const BOUNDARY = 218;
 
 /** 舊決定的主題（凍結，不再新增；新決定的主題寫在條目裡）。分不出來時，看這條決定主要改的是哪一份現行規範。 */
 const LEGACY_TOPICS: Record<string, string[]> = {
@@ -199,7 +199,7 @@ function existingSummaries(parsed: Parsed): Map<string, string> {
 }
 
 /** 每條決定的一句話：新的讀條目，舊的讀現有索引。 */
-function summariesOf(parsed: Parsed): Map<string, string> {
+export function summariesOf(parsed: Parsed): Map<string, string> {
   const existing = existingSummaries(parsed);
   return new Map(parsed.decisions.flatMap(d => {
     const summary = d.legacy ? existing.get(d.id) : d.summary;
