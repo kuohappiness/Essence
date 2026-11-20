@@ -188,6 +188,15 @@ const CASES: Case[] = [
     },
     change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
   },
+  // L2 第三輪 R9：正規表示式裡的引號。
+  {
+    name: 'hook 跑 node tools/start.cjs、它在正規表示式 /["\'].*["\']/ 之後 require(\'./worker.cjs\')，這次只改 tools/worker.cjs',
+    prepare: async e => {
+      await wire('tools/start.cjs', "const quoted = /[\"'].*[\"']/; const worker = require('./worker.cjs');\n")(e);
+      await wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cjs\n')(e);
+    },
+    change: edit('tools/worker.cjs'), preCommit: ALL, ci: ALL,
+  },
   {
     name: 'hook 已經直接跑 node tools/start.cts，這次只改它',
     prepare: wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/start.cts\n'),
@@ -380,8 +389,29 @@ void test('§A3 分派表：本 repo 的相關測試照實際搜尋找得到（�
 });
 
 /**
- * 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，import 用 TypeScript 自己的 preProcessFile 往下找（和 dispatch 的正規式分開算）；
- * 找到的路徑交給 Node 的 require.resolve，以 Node 實際載入的檔為準（L2 第二輪：不寫副檔名的 require）。
+ * TypeScript 語法樹找到的相對相依（L2 第三輪：和 dispatch 的正規式分開算的獨立來源）：import、export … from、import x = require、
+ * 動態 import 與 require(…) 的第一個參數是字面值的。字串、註解、正規表示式裡的不算（語法樹分得出來）。
+ */
+function astImports(text: string, fileName: string): string[] {
+  const kind = /\.[cm]?ts$/.test(fileName) ? ts.ScriptKind.TS : ts.ScriptKind.JS;
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind);
+  const found = new Set<string>();
+  const add = (node: ts.Node | undefined) => {
+    if (node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && /^\.{1,2}\//.test(node.text)) found.add(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) add(node.moduleSpecifier);
+    else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) add(node.moduleReference.expression);
+    else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) add(node.arguments[0]);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return [...found].sort();
+}
+
+/**
+ * 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，相依用 TypeScript 的語法樹往下找（astImports，和 dispatch 的正規式分開算）；
+ * 找到的路徑交給 Node 的 require.resolve，以 Node 實際載入的檔為準（L2 第二輪：不寫副檔名的 require；第三輪：結尾有斜線的資料夾）。
  */
 async function independentEntries(): Promise<Set<string>> {
   const found = new Set(['tools/dispatch.ts', 'tools/hooks.ts', 'tools/ci-gate.ts']);
@@ -403,10 +433,9 @@ async function independentEntries(): Promise<Set<string>> {
     const file = queue.pop()!;
     let text: string;
     try { text = await readFile(join(ROOT, file), 'utf8'); } catch { continue; }
-    for (const { fileName } of ts.preProcessFile(text, true, true).importedFiles) {
-      if (!fileName.startsWith('.')) continue;
+    for (const name of astImports(text, file)) {
       let target: string;
-      try { target = relative(ROOT, createRequire(join(ROOT, file)).resolve(fileName)).replaceAll('\\', '/'); } catch { continue; }
+      try { target = relative(ROOT, createRequire(join(ROOT, file)).resolve(name)).replaceAll('\\', '/'); } catch { continue; }
       if (target.startsWith('tools/') && !found.has(target)) { found.add(target); queue.push(target); }
     }
   }
@@ -422,44 +451,45 @@ void test('§A3 分派表：本 repo 的檢查入口（hook、check.yml、外掛
     const hit = RULES.find(rule => rule.matches(path, { status: 'M', path, oldMode: '100644', newMode: '100644' }, { entries: () => entries }));
     assert.equal(hit, rule6, `${path} 應命中第 6 條，實際是第 ${hit?.id} 條`);
   }
-  // 2026-11-19 的實況（§A3）：入口有這幾支；check-docs、白板、codex 等落第 7 條。
+  // 2026-11-19 的實況（§A3）：入口有這幾支；check-docs、白板、codex 等落第 7 條（多算的前提下也不能把它們算進來）。
   for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/ci-gate.ts', 'tools/check-local-paths.ts']) assert.ok(entries.has(path), path);
   for (const path of ['tools/check-docs.ts', 'tools/progress-board.ts', 'tools/roadmap-board.ts', 'tools/codex.ts']) assert.ok(!entries.has(path), path);
 });
 
-void test('§A3 分派表：import 的正規式認得同一行第二個敘述的 import 與 require，字串裡的不算（第二步 L2 R3）', () => {
-  const samples: [string, string[]][] = [
-    ["run(); import './new-entry.ts';\n", ['./new-entry.ts']],
-    ["import { a } from './a.ts'; import b from \"../b.mjs\";\n", ['../b.mjs', './a.ts']],
-    ["const worker = require('./worker.cjs');\n", ['./worker.cjs']],
-    // L2 第二輪：前面的字串裡有別種引號（撇號、跳脫的引號）不算沒關上；模板字串的 ${…} 裡是程式。
-    ["console.log(\"it's ready\"); import './apostrophe.ts';\n", ['./apostrophe.ts']],
-    ["log('say \"hi\"', 'don\\'t'); import './escaped.ts';\n", ['./escaped.ts']],
-    ["const s = `it's ${x}`; require('./after-template.cjs');\n", ['./after-template.cjs']],
-    ["const s = \"it's\" + 'require(\"./not2.cjs\")';\n", []],
-    ["module.exports = { w: require( \"../w.js\" ) };\n", ['../w.js']],
-    ["const s = 'run(); import \"./not.ts\"';\nconst r = \"require('./not.cjs')\";\n", []],
-    ["// require('./comment.cjs');\n", []],
+void test('§A3 分派表：import 的正規式涵蓋語法樹找到的每個相依，字串與註解裡的寧可多算（第二步 L2 R3、第二輪、第三輪）', () => {
+  // [原文, 語法樹找到的（Node 會載入的）, 正規式多算的]
+  const samples: [string, string[], string[]][] = [
+    ["run(); import './new-entry.ts';\n", ['./new-entry.ts'], []],
+    ["import { a } from './a.ts'; import b from \"../b.mjs\";\n", ['../b.mjs', './a.ts'], []],
+    ["const worker = require('./worker.cjs');\n", ['./worker.cjs'], []],
+    ["module.exports = { w: require( \"../w.js\" ) };\n", ['../w.js'], []],
+    ["console.log(\"it's ready\"); import './apostrophe.ts';\n", ['./apostrophe.ts'], []],
+    ["log('say \"hi\"', 'don\\'t'); import './escaped.ts';\n", ['./escaped.ts'], []],
+    ["const s = `it's ${x}`; require('./after-template.cjs');\n", ['./after-template.cjs'], []],
+    ["const s = `a ${require('./in-template.cjs')} b`;\n", ['./in-template.cjs'], []],
+    // 第三輪 R9：正規表示式裡的引號、跨行的模板字串結束之後。
+    ["const quoted = /[\"'].*[\"']/; const worker = require('./regex-line.cjs');\n", ['./regex-line.cjs'], []],
+    ["const t = `a\nb`; require('./after-multiline.cjs');\n", ['./after-multiline.cjs'], []],
+    ["function f() {} import './after-block.ts';\n", ['./after-block.ts'], []],
+    // 前提（第三輪）：不判斷是不是在字串、註解裡，寫到就算。多算的路徑不存在就不會出現在改動裡；存在就多跑檢查。
+    ["const s = 'run(); import \"./str.ts\"';\nconst r = \"require('./str.cjs')\";\n", [], ['./str.cjs', './str.ts']],
+    ["// require('./comment.cjs');\n/* import x from './block.ts' */\n", [], ['./block.ts', './comment.cjs']],
   ];
-  for (const [text, expected] of samples) {
-    assert.deepEqual([...relativeImports(text)].sort(), expected, text);
-    const typescript = [...new Set(ts.preProcessFile(text, true, true).importedFiles.map(f => f.fileName))].sort();
-    assert.deepEqual(typescript, expected, 'preProcessFile：' + text);
+  for (const [text, loaded, extra] of samples) {
+    assert.deepEqual(astImports(text, 'sample.ts'), loaded, '語法樹：' + text);
+    assert.deepEqual([...relativeImports(text)].sort(), [...loaded, ...extra].sort(), text);
   }
-  // 模板字串 ${…} 裡的 require：Node 執行時會載入，preProcessFile 不收；照 Node 算（多算只會多跑檢查）。
-  assert.deepEqual(relativeImports("const s = `a ${require('./in-template.cjs')} b`;\n"), ['./in-template.cjs']);
-  assert.deepEqual(ts.preProcessFile("const s = `a ${require('./in-template.cjs')} b`;\n", true, true).importedFiles, []);
 });
 
-void test('§A3 分派表：import 的正規式和 TypeScript 的 preProcessFile 取到的一樣（tools/ 與 helper 的每個檔）', async () => {
+void test('§A3 分派表：import 的正規式涵蓋語法樹找到的每個相依（tools/ 與 helper 的每個檔）', async () => {
   const files: string[] = [];
-  for (const name of await readdir(join(ROOT, 'tools'))) if (/\.(ts|mjs)$/.test(name)) files.push(join(ROOT, 'tools', name));
+  for (const name of await readdir(join(ROOT, 'tools'))) if (/\.[cm]?[jt]s$/.test(name)) files.push(join(ROOT, 'tools', name));
   for (const dir of [join(ROOT, 'tools/tests'), join(ROOT, C, 'tests/helpers')]) {
-    for (const name of await readdir(dir)) if (/\.(ts|mjs)$/.test(name)) files.push(join(dir, name));
+    for (const name of await readdir(dir)) if (/\.[cm]?[jt]s$/.test(name)) files.push(join(dir, name));
   }
   for (const file of files) {
     const text = await readFile(file, 'utf8');
-    const expectedImports = [...new Set(ts.preProcessFile(text, true, true).importedFiles.map(f => f.fileName).filter(name => name.startsWith('./') || name.startsWith('../')))].sort();
-    assert.deepEqual([...relativeImports(text)].sort(), expectedImports, file);
+    const found = new Set(relativeImports(text));
+    for (const name of astImports(text, file)) assert.ok(found.has(name), `${file}：${name}`);
   }
 });

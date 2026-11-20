@@ -136,45 +136,16 @@ function comparedTexts(root: string, compare: Dispatch['compare'], wanted: (path
 }
 
 /**
- * 一個檔的相對 import（import、export … from、動態 import、import '…'、require(…)）。dispatch 不用 npm 套件，所以用正規式；
- * tools/tests/dispatch.test.ts 對 tools/ 與 tests/helpers 的每個檔和 ts.preProcessFile 的結果比過。
+ * 一個檔的相對相依（import、export … from、import '…'、動態 import、require(…)），寧可多算（第二步 L2 第三輪 R9，D-200 第 2 點換前提）：
+ * 不判斷是不是在字串、註解或正規表示式裡，關鍵字後面接相對路徑的字面值就算。多算的路徑不存在就不會出現在改動裡，存在就多跑檢查；
+ * 少算才會漏跑（R3、第二輪、第三輪都是判斷字串時漏的）。dispatch 不用 npm 套件，所以用正規式；
+ * tools/tests/dispatch.test.ts 用 TypeScript 的語法樹另外算，斷言這裡涵蓋它找到的每一個。
  */
 export function relativeImports(text: string): string[] {
-  // 先拿掉註解（說明裡寫的 import 範例不算）；行註解只認前面不是引號或冒號的 //，網址與字串裡的不算。
-  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
   const found = new Set<string>();
-  // 靜態的 import、export … from：行首，或同一行 ; 之後的下一個敘述（多行的 import 最後一行是 `} from`）。
-  // 動態 import 與 require 可以在行中間（第二步 L2 R3：hook 跑 .cjs、它再 require 下游的檔）。
-  const pattern = /(^|;)[ \t]*(?:(?:import|export)\b[^'"\n;]*?\bfrom\s*|import\s+|\}[^'"\n;]*?\bfrom\s*)(['"])(\.{1,2}\/[^'"\n]+)\2|(?<![.\w$])(?:import|require)\s*\(\s*(['"])(\.{1,2}\/[^'"\n]+)\4\s*\)/gm;
-  for (const match of code.matchAll(pattern)) {
-    const path = match[3] ?? match[5];
-    if (match[3] !== undefined && match[1] === '') { found.add(path); continue; }
-    // 不在行首的：同一行前面還在字串裡（例如測試的範例）就不算。
-    if (!insideString(code.slice(code.lastIndexOf('\n', match.index) + 1, match.index))) found.add(path);
-  }
+  const pattern = /(?<![\w$.])(?:(?:import|require)\s*\(\s*(['"`])(\.{1,2}\/[^'"`\n]+?)\1|import\s*(['"])(\.{1,2}\/[^'"\n]+?)\3|from\s*(['"])(\.{1,2}\/[^'"\n]+?)\5)/g;
+  for (const match of text.matchAll(pattern)) found.add(match[2] ?? match[4] ?? match[6]);
   return [...found];
-}
-
-/**
- * 一行的開頭到這裡，結束時是不是還在字串裡：照順序走過 '、"、`，字串裡的別種引號與跳脫的字不算（L2 第二輪：
- * 原本分別數三種引號，"it's" 的撇號會被當成沒關上的單引號）。模板字串的 ${…} 裡是程式（裡面的 require 要算），
- * 對應的 } 回到模板字串；用堆疊記巢狀。
- */
-function insideString(line: string): boolean {
-  const stack: string[] = []; // 引號，或 '{'（模板字串的 ${ 裡、以及裡面的大括號）
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const top = stack.at(-1);
-    if (top === undefined || top === '{') {
-      if (char === '"' || char === "'" || char === '`') stack.push(char);
-      else if (top === '{' && char === '{') stack.push('{');
-      else if (top === '{' && char === '}') stack.pop();
-    } else if (char === '\\') i++;
-    else if (char === top) stack.pop();
-    else if (top === '`' && char === '$' && line[i + 1] === '{') { stack.push('{'); i++; }
-  }
-  const top = stack.at(-1);
-  return top !== undefined && top !== '{';
 }
 
 /**
