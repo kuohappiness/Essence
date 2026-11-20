@@ -8,7 +8,7 @@
 
 **規格軸，已重現解析、組卡到 DOM 後處理。** 任務 §4-2、§6-1 要求原題每格各對應一個畫面格，而且順序相同。英文卡組的 `詞序 排序` 下寫 `挖空：==turn====it== off.`，解析與組卡得兩格 `turn`、`it`，畫面卻只取得一個 slot。另一例 `用「＿＿」表示挖空。I know ==where== ==he== ==lives==.` 的 slot 數是三個，但第一個吃掉「＿＿」的字面範例，`lives` 應在的位置留下無法點的底線。
 
-原因是 [`SentenceBody`](../src/ui/PickCard.tsx#L62) 把每個空格串成同一種 `＿＿`，一般文字或相鄰底線都沒有來源資訊。[`insertPickSlot`](../src/ui/rendered.ts#L113) 把連續底線吃成一格，或先吃題幹本來就有的底線。[`Markdown`](../src/ui/Markdown.tsx#L76) 只在第一格找不到時回報，少掉第二格或插錯位置時仍把畫面當成渲染成功。happy-dom 探針直接使用組卡得到的 head／tails 及正式 `postProcess`，以上兩例分別得到「2 個計分格／1 個畫面格」和「畫面格 1 在中文引號內」。作答游標與紀錄仍依原來的格序，孩子可能看不到指定位置、無法回點正確的格，或在錯位的畫面上送出被當成答錯的結果。
+原因是 [`SentenceBody`](../plugins/cards/src/ui/PickCard.tsx#L62) 把每個空格串成同一種 `＿＿`，一般文字或相鄰底線都沒有來源資訊。[`insertPickSlot`](../plugins/cards/src/ui/rendered.ts#L113) 把連續底線吃成一格，或先吃題幹本來就有的底線。[`Markdown`](../plugins/cards/src/ui/Markdown.tsx#L76) 只在第一格找不到時回報，少掉第二格或插錯位置時仍把畫面當成渲染成功。happy-dom 探針直接使用組卡得到的 head／tails 及正式 `postProcess`，以上兩例分別得到「2 個計分格／1 個畫面格」和「畫面格 1 在中文引號內」。作答游標與紀錄仍依原來的格序，孩子可能看不到指定位置、無法回點正確的格，或在錯位的畫面上送出被當成答錯的結果。
 
 **真實路徑。** 手寫、貼入或修改含連續挖空、字面底線的筆記可直接觸發。英文預設一般有空格，頻率低於常規題，但這些輸入目前會被認成合法排序題，無須特殊平台狀態。建議合併前保留各原始格位的獨立識別，按來源順序插入，並核對渲染得到的格數與位置。回歸要覆蓋相鄰格、題幹原有底線、字元參照或連結文字，以及只有部分標記渲染成功。修正後用 Obsidian 真的渲染器對照一例，已有的三格探針只覆蓋正常分隔。
 
@@ -16,7 +16,7 @@
 
 **規格軸，已重現共用檢查器及產品退件入口。** 任務 §5 與 syntax §2-10 對英文草稿要求退回填空文法、異字數替代答案及未被認成排序的排序目標。把任何一例放本文，`check` 報 `english-typed-invalid` 或 `english-order-invalid`。把它移到合法的 `> [!note]- 候選卡片`，補上「理由」並保留一張有效的本文目標，產品呼叫的 `checkPiece(..., { subject: '英文', r3: false }, { unit: 'L3' })` 回 `errors: []`，候選內容仍被解析出來。三例是 `The window ==was broken== yesterday.`、`＿＿ movies is fun. :: Watching | To watch`、`I know ==where== he lives.`，分別掛在 `被動語態 文法`、`動名詞 文法`、`間接問句 排序` 下。
 
-[`check.ts:408`](../src/core/ai/check.ts#L408) 對引言框只收 `parseDeck` 的 error，候選額外呼叫 `checkPick`，但 [`check.ts:479`](../src/core/ai/check.ts#L479) 的 `checkEnglish` 只收到本文的 deck。這些違規在正式解析是提示或翻面，因此能通過 [`checkPiece`](../src/core/ai/reply.ts#L239)。已有的非法中文字 QA 等 parser error 仍會退件。
+[`check.ts:408`](../plugins/cards/src/core/ai/check.ts#L408) 對引言框只收 `parseDeck` 的 error，候選額外呼叫 `checkPick`，但 [`check.ts:479`](../plugins/cards/src/core/ai/check.ts#L479) 的 `checkEnglish` 只收到本文的 deck。這些違規在正式解析是提示或翻面，因此能通過 [`checkPiece`](../plugins/cards/src/core/ai/reply.ts#L239)。已有的非法中文字 QA 等 parser error 仍會退件。
 
 **真實路徑。** 英文預設 §5 A 本來就把教材補充文法放候選，正常 AI 回覆就會進這個入口，寫錯一格或混用填空並不罕見。現階段候選留在引言框，沒有已上線的「加入」路徑直接讓它進入複習。眼前的影響是產品接受了規格要求退回的草稿，家長手動移出後才會看到錯誤題型。建議合併前讓本文、候選共用同一份英文驗證與正確的原文行號。依 ID 加進已有目標的正式合併檢查屬於未實作入口，屆時要按目的目標檢查整個池，不能只猜引言框的名稱。
 
@@ -24,33 +24,33 @@
 
 **規格軸，已重現。** 任務 §3-2～4、syntax §2-3 和審查請求中的實作者說明，要求濾網排除的英翻中不算配對，原本會排程而只是因紀錄讀不懂停掉的才要等。合成 `go 英翻中`（重要性高）與無紀錄的 `go 過去式`，套 `重要性：高` 濾網時，變化單獨出現。另給原形一筆較高 `need` 的紀錄使它進 `history.held`，保持同一濾網，變化就消失。解除濾網時，有 held 的原形讓變化等候符合預期。
 
-[`plan.ts:100–107`](../src/core/study/plan.ts#L100) 檢查分類與重要性，[held 補回配對的分支](../src/core/study/plan.ts#L171) 重算時漏掉這兩項；分類是同篇共同條件，這組可重現的差異來自逐目標的重要性。保持 `candidate` 與「只因紀錄停掉」使用同一個資格判斷，可以避免開著濾網卻仍等待被排除的卡。
+[`plan.ts:100–107`](../plugins/cards/src/core/study/plan.ts#L100) 檢查分類與重要性，[held 補回配對的分支](../plugins/cards/src/core/study/plan.ts#L171) 重算時漏掉這兩項；分類是同篇共同條件，這組可重現的差異來自逐目標的重要性。保持 `candidate` 與「只因紀錄停掉」使用同一個資格判斷，可以避免開著濾網卻仍等待被排除的卡。
 
 **真實路徑。** 需要同篇同字、原形被濾網排除且有讀不懂的特定紀錄、變化還沒開始。正常製卡本身不會產生較高 `need`，混版或非完整紀錄才可能觸發，頻率較低。建議一併修正，測「濾網」×「held」的四種組合。D-157 重複 ID 無法配對屬已列明的限制，本例沒有重複 ID。
 
 ## R4｜P3｜打字卡的手動朗讀仍念提示，英文括號標籤也會漏進自動朗讀
 
-**規格軸，已重現朗讀傳入文字。** 任務 §6-3 要求填回答案讀原句時，括號提示不念。標準例 `I ＿＿ Tom since I was six. (know) :: have known` 的自動朗讀正確，但 [`TypedBody`](../src/ui/screens.tsx#L190) 的題幹喇叭走 `lineSpeech(fillBlank(...))`，探針得到 `I have known Tom since I was six. (know)`。另一方面，對允許的題首標籤 `(Passive Voice) I ＿＿ every day. (clean) :: am cleaned`，[`answerSpeech`](../src/review/english.ts#L74) 實際回 `["am cleaned","Passive Voice) I am cleaned every day."]`。英文片段先略過開括號，後續才移除成對括號，留下提示。反過來，`I ＿＿ the keys (but not the phone) yesterday. (lose) :: lost` 的自動朗讀也會刪掉原句中有意義的括號內容。
+**規格軸，已重現朗讀傳入文字。** 任務 §6-3 要求填回答案讀原句時，括號提示不念。標準例 `I ＿＿ Tom since I was six. (know) :: have known` 的自動朗讀正確，但 [`TypedBody`](../plugins/cards/src/ui/screens.tsx#L190) 的題幹喇叭走 `lineSpeech(fillBlank(...))`，探針得到 `I have known Tom since I was six. (know)`。另一方面，對允許的題首標籤 `(Passive Voice) I ＿＿ every day. (clean) :: am cleaned`，[`answerSpeech`](../plugins/cards/src/review/english.ts#L74) 實際回 `["am cleaned","Passive Voice) I am cleaned every day."]`。英文片段先略過開括號，後續才移除成對括號，留下提示。反過來，`I ＿＿ the keys (but not the phone) yesterday. (lose) :: lost` 的自動朗讀也會刪掉原句中有意義的括號內容。
 
 **真實路徑。** 英文預設常用句尾給原形，點喇叭是普通操作。英文名稱的句首標籤、正文內插語較少，多為手寫。這會改變播放內容，未改動評分或紀錄。建議共用新打字型別的朗讀句子組裝，先依原始題面定位文法標籤、原形提示，再擷取英文，保留正常插語與既有中翻英行為。驗收可比較喇叭與自動朗讀送入的文字，iPhone 音色另依已排的實機清單。
 
 ## R5｜P3｜英文全被挖空時，中文後面沒有換行
 
-**規格軸，已重現 DOM 後處理。** 任務 §6-1 要求中文句子之後英文換行。英文的 `陳述句 排序` 下寫 `我累了。==i== ==am== ==tired==.`，三個格位都存在且第一格可顯示大寫，實際第一格緊接著「我累了。」。[`insertPickSlot`](../src/ui/rendered.ts#L113) 只給第一格一次換行機會，依賴 [`englishBeside`](../src/review/english.ts#L104) 從格子周圍殘留的文字找拉丁字母。當完整英文都在字鍵上，周圍只剩中文、底線、空白與句號，無法插入 `br.ec-break`。有保留英文句頭或句尾時，現有的正常例子可換行。
+**規格軸，已重現 DOM 後處理。** 任務 §6-1 要求中文句子之後英文換行。英文的 `陳述句 排序` 下寫 `我累了。==i== ==am== ==tired==.`，三個格位都存在且第一格可顯示大寫，實際第一格緊接著「我累了。」。[`insertPickSlot`](../plugins/cards/src/ui/rendered.ts#L113) 只給第一格一次換行機會，依賴 [`englishBeside`](../plugins/cards/src/review/english.ts#L104) 從格子周圍殘留的文字找拉丁字母。當完整英文都在字鍵上，周圍只剩中文、底線、空白與句號，無法插入 `br.ec-break`。有保留英文句頭或句尾時，現有的正常例子可換行。
 
 **真實路徑。** 英文預設通常留句首句尾在格外；此分支明確支援從第一格開始的題，家長手寫短句或改題時可達。只影響排版，格序及評分正確。建議為英文排序使用已知道的格位與句首邊界判斷，驗收任務說明的「他住在哪裡？==where== ==does== ==he== ==live==?」等全部挖掉與部分挖掉的題，確認非英文排序和比較卡維持原樣。
 
 ## R6｜P3｜排序詞塊的 Markdown 會變成字鍵上的字面符號
 
-**規格軸，已重現組卡。** syntax §2-6 允許題目文字與答案用粗體。英文排序題 `他去哪裡？==**where**== ==did== ==he== go?` 會進排序，但 [`sentenceCells`](../src/core/deck/question-types.ts#L241) 給出的鍵是字面 `**where**`，第一格的 `starts` 是 true。[字鍵](../src/ui/PickCard.tsx#L167) 和已填格都把這串直接交給 JSX 當文字，句首轉換又只看第一個字元 `*`。原題允許的粗體會變成可見星號，第一格也無法顯示預期的 `Where`。如果另一格是 `==where==`，兩者可見字詞相同，但組卡給的比對字串不同。
+**規格軸，已重現組卡。** syntax §2-6 允許題目文字與答案用粗體。英文排序題 `他去哪裡？==**where**== ==did== ==he== go?` 會進排序，但 [`sentenceCells`](../plugins/cards/src/core/deck/question-types.ts#L241) 給出的鍵是字面 `**where**`，第一格的 `starts` 是 true。[字鍵](../plugins/cards/src/ui/PickCard.tsx#L167) 和已填格都把這串直接交給 JSX 當文字，句首轉換又只看第一個字元 `*`。原題允許的粗體會變成可見星號，第一格也無法顯示預期的 `Where`。如果另一格是 `==where==`，兩者可見字詞相同，但組卡給的比對字串不同。
 
 **真實路徑。** 手改題目或從有粗體的題幹複製再挖空時可達；英文預設的純文字詞塊避開這條。建議明定詞塊是否限純文字。若允許格式，字鍵、句首大寫、等值比對及 `pick` 要以可見詞塊為準，原 Markdown 仍用來算題目指紋；若只收純文字，解析與英文草稿檢查要對格式化詞塊有明確結果。驗收加入相同詞一個有粗體、一個沒有的案例。
 
 
 ## 其餘核對與驗證
 
-- 科目閘門、比較組優先、中置 ID、正式英文名稱與全半形括號、首選／再選的紀錄、相同鍵文字互換、題目輪替與末格標點的標準案例通過指定測試。另有一處公開資料差異：[`parseDeck`](../src/core/deck/parse.ts#L184) 在非英文或無科目卡組的英翻中也填 `Target.pairWord`。用共同祖先與待審版解析同一組無科目、數學、國語的自編卡，移除這個新增欄位後深度比對相同。新增欄位沒有改出題或配對結果，但若「解析結果和 main 相同」要求物件相同，應將此欄位也納入科目閘門或明示例外。
-- §4-3 借用全詩的排列辦法。只有兩個不同鍵時只有一種非正解排列，連續兩回合不能同時滿足題序不同及避開正解。全同鍵也無從打亂。[`orderKeys`](../src/core/study/compose.ts#L155) 實際優先避開正解並容許重複，有現有註解說明。建議把這個規格邊界寫清楚，不把既有的例外當成新回歸。
+- 科目閘門、比較組優先、中置 ID、正式英文名稱與全半形括號、首選／再選的紀錄、相同鍵文字互換、題目輪替與末格標點的標準案例通過指定測試。另有一處公開資料差異：[`parseDeck`](../plugins/cards/src/core/deck/parse.ts#L184) 在非英文或無科目卡組的英翻中也填 `Target.pairWord`。用共同祖先與待審版解析同一組無科目、數學、國語的自編卡，移除這個新增欄位後深度比對相同。新增欄位沒有改出題或配對結果，但若「解析結果和 main 相同」要求物件相同，應將此欄位也納入科目閘門或明示例外。
+- §4-3 借用全詩的排列辦法。只有兩個不同鍵時只有一種非正解排列，連續兩回合不能同時滿足題序不同及避開正解。全同鍵也無從打亂。[`orderKeys`](../plugins/cards/src/core/study/compose.ts#L155) 實際優先避開正解並容許重複，有現有註解說明。建議把這個規格邊界寫清楚，不把既有的例外當成新回歸。
 - 採用修訂任務對混版的明確決定。舊版可以翻面及依舊規則重播，新 `typed`、`cell`、`pick` 與 `also` 的證據沿既有欄位。格式查核 F7 紀錄的提前開始路徑是這次接受的相容取捨。修訂任務與 Claude 回應在主要產品行為一致。濾網與 held 的合併情形依本輪請求的明文判定如 R3。
 - Windows、Node v24.13.0。指定的六個 `tests/english-*.test.ts` 共 37 項皆通過。另用 `parseDeck`／`cardOf`／`postProcess`、`check`／`checkPiece`、`mergeHistory`／`planToday`、`answerSpeech` 跑上述自編 Markdown 與合成 JSONL 探針。
 - 沙箱外的 `npm run check` 完整通過：型別、lint、knip、金鑰與路徑掃描、skill 一致性、文件檢查及 2684 項測試，0 失敗、0 跳過。
@@ -77,13 +77,13 @@
 
 **規格軸，已重現。** 任務 §1-5、§3-1 要求字與意思按 `pickKey` 各自正規化，括號前的空白不算。自編英文卡組放一個從未複習的 `light（輕的） 英翻中`，再放 `light 比較級` 與 `light（輕的） 比較級`。原形無粗體或只加粗字（`**light**（輕的） 英翻中`）時，今天的份只有原形。只把粗體的結尾移到括號後（`**light（輕的）** 英翻中`），無括號的變化就提前出現。換成 `**Light　(輕的)** 英翻中`，有括號和無括號的兩張變化都提前出現。各例使用相同 ID、相同題目與空紀錄。
 
-[`readTyping`](../src/core/deck/question-types.ts#L193) 先去粗體再拆字義。[`pairWordOf`](../src/core/deck/question-types.ts#L215) 卻先拆括號，結尾的 `**` 使括號無法被認出，接著才正規化整段。後一例的鍵因而變成 `{ exact: 'light (輕的)', base: 'light (輕的)' }`。[`planToday`](../src/core/study/plan.ts#L185) 找不到配對便照常出。這與 R3 的濾網和 held 修正是不同路徑。
+[`readTyping`](../plugins/cards/src/core/deck/question-types.ts#L193) 先去粗體再拆字義。[`pairWordOf`](../plugins/cards/src/core/deck/question-types.ts#L215) 卻先拆括號，結尾的 `**` 使括號無法被認出，接著才正規化整段。後一例的鍵因而變成 `{ exact: 'light (輕的)', base: 'light (輕的)' }`。[`planToday`](../plugins/cards/src/core/study/plan.ts#L185) 找不到配對便照常出。這與 R3 的濾網和 held 修正是不同路徑。
 
 **真實路徑。** 有第二義的同篇單字、原形名稱的字與義項一起加粗、變化尚未開始即可觸發。英文預設的範例未加粗，但手寫卡或編輯現有名稱可能這樣寫，不需壞紀錄或混版。提前作答後，只要保留那筆紀錄，日後重播就會把變化視為已開始。建議合併前讓變化與英翻中共用「先處理成對格式，再拆字義」的做法。回歸驗同一個義項前後有無粗體、不同空白與括號時，鍵和排程都一致，並核對原中翻英兩方向配對的規則依舊成立。
 
 ### R6 修正引入｜P2｜排序鍵會刪掉可見符號，有時把不同答案判成同一個
 
-**規格軸，已重現組卡與評分。** 修訂任務 §4-3～4 要去除粗體、斜體的格式記號，評分照看得到的文字。`I saw ==**the**== ==man== and ==the== ==dog==.` 交換兩個 `the` 已能全對。但 [`sentenceCells`](../src/core/deck/question-types.ts#L245) 使用 `/\*\*|\*|__|_/g`，無條件刪除未成對的字元。題目 `Compare ==A_B== and ==AB==.` 兩鍵都變成 `AB`，`createPick` 交換兩顆鍵仍給兩格 `right`。另用正式複習 session 作答並 flush，紀錄的 `r` 是 `good`，`pick` 與 `also[0].pick` 都寫入刪字後的 `AB`。
+**規格軸，已重現組卡與評分。** 修訂任務 §4-3～4 要去除粗體、斜體的格式記號，評分照看得到的文字。`I saw ==**the**== ==man== and ==the== ==dog==.` 交換兩個 `the` 已能全對。但 [`sentenceCells`](../plugins/cards/src/core/deck/question-types.ts#L245) 使用 `/\*\*|\*|__|_/g`，無條件刪除未成對的字元。題目 `Compare ==A_B== and ==AB==.` 兩鍵都變成 `AB`，`createPick` 交換兩顆鍵仍給兩格 `right`。另用正式複習 session 作答並 flush，紀錄的 `r` 是 `good`，`pick` 與 `also[0].pick` 都寫入刪字後的 `AB`。
 
 同一項可見文字契約的反面也已重現。`Compare ==R&amp;D== and ==R&D==.` 的兩個詞塊渲染後都叫 `R&D`，交換仍進 `retry`；`==[turn](turn.md)==` 的鍵含有連結原始語法。syntax §2-6 本來允許連結，英文排序目前也沒有退件或降級。實作只有粗體／斜體的替換，對其餘來源格式仍直接讀原字串。
 
@@ -93,7 +93,7 @@
 
 **規格軸，實際宿主的字元解碼已核對，組卡到 DOM 後處理已重現。** 一般相鄰格、題面本有的 `＿＿`、記號缺一格時放句尾與通報都通過。新組合 `圖例：&#57344;。Tell me ==where== ==he== ==lives==.` 的 `&#57344;` 在渲染後是 U+E000，恰與第一格記號相同。預期圖例字元留在原位，三格位於英文句子。實際第一格放進圖例、英文原本的第一格留下記號字，`slotMissing` 仍為 false。句中加入 `&#xE001;` 可讓第二格占錯位置。
 
-[`SentenceBody`](../src/ui/PickCard.tsx#L69) 只從原始題面移除**字面的**私用區字。[`insertMarkedSlots`](../src/ui/rendered.ts#L79) 取渲染後第一個相同字元，[`slotMissing`](../src/ui/rendered.ts#L56) 只檢查是否找到，沒有檢查重複。`markdown-it` 加 happy-dom 探針保留了這條鏈。另只讀 Obsidian 1.15.1 的 `app.js`，確認行內文字規則會把數字字元參照解碼成 text node，且解碼器接受 U+E000。沒有在正在執行的 Obsidian 視窗操作此案例。
+[`SentenceBody`](../plugins/cards/src/ui/PickCard.tsx#L69) 只從原始題面移除**字面的**私用區字。[`insertMarkedSlots`](../plugins/cards/src/ui/rendered.ts#L79) 取渲染後第一個相同字元，[`slotMissing`](../plugins/cards/src/ui/rendered.ts#L56) 只檢查是否找到，沒有檢查重複。`markdown-it` 加 happy-dom 探針保留了這條鏈。另只讀 Obsidian 1.15.1 的 `app.js`，確認行內文字規則會把數字字元參照解碼成 text node，且解碼器接受 U+E000。沒有在正在執行的 Obsidian 視窗操作此案例。
 
 **真實路徑。** 需手寫或貼入含私用區字元參照的題面，並剛好跟格位代號相同。正常製卡罕見，圖例／圖示來源比較可能。和第一輪相同，格位錯位會使孩子誤填，且這一例沒有缺格提示。建議修法從「原始字串沒撞」改成「渲染結果中的標記身分唯一」，至少不能在同一記號出現兩次時當作成功。回歸同時驗十進位、十六進位、重複記號與缺格，沿用受保護節點的邊界。
 
@@ -101,7 +101,7 @@
 
 **規格軸，已重現自動與手動朗讀所用文字。** 純括號、粗體標籤、正常的句尾原形、半形括號插語均跑過。另用 `Passive Voice 文法` 與 `==(Passive Voice)== I ＿＿ every day. (clean) :: am cleaned`，第 2 步確實跳過，朗讀卻是 `Passive Voice) I am cleaned every day.`。只把結尾提示寫成 `==(clean)==`，自動和手動共用的句子又會把 `(clean)` 留進去。還有一種反向誤判，`(On days when it ＿＿) I stay inside. :: rains` 的開頭括號是正文且含空格，實作刪掉整段，自動只念 `rains`，題幹喇叭則走原題回退。
 
-任務 §2-2 已允許題首標籤有螢光筆，[`mentions`](../src/core/deck/question-types.ts#L225) 也認得。[`typedSentence`](../src/review/english.ts#L74) 另一套規則只接受粗體，而且不判斷括號裡是不是文法點或句子正文。[`TypedBody`](../src/ui/screens.tsx#L190) 在回傳 null 時又使用原題，造成兩個朗讀入口不一致。
+任務 §2-2 已允許題首標籤有螢光筆，[`mentions`](../plugins/cards/src/core/deck/question-types.ts#L225) 也認得。[`typedSentence`](../plugins/cards/src/review/english.ts#L74) 另一套規則只接受粗體，而且不判斷括號裡是不是文法點或句子正文。[`TypedBody`](../plugins/cards/src/ui/screens.tsx#L190) 在回傳 null 時又使用原題，造成兩個朗讀入口不一致。
 
 **真實路徑。** 手寫時替文法提示加螢光筆，或把英文插語寫進括號，都可達。一般 AI 預設不寫首括號文法點，頻率較低。影響是朗讀內容有漏句或多念提示，評分不變。建議兩個入口共享同一套可辨識的標籤拆法，保留有正文或作答格的括號。對找不到完整可朗讀句子的情形明定共同結果，避免手動喇叭又讀回原題提示。
 
@@ -109,7 +109,7 @@
 
 **規格軸，已重現解析、組卡及 DOM 後處理。** 一般的 `我累了。==i== ==am== ==tired==.` 已得到換行。加一個正常的筆記連結 `[我累了。](notes.md)==i== ==am== ==tired==.`，畫面上的中文相同，預期換行且第一格顯示 `I`。實際 `starts[0]` 為 false，處理後得到 `我累了。[0] [1] [2].`，沒有 `br.ec-break`，放入的 `i` 也不會轉大寫。
 
-[`sentenceCells`](../src/core/deck/question-types.ts#L257) 先在原始 Markdown 看空格前的最後一個字，連結尾端的 `)` 使它判定第一格不在句首。渲染後 [`insertMarkedSlots`](../src/ui/rendered.ts#L97) 只有在 `breakFirst` 為真或鄰近文字還有拉丁字母時才嘗試換行。英文全在字鍵上時兩個條件都不成立。
+[`sentenceCells`](../plugins/cards/src/core/deck/question-types.ts#L257) 先在原始 Markdown 看空格前的最後一個字，連結尾端的 `)` 使它判定第一格不在句首。渲染後 [`insertMarkedSlots`](../plugins/cards/src/ui/rendered.ts#L97) 只有在 `breakFirst` 為真或鄰近文字還有拉丁字母時才嘗試換行。英文全在字鍵上時兩個條件都不成立。
 
 **真實路徑。** 可由家長把中文翻譯連回筆記，再挖掉一整句短英文觸發，少於有保留英文句頭的常規格式。格位與評分正確，影響版面與句首顯示。建議用同一個可見句界處理換行和顯示大寫，並驗純文字對照、連結顯示文字、真正先出現英文的題面。
 
@@ -140,15 +140,15 @@
 
 **規格軸，已重現到寫複習紀錄。** 任務 §4-3～4 現在要求詞塊只收純文字。先拿掉真正成對的粗體／斜體，剩餘 Markdown 記號要使題目改回填空，英文草稿也要退件。第二輪的 `A_B`、`R&amp;D`、連結與程式碼案例已會降級，正常的 `**the**` 和 `the` 仍能互換。
 
-新的組合 `Compare ==A* *B== and ==A B==.` 中，兩個星號之間只有空白，沒有被強調的文字。[`plainBlock`](../src/core/deck/question-types.ts#L270) 以 `\*(.+?)\*` 配對，先刪掉星號，才檢查剩下的記號。結果兩鍵都是 `A B`，草稿檢查也沒有 `english-order-invalid`，產品的 `checkPiece` 回傳零退件錯誤。用正式複習 session 交換兩鍵、對答案並寫回，`r` 是 `good`，`pick` 和 `also[0].pick` 都是 `A B`。本機 `markdown-it` 的文字仍有兩個星號。另只讀 Obsidian 1.15.1 的 `app.js`，其單星號強調需要中間有非空白內容，這組字面星號不會成為斜體。另一個在 `markdown-it` 有落差的組合是 `A__B__C` 與 `ABC`，但本項合併判斷只依字面星號這個案例。
+新的組合 `Compare ==A* *B== and ==A B==.` 中，兩個星號之間只有空白，沒有被強調的文字。[`plainBlock`](../plugins/cards/src/core/deck/question-types.ts#L270) 以 `\*(.+?)\*` 配對，先刪掉星號，才檢查剩下的記號。結果兩鍵都是 `A B`，草稿檢查也沒有 `english-order-invalid`，產品的 `checkPiece` 回傳零退件錯誤。用正式複習 session 交換兩鍵、對答案並寫回，`r` 是 `good`，`pick` 和 `also[0].pick` 都是 `A B`。本機 `markdown-it` 的文字仍有兩個星號。另只讀 Obsidian 1.15.1 的 `app.js`，其單星號強調需要中間有非空白內容，這組字面星號不會成為斜體。另一個在 `markdown-it` 有落差的組合是 `A__B__C` 與 `ABC`，但本項合併判斷只依字面星號這個案例。
 
 **真實路徑。** 普通文法例句較少這種符號。手寫補充和從筆記貼入含符號的詞塊仍會遇到，AI 的格式檢查也會接受。影響是程式把兩個答案合成一個並寫下錯誤的學習證據。建議合併前改換判斷前提，避免以「找到兩端相同符號」當作有格式。可明定只接受純文字及一組受限的外層格式，其他輸入整格退回一般填空，或採用能區分格式和字面符號的解析結果。回歸應覆蓋空白、相鄰符號、詞內符號和跳脫，並測留下的詞塊文字、AI 退件及原題指紋。[D-200](../docs/decisions.md#d-200-l2-的發現鏈待驗問題連兩輪沒驗先讀宿主程式整類修過仍失守就換前提) 的第 3 代處理要求換前提，避免再加一個孤立的空白特判。
 
 ### 延續 R4（第 3 代）｜P3｜保留括號仍可能漏讀後半句，單字母答案沒有手動喇叭
 
-**規格軸，已重現朗讀文字與畫面元件。** 任務 §6-3 要求念填回答案的句子，括號裡有作答格時保留正文。上一輪的螢光筆標籤與提示已正確消失，半形括號例確實保留後半句。換用 `（When I ＿＿ home） I called Mom. :: got`，實際自動朗讀只拿到 `["got","When I got home"]`，手動共用的句子也少了 `I called Mom.`。[`typedSentence`](../src/review/english.ts#L84) 保留了括號，但 [`fillBlank`](../src/review/english.ts#L55) 在填答案前先把文字切成英文片段。全形右括號切斷句子，只有含 `＿＿` 的前半段留下。
+**規格軸，已重現朗讀文字與畫面元件。** 任務 §6-3 要求念填回答案的句子，括號裡有作答格時保留正文。上一輪的螢光筆標籤與提示已正確消失，半形括號例確實保留後半句。換用 `（When I ＿＿ home） I called Mom. :: got`，實際自動朗讀只拿到 `["got","When I got home"]`，手動共用的句子也少了 `I called Mom.`。[`typedSentence`](../plugins/cards/src/review/english.ts#L84) 保留了括號，但 [`fillBlank`](../plugins/cards/src/review/english.ts#L55) 在填答案前先把文字切成英文片段。全形右括號切斷句子，只有含 `＿＿` 的前半段留下。
 
-任務同節也要求無空格時兩個入口都只念答案。用手寫文法 QA `Who is the first-person subject? :: I`，第一步答錯、第二步答對後，session 的 `autoRead` 是 `["I"]`，用複習 UI 測試替身確認背面沒有任何朗讀按鈕。[`TypedBody`](../src/ui/screens.tsx#L190) 已準備好答案作為回退，但題幹及答案的喇叭還通過 [`speakWith`](../src/ui/screens.tsx#L39) 的 `lineSpeech`，它會捨棄只有單一英文字母的片段。共同組句目前仍沒有共同的播放資料邊界。
+任務同節也要求無空格時兩個入口都只念答案。用手寫文法 QA `Who is the first-person subject? :: I`，第一步答錯、第二步答對後，session 的 `autoRead` 是 `["I"]`，用複習 UI 測試替身確認背面沒有任何朗讀按鈕。[`TypedBody`](../plugins/cards/src/ui/screens.tsx#L190) 已準備好答案作為回退，但題幹及答案的喇叭還通過 [`speakWith`](../plugins/cards/src/ui/screens.tsx#L39) 的 `lineSpeech`，它會捨棄只有單一英文字母的片段。共同組句目前仍沒有共同的播放資料邊界。
 
 **真實路徑。** 手寫中英混排會用到全形括號，文法單字母答案也存在。沒有空格的 QA 只適用手寫，英文 AI 的一格要求會擋住它。缺句或缺手動喇叭影響朗讀，作答評分不變。建議改換前提，先在完整的題面正文標出並替換原作答格、處理英語片段邊界，再產生明確的朗讀項目。兩個入口共用這些項目，手動端不再用一般內文的篩選規則重猜它是不是英語。驗收同一正文的全半形括號，以及無格的 `I`、`a` 和多字答案，並核對既有中翻英路徑。
 
@@ -156,7 +156,7 @@
 
 **規格軸，已重現解析、組卡及 DOM 後處理。** 上一輪的 `[我累了。](notes.md)==i== ==am== ==tired==.` 已得到 `starts[0] = true` 及換行。只把連結目標改成 `note%20(1).md` 或 `<Class Notes (1).md>`，可見提示仍是「我累了。」，預期一樣換行，第一格顯示 `I`。實際 `starts[0] = false`，三格可點，但無換行，第一格也不做句首大寫。把句號寫成一般字元參照 `我累了&#12290;==i== ==am== ==tired==.` 同樣重現。
 
-[`visibleText`](../src/core/deck/question-types.ts#L277) 在第一個 `)` 就截斷目的地，也沒有解碼字元參照。[`insertMarkedSlots`](../src/ui/rendered.ts#L97) 收到的句首旗標因此為假，附近又沒有留下的拉丁字母可以觸發換行。探針用 `markdown-it` 渲染後交給正式 `postProcess`。另只讀 Obsidian 1.15.1 的 `app.js`，其連結讀法會處理角括號目標及成對的括號，其行內文字也會解碼數字字元參照。這次沒有實際在 Obsidian 視窗操作這些案例。
+[`visibleText`](../plugins/cards/src/core/deck/question-types.ts#L277) 在第一個 `)` 就截斷目的地，也沒有解碼字元參照。[`insertMarkedSlots`](../plugins/cards/src/ui/rendered.ts#L97) 收到的句首旗標因此為假，附近又沒有留下的拉丁字母可以觸發換行。探針用 `markdown-it` 渲染後交給正式 `postProcess`。另只讀 Obsidian 1.15.1 的 `app.js`，其連結讀法會處理角括號目標及成對的括號，其行內文字也會解碼數字字元參照。這次沒有實際在 Obsidian 視窗操作這些案例。
 
 **真實路徑。** 需在中文提示連到含括號的筆記檔名，或貼入保留字元參照的文字，並把英文全部挖掉。家長手寫與編輯有機會遇到，少於預設只挖句中詞塊的題。影響句首與排版，格序和評分仍正確。建議改換前提，讓句首判斷依可見文字的共同邊界，或明定允許的句首前置格式。避免以另一條連結特例延長這條發現鏈。驗收需覆蓋普通連結、括號目的地、wiki 別名、實體字元參照及真正以英文開頭的例子。
 

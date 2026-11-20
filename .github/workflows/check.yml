@@ -1,11 +1,12 @@
 name: Check
 on: [push, pull_request]
-# 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4）：plan 照分派表的 CI 跑法決定哪幾個外掛要跑；共用檢查每次都跑；
+# 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4；第二步 §A4 加共用工具）：plan 照分派表的 CI 跑法決定共用工具與哪幾個外掛要跑；共用檢查每次都跑；
 # gate 確認每個 job 都照 plan（要跑的成功、不跑的跳過），合併條件看 gate。
 jobs:
   plan:
     runs-on: ubuntu-latest
     outputs:
+      tools: ${{ steps.plan.outputs.tools }}
       cards: ${{ steps.plan.outputs.cards }}
       capture: ${{ steps.plan.outputs.capture }}
       mindboard: ${{ steps.plan.outputs.mindboard }}
@@ -38,10 +39,34 @@ jobs:
       - run: npm run check
         working-directory: tools
 
+  # 共用工具自己的完整檢查（第二步 §A2）：型別、lint、knip 與 tools/tests/ 的測試。
+  tools:
+    needs: plan
+    if: needs.plan.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # hooks.test.ts 從這個 repo clone 出暫存 repo。
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+      - run: npm ci
+      - run: npm run self-check
+
   cards:
     needs: plan
     if: needs.plan.outputs.cards == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/cards
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,12 +76,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            tools/package-lock.json
-      # Cards 的檢查也跑共用檢查與 plugin-imports，兩邊都要裝。
-      - run: npm ci
-        working-directory: tools
+          cache-dependency-path: plugins/cards/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm run build
@@ -96,7 +116,7 @@ jobs:
 
   # 要跑的 job 被跳過時，其他 job 都是綠的，只有這裡擋得到。main 之後要設必過檢查時只設這個 job（2026-11-17 查過，現在沒設）。
   gate:
-    needs: [plan, shared, cards, capture, mindboard]
+    needs: [plan, shared, tools, cards, capture, mindboard]
     if: always()
     runs-on: ubuntu-latest
     steps:

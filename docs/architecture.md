@@ -374,22 +374,23 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 
 三個外掛（Cards、Capture、Mindboard）在同一個 repo 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。最上層放三個外掛共用的東西，每個外掛在 `plugins/<外掛>/` 有自己的規則、文件與程式。各自安裝、各自可用（[D-006](decisions.md#d-006-兩個獨立外掛)），程式不互相 import（`tools/check-plugin-imports.ts` 擋）。
 
-分兩步：第一步（2026-11，新外掛寫程式前）建好 Capture、Mindboard 的資料夾與分開檢查；第二步等 Cards 有穩定的基線，把 Cards 也搬進 `plugins/cards/`。現在在兩步之間，所以有兩張圖。
+分兩步：第一步（2026-11，新外掛寫程式前）建好 Capture、Mindboard 的資料夾與分開檢查；第二步把 Cards 也搬進 `plugins/cards/`，分 A（程式）與 B（文件）兩次合併。現在 A 已合併、B 還沒，所以有兩張圖。
 
-### 現在（第一步之後）
+### 現在（第二步 A 之後）
 
 ```text
 Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18 都改名，D-211）
 ├─ AGENTS.md、CLAUDE.md          全專案的底線與協作規則
 ├─ .claude/、.agents/            權限、hook、skill（三個外掛共用）
-├─ .githooks/、.github/          commit 與 CI：照分派表只檢查改到的外掛
-├─ docs/                         共用的文件，加上 Cards 自己的（第二步搬走）
-├─ tasks/、Claude Codex Discussion/   跨外掛的，加上 Cards 的（第二步搬進 docs/ 與 plugins/cards/docs/，D-213）
+├─ .githooks/、.github/          commit 與 CI：照分派表只檢查改到的對象
+├─ docs/                         共用的文件，加上 Cards 自己的（第二步 B 搬走）
+├─ tasks/、Claude Codex Discussion/   跨外掛的，加上 Cards 的（第二步 B 搬進 docs/ 與 plugins/cards/docs/，D-213）
 ├─ experiments/                  試作場
-├─ tools/                        共用的檢查、分派表、hook 與 CI gate 的邏輯（有自己的 package.json），
-│                                加上 Cards 的工具（第二步搬走）
-├─ src/、tests/、manifest.json、package.json   Cards 的程式（第二步搬走）
+├─ tools/                        共用的檢查、分派表、hook 與 CI gate 的邏輯，與它們的測試（tools/tests/）；
+│                                有自己的 package.json
 └─ plugins/
+   ├─ cards/                     Cards 的程式：src/、tests/、tools/（建置、安裝、備份還原等）、
+   │                             manifest.json、package.json 與鎖檔、設定檔
    ├─ capture/                   AGENTS.md、CLAUDE.md、package.json 與鎖檔、.gitignore、docs/backlog.md
    └─ mindboard/                 同上（沒有 .gitignore）
 ```
@@ -437,7 +438,7 @@ Essence/
 | 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態 | `tasks/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層的 `docs/tasks/`，其餘在各外掛的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
 | Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | `Claude Codex Discussion/`（Cards 與跨外掛）；外掛的同名資料夾 | 跨外掛的在最上層的 `docs/Claude Codex Discussion/`，其餘在各外掛的 `docs/` 底下（D-213） |
 | 試作場：樣式稿、試作外掛與測試結果 | `experiments/` | 最上層 |
-| 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | Cards：`src/`、`tests/`、`tools/` 的 Cards 工具；共用的檢查：`tools/`（自己的 `package.json`）；其他外掛在自己的資料夾 | 各外掛；共用的檢查在最上層 `tools/` |
+| 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | Cards：`plugins/cards/` 的 `src/`、`tests/`、`tools/`；共用的檢查與它們的測試：最上層 `tools/`（自己的 `package.json`）；其他外掛在自己的資料夾 | 各外掛；共用的檢查在最上層 `tools/` |
 
 ### 新文件放哪裡
 
@@ -450,9 +451,12 @@ Essence/
 
 分派表 `tools/dispatch.ts` 照改到的路徑決定檢查誰，commit 與 CI 讀同一份：
 
+檢查的對象是共用工具（`tools/` 自己的型別、lint、knip 與 `tools/tests/`）與三個外掛：
+
 - 只改 `plugins/<外掛>/`，就只裝、只檢查那個外掛。
 - 改到兩個外掛都讀的規格（登錄在分派表，現在是轉錄稿格式所在的 `syntax.md`），讀它的外掛都檢查。
-- 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查。
-- 改到共用的工具、hook、CI，或判斷不了的路徑，三個外掛都檢查。
+- 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查；寫到那個檔的共用工具測試也跑。
+- 改到其他共用工具（文件檢查、進度白板、Codex 包裝、雲端的 hook 等），只跑共用工具的完整檢查。
+- 改到決定檢查怎麼啟動、怎麼跑的檔（hook、CI、分派表與它們用到的工具），或判斷不了的路徑，共用工具與三個外掛都檢查。
 
 文件、金鑰、本機路徑、skill 一致、外掛之間不 import 與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。commit 時外掛的檢查在只有暫存內容的副本跑，讀到的就是要 commit 的內容。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。

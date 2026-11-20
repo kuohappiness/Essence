@@ -1,7 +1,7 @@
 // Claude Code SessionStart hook：只在雲端 session（CLAUDE_CODE_REMOTE=true）執行，本機什麼都不做。
 // 雲端是新的淺層 clone：沒有 core.hooksPath（pre-commit 不會跑）、沒有 node_modules、沒有 git tag
 // （跨版本測試要切到 v0.x.0）；PATH 上的 Node 是 22，映像另外裝了 24 在 /opt/node24。
-// 裝的資料夾和 CI（.github/workflows/check.yml）一樣；鎖檔沒變就跳過，resume 時不重裝；沒有相依的不裝。
+// 裝的資料夾和 CI（.github/workflows/check.yml）一樣；鎖檔沒變就跳過，resume 時不重裝；沒有相依的不裝；每個資料夾都寫一句結果。
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
@@ -55,18 +55,39 @@ try {
   notes.push(`抓 git tag 失敗，缺的版本的跨版本測試會失敗：${String(e.stderr || e.message).slice(-300)}`);
 }
 
-for (const dir of ['.', 'tools', 'plugins/capture', 'plugins/mindboard']) {
+// 和 check.yml 每個 job 安裝的資料夾相同（tools/tests/cloud-setup.test.ts 照字面比，CI 加了外掛 job 沒改這裡就紅燈）。
+// 清單寫死、不 import tools/dispatch.ts：雲端 session 開場時 PATH 上可能是 Node 22，跑不了 .ts。
+const DIRS = ['tools', 'plugins/cards', 'plugins/capture', 'plugins/mindboard'];
+
+// 每個資料夾都寫一句結果（第二步 §A5）：跳過的寫理由，分得出「裝好了」和「根本沒走到」。
+for (const dir of DIRS) {
   const cwd = join(root, dir);
-  const lock = join(cwd, 'package-lock.json');
-  if (!existsSync(lock)) continue;
+  const pkgPath = join(cwd, 'package.json');
+  if (!existsSync(pkgPath)) {
+    notes.push(`${dir}：找不到 package.json，沒有安裝`);
+    continue;
+  }
+  let hasDeps = true;
   try {
-    const packages = JSON.parse(readFileSync(lock, 'utf8')).packages ?? {};
-    if (Object.keys(packages).every((key) => key === '')) continue;
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    hasDeps = ['dependencies', 'devDependencies', 'optionalDependencies'].some((field) => Object.keys(pkg[field] ?? {}).length > 0);
   } catch {
-    // 鎖檔讀不懂就照常交給 npm ci，錯誤由它回報
+    // package.json 讀不懂就照常交給 npm ci，錯誤由它回報
+  }
+  if (!hasDeps) {
+    notes.push(`${dir}：沒有相依，跳過`);
+    continue;
+  }
+  const lock = join(cwd, 'package-lock.json');
+  if (!existsSync(lock)) {
+    notes.push(`${dir}：有相依卻沒有鎖檔，沒有安裝`);
+    continue;
   }
   const marker = join(cwd, 'node_modules', '.package-lock.json');
-  if (existsSync(marker) && statSync(marker).mtimeMs >= statSync(lock).mtimeMs) continue;
+  if (existsSync(marker) && statSync(marker).mtimeMs >= statSync(lock).mtimeMs) {
+    notes.push(`${dir}：鎖檔沒變，跳過`);
+    continue;
+  }
   try {
     run('npm', ['ci', '--no-audit', '--no-fund'], cwd);
     notes.push(`${dir}：npm ci 完成`);
@@ -76,5 +97,5 @@ for (const dir of ['.', 'tools', 'plugins/capture', 'plugins/mindboard']) {
 }
 
 console.log(JSON.stringify({
-  hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `雲端環境設定：${notes.join('；') || '相依已是最新'}` },
+  hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `雲端環境設定：${notes.join('；')}` },
 }));

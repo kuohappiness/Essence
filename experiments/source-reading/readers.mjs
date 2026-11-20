@@ -1,7 +1,7 @@
 // 試作（討論稿 2026-11-02-source-reading）：三種出處的讀法，輸出同一種形狀，給 compare.mjs 評分。不是要合併的程式。
 //   readCurrent 現在的讀法｜readSmall 小修版（有限去雜訊＋現有文法＋補提示）｜readScan 重寫版（切段、認單元、掃位置）
 // 輸出：{ units: 本篇以外的單元, places: [{ scope, kind, value }], hint: 要不要提示家長 }。
-import { sourceLinks } from '../../src/core/deck/index.ts';
+import { sourceLinks } from '../../plugins/cards/src/core/deck/index.ts';
 
 export const CONTEXTS = {
   nature: { subject: '自然', self: '國二上 2-2', units: { '國二上 1-3': '', '國二上 1-8': '', '國二上 2-1': '水溶液', '國二上 2-2': '', '國一下 3-1': '' }, headings: ['溶解, 擴散', '睡眠的階段', 'CO₂ 的性質', '水溶液的濃度'] },

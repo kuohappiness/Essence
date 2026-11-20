@@ -1,0 +1,166 @@
+import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import { dirname, resolve, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
+
+const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
+/**
+ * AI 製卡的規則檔從哪裡算：src/core/ai/rules.ts 的表寫的是 repo 根目錄算的路徑，從 Cards 的根往上幾層就是 repo 的根
+ * （D-208 第二步 §A5、§A6：Cards 在 plugins/cards/，往上兩層；表不用改）。
+ */
+export const RULES_FROM_ROOT = '../..';
+// 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
+const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
+/** D-148：只有電腦專用的資料夾能用 Node 與 Electron，而且只能用明列的這幾個（不放寬全域的 external）。 */
+export const DESKTOP = 'src/desktop/';
+export const DESKTOP_ONLY = ['electron', 'node:crypto', 'node:fs/promises', 'node:os', 'node:path'];
+
+/**
+ * D-148 第 3 點的建置檢查（esbuild 外掛）：Node 的內建模組與 Electron 只在 src/desktop/ 裡引入、而且在明列的清單裡時才當成外部模組；
+ * 其他檔案（含第三方套件的傳遞相依）引入就讓建置失敗，說出是哪個檔。測試打包 src/main.ts 時也用它。
+ */
+export function desktopOnly(root = defaultRoot) {
+  return {
+    name: 'essence-desktop-only',
+    setup(build) {
+      build.onResolve({ filter: /^(node:|electron$)/ }, args => {
+        const from = relative(root, args.importer).replaceAll('\\', '/');
+        if (from.startsWith(DESKTOP) && DESKTOP_ONLY.includes(args.path)) return { path: args.path, external: true };
+        return { errors: [{ text: `${args.path} 只有 ${DESKTOP} 能用，而且要在明列的清單裡（D-148）：${from} 不行` }] };
+      });
+    },
+  };
+}
+
+/**
+ * metafile 的第二道檢查（D-148 第 3 點）：每個外部模組由哪個檔引入。Obsidian 提供的那幾個哪裡都能用；DESKTOP_ONLY 只能由 src/desktop/
+ * 的檔引入；src/desktop/ 只能由 src/main.ts 動態 import（不經共用的重新匯出檔）。回傳違規的「檔 → 模組」。
+ */
+const RESTORE_WIRING = ['src/obsidian/restore.ts', 'src/obsidian/restore-modal.ts'];
+export function desktopViolations(metafile) {
+  const bad = [];
+  for (const [file, input] of Object.entries(metafile.inputs)) {
+    const from = file.replaceAll('\\', '/');
+    for (const item of input.imports) {
+      const to = item.path.replaceAll('\\', '/');
+      if (item.external && !external.includes(to) && !(DESKTOP_ONLY.includes(to) && from.startsWith(DESKTOP))) bad.push(`${from} → ${to}`);
+      if (!item.external && to.startsWith(DESKTOP) && !from.startsWith(DESKTOP) && !(from === 'src/main.ts' && item.kind === 'dynamic-import')) bad.push(`${from} → ${to}`);
+      // 還原的接線只給電腦（tasks/plugin-restore.md §7）：手機載入時不執行。開發版的 dev-restore.ts 本身就是動態載入的。
+      if (!item.external && RESTORE_WIRING.includes(to) && item.kind !== 'dynamic-import' && !/^src\/obsidian\/dev-/.test(from)) bad.push(`${from} → ${to}`);
+    }
+  }
+  return bad;
+}
+
+/**
+ * 「版本」命令顯示的建置版本：manifest 的版本加 git commit（有未提交的修改時加 .dirty）。寫進 main.js、不在執行時讀
+ * manifest：iCloud 可能先同步到新的 manifest、main.js 還是舊的（更新與相容的規畫第 1 點）；iPhone 測試靠它確認跑的是哪一次建置。
+ * 過渡的備份工具也用它當清單的 tool（syntax §8）。
+ */
+export async function buildVersion(root = defaultRoot) {
+  const manifest = JSON.parse(await readFile(resolve(root, 'manifest.json'), 'utf8'));
+  // 拿掉繼承來的 git 環境變數（名稱不分大小寫）：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo，會讀到別的 repo 的 commit
+  // （同 tools/git.ts；這個檔在測試裡會單獨複製到暫存專案，所以不 import）。
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_')));
+  const git = args => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let commit = '';
+  try { commit = git(['rev-parse', '--short', 'HEAD']) + (git(['status', '--porcelain', '--untracked-files=no']) ? '.dirty' : ''); } catch { /* 不在 git 裡（測試的暫存專案） */ }
+  return manifest.version + (commit ? '+' + commit : '');
+}
+
+/** AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）：表上每一份，repo 根目錄算的路徑，不重複。測試的暫存專案要一起複製。 */
+export function ruleFiles() {
+  return [...new Set(RULE_SUBJECTS.flatMap(subject => subject.files.map(file => file.path)))];
+}
+
+/**
+ * 照 src/core/ai/rules.ts 的表讀規則檔、取送出的部分、算 SHA-256（UTF-8、換行統一成 
+），嵌進 main.js（D-151 第 1 點）。
+ * 表上的檔讀不到、標記找不到就建置失敗。
+ */
+export async function embedRules(rulesRoot = resolve(defaultRoot, RULES_FROM_ROOT)) {
+  const rules = {};
+  for (const subject of RULE_SUBJECTS) {
+    rules[subject.key] = [];
+    for (const file of subject.files) {
+      let raw;
+      try { raw = await readFile(resolve(rulesRoot, file.path), 'utf8'); } catch (error) { throw Error(`AI 製卡的規則檔讀不到：${file.path}`, { cause: error }); }
+      const text = ruleText(raw, file);
+      rules[subject.key].push({ name: file.name, version: file.version, text, sha256: createHash('sha256').update(text, 'utf8').digest('hex') });
+    }
+  }
+  return rules;
+}
+
+/**
+ * 建置 main.js 與 styles.css 到 outdir（預設是 repo 根目錄）。dev 加上給 AI 測試與量測的開發命令；正式建置時 DEV 是 false，
+ * 整段被拿掉。main.js 第一行寫 `/*! Essence Cards build=<BUILD> dev=<true|false> *\/`：安裝命令與備份工具從產出讀它
+ * （D-149 第 4 點：不只看 BUILD 有沒有 .dirty）。
+ * sourcemap：對照表（main.js.map）另外寫到這個路徑（D-155 第 5 點）；用 esbuild 的 external，main.js 逐位元組不變、
+ * 不加 sourceMappingURL。sources 改成相對 repo 根目錄，內容（sourcesContent）一起存，定位時不用那一版的原始碼。
+ * rulesRoot：規則檔的基準，預設是 root 往上 RULES_FROM_ROOT（測試的暫存專案可以另外指定）。
+ * version：只給測試與驗收用，固定建置版本（D-208 第二步驗收第 A3 項：搬家前後逐位元組比）；安裝與發布的流程不傳。
+ */
+export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root, RULES_FROM_ROOT), dev = false, outdir = root, sourcemap, version: fixed } = {}) {
+  const version = fixed ?? await buildVersion(root);
+  const rules = await embedRules(rulesRoot);
+  await mkdir(outdir, { recursive: true });
+  const outfile = resolve(outdir, 'main.js');
+  const result = await build({
+    absWorkingDir: root, entryPoints: ['src/main.ts'], outfile,
+    bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
+    jsx: 'automatic', external, metafile: true, plugins: [desktopOnly(root)], sourcemap: sourcemap ? 'external' : false,
+    banner: { js: `/*! Essence Cards build=${version} dev=${dev} */` },
+    // CARD_RULES：AI 製卡的規則組（embedRules），以 JSON 字串嵌入、main.ts 解開；物件寫法 esbuild 會當成另一個輸入模組。
+    define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version), CARD_RULES: JSON.stringify(JSON.stringify(rules)) },
+  });
+  // 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
+  if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, JSON.stringify(result.metafile));
+  if (sourcemap) {
+    const map = JSON.parse(await readFile(outfile + '.map', 'utf8'));
+    // esbuild 的 sources 相對輸出資料夾；輸出和 repo 在不同磁碟（例如暫存資料夾在 C:）時是 file: 網址。
+    const absolute = source => source.startsWith('file:') ? fileURLToPath(source) : resolve(outdir, source);
+    // 相對 repo 的根（Cards 往上 RULES_FROM_ROOT），不是 Cards 的根：搬家後 locate 回的路徑才在 repo 裡找得到（第二步 L2 R5）。
+    // 搬家前保存的對照表是相對當時的根（就是 repo 的根），照舊對。
+    map.sources = map.sources.map(source => relative(resolve(root, RULES_FROM_ROOT), absolute(source)).replaceAll('\\', '/'));
+    await rm(outfile + '.map');
+    await mkdir(dirname(resolve(sourcemap)), { recursive: true });
+    await writeFile(resolve(sourcemap), JSON.stringify(map));
+  }
+  const code = await readFile(outfile, 'utf8');
+  const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);
+  const imports = Object.values(result.metafile.outputs).flatMap(out => out.imports);
+  const allowed = [...external, ...DESKTOP_ONLY];
+  if (requires.some(name => !allowed.includes(name)) || imports.some(i => i.external && !allowed.includes(i.path))) {
+    throw Error('建置含有 ' + allowed.join('、') + ' 以外的外部相依：' + requires.join(', '));
+  }
+  const violations = desktopViolations(result.metafile);
+  if (violations.length) throw Error('Node 或 Electron 只能在 ' + DESKTOP + ' 裡用，而且只由 src/main.ts 動態載入（D-148）：' + violations.join('、'));
+  // 另一份 CodeMirror 被打包進來時，類別身分和 Obsidian 的不同，編輯器的擴充會失效。
+  const bundled = Object.keys(result.metafile.inputs).filter(path => path.replaceAll('\\', '/').includes('node_modules/@codemirror/'));
+  if (bundled.length) throw Error('CodeMirror 被打包進 main.js：' + bundled.join(', '));
+  const css = [];
+  for (const entry of await readdir(resolve(root, 'src'), { recursive: true, withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith('.css')) css.push(resolve(entry.parentPath, entry.name));
+  }
+  const key = path => relative(root, path).replaceAll('\\', '/');
+  css.sort((a, b) => {
+    if (key(a) === 'src/ui/tokens.css') return -1;
+    if (key(b) === 'src/ui/tokens.css') return 1;
+    return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
+  });
+  await writeFile(resolve(outdir, 'styles.css'), (await Promise.all(css.map(path => readFile(path, 'utf8')))).join('\n'));
+  const listed = names => [...new Set(names)].sort().join(', ');
+  console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${listed(requires.filter(name => external.includes(name)))}; desktop: ${listed(requires.filter(name => DESKTOP_ONLY.includes(name)))}; version ${version}`);
+  return { version, dev };
+}
+
+if (import.meta.main) {
+  const at = process.argv.indexOf('--sourcemap');
+  const sourcemap = at < 0 ? undefined : process.argv[at + 1];
+  if (at >= 0 && (!sourcemap || sourcemap.startsWith('--'))) throw Error('用法：node tools/build.mjs [--dev] [--sourcemap <對照表的路徑>]');
+  await buildPlugin({ dev: process.argv.includes('--dev'), sourcemap });
+}

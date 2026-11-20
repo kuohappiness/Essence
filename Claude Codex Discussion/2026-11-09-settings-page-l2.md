@@ -10,43 +10,43 @@
 
 **規格｜接線已重現。** 啟動和開頁都讀不到，選 5 分鐘。寫前讀到 `{capMinutes:45,retention:0.9,future:{x:1}}`，第一次提交保留了其他欄位，寫後卻讀回 `null`。預期已看過檔案，核對失敗並保留最後確認的狀態，後續遇到 `null` 停寫。實際 `seenFile` 只在 `adopt` 時設定，寫前讀只拿來做底稿。核對將 `null` 採用為空物件，`known` 誤升成 true。接著關倒數，若寫前仍回 `null`，第二筆只提交 `{examCountdown:false}`。另從公開 store 介面以相同順序試恢復預設，核對還會回 `saved`，因為空物件裡找不到要刪的鍵。
 
-**真實路徑。** 第一個重現從正式 bundle 的下拉選單與開關操作。底層回 `null` 的條件已知包括 `ENOENT`，例如同步替換、移走後再出現的間隙。若寫前讀回 `null` 後，寫入時檔案已出現，第二筆能覆寫其餘欄位。iPhone 佔位檔是否也回這個值待驗。合併前修，任一有效物件讀取都應建立「本次已見檔」的事實，與採用為目前設定分開。測首次有效讀發生在寫前的情況，讓任務 §2-2、§7 第 33 項與 D-149 第 7 點的保護在核對及後續寫入都成立。 [D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) · [讀取與採用](../src/core/settings/store.ts#L53) · [寫前及核對](../src/core/settings/store.ts#L96)
+**真實路徑。** 第一個重現從正式 bundle 的下拉選單與開關操作。底層回 `null` 的條件已知包括 `ENOENT`，例如同步替換、移走後再出現的間隙。若寫前讀回 `null` 後，寫入時檔案已出現，第二筆能覆寫其餘欄位。iPhone 佔位檔是否也回這個值待驗。合併前修，任一有效物件讀取都應建立「本次已見檔」的事實，與採用為目前設定分開。測首次有效讀發生在寫前的情況，讓任務 §2-2、§7 第 33 項與 D-149 第 7 點的保護在核對及後續寫入都成立。 [D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) · [讀取與採用](../plugins/cards/src/core/settings/store.ts#L53) · [寫前及核對](../plugins/cards/src/core/settings/store.ts#L96)
 
 ### F2（P2）設定頁的儲存入口可在 layout ready 前讀寫
 
 **規格｜接線已重現。** 只呼叫正式 bundle 的 `plugin.onload()`，打開替身設定頁，在送出 `layoutReady()` 前選 5 分鐘。預期 T12 之下沒有 `loadData`，實際為 2 次 load、1 次 save，原本的 45 已改成 5，此時 `state` 仍是 `null`。只有 `reload` 查 `started`，設定頁控制項已接到無啟動閘門的 `change`。現行 T12 測試只取按鈕操作前的讀取數。
 
-**真實路徑。** Windows 封裝先初始化外掛、再載入工作區，`onLayoutReady` 的回呼還會分次排入事件迴圈（`app.js:625:61000` 附近、`app.js:524:46059`）。分頁已註冊，啟動中原生 UI 何時能點到仍待實機確認。合併前讓所有設定存檔入口共用啟動閘門，驗收在 layout ready 前經設定頁操作也沒有 I/O。 [分頁註冊與啟動](../src/main.ts#L153) · [設定儲存](../src/obsidian/settings.ts#L142) · [目前的 T12 測試](../tests/settings-tab.test.ts#L135)
+**真實路徑。** Windows 封裝先初始化外掛、再載入工作區，`onLayoutReady` 的回呼還會分次排入事件迴圈（`app.js:625:61000` 附近、`app.js:524:46059`）。分頁已註冊，啟動中原生 UI 何時能點到仍待實機確認。合併前讓所有設定存檔入口共用啟動閘門，驗收在 layout ready 前經設定頁操作也沒有 I/O。 [分頁註冊與啟動](../plugins/cards/src/main.ts#L153) · [設定儲存](../plugins/cards/src/obsidian/settings.ts#L142) · [目前的 T12 測試](../plugins/cards/tests/settings-tab.test.ts#L135)
 
 ### F3（P2）停用外掛後，舊實例尚未開始的設定寫入仍會執行
 
 **設計｜接線已重現。** 用正式 bundle 開設定頁，選 45 後讓第一筆 `saveData` 等待，再選 60 並停用外掛。釋放第一筆，第二筆於停用之後才進 `saveData`，磁碟成為 60。預期已開始的寫入可安全收尾，還沒開始的工作應有停用時的處置。實際 `onunload` 關掉 `state`，設定隊伍與訂閱仍活著。若立即啟用，新舊兩個 store 的隊伍各自獨立，舊意圖可能晚於新實例的設定操作才提交。
 
-**真實路徑。** 慢寫、連續修改設定與停用外掛都是現有入口。停用後第二筆開始已在主程式替身驗證，新舊實例實際寫入先後視 adapter 和時序而定。合併前定義停用後的隊伍生命週期，至少阻止尚未開始的工作進入讀寫，測停用與立即重啟的交錯。 [停用入口](../src/main.ts#L202) · [設定隊伍](../src/core/settings/store.ts#L42) · [設定訂閱](../src/main.ts#L158)
+**真實路徑。** 慢寫、連續修改設定與停用外掛都是現有入口。停用後第二筆開始已在主程式替身驗證，新舊實例實際寫入先後視 adapter 和時序而定。合併前定義停用後的隊伍生命週期，至少阻止尚未開始的工作進入讀寫，測停用與立即重啟的交錯。 [停用入口](../plugins/cards/src/main.ts#L202) · [設定隊伍](../plugins/cards/src/core/settings/store.ts#L42) · [設定訂閱](../plugins/cards/src/main.ts#L158)
 
 ### F4（P2）首次載入的期限與遲到採用有兩個不一致
 
 **規格｜已重現。** 任務 §3 與 §7 第 11 項要求 2 秒先 ready，晚到的設定再更新。直接對公開 `createState` 傳第 3 秒完成的 `settingsFirst`，2.25 秒時仍未 ready，第 3 秒才首次排程。正常主程式的 `store.first()` 有 2 秒門檻，所以這個直接呼叫的反例目前只會出現在 API 使用與該項字面驗收。另用正常的 store 首讀路徑，讓底層有效物件在 5.2 秒回來，沒有更新的工作：2 秒時為預設，5 秒後結果被丟棄，最後仍是 `known: false`、30 分鐘，直到另一次 reload 才採用 5。現有測試給 state 一個已完成的未知值，store 的遲到測試則落在 5 秒內。
 
-**真實路徑。** 啟動首讀可能因雲端檔慢而跨 5 秒。若沒有後續重讀觸發，這次開啟可一直按預設排程，即使底層最後已成功讀到。合併前統一介面與驗收的 2 秒責任，並明訂首讀超過 5 秒但終於成功時，如何在沒有更新結果可被覆蓋的前提下採用或補讀。 [state 的等待](../src/state/index.ts#L611) · [store 的兩段期限](../src/core/settings/store.ts#L31) · [state 現有測試](../tests/settings-state.test.ts#L64)
+**真實路徑。** 啟動首讀可能因雲端檔慢而跨 5 秒。若沒有後續重讀觸發，這次開啟可一直按預設排程，即使底層最後已成功讀到。合併前統一介面與驗收的 2 秒責任，並明訂首讀超過 5 秒但終於成功時，如何在沒有更新結果可被覆蓋的前提下採用或補讀。 [state 的等待](../plugins/cards/src/state/index.ts#L611) · [store 的兩段期限](../plugins/cards/src/core/settings/store.ts#L31) · [state 現有測試](../plugins/cards/tests/settings-state.test.ts#L64)
 
 ### F5（P2）發布前比較會把有 BOM 的設定算成可讀，和 Windows Obsidian 不同
 
 **規格｜比較路徑已重現，Obsidian 靜態核對。** 以 40 個新目標及 UTF-8 BOM 開頭的 `{"capMinutes":5}` 做備份，呼叫 `adapterInput → snapshot`，比較結果為 20 個。Windows Obsidian 1.15 的 adapter 以 `readFile(path,"utf8")` 讀字串，`readJson` 直接用 `JSON.parse`（`app.js:41:41563`、`app.js:207:77287`）。Node 同樣解碼加解析會拒絕這份檔案，冷啟動的預設排程有 40 個。差異來自 `adapterInput` 使用預設的 `TextDecoder`，在交給該版解析前就拿掉 BOM。這與 §2-9、[D-149 第 5 點](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 要求用各版實際讀法的比較不同。
 
-**真實路徑。** 可由外部 Windows 工具寫入帶 BOM 的設定，備份與還原會保留位元組。合併前讓凍結輸入保留設定檔的 BOM，並從原始位元組走到比較結果驗收。 [凍結輸入](../tools/compare-versions.ts#L67) · [比較解析](../tools/compare/adapter.ts#L197)
+**真實路徑。** 可由外部 Windows 工具寫入帶 BOM 的設定，備份與還原會保留位元組。合併前讓凍結輸入保留設定檔的 BOM，並從原始位元組走到比較結果驗收。 [凍結輸入](../plugins/cards/tools/compare-versions.ts#L67) · [比較解析](../plugins/cards/tools/compare/adapter.ts#L197)
 
 ### F6（P2）設定頁留在前景或切回前景跨過 04:00 時，學期選單可停在昨天
 
 **規格｜接線已重現。** 用手機替身開設定頁，`國二上` 的錨點為 2026-09-15。時鐘從 2027-02-01 03:59:59.999 到 04:00，切到背景再回前景，內容相同的重讀成功。預期 §5 的選單顯示今天算出的學期。實際 `currentSettings().semester` 已是國二下，選單仍是國二上，寫入次數為零。store 用儲存錨點做 fingerprint，這次重讀無通知。設定分頁沒有像入口那樣的換日重畫。
 
-**真實路徑。** iPhone 把設定頁留在背景過夜再回來就符合條件，桌面設定頁開著跨日也缺少換日觸發。重新進入分頁可恢復。合併前驗收開著的分頁如何刷新有效學期，維持原檔與排程的去重。 [前景重讀](../src/main.ts#L183) · [store 去重](../src/core/settings/store.ts#L50) · [學期選單](../src/obsidian/settings.ts#L189) · [入口換日](../src/ui/entry-host.tsx#L69)
+**真實路徑。** iPhone 把設定頁留在背景過夜再回來就符合條件，桌面設定頁開著跨日也缺少換日觸發。重新進入分頁可恢復。合併前驗收開著的分頁如何刷新有效學期，維持原檔與排程的去重。 [前景重讀](../plugins/cards/src/main.ts#L183) · [store 去重](../plugins/cards/src/core/settings/store.ts#L50) · [學期選單](../plugins/cards/src/obsidian/settings.ts#L189) · [入口換日](../plugins/cards/src/ui/entry-host.tsx#L69)
 
 ### F7（規格衝突）既有 data.json 的第一次覆寫能早於新版備份
 
 **規格｜靜態推斷。** D-150 第 2 點要求新版在這台電腦第一次改寫卡組或其他使用者檔案前先備份，第 3 點則把備份失敗的停寫規則列在卡組。任務 §2-8 明說設定不等備份，程式也確實直接存，`startBackup` 還要等 state ready 才啟動 runner。已有設定的電腦升版，開頁後立刻改值，首份新版備份就可能只保留改後的內容。
 
-**真實路徑。** 設定頁上線後的升版會有既存檔，備份慢或失敗也能從正常入口寫入。更新命令的安裝前備份仍是另一份可用的保護。合併前請整合者釐清第 2 點是否涵蓋設定的覆寫。若採用任務的例外，將例外同步到決定與驗收，避免兩份規格給出相反要求。 [D-150 第 2、3 點](../docs/decisions.md#d-150-備份與還原) · [備份開始時機](../src/main.ts#L433) · [獨立設定寫入](../src/main.ts#L118)
+**真實路徑。** 設定頁上線後的升版會有既存檔，備份慢或失敗也能從正常入口寫入。更新命令的安裝前備份仍是另一份可用的保護。合併前請整合者釐清第 2 點是否涵蓋設定的覆寫。若採用任務的例外，將例外同步到決定與驗收，避免兩份規格給出相反要求。 [D-150 第 2、3 點](../docs/decisions.md#d-150-備份與還原) · [備份開始時機](../plugins/cards/src/main.ts#L433) · [獨立設定寫入](../plugins/cards/src/main.ts#L118)
 
 ## 驗證
 
@@ -85,13 +85,13 @@ Windows Node v24.13.0 在沙箱外執行 `npm run check`，通過型別、ESLint
 
 剩餘時序：首讀 A 逾時，使用者關考試倒數，寫前讀 B。讓 B 先回 `null`，隔一個微任務讓 A 回 `{capMinutes:45,retention:0.9,future:{x:1}}`。B 已被分類成可用空底稿，A 在 `saveData` 之前完成分類並設好 `seenFile`，存檔仍送出 `{examCountdown:false}`，核對回 `saved`。預期已確認見過檔案時，這次依據缺檔做的寫入要停止。可控 Promise 與分類順序探針確認了「分類 A 的物件 → 呼叫 saveData」。
 
-**真實路徑。** 正常存檔可與逾時後仍在進行的 `loadData` 重疊。若寫前曾遇同步替換的缺檔間隙，寫入時原檔已出現，這筆可覆寫其他鍵。具體微任務時序已在替身重現，實機觸發頻率待驗。合併前修，保留寫前結果「由缺檔取得」的資訊，在真正送出存檔前依目前 `seenFile` 再擋一次。 [分類與晚到結果](../src/core/settings/store.ts#L61) · [寫入入口](../src/core/settings/store.ts#L124)
+**真實路徑。** 正常存檔可與逾時後仍在進行的 `loadData` 重疊。若寫前曾遇同步替換的缺檔間隙，寫入時原檔已出現，這筆可覆寫其他鍵。具體微任務時序已在替身重現，實機觸發頻率待驗。合併前修，保留寫前結果「由缺檔取得」的資訊，在真正送出存檔前依目前 `seenFile` 再擋一次。 [分類與晚到結果](../plugins/cards/src/core/settings/store.ts#L61) · [寫入入口](../plugins/cards/src/core/settings/store.ts#L124)
 
 ### F3（P2，部分通過）停用後仍會發布寫後核對
 
 **設計｜已重現。** 佇列中還沒開始的存檔、進行中的寫前讀和逾時首讀，都已驗證會在 `close()` 後停止寫入或採用。剩餘的是已送出的寫入。先讓 `saveData` 等待，呼叫 `close()` 再完成寫入，會額外啟動一次 `loadData`，採用新值並通知一次。若改在核對已送出後才 `close()`，正常回來的核對也仍通知一次。這違反 `close()`「不再通知」的契約。主程式的 `saveFailed` 有停用防線，這兩個案例走的是 `adopt → onChange`。
 
-**真實路徑。** 在慢寫或核對期間停用外掛即可。採用與通知已經由公開 store 重現，Obsidian 已移除設定分頁時是否還會重畫取決於主機。合併前補上寫後的停用邊界。若保留核對作為已送出寫入的收尾，核對仍應避免採用、通知或重畫舊實例。這項和核對表接受的新舊實例各有一筆在途寫入分開。 [關閉契約](../src/core/settings/store.ts#L28) · [寫後核對](../src/core/settings/store.ts#L133) · [主程式訂閱](../src/main.ts#L153)
+**真實路徑。** 在慢寫或核對期間停用外掛即可。採用與通知已經由公開 store 重現，Obsidian 已移除設定分頁時是否還會重畫取決於主機。合併前補上寫後的停用邊界。若保留核對作為已送出寫入的收尾，核對仍應避免採用、通知或重畫舊實例。這項和核對表接受的新舊實例各有一筆在途寫入分開。 [關閉契約](../plugins/cards/src/core/settings/store.ts#L28) · [寫後核對](../plugins/cards/src/core/settings/store.ts#L133) · [主程式訂閱](../plugins/cards/src/main.ts#L153)
 
 ### F4（P2，部分通過）晚到讀取可能被較舊的缺檔結果或未寫入的嘗試擋掉
 
@@ -100,13 +100,13 @@ Windows Node v24.13.0 在沙箱外執行 `npm run check`，通過型別、ESLint
 - A 首讀逾時後，開頁或前景觸發 B 重讀，B 也逾時，期間沒有存檔。A 先晚到回 `null`，把狀態定為 `known:true`、30 分鐘。B 接著晚到回 `{capMinutes:75}`，因 `!known` 不成立而忽略。預期較新取得的有效物件可取代較早的缺檔預設，實際仍用 30，直到再次重讀。
 - A 首讀逾時後，改上限時的寫前讀回 `undefined`，`change()` 回 `unreadable`，`saveData` 零次。A 隨後回 `{capMinutes:45}`，但 `writes` 在寫前讀就加一，仍維持 `known:false`、30。任務 §2-5、§7 第 11 項用的是「期間沒存過」，需要明確區分曾嘗試與真的送出寫入。
 
-**真實路徑。** 同步期間可連續慢讀，使用者也能在初始預設值出現後開設定頁或改設定。兩個交錯均用可控 Promise 重現。合併前以讀取順序、是否送出寫入來定義遲到結果的採用條件，補「兩次都遲到」與「改設定但沒進到 saveData」的回歸。 [遲到採用](../src/core/settings/store.ts#L70) · [寫入計數](../src/core/settings/store.ts#L124) · [現有驗收](../tests/settings-store.test.ts#L297)
+**真實路徑。** 同步期間可連續慢讀，使用者也能在初始預設值出現後開設定頁或改設定。兩個交錯均用可控 Promise 重現。合併前以讀取順序、是否送出寫入來定義遲到結果的採用條件，補「兩次都遲到」與「改設定但沒進到 saveData」的回歸。 [遲到採用](../plugins/cards/src/core/settings/store.ts#L70) · [寫入計數](../plugins/cards/src/core/settings/store.ts#L124) · [現有驗收](../plugins/cards/tests/settings-store.test.ts#L297)
 
 ### F6（P2，部分通過）回前景跨學期時，重讀失敗仍顯示舊學期
 
 **規格｜接線已重現。** 正式 bundle 配手機替身，選單開在 2/1 03:59:59.999，跨 04:00 後回前景。若重讀成功且內容相同，選單從國二上換成國二下，第二次重讀沒有再重畫，也沒有寫檔或額外重排。若同一時刻的 `loadData` 回 `undefined`，`currentSettings().semester` 已為國二下，選單仍留國二上。已有有效錨點，可以用保留的值算今天的學期。現在只有成功重讀才會走到 fingerprint 比較。
 
-**真實路徑。** iPhone 把分頁留在背景，跨學期回來又暫時讀不到設定檔。合併前補這條前景路徑，檔案讀不到時也可用現有錨點更新選單。這個案例沿用既有前景事件，與電腦整夜開著、無事件的情況分開。 [重讀](../src/core/settings/store.ts#L99) · [前景入口](../src/main.ts#L183) · [學期選單](../src/obsidian/settings.ts#L189)
+**真實路徑。** iPhone 把分頁留在背景，跨學期回來又暫時讀不到設定檔。合併前補這條前景路徑，檔案讀不到時也可用現有錨點更新選單。這個案例沿用既有前景事件，與電腦整夜開著、無事件的情況分開。 [重讀](../plugins/cards/src/core/settings/store.ts#L99) · [前景入口](../plugins/cards/src/main.ts#L183) · [學期選單](../plugins/cards/src/obsidian/settings.ts#L189)
 
 ### 已通過與驗證
 
@@ -143,23 +143,23 @@ Windows Node v24.13.0 在沙箱外執行 `npm run check`，型別、ESLint、kni
 
 **規格｜公開介面與接線已重現。** 首讀 A 逾時，普通重讀或寫後核對 B 先把 `null` 分類成可用的空底稿。B 的 `await read()` 繼續前，遲到的 A 回傳有效物件並設下 `seenFile`。依 §2-5 與 §7 第 33 項，此時 B 應算讀不到，保留目前值，若是核對則回 `failed`。實際重讀與核對都可採用 B，把 `known` 從 `false` 改為 `true`；清除學期時還會回 `saved`，因為空底稿裡沒有學期鍵。補讀若也讀不到，這個錯誤的 `known` 會維持。探針讓 B 先完成、隔一個 Promise 微任務讓 A 完成，重現兩條路徑。同一組時序用在寫前讀，已驗證送出 `saveData` 前確知見過檔時會擋寫。
 
-**真實路徑。** 逾時首讀可與開頁、回前景、外部變更或設定存檔的讀取重疊。用正式程式的設定頁配替身，首讀逾時後連選一個學期再選「未設定」，第一筆寫前讀不到，第二筆 `saveData({})` 模擬吞掉錯誤，核對交錯如上。最後只有第一筆有失敗通知，`state.currentSettings().known` 為 `true`。這個反例需要缺檔回報與遲到物件在相鄰微任務到達，原生 adapter 的精確時序待驗。合併前一起驗收送寫、採用、核對三個使用讀取結果的出口。 [§2-5 與 §7 第 33 項](../tasks/settings-page.md#2-讀與存要格式查核) · [缺檔分類與晚到讀取](../src/core/settings/store.ts#L61) · [重讀採用](../src/core/settings/store.ts#L104) · [寫後核對](../src/core/settings/store.ts#L148)
+**真實路徑。** 逾時首讀可與開頁、回前景、外部變更或設定存檔的讀取重疊。用正式程式的設定頁配替身，首讀逾時後連選一個學期再選「未設定」，第一筆寫前讀不到，第二筆 `saveData({})` 模擬吞掉錯誤，核對交錯如上。最後只有第一筆有失敗通知，`state.currentSettings().known` 為 `true`。這個反例需要缺檔回報與遲到物件在相鄰微任務到達，原生 adapter 的精確時序待驗。合併前一起驗收送寫、採用、核對三個使用讀取結果的出口。 [§2-5 與 §7 第 33 項](../tasks/settings-page.md#2-讀與存要格式查核) · [缺檔分類與晚到讀取](../plugins/cards/src/core/settings/store.ts#L61) · [重讀採用](../plugins/cards/src/core/settings/store.ts#L104) · [寫後核對](../plugins/cards/src/core/settings/store.ts#L148)
 
 ### R3-2（P2，第二輪 F4 修正引入，第 3 代）重複補讀可以讓後續存檔多等 5 秒
 
 **規格｜公開介面已重現。** 首讀 A、一次普通重讀 B 都逾時。A 晚到後開始補讀 C，C 還在等時 B 又晚到，接著使用者改上限。C 讀到磁碟的 45 分鐘並通知，恢復已知設定後，先前被 B 排入的補讀 D 仍開始，卡在存檔前面。可控 Promise 與計時器驗證 D 逾時前都沒有進入寫前讀，5 秒後才存成 60 分鐘。另驗一筆慢寫成功核對後，原先排在它後面的補讀照樣發出。補讀有成功結果或存檔已完成核對時，預期隊伍可直接放行後續操作。
 
-**真實路徑。** 啟動首讀加上開頁、回前景或外部變更即可產生兩筆普通讀，兩次都逾時後的晚到可分別在不同事件回來。已驗證補讀自身逾時會停止衍生下一筆，`close()` 也會跳過已排隊、尚未執行的補讀。合併前驗收補讀已排隊或進行中時收到第二個遲到結果，並區分第一筆補讀成功與失敗，保留讀取恢復的機會。 [§2-1、§2-5](../tasks/settings-page.md#2-讀與存要格式查核) · [排補讀的條件](../src/core/settings/store.ts#L80) · [出隊時的檢查](../src/core/settings/store.ts#L104) · [前景與外部事件](../src/main.ts#L183)
+**真實路徑。** 啟動首讀加上開頁、回前景或外部變更即可產生兩筆普通讀，兩次都逾時後的晚到可分別在不同事件回來。已驗證補讀自身逾時會停止衍生下一筆，`close()` 也會跳過已排隊、尚未執行的補讀。合併前驗收補讀已排隊或進行中時收到第二個遲到結果，並區分第一筆補讀成功與失敗，保留讀取恢復的機會。 [§2-1、§2-5](../tasks/settings-page.md#2-讀與存要格式查核) · [排補讀的條件](../plugins/cards/src/core/settings/store.ts#L80) · [出隊時的檢查](../plugins/cards/src/core/settings/store.ts#L104) · [前景與外部事件](../plugins/cards/src/main.ts#L183)
 
 ### R3-3（P3，延續第二輪 F3，第 3 代）停用後才完成的核對仍回 `saved`
 
 **規範與設計｜公開介面已重現。** 讓寫入完成、核對的 `loadData` 在途，這時呼叫 `close()`，再讓核對回傳本次選的值。`adopt()` 擋住了採用和通知，但 `change()` 仍以 `hasChange` 回 `saved`，與 `close()` 的「存檔都回 failed」契約不同。若提前到寫入仍在途時停用，同一探針得到 `failed`、零次寫後讀，已排隊的補讀也沒有開始。新增的核對回歸測試等待存檔完成，但沒有斷言回傳值。
 
-**真實路徑。** 慢核對期間停用可走到此路徑。現行分頁收到 `saved` 時直接返回，探針沒有看到採用、狀態通知或成功提示。另從分頁觸發停用前已送出的慢寫，停用後的 `failed` 會被主程式擋下失敗通知，但分頁容器若仍顯示，替身重畫一次。Windows Obsidian 1.15.0 封裝會在卸載時移除分頁，當前頁在桌面同步關閉。手機關頁有動畫分支，原生重畫時序待驗（`app.js:530:1898`、`app.js:625:40979`、`app.js:625:42588`）。收尾時把核對完成的回傳與分頁收尾納入同一項停用驗收。 [關閉契約](../src/core/settings/store.ts#L28) · [核對與回報](../src/core/settings/store.ts#L145) · [現有回歸](../tests/settings-store.test.ts#L387) · [分頁失敗收尾](../src/obsidian/settings.ts#L145) · [停用後的通知防線](../src/main.ts#L153)
+**真實路徑。** 慢核對期間停用可走到此路徑。現行分頁收到 `saved` 時直接返回，探針沒有看到採用、狀態通知或成功提示。另從分頁觸發停用前已送出的慢寫，停用後的 `failed` 會被主程式擋下失敗通知，但分頁容器若仍顯示，替身重畫一次。Windows Obsidian 1.15.0 封裝會在卸載時移除分頁，當前頁在桌面同步關閉。手機關頁有動畫分支，原生重畫時序待驗（`app.js:530:1898`、`app.js:625:40979`、`app.js:625:42588`）。收尾時把核對完成的回傳與分頁收尾納入同一項停用驗收。 [關閉契約](../plugins/cards/src/core/settings/store.ts#L28) · [核對與回報](../plugins/cards/src/core/settings/store.ts#L145) · [現有回歸](../plugins/cards/tests/settings-store.test.ts#L387) · [分頁失敗收尾](../plugins/cards/src/obsidian/settings.ts#L145) · [停用後的通知防線](../plugins/cards/src/main.ts#L153)
 
 ### 通過與驗證
 
-- **F6 通過。** 正式程式配手機替身，在設定頁跨過 2/1 04:00 後觸發前景與兩次外部重讀，三次都讀不到。學期從國二上變國二下，只重畫一次，零次寫檔，換日後的 `today()` 保持同一物件。 [重讀失敗也比較通知](../src/core/settings/store.ts#L86)
+- **F6 通過。** 正式程式配手機替身，在設定頁跨過 2/1 04:00 後觸發前景與兩次外部重讀，三次都讀不到。學期從國二上變國二下，只重畫一次，零次寫檔，換日後的 `today()` 保持同一物件。 [重讀失敗也比較通知](../plugins/cards/src/core/settings/store.ts#L86)
 - 待審 `b7cccac8f792f53e6582070a994d3352e085abb6` 的上述修正與受影響入口，在 `d280012ebacd2a5a0c92c78ccca7ed53d1006699` 驗證。Windows Node v24.13.0，五個設定測試檔以 `node --test --test-timeout=15000` 跑 83 項全過；另以 Node stdin、可控 Promise 與既有 Obsidian 替身執行 12 個隔離探針。正式 `buildPlugin` 通過，產物寫到暫存目錄。
 - 在 Windows 沙箱外執行 `npm run check`，型別、ESLint、knip、secretlint、skill 一致性、文件檢查與完整測試套件皆通過，exit 0。
 - D-197 的試行規則在 `main` 的 `docs/agents/quality.md`（`dda2caf`）。本輪三項已標出發現鏈，交整合者在本輪 Claude 回應先重整並記錄試行結果。
@@ -202,13 +202,13 @@ Windows Node v24.13.0 在沙箱外執行 `npm run check`，型別、ESLint、kni
 
 **規範與設計｜公開介面已重現。** 以直接同步 `throw` 的 `load` 替身讓首讀失敗，下一筆起都正常回 `null`。預期失敗的讀應釋放計數，後續確認缺檔後可以首次存檔。實際 `reading++` 已執行，但同步例外讓程式跳過 `.catch().then()`，首讀拒絕，後續重讀不能確認缺檔，`change()` 回 `unreadable` 且零次寫入。同探針在 `d280012` 的 store 上，首讀也拒絕，但後續可寫成並回 `saved`。同步例外若出現在寫前讀，`change()` 的 Promise 保持未完成，後續重讀仍會出隊。這個未完成行為也存在於前版的同一條例外路徑；新增影響是後續的缺檔判斷一直被擋住。
 
-**真實路徑。** 目前唯一正式接線傳入 `() => this.loadData()`。Windows Obsidian 1.15.0 封裝的 `loadData` 是 `async`（`app.js:530:4028`），方法內部的同步例外也會成為 Promise 拒絕。以同樣形狀的替身經正式設定頁驗證，拒絕後仍可首次存檔。這項發現適用於直接同步拋錯的注入函式，現有正式接線不受阻。若未來加入可直接拋錯的呼叫端，應讓所有載入失敗都回到同一個回收步驟，維持減計數與分類在同一個同步步驟。 [在途計數與載入](../src/core/settings/store.ts#L81) · [主程式接線](../src/main.ts#L119)
+**真實路徑。** 目前唯一正式接線傳入 `() => this.loadData()`。Windows Obsidian 1.15.0 封裝的 `loadData` 是 `async`（`app.js:530:4028`），方法內部的同步例外也會成為 Promise 拒絕。以同樣形狀的替身經正式設定頁驗證，拒絕後仍可首次存檔。這項發現適用於直接同步拋錯的注入函式，現有正式接線不受阻。若未來加入可直接拋錯的呼叫端，應讓所有載入失敗都回到同一個回收步驟，維持減計數與分類在同一個同步步驟。 [在途計數與載入](../plugins/cards/src/core/settings/store.ts#L81) · [主程式接線](../plugins/cards/src/main.ts#L119)
 
 ### 第三輪發現的驗收
 
-- **R3-1 缺檔防線通過。** 公開的 `change()` 和 `reload()` 各驗兩種回來順序、各隔 0～11 個微任務，共 48 種交錯。只要有較早的有效物件在途或已回來，`null` 就不會用來寫入或把 `known` 升為 `true`。兩筆在途時，一筆拒絕也不會提早放行；最後一筆拒絕且從未見檔，下一次正常讀到 `null` 就可首次存檔。正常的 Promise 載入中，計數減一與標記見檔同在一個回呼，使用端看不到兩者中間的狀態。另用暫存目錄實際建立 `data.json`，首次存入 5 分鐘回 `saved`，恢復預設後檔案內容為 `{}`。寫入被吞掉、核對仍缺檔時，新增設定和清除學期都回 `failed`。 [判定與讀取](../src/core/settings/store.ts#L75) · [寫後核對](../src/core/settings/store.ts#L163)
-- **R3-2 補讀通過。** 隊伍只留一筆尚未開始的補讀。前一筆補讀或存檔核對成功，排在後面的補讀出隊後直接放行；第一筆補讀失敗時，另一筆晚到結果排的補讀仍能恢復。另驗補讀在途、第二筆補讀與存檔排隊時停用，以及慢寫核對期間停用，兩例都沒有新增 I/O 或通知。 [補讀隊伍](../src/core/settings/store.ts#L117) · [補讀回歸](../tests/settings-store.test.ts#L458)
-- **R3-3 停用契約通過。** 慢核對已送出後才停用，結果回 `failed`，沒有採用、通知或開始已排隊的補讀。設定頁的失敗重畫維持現行做法已足夠。正式程式配替身，分頁已隱藏時零次重畫，刻意保留可見時重畫一次，兩例都沒有額外讀寫 `data.json`、失敗通知或套用新設定。Windows Obsidian 1.15.0 卸載時會移除分頁並同步關閉當前頁（`app.js:530:1898`、`625:40979`、`625:42588`）；手機動畫期間是否短暫重畫仍待原生驗證。 [停用後核對](../src/core/settings/store.ts#L161) · [設定頁失敗收尾](../src/obsidian/settings.ts#L145) · [停用後通知防線](../src/main.ts#L153)
+- **R3-1 缺檔防線通過。** 公開的 `change()` 和 `reload()` 各驗兩種回來順序、各隔 0～11 個微任務，共 48 種交錯。只要有較早的有效物件在途或已回來，`null` 就不會用來寫入或把 `known` 升為 `true`。兩筆在途時，一筆拒絕也不會提早放行；最後一筆拒絕且從未見檔，下一次正常讀到 `null` 就可首次存檔。正常的 Promise 載入中，計數減一與標記見檔同在一個回呼，使用端看不到兩者中間的狀態。另用暫存目錄實際建立 `data.json`，首次存入 5 分鐘回 `saved`，恢復預設後檔案內容為 `{}`。寫入被吞掉、核對仍缺檔時，新增設定和清除學期都回 `failed`。 [判定與讀取](../plugins/cards/src/core/settings/store.ts#L75) · [寫後核對](../plugins/cards/src/core/settings/store.ts#L163)
+- **R3-2 補讀通過。** 隊伍只留一筆尚未開始的補讀。前一筆補讀或存檔核對成功，排在後面的補讀出隊後直接放行；第一筆補讀失敗時，另一筆晚到結果排的補讀仍能恢復。另驗補讀在途、第二筆補讀與存檔排隊時停用，以及慢寫核對期間停用，兩例都沒有新增 I/O 或通知。 [補讀隊伍](../plugins/cards/src/core/settings/store.ts#L117) · [補讀回歸](../plugins/cards/tests/settings-store.test.ts#L458)
+- **R3-3 停用契約通過。** 慢核對已送出後才停用，結果回 `failed`，沒有採用、通知或開始已排隊的補讀。設定頁的失敗重畫維持現行做法已足夠。正式程式配替身，分頁已隱藏時零次重畫，刻意保留可見時重畫一次，兩例都沒有額外讀寫 `data.json`、失敗通知或套用新設定。Windows Obsidian 1.15.0 卸載時會移除分頁並同步關閉當前頁（`app.js:530:1898`、`625:40979`、`625:42588`）；手機動畫期間是否短暫重畫仍待原生驗證。 [停用後核對](../plugins/cards/src/core/settings/store.ts#L161) · [設定頁失敗收尾](../plugins/cards/src/obsidian/settings.ts#L145) · [停用後通知防線](../plugins/cards/src/main.ts#L153)
 
 **§2-2 的代價可接受。** 首讀一直不回來時，無法區分真正缺檔和更早的讀仍可能帶回原設定，暫時擋住建立檔案可保住其他欄位。已驗證在途讀一旦結束且從未見檔，下次確認 `null` 即可存檔，這種情況不用重開；寫前讀到物件也仍可修改。iPhone 若常出現原生讀取不返回，須先確認安全的缺檔依據，單憑等得夠久無法證明沒有原檔。 [任務 §2-2](../tasks/settings-page.md#2-讀與存要格式查核) · [iPhone 補測](../tasks/settings-page.md#8-windows-實機claude-用開發版跑先確認測試-vault-沒有別的-session-在用結束後把-datajson-還原)
 

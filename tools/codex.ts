@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Claude 直接呼叫本機的 Codex（D-212）：`npm run codex -- <類型> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <等級>] [--confirmed]`。
+ * Claude 直接呼叫本機的 Codex（D-212）：`node tools/codex.ts <類型> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <等級>] [--confirmed]`。
  * xhigh 或 Astra 會用掉大量額度，沒有 `--confirmed` 就不跑：先問使用者，同意了才加（D-212 第 2 點）。
  * 每次都是新的 Codex session（D-171 第 1 點）。回報存在 `.local/codex/`，Codex 的執行紀錄另存一份 .log，Claude 只讀回報。
  * 跑完印一行 token 與額度，Claude 附在回覆末端（D-212 第 3 點）。
@@ -237,7 +237,7 @@ if (import.meta.main) {
   const isEffort = (value: string): value is Preset['effort'] => (efforts as readonly string[]).includes(value);
   const effortValue = effort !== undefined && isEffort(effort) ? effort : undefined;
   if (!kind || !isKind(kind) || !requestFile || (effort !== undefined && !effortValue)) {
-    console.error(`用法：npm run codex -- <${Object.keys(PRESETS).join('|')}> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <${efforts.join('|')}>] [--confirmed]`);
+    console.error(`用法：node tools/codex.ts <${Object.keys(PRESETS).join('|')}> <請求檔> [--note <這一輪的說明>] [--model <模型>] [--effort <${efforts.join('|')}>] [--confirmed]`);
     process.exitCode = 1;
   } else {
     try {

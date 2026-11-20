@@ -10,7 +10,7 @@
 - **怎麼跑**：雲端討論串讀不到電腦，要開 Remote Control 由電腦上的 session 統計。統計腳本放在使用者電腦的 `%TEMP%\essence-claude-usage\`，可能被系統清掉。
 - **範圍**：整台電腦所有專案的合計（這段時間主要是 Essence）；雲端討論串沒有紀錄。
 - **加權成本**：照 Anthropic API 定價折成 Opus 的一般輸入：快取讀 ×0.05、1 小時快取寫 ×2、輸出 ×5；Fable、Sonnet 也照 Opus 算。方案額度怎麼扣沒有公布，所以只是近似，原始 token 一起列。
-- **工作量**：Essence Cards `main` 上有改到 `src/` 或 `tests/` 的 commit（不含合併）。
+- **工作量**：Essence Cards `main` 上有改到 `src/` 或 `tests/` 的 commit（不含合併；2026-11-20 D-208 第二步 A 之後是 `plugins/cards/src/`、`plugins/cards/tests/`，搬家那個 commit 不算）。
 - **品質**：每件 L2 的審查輪數（從審查稿的狀態行與標題數，可能差一輪）；修正型 commit（標題不是 docs 開頭、以 fix 開頭或含 revert）佔非文件 commit 的比例，很粗。
 - **不要用週額度比**：Codex 的週額度（`rate_limits.secondary`）10-19～11-09 重置了 8 次，不是連續的曲線。
 

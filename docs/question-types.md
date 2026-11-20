@@ -105,12 +105,12 @@
 
 | 接點 | 在哪裡 | 做什麼 |
 |---|---|---|
-| 解析 | [`core/deck/question-types.ts`](../src/core/deck/question-types.ts) | 名稱與題目怎麼認、哪些算寫錯 |
-| 組卡 | [`core/study/compose.ts`](../src/core/study/compose.ts) | 這張卡是哪一種題型、有哪幾格 |
-| 作答 | [`review/flow.ts`](../src/review/flow.ts) | `FLOWS`、`PREVIEWS`：判定、評分與紀錄 |
-| 畫面 | [`ui/screens.tsx`](../src/ui/screens.tsx) | `SCREENS`：題目區、底部那一排、點卡片做什麼 |
+| 解析 | [`core/deck/question-types.ts`](../plugins/cards/src/core/deck/question-types.ts) | 名稱與題目怎麼認、哪些算寫錯 |
+| 組卡 | [`core/study/compose.ts`](../plugins/cards/src/core/study/compose.ts) | 這張卡是哪一種題型、有哪幾格 |
+| 作答 | [`review/flow.ts`](../plugins/cards/src/review/flow.ts) | `FLOWS`、`PREVIEWS`：判定、評分與紀錄 |
+| 畫面 | [`ui/screens.tsx`](../plugins/cards/src/ui/screens.tsx) | `SCREENS`：題目區、底部那一排、點卡片做什麼 |
 
-`QuestionType` 多一個值時，TypeScript 會指出 `FLOWS`、`PREVIEWS`、`SCREENS` 和 [`tests/question-types.test.ts`](../tests/question-types.test.ts) 的範例表缺哪一列。範例從筆記的文字跑到題型，解析或組卡沒接上，測試不過。
+`QuestionType` 多一個值時，TypeScript 會指出 `FLOWS`、`PREVIEWS`、`SCREENS` 和 [`tests/question-types.test.ts`](../plugins/cards/tests/question-types.test.ts) 的範例表缺哪一列。範例從筆記的文字跑到題型，解析或組卡沒接上，測試不過。
 
 ## v1 分段
 

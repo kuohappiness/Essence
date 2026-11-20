@@ -2,7 +2,7 @@
 // 比較兩種讀法：現在的 sourceLinks（整串比對）與這裡的 tokenRead（先去雜訊、再拆成詞）。只讀程式、不碰 vault。
 //   node experiments/source-reading/noise-check.mjs        結果摘要
 //   node experiments/source-reading/noise-check.mjs --list 列出每一個讀法改變的例子
-import { sourceLinks } from '../../src/core/deck/index.ts';
+import { sourceLinks } from '../../plugins/cards/src/core/deck/index.ts';
 
 // ── 另一種讀法的試作 ──
 

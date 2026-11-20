@@ -2,8 +2,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomInt } from 'node:crypto';
-import { parseDeck, readProperties } from '../../src/core/deck/parse.ts';
-import { linesOf, listTree, questionSyntax, stripId } from '../../src/core/deck/markdown.ts';
+import { parseDeck, readProperties } from '../../plugins/cards/src/core/deck/parse.ts';
+import { linesOf, listTree, questionSyntax, stripId } from '../../plugins/cards/src/core/deck/markdown.ts';
 import { exists, readJson, writeJson } from './core.mjs';
 import { hash, references } from './screen-analysis.mjs';
 import { secondSettings } from './arch-r2.mjs';

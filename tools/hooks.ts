@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { NAMES, PLUGINS, dispatch, readChanges, shown, type Dispatch, type Plugin } from './dispatch.ts';
+import { NAMES, TARGETS, dispatch, folder, readChanges, shown, type Dispatch, type Target } from './dispatch.ts';
 
 /** 共用檢查：每次都跑，在 hook 原本的環境讀暫存區（git commit <路徑>、-a 用的是暫時的索引）。 */
 export const SHARED_CHECKS: [string, ...string[]][] = [
@@ -18,9 +18,6 @@ export const SHARED_CHECKS: [string, ...string[]][] = [
   // 每一份 roadmap 讀得出來（§8）：外掛的 roadmap 寫壞時 commit 就擋，不會等到 Pages 才失敗。
   ['roadmap-board.ts', '--check', '--staged'],
 ];
-
-/** 外掛的資料夾：Cards 過渡期在根目錄（第二步搬進 plugins/cards/）。 */
-export const folder = (plugin: Plugin) => (plugin === 'cards' ? '.' : `plugins/${plugin}`);
 
 const git = (root: string, args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -77,7 +74,7 @@ function stagedCopy(root: string): { dir: string; cleanup: () => void } {
   try {
     git(root, ['-c', 'core.autocrlf=false', 'checkout-index', '--all', `--prefix=${dir.replaceAll('\\', '/')}/`]);
     writeFileSync(join(dir, '.git'), `gitdir: ${git(root, ['rev-parse', '--absolute-git-dir'])}\n`);
-    for (const sub of ['tools', ...PLUGINS.map(folder)]) {
+    for (const sub of new Set(TARGETS.map(folder))) {
       const from = join(root, sub, 'node_modules');
       if (!existsSync(from) || !existsSync(join(dir, sub))) continue;
       const to = join(dir, sub, 'node_modules');
@@ -94,18 +91,21 @@ function stagedCopy(root: string): { dir: string; cleanup: () => void } {
 /** npm 在 Windows 是 npm.cmd，要經過 shell 才找得到；參數都是固定的字，沒有使用者輸入。 */
 const npm = (args: string[], options: SpawnSyncOptions) => spawnSync(['npm', ...args].join(' '), { ...options, shell: true });
 
-/** 照分派表跑一個外掛（在暫存內容的副本 copy 裡跑）；回傳這個外掛在最後那行的寫法，失敗時回傳 undefined（已經印出原因）。 */
-function runPlugin(root: string, copy: string, plugin: Plugin, result: Dispatch, env: NodeJS.ProcessEnv): string | undefined {
-  const { run, tests, why } = result.plugins[plugin];
-  const name = NAMES[plugin];
+/**
+ * 照分派表跑一個對象（在暫存內容的副本 copy 裡跑）；回傳這個對象在最後那行的寫法，失敗時回傳 undefined（已經印出原因）。
+ * 完整：外掛跑 npm run check，共用工具跑 npm run self-check（§A2；check 是每次 commit 的共用檢查，前面已經跑過）。
+ */
+function runTarget(root: string, copy: string, target: Target, result: Dispatch, env: NodeJS.ProcessEnv): string | undefined {
+  const { run, tests, why } = result.targets[target];
+  const name = NAMES[target];
   if (run === 'skip') return `${name}：${why}`;
-  const dir = join(copy, folder(plugin));
-  const where = plugin === 'cards' ? '根目錄' : `${folder(plugin)}/`;
+  const dir = join(copy, folder(target));
+  const where = folder(target) === '.' ? '根目錄' : `${folder(target)}/`;
   if (!existsSync(join(dir, 'package.json'))) {
     console.error(`${name}：${where}沒有 package.json，跑不了檢查。`);
     return undefined;
   }
-  if (needsInstall(dir) && !existsSync(join(root, folder(plugin), 'node_modules'))) {
+  if (needsInstall(dir) && !existsSync(join(root, folder(target), 'node_modules'))) {
     console.error(`${name} 要檢查，先在${where}執行 npm ci。`);
     return undefined;
   }
@@ -113,11 +113,11 @@ function runPlugin(root: string, copy: string, plugin: Plugin, result: Dispatch,
   // 原本約 4.2 萬字（外掛架構檢查環節 9 的 Q2）。手動跑與 CI 不變。
   const dotEnv = { ...env, NODE_OPTIONS: `${env.NODE_OPTIONS ? env.NODE_OPTIONS + ' ' : ''}--test-reporter=dot` };
   if (run === 'full') {
-    const { status } = npm(['run', 'check'], { cwd: dir, env: dotEnv, stdio: 'inherit' });
+    const { status } = npm(['run', target === 'tools' ? 'self-check' : 'check'], { cwd: dir, env: dotEnv, stdio: 'inherit' });
     if (status !== 0) return undefined;
     return `${name}：${why}通過`;
   }
-  // 相關測試（只有 Cards）：通過時只印一行。
+  // 相關測試（Cards 與共用工具）：通過時只印一行。
   const out = spawnSync(process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=dot', ...tests], { cwd: dir, env, encoding: 'utf8' });
   if (out.status !== 0) {
     process.stderr.write(out.stdout + out.stderr);
@@ -141,9 +141,9 @@ export function preCommit(root: string): number {
   if (!runShared(root)) return 1;
   const env = cleanEnv(root);
   const parts = ['共用檢查通過'];
-  // 有外掛要跑才取出副本（照表全部跳過的 commit 不多花時間）。
+  // 有對象要跑才取出副本（照表全部跳過的 commit 不多花時間）。
   let copy: ReturnType<typeof stagedCopy> | undefined;
-  if (PLUGINS.some(plugin => result.plugins[plugin].run !== 'skip')) {
+  if (TARGETS.some(target => result.targets[target].run !== 'skip')) {
     try {
       copy = stagedCopy(root);
     } catch (error) {
@@ -155,8 +155,8 @@ export function preCommit(root: string): number {
   const ignore = () => undefined;
   process.on('SIGINT', ignore);
   try {
-    for (const plugin of PLUGINS) {
-      const part = runPlugin(root, copy?.dir ?? root, plugin, result, env);
+    for (const target of TARGETS) {
+      const part = runTarget(root, copy?.dir ?? root, target, result, env);
       if (part === undefined) return 1;
       parts.push(part);
     }
@@ -181,7 +181,7 @@ const gh = (args: string[], env: NodeJS.ProcessEnv) =>
 
 /**
  * 合併進 main 之前，要合併的 commit 在 GitHub Actions 的 Check 要是綠燈（第二次里程碑檢查 R2）。用分派表的 CI 跑法比
- * <合併基點>..<head>，有外掛要跑就要 CI 綠燈；只查同一個 head 的 push run：分支 push 的比較範圍才是整個分支對 main。
+ * <合併基點>..<head>，有對象要跑就要 CI 綠燈；只查同一個 head 的 push run：分支 push 的比較範圍才是整個分支對 main。
  * 快轉與有衝突的合併不經過這個 hook（docs/agents/quality.md 的合併步驟也寫了）；gh 不能用或沒登入時警告放行。
  */
 export function preMergeCommit(root: string): number {
@@ -203,7 +203,7 @@ export function preMergeCommit(root: string): number {
     if (base) {
       try {
         const result = dispatch(readChanges(root, { kind: 'range', base, head }), { root, ci: true, compare: { kind: 'range', base, head } });
-        if (PLUGINS.every(plugin => result.plugins[plugin].run === 'skip')) continue;
+        if (TARGETS.every(target => result.targets[target].run === 'skip')) continue;
       } catch { /* 讀不到改動：照要 CI 處理 */ }
     }
     const out = gh(['run', 'list', '--commit', head, '--workflow', 'check.yml', '--event', 'push', '--limit', '1', '--json', 'status,conclusion'], env);

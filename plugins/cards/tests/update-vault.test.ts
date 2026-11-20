@@ -1,0 +1,220 @@
+import test from 'node:test';
+import { gitEnv } from '../tools/git.ts';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { hashBytes } from '../src/core/backup/index.ts';
+import type { BackupManifest } from '../src/core/backup/index.ts';
+import { examReminder } from '../tools/exam-reminder.ts';
+import { registerTestVault } from '../tools/install.ts';
+import { UPDATE_CHECKS, baseline, changedSince, checkUpdate, installUpdate } from '../tools/update-vault.ts';
+import type { UpdateOptions } from '../tools/update-vault.ts';
+import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const env = gitEnv();
+const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, env, encoding: 'utf8' }).trim();
+const short = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, env, encoding: 'utf8' }).trim();
+// 當地時間 +08:00 的某一刻。
+const at = (date: string, time: string): number => Date.parse(`${date}T${time}+08:00`);
+const scope = (start?: string, end?: string): string =>
+  (start || end ? '---\n' + (start ? `考試開始: ${start}\n` : '') + (end ? `考試結束: ${end}\n` : '') + '---\n' : '') + '- 國二上 自然 2-1～2-3\n';
+const remind = (scopes: Record<string, string | null>, now: number) =>
+  examReminder(Object.entries(scopes).map(([path, text]) => ({ path, text })), now, 480);
+
+void test('考前提醒：整組已經結束的舊副本不算；外掛當成沒有範圍的只要日期算得到照樣提醒（刻意比較保守）', () => {
+  const now = at('2026-10-25', '12:00');
+  const ended = '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n---\n- 國二上 自然 2\n';
+  const copy = '---\n識別碼: aaaaaa\n考試開始: 10/28\n---\n- 國二上 自然 2\n';
+  assert.deepEqual(remind({ a: ended, b: copy }, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' }, '同一個識別碼已經結束，舊副本的壞日期不用多問');
+  const stranger = '---\n識別碼: bbbbbb\n考試開始: 10/28\n---\n- 國二上 自然 2\n';
+  assert.equal(remind({ a: ended, b: stranger }, now).kind, 'unreadable', '別的識別碼：還是要問');
+  assert.equal(remind({ a: ended, b: copy, c: null }, now).kind, 'unreadable', '讀不到的不知道是哪一次考試：還是要問');
+  assert.deepEqual([remind({ a: '---\n識別碼: cccccc\n考試開始: 2026-10-26\n---\n分類：醫學\n' }, now).kind, remind({ a: '---\n識別碼: cccccc\n考試開始: 2026-10-26\n---\n' }, now).needsOk], ['soon', true], '只有分類、空的');
+  assert.equal(remind({ a: '---\n識別碼: cccccc\n考試開始: 10/26\n---\n' }, now).kind, 'unreadable');
+  assert.equal(remind({ a: '---\n"識別碼": "school #1"\n提前結束: 2026-10-20\n其他: [\n---\n', b: '---\n"識別碼": "school #1"\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, now).kind, 'none', '鍵有引號也一樣（R18）');
+  assert.equal(remind({ a: '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n', b: copy }, now).kind, 'none', '結束的那份屬性區壞了，識別碼還認得');
+  assert.equal(remind({ a: '---\n備註: |\n  {"識別碼": "bbbbbb"}\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n', b: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, now).kind, 'soon', '結束的那份備註裡寫著另一次考試的識別碼：另一次照常提醒（R22）');
+});
+
+void test('考前提醒：前 7 天內、考試期間印提醒並要 --exam-ok；7 天以外與沒有生效的不用；清晨 4 點換日', () => {
+  const now = at('2026-10-21', '20:00');
+  assert.deepEqual(remind({ a: scope('2026-10-28', '2026-10-29') }, now), { kind: 'soon', needsOk: true, message: '離段考還有 7 天（「a」）；這一版可以考後再裝，由家長決定' });
+  assert.deepEqual([remind({ a: scope('2026-10-29') }, now).kind, remind({ a: scope('2026-10-29') }, now).needsOk], ['none', false]);
+  assert.match(remind({ a: scope('2026-10-29') }, now).message, /離段考還有 8 天.*在 7 天以外/);
+  // 考試開始那天清晨 4 點前還是前一天；4 點起是考試期間。
+  assert.equal(remind({ a: scope('2026-10-28', '2026-10-29') }, at('2026-10-28', '03:59')).message, '離段考還有 1 天（「a」）；這一版可以考後再裝，由家長決定');
+  assert.equal(remind({ a: scope('2026-10-28', '2026-10-29') }, at('2026-10-28', '04:00')).kind, 'during');
+  // 結束日的隔天清晨 4 點前仍是考試期間；4 點起失效。只寫開始就是一天。
+  assert.equal(remind({ a: scope('2026-10-28', '2026-10-29') }, at('2026-10-30', '03:59')).kind, 'during');
+  assert.deepEqual(remind({ a: scope('2026-10-28', '2026-10-29') }, at('2026-10-30', '04:00')), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.equal(remind({ a: scope('2026-10-28') }, at('2026-10-29', '04:00')).kind, 'none');
+  // 好幾份生效時用開始日最早的那一份。
+  assert.match(remind({ late: scope('2026-11-20'), early: scope('2026-10-25') }, now).message, /離段考還有 4 天（「early」）/);
+  assert.deepEqual(remind({}, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+});
+
+void test('考前提醒：讀法和外掛相同：日期的多種寫法認得，提前結束的不算，同一個識別碼的舊副本也不算', () => {
+  const now = at('2026-10-21', '20:00');
+  assert.equal(remind({ a: scope('20261028') }, now).kind, 'soon');
+  assert.equal(remind({ a: scope('2026/10/21') }, now).kind, 'during');
+  const ended = '---\n識別碼: x\n考試開始: 2026-10-22\n提前結束: 2026-10-20\n---\n- 國二上 自然 2-1\n';
+  assert.equal(remind({ a: ended }, now).kind, 'none');
+  assert.equal(remind({ a: ended, b: '---\n識別碼: x\n考試開始: 2026-10-22\n---\n- 國二上 自然 2-1\n' }, now).kind, 'none');
+});
+
+void test('考前提醒：沒填日期是日期未定；讀不到（讀不到檔、屬性區壞了、日期寫法不對）照實說，不當成沒有考試', () => {
+  const now = at('2026-10-21', '20:00');
+  assert.deepEqual(remind({ a: scope() }, now), { kind: 'undated', needsOk: false, message: '考試範圍「a」還沒填考試日期，日期未定' });
+  assert.equal(remind({ a: scope(), b: scope('2026-12-20') }, now).kind, 'none');
+  for (const text of [null, '---\n考試開始: [\n---\n', '---\n考試開始: 2026-10-28\n', '---\n考試開始: 10/28\n---\n', '---\n考試開始: 2026-02-30\n---\n']) {
+    const result = remind({ a: text }, now);
+    assert.deepEqual([result.kind, result.needsOk], ['unreadable', true], String(text));
+    assert.match(result.message, /不當成沒有考試/);
+  }
+});
+
+void test('基線：和 .local/releases/ 的產物相同就用那一份的 commit；否則讀 BUILD；.dirty、讀不出、repo 裡找不到都是基線缺失', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const main = (text: string): Uint8Array => new TextEncoder().encode(text);
+  assert.deepEqual(await baseline(null, local, root), { missing: '這個 vault 還沒裝過外掛' });
+  assert.deepEqual(await baseline(main(`/*! Essence Cards build=0.0.1+${short} dev=false */`), local, root), { commit: head, build: '0.0.1+' + short });
+  assert.match((await baseline(main(`/*! Essence Cards build=0.0.1+${short}.dirty dev=true */`), local, root) as { missing: string }).missing, /未提交修改/);
+  assert.match((await baseline(main('/*! Essence Cards build=0.0.1+0000000 dev=false */'), local, root) as { missing: string }).missing, /repo 裡找不到/);
+  assert.match((await baseline(main('"use strict";'), local, root) as { missing: string }).missing, /讀不出/);
+  assert.match((await baseline(main('/*! Essence Cards build=0.0.1 dev=false */'), local, root) as { missing: string }).missing, /沒有 commit/);
+  const released = main('released main.js');
+  await mkdir(join(local, 'releases', '0.1.0'), { recursive: true });
+  await writeFile(join(local, 'releases', '0.1.0', 'release.json'), JSON.stringify({ build: '0.1.0+abcdef0', commit: 'abcdef0123', sha256: { 'main.js': hashBytes(released) } }));
+  assert.deepEqual(await baseline(released, local, root), { commit: 'abcdef0123', build: '0.1.0+abcdef0' });
+});
+
+void test('--check 之後的變動：卡組或 data.json 改了、新的卡組都算；紀錄只多了後面的行與新的紀錄檔不算', () => {
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+  const LOG = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', DECK = 'Essence Cards/A.md', DATA = '.obsidian/plugins/essence-cards/data.json';
+  const backup = new Map([[DECK, bytes(goal('aaa111'))], [LOG, bytes('a\n')], [DATA, bytes('{}')]]);
+  const manifest = { files: [...backup].map(([path, content]) => ({ path, size: content.length, sha256: hashBytes(content) })) } as BackupManifest;
+  const now = (changes: Record<string, string | null>): Map<string, Uint8Array> => {
+    const map = new Map(backup);
+    for (const [path, text] of Object.entries(changes)) { if (text === null) map.delete(path); else map.set(path, bytes(text)); }
+    return map;
+  };
+  assert.deepEqual(changedSince(manifest, backup, now({ [LOG]: 'a\nb\n', 'Essence Cards/紀錄/2026-11 iPhone-7f3a.jsonl': 'c\n' })), []);
+  assert.deepEqual(changedSince(manifest, backup, now({ [DECK]: goal('aaa111', '改') })), [DECK]);
+  assert.deepEqual(changedSince(manifest, backup, now({ [LOG]: 'x\n' })), [LOG]);
+  assert.deepEqual(changedSince(manifest, backup, now({ [DATA]: null, 'Essence Cards/B.md': goal('bbb222') })), [DATA, 'Essence Cards/B.md']);
+  // --check 之後才產生的考試切面：不是紀錄檔，要求重跑 --check（tasks/record-gaps.md §6 第 32 條，保守行為不放寬）。
+  const SNAPSHOT = 'Essence Cards/紀錄/考試切面/2026-10-28 4e4ddf5dff5c iPhone-7f3a.jsonl';
+  assert.deepEqual(changedSince(manifest, backup, now({ [SNAPSHOT]: '{}\n' })), [SNAPSHOT]);
+});
+
+void test('更新命令（測試 vault 演練）：--check 備份、比較、記下；--install 在卡組改了時要求重跑、考試期間要 --exam-ok，然後安裝', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const vault = await makeVault(t, {
+    'Essence Cards/A.md': goal('aaa111'),
+    'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl': JSON.stringify({ t: '2026-10-28T20:00:00.000+08:00', set: 'app', val: '0.0.1+' + short }) + '\n' + review('2026-10-28T20:01:00.000+08:00', 'aaa111') + '\n',
+    'Essence Cards/考試範圍/2026-10-28 國二上.md': scope('2026-10-28', '2026-10-30'),
+    '.obsidian/plugins/essence-cards/main.js': `/*! Essence Cards build=0.0.1+${short} dev=false */`,
+  });
+  await registerTestVault(vault, local);
+  const compared: string[] = [];
+  const installed: string[] = [];
+  const options: UpdateOptions = { vault, local, to: await tempFolder(t, 'essence-backup-'), now: () => at('2026-10-29', '20:00'), offset: () => 480, seams: {
+    check: async () => {},
+    compare: async ({ backup, old, new: next }) => {
+      compared.push(old, next);
+      const report = join(backup, '..', '報告.md');
+      await writeFile(report, '');
+      return { report, zip: '', old: { commit: old, build: '', result: { ok: false, reason: '' } }, new: { commit: next, build: '', result: { ok: false, reason: '' } }, comparable: true, differences: ['一項'] };
+    },
+    install: ({ vault: target }) => { installed.push(target); return Promise.resolve({ kind: 'test' as const, version: '0.0.1', build: '0.0.1+' + short, vault: target }); },
+  } };
+  const checked = await checkUpdate(options);
+  assert.deepEqual([checked.test, checked.exam.kind, checked.differences, compared], [true, 'during', 1, [head, head]]);
+  assert.deepEqual(checked.baseline, { commit: head, build: '0.0.1+' + short });
+  assert.deepEqual(checked.devices.map(row => [row.device, row.build]), [['iPhone-7f3a', '0.0.1+' + short]]);
+  assert.match(checked.backup, /Essence Cards 備份 2026-10-29 200000 0\.0\.1\+[0-9a-f]+ [0-9a-f]{4}\.zip$/);
+  await appendFile(join(vault, 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl'), review('2026-10-29T21:00:00.000+08:00', 'aaa111') + '\n');
+  await put(vault, 'Essence Cards/A.md', goal('aaa111', '改過'));
+  await assert.rejects(installUpdate(options), /卡組、設定檔或 data\.json 在 --check 之後改了，重跑 --check：\n- Essence Cards\/A\.md/);
+  await put(vault, 'Essence Cards/A.md', goal('aaa111'));
+  await assert.rejects(installUpdate(options), /考試期間.*先問過使用者再加 --exam-ok/);
+  assert.deepEqual(await installUpdate({ ...options, examOk: true }), { build: '0.0.1+' + short, kind: 'test' });
+  assert.deepEqual(installed.length, 1);
+  assert.deepEqual(await readdir(local), ['test-vaults.json']);
+  await assert.rejects(installUpdate({ ...options, examOk: true }), /還沒跑 --check/);
+  // 沒裝過外掛：基線缺失，照樣寫報告。
+  const fresh = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') });
+  await registerTestVault(fresh, local);
+  const missing = await checkUpdate({ ...options, vault: fresh });
+  assert.deepEqual(missing.baseline, { missing: '這個 vault 還沒裝過外掛' });
+  assert.match(await readFile(missing.report, 'utf8'), /基線缺失：這個 vault 還沒裝過外掛/);
+});
+
+void test('更新命令：考試範圍/小考/ 留給小考（D-189）：裡面壞掉的、就要考的檔都不提醒，不要求 --exam-ok；放在外面才算', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const main = `/*! Essence Cards build=0.0.1+${short} dev=false */`;
+  const broken = '---\n考試開始: [\n---\n';
+  const vault = await makeVault(t, {
+    'Essence Cards/A.md': goal('aaa111'),
+    'Essence Cards/考試範圍/小考/壞.md': broken,
+    'Essence Cards/考試範圍/小考/2026/就要考.md': scope('2026-10-29', '2026-10-30'),
+    '.obsidian/plugins/essence-cards/main.js': main,
+  });
+  await registerTestVault(vault, local);
+  const options: UpdateOptions = { vault, local, to: await tempFolder(t, 'essence-backup-'), now: () => at('2026-10-29', '20:00'), offset: () => 480, seams: {
+    check: async () => {},
+    compare: async ({ backup, old, new: next }) => {
+      const report = join(backup, '..', '報告.md');
+      await writeFile(report, '');
+      return { report, zip: '', old: { commit: old, build: '', result: { ok: false, reason: '' } }, new: { commit: next, build: '', result: { ok: false, reason: '' } }, comparable: true, differences: [] };
+    },
+    install: ({ vault: target }) => Promise.resolve({ kind: 'test' as const, version: '0.0.1', build: '0.0.1+' + short, vault: target }),
+  } };
+  const checked = await checkUpdate(options);
+  assert.deepEqual(checked.exam, { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(await installUpdate(options), { build: '0.0.1+' + short, kind: 'test' }, '不用 --exam-ok');
+
+  await put(vault, 'Essence Cards/考試範圍/壞.md', broken);
+  const outside = await checkUpdate(options);
+  assert.deepEqual([outside.exam.kind, outside.exam.needsOk], ['unreadable', true], '同一份在外面就要問');
+});
+
+void test('考前提醒：搬出 小考/ 的小考檔（小考日期合法、空的、寫錯）不出「日期未定」；對照的段考檔照常', () => {
+  const now = at('2026-10-21', '20:00');
+  const quiz = (date: string): string => `---\n識別碼: q4m8t2\n小考日期: ${date}\n---\n- 國二上 英文 L3\n`;
+  const quizzes = { a: quiz('2026-11-05'), b: quiz(''), c: quiz('明天') };
+  assert.deepEqual(remind(quizzes, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(remind({ ...quizzes, d: scope() }, now), { kind: 'undated', needsOk: false, message: '考試範圍「d」還沒填考試日期，日期未定' });
+  assert.equal(remind({ ...quizzes, d: scope('2026-10-25') }, now).kind, 'soon');
+  // 屬性區壞到讀不出鍵：不猜，照段考的處理。
+  assert.deepEqual(remind({ a: '---\n小考日期: [\n---\n' }, now).kind, 'unreadable');
+});
+
+void test('升正式版的檢查（D-208 第二步 §A1、驗收第 A17 項）：共用檢查、共用工具的完整檢查、Cards 的檢查都跑；任一段失敗就停，沒有備份、比較與安裝', async t => {
+  const tools = join(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, env, encoding: 'utf8' }).trim(), 'tools');
+  const expected = [[tools, 'check'], [tools, 'self-check'], [root, 'check']].map(([cwd, script]) => join(cwd, '.') + ' ' + script);
+  assert.deepEqual(UPDATE_CHECKS.map(step => step.name), ['共用檢查', '共用工具的完整檢查', 'Cards 的檢查']);
+  for (const [index, step] of UPDATE_CHECKS.entries()) {
+    const local = await tempFolder(t, 'essence-local-');
+    const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/main.js': '/*! Essence Cards build=0.0.1+' + short + ' dev=false */' });
+    await registerTestVault(vault, local);
+    const to = await tempFolder(t, 'essence-backup-');
+    const ran: string[] = [];
+    const later: string[] = [];
+    const options: UpdateOptions = { vault, local, to, seams: {
+      run: (cwd, script) => {
+        ran.push(join(cwd, '.') + ' ' + script);
+        return ran.length === index + 1 ? Promise.reject(Object.assign(Error('替身失敗'), { stdout: step.name + ' 的替身失敗' })) : Promise.resolve();
+      },
+      compare: () => { later.push('compare'); return Promise.reject(Error('不該比較')); },
+      install: () => { later.push('install'); return Promise.reject(Error('不該安裝')); },
+    } };
+    await assert.rejects(checkUpdate(options), new RegExp('^Error: ' + step.name + '（'));
+    assert.deepEqual(ran, expected.slice(0, index + 1), step.name);
+    assert.deepEqual(await readdir(to), [], step.name + '：還沒有備份');
+    assert.deepEqual(later, [], step.name);
+  }
+});

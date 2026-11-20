@@ -11,37 +11,37 @@
 
 **規格・已重現。** 用 `build: '0.6.0'` 的真實 state 啟用一篇有 ID、含 `出處：課外：高中課本 p.44` 的草稿。實際 `activateDraft` 回 `done`、寫成啟用，但檔案沒有 `需要版本`。再以 0.5.0 的建置判讀條件重讀，卡組未被擋。D-209 第 2 點預期標記與能讓該目標開始排程的寫入一起成功。第一輪格式查核已用發布標籤的解析器證實 0.5.0 會把這串讀成教材頁碼。
 
-這是家長在草稿審查期間手寫或貼入課外來源、直接按啟用的正常路徑。初次製卡的檢查也接受這個前綴，`aiCreateDeck` 直接建立草稿，因此 AI 輸出也可能走到。換版窗口裡仍開著舊版的裝置會讀錯頁碼與考試順位。觸發與建置版本升到 0.6.0 後才開始，單元探針已用該版本條件。收窄到啟用的寫入邊界，對最終文本共用 `withNeed`，標記無法寫入就保留草稿並回報原因。涵蓋手寫、AI 草稿、混合出處、檔案與編輯器入口，以及實際發布標籤再讀。改動在狀態寫入及相容測試，回 L2。[state/index.ts](../src/state/index.ts#L901) · [state/index.ts](../src/state/index.ts#L1210) · [state/need.ts](../src/state/need.ts#L30)
+這是家長在草稿審查期間手寫或貼入課外來源、直接按啟用的正常路徑。初次製卡的檢查也接受這個前綴，`aiCreateDeck` 直接建立草稿，因此 AI 輸出也可能走到。換版窗口裡仍開著舊版的裝置會讀錯頁碼與考試順位。觸發與建置版本升到 0.6.0 後才開始，單元探針已用該版本條件。收窄到啟用的寫入邊界，對最終文本共用 `withNeed`，標記無法寫入就保留草稿並回報原因。涵蓋手寫、AI 草稿、混合出處、檔案與編輯器入口，以及實際發布標籤再讀。改動在狀態寫入及相容測試，回 L2。[state/index.ts](../plugins/cards/src/state/index.ts#L901) · [state/index.ts](../plugins/cards/src/state/index.ts#L1210) · [state/need.ts](../plugins/cards/src/state/need.ts#L30)
 
 #### R2｜先排進佇列的加深可越過稍後設下的逾時鎖
 
 **規格・已重現。** 用 `createState` 與記憶體 Files，讓第一個 `aiAppend` 已進 modify 回呼、寫入結果延到逾時後才回。第一次仍在等時排第二個，同篇。第一個回 `timeout`、`addLocked(path) === true`，放開前一個 modify 後第二個仍執行其 plan，寫出第二段並回 `written/confirmed`。預期已排隊的後續寫入也受鎖保護。正常 UI 一篇只有一個加深視窗，兩個加深工作不是主要入口。真實交集是閱讀模式的「加入」已進寫入、同篇再開加深貼回，或關閉視窗後繼續別的操作；要碰到寫入逾時，低頻，但卡住有 iCloud 這條實際路徑。下一筆若走 editor，晚回的前筆儲存與後筆可能交錯，影響整篇，這部分未在宿主重現。
 
-`addCandidates` 已在 plan 裡重驗逾時鎖。`aiAppend` 只有排隊前檢查，且設鎖在佇列工作回傳之後。先收窄，沿用既有鎖，在同一佇列工作內處理逾時，並在允許改字的最後入口重驗。區分「前一筆不明、這一筆確定沒寫」與「這一筆本身結果不明」，避免無故燒掉恢復工作的正常重試出口。測 `加入 → 加深`、反向，以及檔案／編輯器的交錯。影響共用寫入門檻與 L2。[state/index.ts](../src/state/index.ts#L919) · [state/index.ts](../src/state/index.ts#L1191) · [writes.ts](../src/state/writes.ts#L154)
+`addCandidates` 已在 plan 裡重驗逾時鎖。`aiAppend` 只有排隊前檢查，且設鎖在佇列工作回傳之後。先收窄，沿用既有鎖，在同一佇列工作內處理逾時，並在允許改字的最後入口重驗。區分「前一筆不明、這一筆確定沒寫」與「這一筆本身結果不明」，避免無故燒掉恢復工作的正常重試出口。測 `加入 → 加深`、反向，以及檔案／編輯器的交錯。影響共用寫入門檻與 L2。[state/index.ts](../plugins/cards/src/state/index.ts#L919) · [state/index.ts](../plugins/cards/src/state/index.ts#L1191) · [writes.ts](../plugins/cards/src/state/writes.ts#L154)
 
 #### R3｜未儲存檢查早於佇列，編輯器後續變更會被當成可寫
 
 **規格・已重現，實機時序待驗。** 真實 `createDeepen → state.aiAppend → writes.edit`，用記憶體 Files 與 EditorHandle。先讓別篇的寫入占住佇列。同篇加深的 `unsaved` 讀到編輯器與磁碟相同。釋放佇列前在編輯器加一行，磁碟尚無此字。實際加深回 `done`，同時把家長還沒存的字和加深框都存進磁碟。§3-2 預期最新文字驗到未存就先不寫。不同分頁仍可有操作或外部同步，或在關閉加深視窗後編輯，前端一次比對無法保證整個等候區間。這個探針保存了家長的字，未證明內容遺失；如果是磁碟在等候期間變新、編輯器仍舊，另有覆蓋風險，取決於宿主刷新時序。
 
-收窄為只在可取得同一筆檔案、編輯器與磁碟一致的寫入邊界操作。保留進佇列後，比對用的檔案與編輯器文字在改字前再驗；做不到可靠驗證就請家長先儲存並退出編輯模式。留意 `writes.edit` 的 `plan → null` 仍會 persist，拒寫路徑要在它之前結束。只動加深入口與其寫入門檻，避免擴充既有存檔語意。補實機兩個分頁及等候中編輯、同步、分頁換篇。回 L2。[deepen.ts](../src/obsidian/deepen.ts#L137) · [main.ts](../src/main.ts#L260) · [writes.ts](../src/state/writes.ts#L382)
+收窄為只在可取得同一筆檔案、編輯器與磁碟一致的寫入邊界操作。保留進佇列後，比對用的檔案與編輯器文字在改字前再驗；做不到可靠驗證就請家長先儲存並退出編輯模式。留意 `writes.edit` 的 `plan → null` 仍會 persist，拒寫路徑要在它之前結束。只動加深入口與其寫入門檻，避免擴充既有存檔語意。補實機兩個分頁及等候中編輯、同步、分頁換篇。回 L2。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L137) · [main.ts](../plugins/cards/src/main.ts#L260) · [writes.ts](../plugins/cards/src/state/writes.ts#L382)
 
 #### R4｜提醒可使用已知不完整的紀錄，讀一篇失敗又保留舊按鈕
 
 **規格・已重現。** 讓三個目標各有兩次有效答對，刷新產生「有 3 個記穩了」。然後讓紀錄檔讀取失敗，state 的 `unread()` 明列該檔且 `writeBlock() === 'unread'`。同時模擬一篇的讀取丟錯，重算後 `rows()` 仍保留原來的可按列。實際原因有兩個。① state 保留上次讀到的歷史，`compute` 只擋 loading，`history.incomplete` 不代表 I/O 尚缺的片段。② 卡組在迴圈逐篇 `await deps.read`，單篇拒絕使整次 compute 失敗，`refresh` 採用上一份全部列；點按也呼叫同一個 refresh，仍可用到陳舊列。主程式的 vault 讀取會拒絕，且 `onUnread` 單獨變更時只更新狀態列，沒有請求重算加深。
 
-預期紀錄不完整時不宣告記穩，也不從讀取失敗的舊列執行加深／這次不用。讀不到後重試是已知正常同步狀態，發生時會提示錯的數字、凍結錯的集合或讓家長複製不可靠的提示；全域寫入門檻會稍後擋下卡組寫入。先區分紀錄缺讀、個別卡組缺讀與工作本地已知三種輸入。缺讀不出可發起列且點按當下再驗；單篇失敗不能凍結其他篇；以既有有界讀取避免單次永久未完成阻塞後續 refresh。可保留明確可取消的既有本機工作。改動提醒、狀態事件和接線，回 L2。[deepen.ts](../src/obsidian/deepen.ts#L168) · [deepen.ts](../src/obsidian/deepen.ts#L200) · [main.ts](../src/main.ts#L424) · [main.ts](../src/main.ts#L679) · [reads.ts](../src/state/reads.ts#L192)
+預期紀錄不完整時不宣告記穩，也不從讀取失敗的舊列執行加深／這次不用。讀不到後重試是已知正常同步狀態，發生時會提示錯的數字、凍結錯的集合或讓家長複製不可靠的提示；全域寫入門檻會稍後擋下卡組寫入。先區分紀錄缺讀、個別卡組缺讀與工作本地已知三種輸入。缺讀不出可發起列且點按當下再驗；單篇失敗不能凍結其他篇；以既有有界讀取避免單次永久未完成阻塞後續 refresh。可保留明確可取消的既有本機工作。改動提醒、狀態事件和接線，回 L2。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L168) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L200) · [main.ts](../plugins/cards/src/main.ts#L424) · [main.ts](../plugins/cards/src/main.ts#L679) · [reads.ts](../plugins/cards/src/state/reads.ts#L192)
 
 #### R5｜提醒排除的目標，在提示和快照仍可被標成「記穩了」
 
 **規格・已重現。** 真實 state 給同一 ID 兩次足以記穩的作答。另一篇也用了該 ID 時，`deckTargets(path)` 為空，但 `ready` 顯示「記穩了 1」、`copy` 把該 ID 存進 `job.stable`，同單元別篇同時又列它為去重用。把目標改暫停而保留一個可用的新目標，也重現暫停 ID 被凍結，儘管排程只收新目標。§2-1 的啟用定義要排除暫停、重複與被停出的 ID。重複可能跨篇，單篇 `new Set` 只留下第一項，無法保證那是作答對應的目標。暫停與改寫是可預期的操作，會把 AI 導向不該加深的前置目標，或日後解除暫停仍被誤算成已送出。
 
-使用 state 已有的全域 ID／紀錄合格判斷，讓提醒與手動流程共用。暫停整篇仍可手動發起，但需把「供 AI 去重／看結構」與「算記穩及凍結」的資格寫清楚。未完整紀錄亦不可顯示為可判定的「還沒記穩」。針對跨篇與同篇重複、暫停、狀態不明、少數合格目標測試同一份數字和快照。涉及提示、恢復資料與提醒，回 L2。[deepen.ts](../src/obsidian/deepen.ts#L90) · [deepen.ts](../src/obsidian/deepen.ts#L252) · [deepen-prompt.ts](../src/core/ai/deepen-prompt.ts#L29) · [state/index.ts](../src/state/index.ts#L1177)
+使用 state 已有的全域 ID／紀錄合格判斷，讓提醒與手動流程共用。暫停整篇仍可手動發起，但需把「供 AI 去重／看結構」與「算記穩及凍結」的資格寫清楚。未完整紀錄亦不可顯示為可判定的「還沒記穩」。針對跨篇與同篇重複、暫停、狀態不明、少數合格目標測試同一份數字和快照。涉及提示、恢復資料與提醒，回 L2。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L90) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L252) · [deepen-prompt.ts](../plugins/cards/src/core/ai/deepen-prompt.ts#L29) · [state/index.ts](../plugins/cards/src/state/index.ts#L1177)
 
 #### R6｜手改補題後，純說明和圍欄內的字還算待審
 
 **規格・已重現。** 加深補題框保留原目標名稱，移走真問題，只留一行 `說明中 :: 留著`，或只留縮排圍欄及圍欄內 `x :: y`，`deepenPending` 都回 true。一般 `補題 :: 答` 回 true，普通無記號說明回 false。原因是逐原始行找 `::`／成對 `==`，沒有用清單、圍欄及實際題目解析。§4-3 預期只剩家長的字時解除，這在手動調整回覆後會碰到。影響限於提醒一直卡住，尚可手動加深。
 
-用與補題「加入」相同的題目邊界判斷，把真正題目、可修的題目與普通說明的結果寫成測試；至少涵蓋行內程式碼、圍欄、資料欄和無答案問答。新目標／候選的行尾 ID 應維持現有辨識契約。改動限框讀取及回歸測試。[intro.ts](../src/core/ai/intro.ts#L129) · [existing.ts](../src/core/ai/existing.ts)
+用與補題「加入」相同的題目邊界判斷，把真正題目、可修的題目與普通說明的結果寫成測試；至少涵蓋行內程式碼、圍欄、資料欄和無答案問答。新目標／候選的行尾 ID 應維持現有辨識契約。改動限框讀取及回歸測試。[intro.ts](../plugins/cards/src/core/ai/intro.ts#L129) · [existing.ts](../plugins/cards/src/core/ai/existing.ts)
 
 ### 規格取捨與其他差異
 
@@ -49,15 +49,15 @@
 
 **規格・改名已由實作者在 Windows 重現，捨棄已用公開函式重現。** §2-3 接受「連結失效時當首次」，代價只寫可能多出現一次。實際關掉自動更新連結後，普通改名就失去曾經加深的基準；下次只新穩一個時需要 3 個，會少提醒，連地圖也少。另有完全不改名的正常情境：成功加深時沒有記穩 ID，回傳只增加新目標／候選，家長全部捨棄。快照的唯一 ID 是被捨棄的 `def234`，本篇仍有原來的 `abc234`。探針 `ownSnapshots` 回空，第一次的門檻 3 擋住新記穩的一個；保有成功快照時後續輪門檻應是 1。§2-3 把這情況也當路徑重用，與 §3-2、D-194 第 5 點「成功沒有新目標也算」的用途不一致。
 
-**改名交使用者選。** 缺提醒在有自動更新關閉、又改名的使用情境是可重現的，不能直接記為極低。至少修正文案及驗收。最窄的工程修正限**外掛已收到的同一檔案 rename**：以既有事件承接這個工作階段內已明確歸屬的快照，不靠全 vault ID 交集猜，不改寫快照。無法證明連續性就仍回首輪。另一個選項是接受回首輪，明寫提醒可能增減及地圖遺失，讓家長可手動把連結指回新路徑。跨重開或外掛關著的改名若也要自動保留基準，會新增持久狀態或改寫快照，可先不納入。**同路徑捨棄一定修**：不能用這次新生成的 ID 當原篇曾存在的唯一證據。先評估復用生成時留存的原篇目標證據；若需要加欄位，保留舊快照退路與同路徑重建防線。合併兩個新情境測試，回 L2。[任務〈結果〉](../tasks/ai-cards-deepen.md#結果) · [deepen.ts](../src/obsidian/deepen.ts#L111) · [deepen-snapshot.ts](../src/core/ai/deepen-snapshot.ts#L83) · [deepen-remind.ts](../src/core/ai/deepen-remind.ts#L24)
+**改名交使用者選。** 缺提醒在有自動更新關閉、又改名的使用情境是可重現的，不能直接記為極低。至少修正文案及驗收。最窄的工程修正限**外掛已收到的同一檔案 rename**：以既有事件承接這個工作階段內已明確歸屬的快照，不靠全 vault ID 交集猜，不改寫快照。無法證明連續性就仍回首輪。另一個選項是接受回首輪，明寫提醒可能增減及地圖遺失，讓家長可手動把連結指回新路徑。跨重開或外掛關著的改名若也要自動保留基準，會新增持久狀態或改寫快照，可先不納入。**同路徑捨棄一定修**：不能用這次新生成的 ID 當原篇曾存在的唯一證據。先評估復用生成時留存的原篇目標證據；若需要加欄位，保留舊快照退路與同路徑重建防線。合併兩個新情境測試，回 L2。[任務〈結果〉](../tasks/ai-cards-deepen.md#結果) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L111) · [deepen-snapshot.ts](../plugins/cards/src/core/ai/deepen-snapshot.ts#L83) · [deepen-remind.ts](../plugins/cards/src/core/ai/deepen-remind.ts#L24)
 
 #### R8｜考試中的提示一律寫「平常複習」
 
-**規格・靜態可確定。** §2-2 要顯示平常／段考／小考，`createDeepen.formOf` 對所有卡組傳 `purpose: '平常複習'`，`deepenTask` 照傳入值印。即使已有可用考試範圍或單篇小考也一樣。期中、期末常走到，AI 看不到此輪要服務的考試目的。補上既有考試及小考選取的讀取結果，並定同時命中的優先序，或由整合者明寫改為本批固定目的並請使用者確認。先複用已有判定，別新增第二份考試日期狀態。[任務 §2-2](../tasks/ai-cards-deepen.md#2-2-任務段加深-v1和製卡的-提示-v3-分開記版號) · [deepen.ts](../src/obsidian/deepen.ts#L122) · [deepen-prompt.ts](../src/core/ai/deepen-prompt.ts#L71)
+**規格・靜態可確定。** §2-2 要顯示平常／段考／小考，`createDeepen.formOf` 對所有卡組傳 `purpose: '平常複習'`，`deepenTask` 照傳入值印。即使已有可用考試範圍或單篇小考也一樣。期中、期末常走到，AI 看不到此輪要服務的考試目的。補上既有考試及小考選取的讀取結果，並定同時命中的優先序，或由整合者明寫改為本批固定目的並請使用者確認。先複用已有判定，別新增第二份考試日期狀態。[任務 §2-2](../tasks/ai-cards-deepen.md#2-2-任務段加深-v1和製卡的-提示-v3-分開記版號) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L122) · [deepen-prompt.ts](../plugins/cards/src/core/ai/deepen-prompt.ts#L71)
 
 #### R9｜入口能顯示「已取消」，原本的寫入卻仍在進行
 
-**規格・靜態可確定。** 在寫入尚未完成時關閉加深視窗、從入口對同一工作按「取消」。只要工作還在，`compute` 一律顯示等待貼回，且仍有取消動作。按下後 `exclusive` 會回 `BUSY`，`deepenAct` 忽略結果，仍通知「已取消這次加深」。原工作照常完成寫入。§1 第 3 點要求寫入中停用按鈕，預期取消成功才通知成功。正常寫入很快時窗口短，iCloud 慢寫或使用者關窗重開入口時可走到，會誤以為筆記不會再變。一定修。最小修正先用 `cancel` 的結果決定通知，寫入中的列停用動作並反映實際狀態，沿用已有的 busy，無須新持久狀態。測試案讓受控寫入停住再按取消。[main.ts](../src/main.ts#L424) · [deepen.ts](../src/obsidian/deepen.ts#L84) · [deepen.ts](../src/obsidian/deepen.ts#L180) · [deepen.ts](../src/obsidian/deepen.ts#L305)
+**規格・靜態可確定。** 在寫入尚未完成時關閉加深視窗、從入口對同一工作按「取消」。只要工作還在，`compute` 一律顯示等待貼回，且仍有取消動作。按下後 `exclusive` 會回 `BUSY`，`deepenAct` 忽略結果，仍通知「已取消這次加深」。原工作照常完成寫入。§1 第 3 點要求寫入中停用按鈕，預期取消成功才通知成功。正常寫入很快時窗口短，iCloud 慢寫或使用者關窗重開入口時可走到，會誤以為筆記不會再變。一定修。最小修正先用 `cancel` 的結果決定通知，寫入中的列停用動作並反映實際狀態，沿用已有的 busy，無須新持久狀態。測試案讓受控寫入停住再按取消。[main.ts](../plugins/cards/src/main.ts#L424) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L84) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L180) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L305)
 
 ### 驗證
 
@@ -108,35 +108,35 @@ R7 的選項（交使用者）：
 
 **反向逾時也已重現。** `aiAppend` 的檔案寫入已提交、完成訊號延到逾時後。在逾時前用 EditorHandle 排入同篇的 `addCandidates`。前筆回 `timeout`，後筆 plan 見鎖沒有 `apply`，也回 `timeout`，但 `persist` 仍執行一次，前筆已寫的文字消失。補題的目的地與來源清理遇鎖同樣回 null plan 並使用 `writes.edit`，該交叉路徑為程式推斷。檔案入口的 `locked`／`timeout` 分界已修，證據涵蓋「加入→加深」及「加深→加深」。
 
-**一定修。** 需要慢速寫入或同步落盤後分頁仍舊，單次低頻。同步、分頁與「加入」均是正常操作，碰到會無告知倒退內容。收窄為明確拒寫，讓「鎖住／文字不同」在 apply 和 persist 之前結束，維持一般存檔的語意。若現有介面無法確認最新文字，收窄到退出編輯模式才走檔案入口。補檔案／編輯器交錯與補題兩端的回歸，實機讓磁碟更新後分頁晚到。改共用寫入邊界與加深／加入入口，回 L2。[state/index.ts](../src/state/index.ts#L919) · [state/index.ts](../src/state/index.ts#L1021) · [state/index.ts](../src/state/index.ts#L1195) · [writes.ts](../src/state/writes.ts#L382)
+**一定修。** 需要慢速寫入或同步落盤後分頁仍舊，單次低頻。同步、分頁與「加入」均是正常操作，碰到會無告知倒退內容。收窄為明確拒寫，讓「鎖住／文字不同」在 apply 和 persist 之前結束，維持一般存檔的語意。若現有介面無法確認最新文字，收窄到退出編輯模式才走檔案入口。補檔案／編輯器交錯與補題兩端的回歸，實機讓磁碟更新後分頁晚到。改共用寫入邊界與加深／加入入口，回 L2。[state/index.ts](../plugins/cards/src/state/index.ts#L919) · [state/index.ts](../plugins/cards/src/state/index.ts#L1021) · [state/index.ts](../plugins/cards/src/state/index.ts#L1195) · [writes.ts](../plugins/cards/src/state/writes.ts#L382)
 
 #### R11｜R7 修正引入：改名寫入會越過稍後關閉的門檻，連續改名會留下中間名
 
 **規格・已重現。** `retargetSnapshots` 通過入口檢查後，讓 `snapshots()` 讀回前把 `blocked()` 切為 true，實際仍寫快照一次。入口的 `this.state?.writeBlock() != null` 在 state 未建立時也回 false。另將 A→B 的 `process` 停在真正修改前，平行做 B→C。後次讀到 A、預掃略過，前次最後只改成 B。§2-3 預期寫入門檻關閉時略過，且觀察到相鄰兩次改名後應指到 C。
 
-**一定修。** 真實路徑是掃描期間碰到還原、讀取受阻、停用，或資料夾改名觸發多次掃描時又改名。需跨 I/O，低頻，但會在應唯讀時寫入，或讓工作狀態跟不上實際檔案。收窄至有 state 且允許寫才處理，沿用寫入邊界，在最新全文的回呼重驗；相鄰改名按觀察順序處理，避免後次用前次未寫的內容預掃。已有快照增添屬性後仍保留的正向測試，再補 A→B→C、門檻由開轉關、快照被刪或改名與停用。改接線及寫入邊界，回 L2。[deepen-links.ts](../src/obsidian/deepen-links.ts#L21) · [main.ts](../src/main.ts#L282)
+**一定修。** 真實路徑是掃描期間碰到還原、讀取受阻、停用，或資料夾改名觸發多次掃描時又改名。需跨 I/O，低頻，但會在應唯讀時寫入，或讓工作狀態跟不上實際檔案。收窄至有 state 且允許寫才處理，沿用寫入邊界，在最新全文的回呼重驗；相鄰改名按觀察順序處理，避免後次用前次未寫的內容預掃。已有快照增添屬性後仍保留的正向測試，再補 A→B→C、門檻由開轉關、快照被刪或改名與停用。改接線及寫入邊界，回 L2。[deepen-links.ts](../plugins/cards/src/obsidian/deepen-links.ts#L21) · [main.ts](../plugins/cards/src/main.ts#L282)
 
 #### R12｜R7 修正引入：重寫後的連結數量相同，目的地仍可能錯
 
 **規格・已重現。** 目的檔名含 `#` 時，`原篇.md#段落` 被寫成 `新#篇.md#段落`，重讀的目的地只有 `…/新`。驗證只比連結數量，仍接受。另一例在 `對象` 同一行的 YAML 註解寫舊連結，註解也被改。普通一行的 flow 清單、CRLF、段落錨、自訂顯示名通過。合法的引號鍵 `"對象"` 可讀但不改；單引號值遇新檔名有撇號時，會正確拒絕改壞 YAML。basename 不分大小寫、完整路徑逐字比符合現文；只改大小寫時短連結仍能用。附 `.md` 的手寫短連結不在現有 basename 的承諾內，程式產出的短連結不帶副檔名。
 
-**會寫錯的輸入一定修；安全略過的舊寫法可記限制。** 路徑可由外部改名或同步產生；Obsidian 對話框能否直接產生含 `#` 的路徑本輪未驗。註解是合法的編輯，寫入後應保持原樣。收窄到 YAML 值內可確定的連結，重讀驗每個目的地和其他屬性。不支援的目的路徑維持原文並保留手動修正出口。測頂層清單、scalar、flow、註解、轉義、錨與分隔字元的整類案例。涉及語法及寫回，回 L2。[deepen-snapshot.ts](../src/core/ai/deepen-snapshot.ts#L64) · [deepen-snapshot.ts](../src/core/ai/deepen-snapshot.ts#L132)
+**會寫錯的輸入一定修；安全略過的舊寫法可記限制。** 路徑可由外部改名或同步產生；Obsidian 對話框能否直接產生含 `#` 的路徑本輪未驗。註解是合法的編輯，寫入後應保持原樣。收窄到 YAML 值內可確定的連結，重讀驗每個目的地和其他屬性。不支援的目的路徑維持原文並保留手動修正出口。測頂層清單、scalar、flow、註解、轉義、錨與分隔字元的整類案例。涉及語法及寫回，回 L2。[deepen-snapshot.ts](../plugins/cards/src/core/ai/deepen-snapshot.ts#L64) · [deepen-snapshot.ts](../plugins/cards/src/core/ai/deepen-snapshot.ts#L132)
 
 #### R13｜R7 修正引入：改寫已發布快照後，恢復會重發同一識別碼
 
 **規格・已重現。** 以 `beginDeepen` 建可發布的工作，模擬快照寫成而工作尚在本機。用改名功能只改快照的 `對象`，接著 `runDeepen` 恢復。它把原位的同一份快照當成一般撞名，再建一份 `加深 2.md`。兩份識別碼、時間、記穩集合相同，後建的仍指舊路徑。§3-2 預期識別出已發布的同一工作，至多寫一份。
 
-**建議合併前收窄。** 需發布核對或清除工作失敗、強制關閉等中斷，再在恢復前改名，低頻。原路徑若又被重用，重發還會帶回舊連結。既有位置的同識別碼且雜湊不同，先不要當作可以加後綴的普通撞名。能證明只有允許的連結變更才認領，其餘停在衝突。測已 retarget、同 ID 其他修改、普通撞名及舊路徑重用。改恢復出口並回 L2。[deepen-job.ts](../src/core/ai/deepen-job.ts#L189) · [deepen-job.ts](../src/core/ai/deepen-job.ts#L241)
+**建議合併前收窄。** 需發布核對或清除工作失敗、強制關閉等中斷，再在恢復前改名，低頻。原路徑若又被重用，重發還會帶回舊連結。既有位置的同識別碼且雜湊不同，先不要當作可以加後綴的普通撞名。能證明只有允許的連結變更才認領，其餘停在衝突。測已 retarget、同 ID 其他修改、普通撞名及舊路徑重用。改恢復出口並回 L2。[deepen-job.ts](../plugins/cards/src/core/ai/deepen-job.ts#L189) · [deepen-job.ts](../plugins/cards/src/core/ai/deepen-job.ts#L241)
 
 #### R14｜延續 R4：一筆讀取不回，所有提醒刷新及點按就卡在同一次計算
 
 **規格・已重現等待行為。** 令 `snapshots()` 未完成，第二次 `refresh` 共用未完成的 Promise，直到測試主動釋放。主程式的快照走 `Promise.all(cachedRead)`，卡組也逐篇 await，catch 只排除 rejection。點按等同一個 refresh，後來發生的改名、刪除、讀取恢復也不能越過這次等待。iCloud 佔位不回已有專案證據，這一個快照入口的宿主時序未重跑。
 
-**一定修。** 複用已有的有界讀取，單檔缺讀略過或只留可靠的本機工作。重驗沒有有效結果就不沿用可按舊列。部分狀態直接看 `unread()`，避免 `writeBlock` 先回 backup／restore 使缺讀條件看不到。測一直不回的快照與卡組、晚到結果不可採用及恢復後可刷新。改讀取接線與契約，回 L2。[deepen.ts](../src/obsidian/deepen.ts#L203) · [deepen.ts](../src/obsidian/deepen.ts#L246) · [main.ts](../src/main.ts#L439) · [writes.ts](../src/state/writes.ts#L130)
+**一定修。** 複用已有的有界讀取，單檔缺讀略過或只留可靠的本機工作。重驗沒有有效結果就不沿用可按舊列。部分狀態直接看 `unread()`，避免 `writeBlock` 先回 backup／restore 使缺讀條件看不到。測一直不回的快照與卡組、晚到結果不可採用及恢復後可刷新。改讀取接線與契約，回 L2。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L203) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L246) · [main.ts](../plugins/cards/src/main.ts#L439) · [writes.ts](../plugins/cards/src/state/writes.ts#L130)
 
 #### R15｜R8 修正引入：小考日期隔天凌晨，提示提早改成平常複習
 
-**規格・已重現。** 正常小考檔寫 11/20，同單元於 11/21 02:30（UTC+8）時 `state.quizzes()` 仍列它，複製提示卻是「平常複習」。`purposeOf` 再用日曆日期濾一次，而 syntax §4-1 是清晨 4 點換日。凌晨使用頻率較低，僅影響 AI 的此次目的。沿用已按生效日篩過的小考清單，去掉第二個日期來源。補 03:59／04:00 及段考同時生效，屬可直接修的小改，不需新增狀態。[deepen.ts](../src/obsidian/deepen.ts#L145) · [syntax §4-1](../docs/syntax.md#4-1-小考)
+**規格・已重現。** 正常小考檔寫 11/20，同單元於 11/21 02:30（UTC+8）時 `state.quizzes()` 仍列它，複製提示卻是「平常複習」。`purposeOf` 再用日曆日期濾一次，而 syntax §4-1 是清晨 4 點換日。凌晨使用頻率較低，僅影響 AI 的此次目的。沿用已按生效日篩過的小考清單，去掉第二個日期來源。補 03:59／04:00 及段考同時生效，屬可直接修的小改，不需新增狀態。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L145) · [syntax §4-1](../docs/syntax.md#4-1-小考)
 
 ### 修正核對與格式查核
 
@@ -177,19 +177,19 @@ R7 的選項（交使用者）：
 
 **規格・已重現於真實 State、記憶體 Files 與 EditorHandle，宿主分頁刷新待驗。** 同篇補題已選定目的地，之前排進佇列的加深已落盤但回傳逾時。補題來源拿到的仍是舊分頁。以兩個只差 `destStill` 的情境驗證，兩者在執行時都已查到鎖。確認仍有效時回「寫入還沒確定」、`persist` 為 0、前筆內容保留。確認已失效時，實際回 `changed`、`persist` 為 1，前筆已落盤的文字消失。來源 plan 先判 `ownMoved`，回一般 `null`，因而繞過後面的鎖與 `REFUSE`。預期任何鎖住的來源都禁止存回編輯器。
 
-**一定修。** 真實組合是手寫 `ID 名稱` 的逐項加入，確認強度包含目的地目標名稱與第一題。同篇確認後這些內容或分頁快照變動，且排在前一筆逾時寫入後，便可走到。窗口窄、單次低頻，後果是無通知覆蓋新內容。先收窄，在所有補題與候選寫入的 plan 最前面檢查本篇鎖，再讀入分頁到 tracker 或處理其他拒絕理由。保留原先普通 `null` 的存檔語意。回歸應至少交叉來源／目的地、確認符合／不符、編輯器及檔案，驗 `persist` 呼叫數、前筆已落盤的字與回報；實機補同篇分頁、同步和晚回寫入。涉及寫入邊界，回 L2。[state/index.ts](../src/state/index.ts#L1073) · [writes.ts](../src/state/writes.ts#L386) · [intro-run.ts](../src/obsidian/intro-run.ts#L198)
+**一定修。** 真實組合是手寫 `ID 名稱` 的逐項加入，確認強度包含目的地目標名稱與第一題。同篇確認後這些內容或分頁快照變動，且排在前一筆逾時寫入後，便可走到。窗口窄、單次低頻，後果是無通知覆蓋新內容。先收窄，在所有補題與候選寫入的 plan 最前面檢查本篇鎖，再讀入分頁到 tracker 或處理其他拒絕理由。保留原先普通 `null` 的存檔語意。回歸應至少交叉來源／目的地、確認符合／不符、編輯器及檔案，驗 `persist` 呼叫數、前筆已落盤的字與回報；實機補同篇分頁、同步和晚回寫入。涉及寫入邊界，回 L2。[state/index.ts](../plugins/cards/src/state/index.ts#L1073) · [writes.ts](../plugins/cards/src/state/writes.ts#L386) · [intro-run.ts](../plugins/cards/src/obsidian/intro-run.ts#L198)
 
 ### R17｜延續 R14：手動打開加深視窗時，首筆讀取沒有上限
 
 **規格・已用正式視窗模組及 Obsidian stub 重現，宿主讀取未回待實測。** 打開沒有本機工作的篇，`DeepenModal.start` 先直接 await `host.read`，才畫待審提示、就緒訊息或表單。讓這筆讀取先不回傳，視窗已打開但 `ready` 次數為 0；只有手動解開才進 `ready`。檢查呼叫鏈，主程式該入口用 `vault.read`，並未經 `createDeepen` 的 `limited`。讀取若拒絕，`onOpen` 的 `void this.start()` 也沒有這個入口的訊息或復原。既有「手動加深」測的是 `copy` 已開始之後的快照等待，覆蓋不到這一步。
 
-**一定修。** 卡組最近可讀、開視窗這一刻成為暫時不可讀的檔案，即有真實路徑。影響是該篇入口沒辦法開始，同一個空白視窗還會擋另開。收窄到與提醒／複製共用的有界讀取，在判不了待審時讓該次發起停下並顯示可重試的訊息。逾時後的資料不再改舊視窗，關閉或重開後舊結果亦不接手。測命令與提醒打開、未回／拒絕、逾時後晚到及重試成功。改視窗和讀取接線，回 L2。[deepen-modal.ts](../src/obsidian/deepen-modal.ts#L54) · [deepen-modal.ts](../src/obsidian/deepen-modal.ts#L69) · [main.ts](../src/main.ts#L268)
+**一定修。** 卡組最近可讀、開視窗這一刻成為暫時不可讀的檔案，即有真實路徑。影響是該篇入口沒辦法開始，同一個空白視窗還會擋另開。收窄到與提醒／複製共用的有界讀取，在判不了待審時讓該次發起停下並顯示可重試的訊息。逾時後的資料不再改舊視窗，關閉或重開後舊結果亦不接手。測命令與提醒打開、未回／拒絕、逾時後晚到及重試成功。改視窗和讀取接線，回 L2。[deepen-modal.ts](../plugins/cards/src/obsidian/deepen-modal.ts#L54) · [deepen-modal.ts](../plugins/cards/src/obsidian/deepen-modal.ts#L69) · [main.ts](../plugins/cards/src/main.ts#L268)
 
 ### R18｜延續 R14：單輪讀取有上限，點按仍可能連續等待下一輪
 
 **規格・已重現。** `refresh` 的 `computing` 同時涵蓋 `do…while (again)` 裡所有掃描。入口點按 await 該 Promise，中間再有任何刷新請求就多跑一次。同樣讀取不上來時，以 25 ms 上限及每 7 ms 模擬一次刷新請求，140 ms 內已開始 5 次掃描，第一個點按等待仍未完成。停止觸發並讓讀取恢復後，第 6 次正常完成，沒有記 `Late` 錯誤。正式路徑會因作答、存檔、同步等變動請求刷新；只要每個 30 秒窗口內還有一次通過 1.5 秒防抖的刷新請求，這個點按就沒有整體期限。即使沒有連續事件，逐篇讀取的多個慢檔也會把單次等待加長。預期單次點按有可預測的結果，失敗時不沿用舊列。
 
-**合併前收窄點按等待。** 要同時有慢讀與持續事件才有無限延後，低頻；一般同步期間仍可能等數個 30 秒。讓點按只等有限的一輪或其自身的期限，沒有足夠新鮮資料就提示稍後再按；背景合併後續刷新不應延長同一次點按。對應測慢快照、連續刷新和多個慢卡組；晚回只能交給下一次判斷，不能讓逾時的點按繼續執行。改刷新函式的呼叫契約，回 L2。[deepen.ts](../src/obsidian/deepen.ts#L217) · [deepen.ts](../src/obsidian/deepen.ts#L260) · [main.ts](../src/main.ts#L451)
+**合併前收窄點按等待。** 要同時有慢讀與持續事件才有無限延後，低頻；一般同步期間仍可能等數個 30 秒。讓點按只等有限的一輪或其自身的期限，沒有足夠新鮮資料就提示稍後再按；背景合併後續刷新不應延長同一次點按。對應測慢快照、連續刷新和多個慢卡組；晚回只能交給下一次判斷，不能讓逾時的點按繼續執行。改刷新函式的呼叫契約，回 L2。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L217) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L260) · [main.ts](../plugins/cards/src/main.ts#L451)
 
 ### 回歸核對
 
@@ -225,13 +225,13 @@ R7 的選項（交使用者）：
 
 **規格・已用正式視窗模組與 Obsidian stub 重現。** 首次讀取回 `null`，視窗仍走 `showForm()`。讓 state 也已辨認檔案不存在時，畫面只有「找不到這一篇」和「關閉」。重試按鈕只在 catch 裡，涵蓋拒絕與逾時。第三輪核對寫的「讀不到、丟錯或等不到都有重試」漏了正常回傳 `null` 的分支。主程式的 `getFileByPath` 查不到路徑時就回 `null`，例如點命令與讀取之間檔案剛被移走、刪除，或同步暫時只看不到舊路徑。若 state 還沒更新，`showForm()` 也可能先展示舊篇的數字，後續複製會再次查檔並因不存在而停下。
 
-**影響及處理。** 需要在命令或提醒取得路徑與視窗讀取之間恰好改變檔案可見性，窗口窄、低頻。畫面會從等待交回，關閉再開可重試，沒有觀察到卡組寫入或覆蓋。可接受這個退路並把行為寫清楚；若要與規格一致，最小修法是讓 `null` 共用目前的讀不到畫面，補 `null → 檔案重新可見 → 重試` 的視窗測試。只動視窗分支及測試，不加新狀態。第四輪到此，交使用者決定是否接受這項限制或先補修。[deepen-modal.ts](../src/obsidian/deepen-modal.ts#L74) · [main.ts](../src/main.ts#L268) · [deepen.ts](../src/obsidian/deepen.ts#L307)
+**影響及處理。** 需要在命令或提醒取得路徑與視窗讀取之間恰好改變檔案可見性，窗口窄、低頻。畫面會從等待交回，關閉再開可重試，沒有觀察到卡組寫入或覆蓋。可接受這個退路並把行為寫清楚；若要與規格一致，最小修法是讓 `null` 共用目前的讀不到畫面，補 `null → 檔案重新可見 → 重試` 的視窗測試。只動視窗分支及測試，不加新狀態。第四輪到此，交使用者決定是否接受這項限制或先補修。[deepen-modal.ts](../plugins/cards/src/obsidian/deepen-modal.ts#L74) · [main.ts](../plugins/cards/src/main.ts#L268) · [deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L307)
 
 ### 修正已核對
 
-- **R16 通過。** 真實 State 與記憶體 Files 探針讓前筆寫入落盤後回 `timeout`，再執行已排隊的補題。驗同篇來源（確認原會成立／不成立）與跨篇目的地，均在確認及 `track` 前命中鎖，舊分頁存檔次數為 0，前筆內容保留，留在框內的原因為「寫入還沒確定，請重開 Obsidian 後再按」。`flush()` 後沒有待處理的 `unread`，再寫無關篇仍回 `done`。候選加入既有回 `timeout` 的 UI 契約維持；未鎖而確認失效的 `changed` 走原分支。拒寫仍由 `writes.edit` 的 finally 解除 hold 並重讀，沒有靠 `track` 完成核對。[state/index.ts](../src/state/index.ts#L919) · [state/index.ts](../src/state/index.ts#L1073) · [writes.ts](../src/state/writes.ts#L386)
-- **R17 的逾時、拒絕、重試及關閉後晚回通過。** 指定測試驗逾時後重試成功、讀取拒絕、逾時後晚回。另在第一筆仍等待時關閉並開同篇的新視窗，讓新視窗顯示讀取失敗，再交回舊讀取的待審框。舊視窗保持空白，新視窗的訊息與「重試」按鈕不變。正常回 `null` 的分支見 R19。[deepen-modal.test.ts](../tests/deepen-modal.test.ts)
-- **R18 通過。** 既有回歸用持續背景刷新驗點按期限。另以正式 main 建置與 Obsidian stub 驗接線：`refreshForClick` 回 false 時顯示讀取中的提示、沒有執行「這次不用」；成功重算但列已消失時只重畫；有效的列才執行一次。期限只約束點按等待，背景刷新可照常回填列，不會接回已逾時的按鈕動作。[deepen.ts](../src/obsidian/deepen.ts#L279) · [main.ts](../src/main.ts#L451)
+- **R16 通過。** 真實 State 與記憶體 Files 探針讓前筆寫入落盤後回 `timeout`，再執行已排隊的補題。驗同篇來源（確認原會成立／不成立）與跨篇目的地，均在確認及 `track` 前命中鎖，舊分頁存檔次數為 0，前筆內容保留，留在框內的原因為「寫入還沒確定，請重開 Obsidian 後再按」。`flush()` 後沒有待處理的 `unread`，再寫無關篇仍回 `done`。候選加入既有回 `timeout` 的 UI 契約維持；未鎖而確認失效的 `changed` 走原分支。拒寫仍由 `writes.edit` 的 finally 解除 hold 並重讀，沒有靠 `track` 完成核對。[state/index.ts](../plugins/cards/src/state/index.ts#L919) · [state/index.ts](../plugins/cards/src/state/index.ts#L1073) · [writes.ts](../plugins/cards/src/state/writes.ts#L386)
+- **R17 的逾時、拒絕、重試及關閉後晚回通過。** 指定測試驗逾時後重試成功、讀取拒絕、逾時後晚回。另在第一筆仍等待時關閉並開同篇的新視窗，讓新視窗顯示讀取失敗，再交回舊讀取的待審框。舊視窗保持空白，新視窗的訊息與「重試」按鈕不變。正常回 `null` 的分支見 R19。[deepen-modal.test.ts](../plugins/cards/tests/deepen-modal.test.ts)
+- **R18 通過。** 既有回歸用持續背景刷新驗點按期限。另以正式 main 建置與 Obsidian stub 驗接線：`refreshForClick` 回 false 時顯示讀取中的提示、沒有執行「這次不用」；成功重算但列已消失時只重畫；有效的列才執行一次。期限只約束點按等待，背景刷新可照常回填列，不會接回已逾時的按鈕動作。[deepen.ts](../plugins/cards/src/obsidian/deepen.ts#L279) · [main.ts](../plugins/cards/src/main.ts#L451)
 
 ### 驗證
 
