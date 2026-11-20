@@ -390,3 +390,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   }
   console.log(`文件檢查通過（${staged ? '暫存區' : '工作樹'}）：${files} 個 Markdown 檔、${links} 個連結；待補測與補做 ${deferred} 列（backlog 技術債，D-195）`);
 }
+// CI 探針（D-208 第二步驗收第 A12 項），不合併。
