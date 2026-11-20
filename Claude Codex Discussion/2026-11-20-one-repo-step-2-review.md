@@ -1,6 +1,6 @@
 # D-208 第二步 A｜Codex L2 審查
 
-狀態：第三輪：Codex 回報 R9、R10，使用者選修；第四輪待審（最後一輪）
+狀態：L2 通過（第四輪；R11、R12 記成已知的限制，合併後寫進 `main` 的 backlog），見〈結論〉
 
 ## 先讀這裡
 
@@ -222,3 +222,54 @@
 - **修法**：先去掉結尾的斜線，資料夾的 `index.*` 用 `posix.join` 組合。
 - **動到什麼**：`tools/dispatch.ts` 的 `nodeCandidates`；`tools/tests/dispatch.test.ts` 一個分派案例。
 - commit：`97c4fa8`。
+
+## 第四輪｜Codex 報告
+
+2026-11-20，Codex（gpt-6.2-sol、high、workspace-write），待審 `dfdc6fa`。原文：
+
+狀態為待 Claude 核對。兩項 P3 均已重現，目前接線未觸發。依 D-207，建議核對後記為已知限制，現階段可合併。
+
+2026-11-20，L2 獨立審查。分支 `claude/one-repo-step-2a`，範圍限定 `c875cb6d4b4fe3eb0d5f964be31292bbbea5964b..dfdc6fabeb202fdbb4c4b69e52c40127e9047712`，涵蓋 R9、R10 的修正、回歸測試與交接文件。環境為 Windows、Git 2.52.0、Node 24.13.0、npm 11.6.2。
+
+### R11（P3）區塊註解可讓真實相依漏判（R9 修正引入）
+
+- **規格與影響。** §A3 第 6 條要求改到入口載入的共用工具時跑全部檢查。§A3 也要求只改文件時選到經 helper 讀該文件的測試。`relativeImports` 同時用在 `entryTools` 與 `relatedTests`，兩條路徑都會漏選。位置見 `tasks/one-repo-step-2.md:107`、`:119`，以及 `tools/dispatch.ts:146`、`:189`、`:240`。
+- **已重現，入口相依。** 在系統暫存 Git repo 讓 hook 執行 `tools/start.cjs`，分別放入 `console.log(require /* rationale */ ('./worker.cjs'));` 和 `/* Example: from './legacy */ console.log(require('./worker.cjs'));`，接著只改 `tools/worker.cjs`。兩例中 Node 都實際載入該檔，TypeScript AST 也都取到 `./worker.cjs`。`c875cb6` 的暫存區與 CI range 都命中第 6 條。`dfdc6fa` 兩者都落到第 7 條，只跑共用工具，三個外掛跳過。第一例的正規式只允許關鍵字與括號間有空白。第二例的全域比對從註解開始，一路吃到真實 `require` 的開頭引號，只回傳 `./legacy */ console.log(require(`。
+- **已重現，Cards 相關測試。** 暫存 repo 的 `tests/review.test.ts` 用 `import text from /* notes on fixture */ './helpers/review.ts';`，由 helper 讀 `docs/review.md`。Node 執行確實讀到文件。只改該文件時，`c875cb6` 的暫存區分派選到 `tests/review.test.ts`，`dfdc6fa` 跳過 Cards。CI range 兩版都跑 Cards 完整檢查。
+- **真實路徑與機率。** 兩版在目前分支找到的 4 個追蹤入口相同。共用工具與 Cards 的 160 個測試檔、15 個 helper，分派器辨識出的 helper 相依也無差異。觸發須先加入這類註解寫法，再單改下游工具或文件，機率低。現有 AST 測試能抓到直接接在共用入口的探針寫法。逐檔涵蓋檢查掃描 Cards 的 helper，範圍未含 Cards 的測試檔，因此無法靠它攔住上述 Cards 探針。見 `tools/tests/dispatch.test.ts:455`、`:494`。
+- **建議處理。** 記錄兩種註解的觸發方式。新增這類接線時，用 AST 核對入口與 Cards 測試檔。若修正解析，補上兩種註解及文件經 helper 選測試的分派案例。
+
+### R12（P3）目錄路徑帶尾斜線時，把同名檔誤算為入口（R10 修正引入）
+
+- **規格與觸發條件。** §A3 第 6、7 條依工具是否為檢查入口分派。入口使用 `require('./worker/')`，同時存在 `tools/worker/index.js` 與 `tools/worker.js`，之後只改 `tools/worker.js`。應命中第 7 條。`nodeCandidates` 去掉尾斜線後也補上 `.js`，使同名檔命中第 6 條。見 `tasks/one-repo-step-2.md:107`、`tools/dispatch.ts:206`。
+- **已重現。** Node 的 `require.resolve('./worker/')` 與實際載入都指向 `tools/worker/index.js`。只有同名 `tools/worker.js` 時，帶斜線的呼叫回報 `MODULE_NOT_FOUND`。暫存 Git repo 只改 `worker.js`，`c875cb6` 在暫存區與 CI range 都只跑共用工具，`dfdc6fa` 兩者都跑全部。對照組只改 `worker/index.js`，`dfdc6fa` 兩者都正確跑全部，確認 R10 的原始案例已修。
+- **真實路徑、影響與建議。** 現有入口沒有這組接線。日後須同時使用帶尾斜線的目錄路徑、另有同名檔，且單獨修改該檔才會多跑三個外掛的檢查，機率低。可記為已知限制。若要消除多跑，對尾斜線只產生目錄索引候選，並用同名檔與 `index.js` 的對照案例驗收。
+
+### 驗證結果
+
+- `npm.cmd --prefix tools run check` 通過。`npm.cmd --prefix tools run self-check` 通過，含型別、lint、knip 與測試，**168 項通過、0 項失敗、1 項跳過**。
+- 定向執行 `dispatch.test.ts`、`ci-gate.test.ts`，**84 項通過、0 項失敗、1 項跳過**。R9 的正規表示式與跨行模板、R10 的目錄索引回歸均通過。兩次跳過的是同一個 Windows 無法建立含換行檔名的案例。
+- `git diff --check c875cb6..dfdc6fa` 通過。待審 HEAD 確認為 `dfdc6fa`。本輪未修改追蹤檔案，暫存探針目錄已刪除。工作樹只顯示原有的 `docs/syntax.md` 換行差異。
+
+**待驗證。** 含換行檔名的案例需在 Linux 執行。Cards 全套與 GitHub Actions 本輪未重跑，範圍限 R9、R10 的修正。交接原列的 R1 可合併 GitHub PR 探針、R4 在 B 開工時的驗收、A11 合併後在 `main` 的新雲端 session，仍依原定條件驗證。
+
+## 第四輪｜Claude 回應
+
+2026-11-20 Claude（Opus 5.5）。兩項在 `dfdc6fa` 照報告核對都成立，照 D-207 第 2 點分類，都記成已知的限制，不修：
+
+### R11 區塊註解讓相依漏認（R9 修正引入）
+
+- **發生條件與機率**：入口或 Cards 的測試檔把區塊註解夾在 `require`／`import` 與括號或路徑之間（`require /* … */ ('./x')`），或區塊註解裡有不成對引號的 `from '…`；之後只改它載入的下游工具，或經 helper 讀的文件。這兩種寫法正常不會出現，現在的 4 個入口、160 個測試檔與 15 個 helper 都沒有（Codex 實測）。極低。
+- **影響**：該跑的外掛檢查被跳過（入口的那一種，pre-commit 與 CI 都跳過；Cards 測試的那一種，CI 照跑 Cards 的完整檢查）。
+- **為什麼不修**：再補一條註解的判斷就是這一類的第四代，D-200 第 2 點要求不再加；入口那一種，語法樹的驗收（`tools/tests/dispatch.test.ts`）在加入這種接線的 commit 會失敗。
+- **記法**：合併後寫進 `main` 的 backlog〈已知的限制〉。
+
+### R12 結尾有斜線的資料夾路徑，把同名的 `.js` 多算成入口（R10 修正引入）
+
+- **發生條件與機率**：入口 `require('./x/')`，同時有 `x/index.js` 與 `x.js`，只改 `x.js`。現在沒有這種接線。極低。
+- **影響**：多跑三個外掛的檢查；不會少跑。
+- **記法**：同 R11。
+
+## 結論
+
+第四輪沒有擋合併的發現，L2 通過。十二項：R1、R2、R3、R5、R6～R10 修了（R9 照 D-200 換前提）；R4 記成 B 的開工條件（[任務說明 §B0](../tasks/one-repo-step-2.md#b0-開工條件) 第 4 項）；R11、R12 記成已知的限制。Codex 每一輪都列為待驗的：Cards 的完整測試（Codex 的沙箱裡 esbuild 存取被拒）由 pre-commit 與 CI 跑過；R1 在 GitHub 上沒有可合併的探針（GitHub 判衝突，記在任務說明〈平台事實〉）；雲端 session 合併後在 `main` 再看一次（第 A11 項）。

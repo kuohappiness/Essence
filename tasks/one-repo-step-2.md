@@ -366,6 +366,7 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 13 項：`e7130d4`（§A2）與 `7637a8c`（`<搬家>`）各 push 一個探針分支，run [44683434100](https://github.com/kuohappiness/Essence/actions/runs/44683434100)、[44683434330](https://github.com/kuohappiness/Essence/actions/runs/44683434330) 七個 job 都成功；探針分支已刪。本機每個 commit 都經過 pre-commit。
 - 第 14 項（合併前的部分）：`<基準>` 與 `1bdc1ef` 各在乾淨的 worktree 跑 `node tools/progress-board.ts`、`node tools/roadmap-board.ts`，`index.html`、`progress-map-list.html`、`progress-map-board.html`、`roadmap.html` 四個檔逐行相同（產生時間剛好在同一分鐘）。合併後看 Pages 的 run。
 - 第 11 項（合併前）：使用者在分支 `c298cf1` 開新的雲端 session（只讀），2026-11-20 核對開場訊息：`tools`、`plugins/cards` 是「`npm ci` 完成」，`plugins/capture`、`plugins/mindboard` 是「沒有相依，跳過」；`node --version` 是 24 版；`core.hooksPath` 是 `.githooks`。訊息原文沒有存下來（內建瀏覽器沒登入 claude.ai，Claude 讀不到那個 session）。
+- 第 19 項：L2 四輪（`c298cf1`、`c7d5493`、`c875cb6`、`dfdc6fa`），第四輪沒有擋合併的發現；十二項裡 R4 記成 §B0 第 4 項、R11 與 R12 記成已知的限制，其餘修（[報告與回應](<../Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>)）。每一輪的 push run 七個 job 都成功（第四輪 [44712161426](https://github.com/kuohappiness/Essence/actions/runs/44712161426)）。
 - 第 16 項：`id` 是 `essence-cards`，版號 `0.6.0` 和 `<基準>` 相同；`v0.1.0`～`v0.6.0` 指的 commit 和 GitHub 上的相同。
 
 §A7 演練（隔離的 clone 與演練 vault，都在本機暫存資料夾）：
@@ -378,4 +379,4 @@ A 合併後開工。D-208 第 9 點的一次性例外只限這一節列出、或
 - 第 6 項通過：使用者在 iPhone 完全關掉再打開 Obsidian，「版本」顯示 `0.6.0+288fc3d9`。
 - 演練後還原：三個檔放回測試 vault，雜湊和另存的相同；Obsidian 完全關掉再打開，`version` 讀回 `0.6.0+4536a17`。測試 vault 的紀錄多了 D-149 的版本行（Windows 換版與換回、iPhone 載入各一行），其他沒動。
 
-還沒做的驗收：第 11 項合併後在 `main` 的雲端 session、第 14 項合併後的 Pages、第 19 項的 L2；§A8 的 backlog、roadmap 兩列合併後在 `main` 改。
+還沒做的驗收：第 11 項合併後在 `main` 的雲端 session、第 14 項合併後的 Pages；§A8 的 backlog、roadmap 兩列與 L2 的兩個已知的限制（R11、R12）合併後在 `main` 改。
