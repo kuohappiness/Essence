@@ -11,7 +11,7 @@ import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { LIST_PAGE as PROGRESS_MAP, TOKENS, escape } from './progress-board-data.ts';
-import { downstreamOf, markdownTexts } from './check-docs.ts';
+import { downstreamOf, headingTitle, markdownTexts } from './check-docs.ts';
 import { DecisionsError, linksOf, parseDecisions, summariesOf } from './decisions.ts';
 import { parseStatus } from './status-line.ts';
 
@@ -230,11 +230,16 @@ export function recentDecisions(decisions: string, texts: ReadonlyMap<string, st
     .map(d => ({
       date: day(d), id: d.id, name: d.name, url: `${BLOB}docs/decisions.md#${encodeURIComponent(d.anchor)}`, summary: inlineCell(summaries.get(d.id) ?? '', 'docs/decisions.md'),
       now: d.legacy ? [] : downstreamOf(texts, `docs/decisions.md#${d.anchor}`).map(node => {
-        const [file, anchor] = node.split('#');
+        const hash = node.indexOf('#');
+        const file = hash < 0 ? node : node.slice(0, hash);
+        const anchor = hash < 0 ? undefined : node.slice(hash + 1);
         const decision = file === 'docs/decisions.md' ? parsed.decisions.find(x => x.anchor === anchor) : undefined;
-        return decision
-          ? { label: decision.id, url: `${BLOB}docs/decisions.md#${encodeURIComponent(anchor)}`, status: '決定' }
-          : { label: file, url: `${BLOB}${file.split('/').map(encodeURIComponent).join('/')}`, status: statusLabel(texts.get(file)) };
+        if (decision) return { label: decision.id, url: `${BLOB}docs/decisions.md#${encodeURIComponent(decision.anchor)}`, status: '決定' };
+        const url = `${BLOB}${file.split('/').map(encodeURIComponent).join('/')}`;
+        if (!anchor) return { label: file, url, status: statusLabel(texts.get(file)) };
+        // backlog 的一項：連到那一項的錨點，顯示標題（L2 R6）。
+        const title = headingTitle(file, texts.get(file) ?? '', anchor);
+        return { label: `${file}〈${title ?? anchor}〉`, url: `${url}#${encodeURIComponent(anchor)}`, status: '—' };
       }),
     }));
 }

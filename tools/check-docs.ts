@@ -110,7 +110,7 @@ const linkPath = (href: string) => {
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 
-interface Heading { line: number; level: number; slug: string }
+interface Heading { line: number; level: number; slug: string; title: string }
 interface Doc { file: string; lines: string[]; tokens: Token[]; anchors: Set<string>; headings: Heading[] }
 
 const markdown = new MarkdownIt({ html: true });
@@ -181,9 +181,10 @@ function parse(file: string, text: string): Doc {
   const slugger = new GithubSlugger();
   tokens.forEach((token, i) => {
     if (token.type === 'heading_open') {
-      const slug = slugger.slug(plainText(tokens[i + 1].children ?? []));
+      const title = plainText(tokens[i + 1].children ?? []);
+      const slug = slugger.slug(title);
       anchors.add(slug);
-      headings.push({ line: token.map![0] + 1, level: Number(token.tag.slice(1)), slug });
+      headings.push({ line: token.map![0] + 1, level: Number(token.tag.slice(1)), slug, title: title.trim() });
     } else if (token.type === 'html_block') htmlIds(token.content, anchors);
     else if (token.type === 'inline') for (const child of token.children ?? []) if (child.type === 'html_inline') htmlIds(child.content, anchors);
   });
@@ -381,21 +382,19 @@ function paragraphLines(doc: Doc, [from, to]: [number, number] = [0, doc.tokens.
   return out;
 }
 
-/** backlog 的一站是「檔＋最近的標題」：那一行之前最近的標題的錨點。 */
+/**
+ * backlog 的一站是「檔＋最近的標題」：那一行之前最近的標題的錨點（不管幾級）。
+ * 核對回鏈、往下游走與白板的連結都用這一個（子項的「來自」不算父項的，L2 R6）。
+ */
 const stationAnchor = (doc: Doc, line: number) => doc.headings.filter(h => h.line <= line).at(-1)?.slug ?? '';
+
+/** 檔裡錨點那個標題的文字（給白板顯示 backlog 的一站）；找不到是 undefined。 */
+export const headingTitle = (file: string, text: string, anchor: string) => parse(file, text).headings.find(h => h.slug === anchor)?.title;
 
 /** 二級標題 title 那一節的 token 範圍。 */
 function h2Range(doc: Doc, title: string): [number, number] | undefined {
   const found = section(doc, title);
   return found ? [found.open, found.close] : undefined;
-}
-
-/** 錨點那個標題底下（到下一個同級或更高的標題）的 token 範圍；找不到時是整份。 */
-function anchorRange(doc: Doc, anchor: string): [number, number] {
-  const at = doc.headings.findIndex(h => h.slug === anchor);
-  if (at < 0) return [0, doc.tokens.length];
-  const start = doc.tokens.findIndex(token => token.type === 'heading_open' && token.map![0] + 1 === doc.headings[at].line);
-  return under(doc, start);
 }
 
 /** 一份檔的「→」行：格式、日期、backlog〈待處理〉裡不能有。決策紀錄不看（決定的上游寫在狀態行）。 */
@@ -482,9 +481,15 @@ function checkStations(docs: Map<string, Doc>): Problem[] {
       if (!to.file.toLowerCase().endsWith('.md')) problem('「→」要指到一站（任務、討論稿、plans 或決定）');
       continue;
     }
-    const range = ANY_BACKLOG.test(to.file) ? anchorRange(target, to.anchor) : firstH2(target);
-    if (!fromLinks(target, range).some(({ to: back }) => sameStation(back, arrow.file, arrow.station))) {
-      problem(`${to.file} 沒有「來自」連回這裡${arrow.station ? `（#${arrow.station}）` : ''}：在它第一個二級標題之前寫「來自：[…](…)」`);
+    // backlog：「來自」要在錨點那個標題底下、下一個標題之前（站是最近的標題），沒有錨點時看整份；其他檔：第一個二級標題之前。
+    const backlog = ANY_BACKLOG.test(to.file);
+    const item = backlog && to.anchor ? to.anchor : undefined;
+    const all = fromLinks(target, backlog ? [0, target.tokens.length] : firstH2(target));
+    const backs = item === undefined ? all : all.filter(({ line }) => stationAnchor(target, line) === item);
+    if (!backs.some(({ to: back }) => sameStation(back, arrow.file, arrow.station))) {
+      problem(item === undefined
+        ? `${to.file} 沒有「來自」連回這裡${arrow.station ? `（#${arrow.station}）` : ''}：在它第一個二級標題之前寫「來自：[…](…)」`
+        : `${to.file}#${item} 沒有「來自」連回這裡${arrow.station ? `（#${arrow.station}）` : ''}：在那個標題底下、下一個標題之前寫「來自：[…](…)」`);
     }
   }
 

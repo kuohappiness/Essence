@@ -161,6 +161,19 @@ const DECISIONS = ['# 決策紀錄', '', '## 索引', '', '| 決定 | 一句話 
   '## D-219 新乙', '', '✅ 2026-11-20｜來自 [plans](plans/w.md)｜取代 [D-213](#d-213-舊213)', '', '主題：協作與文件｜一句話：新乙的一句話。', '',
   '## D-220 新丙', '', '💬 2026-11-22｜來自 [plans](plans/w.md)', '', '主題：協作與文件｜一句話：還在談。', ''].join('\n');
 
+void test('L2 R6 決定退回 backlog 的項目：「現在在哪」連到那一項的錨點，父子兩項是兩個連結', () => {
+  const texts = new Map([
+    ['docs/decisions.md', DECISIONS],
+    ['docs/backlog.md', ['# B', '', '## 待處理', '', '### 詞（甲）、A+B', '', '來自：[D-218](decisions.md#d-218-新甲)', '',
+      '#### 子項', '', '來自：[D-218](decisions.md#d-218-新甲)', '', '## 已轉出', ''].join('\n')],
+  ]);
+  const [d218] = recentDecisions(DECISIONS, texts);
+  assert.deepEqual(d218.now.map(x => [x.label, x.url.replace(/^.*\/blob\/main\//, '')]), [
+    ['docs/backlog.md〈詞（甲）、A+B〉', `docs/backlog.md#${encodeURIComponent('詞甲ab')}`],
+    ['docs/backlog.md〈子項〉', `docs/backlog.md#${encodeURIComponent('子項')}`],
+  ]);
+});
+
 void test('最近定案：只取 ✅、沒被取代的最新 5 條，照日期再照編號新到舊；新寫法的加「現在在哪」與狀態值', () => {
   const texts = new Map([
     ['docs/decisions.md', DECISIONS],

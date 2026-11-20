@@ -263,6 +263,19 @@ void test('「→」與「來自」互相連回；日期要是真的；backlog�
   ]);
 });
 
+void test('L2 R6 backlog 的一站是「檔＋最近的標題」：子項的「來自」不能代替父項的', async t => {
+  const { add, run } = await repo(t);
+  await add(BACKLOG, [
+    '# B', '', '## 待處理', '', '### 父項', '', '- 父', '', '#### 子項', '', '來自：[任務](tasks/r.md)', '',
+    '### 詞（甲）、A+B', '', '來自：[任務](tasks/r.md)', '', '## 已轉出', '',
+  ].join('\n'));
+  await add('docs/tasks/r.md', [
+    '# R', '', '狀態：實作中｜下一步：x｜等誰：Claude', '', '## 一', '',
+    '→ [父項](../backlog.md#父項)（2026-11-22）', '', '→ [子項](../backlog.md#子項)（2026-11-22）', '', '→ [詞](../backlog.md#詞甲ab)（2026-11-22）', '',
+  ].join('\n'));
+  assert.deepEqual(run(), ['docs/tasks/r.md:7  →  docs/backlog.md#父項 沒有「來自」連回這裡：在那個標題底下、下一個標題之前寫「來自：[…](…)」']);
+});
+
 void test('L2 R9「→」連到外部網址報錯：下一站要是 repo 裡的一站；引用框與程式碼裡的範例不看', async t => {
   const { add, run } = await repo(t);
   await add('docs/plans/x.md', [
