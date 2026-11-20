@@ -131,8 +131,15 @@ function need(tables: Map<string, Table>, section: string): Table {
 }
 
 const EMPTY: Cell = { html: '', text: '' };
-/** 升版的那一列：舊的寫「升正式版 `x`」，發版任務收尾的「完成」以「正式 vault 升到 `x`」開頭（docs/agents/workflow.md〈任務說明〉）。 */
-const RELEASE = /(?:升正式版|正式 vault 升到)\s*`?v?(\d+\.\d+\.\d+)`?/;
+/**
+ * 升版的那一列：舊的手寫列寫「升正式版 `x`」；發版任務收尾的「完成」以「正式 vault 升到 `x`」開頭（docs/agents/workflow.md〈任務說明〉），
+ * 只在那一格開頭或工具寫的「工作：」後面才算，句中提到計畫中的版本不算（L2 R8）。
+ */
+const RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?|^(?:[^：]*：)?正式 vault 升到\s*`?v?(\d+\.\d+\.\d+)`?/;
+const releaseOf = (text: string) => {
+  const match = RELEASE.exec(text);
+  return match ? match[1] ?? match[2] : undefined;
+};
 /** roadmap-sync 寫的已合併列（純文字）：「工作：完成（已合併，入口）」。 */
 const GENERATED_MERGED = /（已合併，入口）$/;
 /** 「最近完成」「最近定案」先列幾條。 */
@@ -184,13 +191,15 @@ export function parseRelease(source: string, file = RELEASE_ROADMAP): Omit<Roadm
 
   // 正式 vault 的版本：「正式使用的 vault 現在是 `x`（日期」與已完成裡最新一列升版，取日期較新的（同一天以那句為準）。
   const stated = /正式使用的 vault 現在是\s*`?v?(\d+\.\d+\.\d+)`?\s*[（(](\d{4}-\d{2}-\d{2})/.exec(source);
-  const releaseAt = done.findIndex(d => RELEASE.test(d.work.text));
-  const fromDone = releaseAt >= 0 ? { version: RELEASE.exec(done[releaseAt].work.text)![1], date: done[releaseAt].date } : null;
+  const releaseAt = done.findIndex(d => releaseOf(d.work.text) !== undefined);
+  const fromDone = releaseAt >= 0 ? { version: releaseOf(done[releaseAt].work.text)!, date: done[releaseAt].date } : null;
   const fromStated = stated ? { version: stated[1], date: stated[2] } : null;
   const vault = fromStated && fromDone ? (fromDone.date > fromStated.date ? fromDone : fromStated) : fromStated ?? fromDone;
 
-  // 已合併、還沒發布：已完成裡比最新一次升版新、而且寫到合併進 main（舊的手寫列）或是工具寫的已合併列。找不到升版的列時，用版本的日期切。
-  const newer = releaseAt >= 0 ? done.slice(0, releaseAt) : done.filter(d => vault && d.date > vault.date);
+  // 已合併、還沒發布：已完成裡比選中的那一次升版新、而且寫到合併進 main（舊的手寫列）或是工具寫的已合併列（L2 R8）。
+  // 選中的是升版的列（或同一天、同一版的那句）：照列的位置切（同一天也分得出先後）；選中的是那句：用那句的日期切。
+  const byRow = fromDone !== null && (vault === fromDone || (fromStated?.date === fromDone.date && fromStated.version === fromDone.version));
+  const newer = byRow ? done.slice(0, releaseAt) : done.filter(d => vault && d.date > vault.date);
   const unreleased = newer.filter(d => /\bmain\b/.test(d.work.text) || GENERATED_MERGED.test(d.work.text));
 
   return { done, vault, unreleased };

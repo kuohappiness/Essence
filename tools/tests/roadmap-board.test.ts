@@ -111,6 +111,30 @@ void test('正式 vault：認得「正式 vault 升到」，和「現在是」�
   assert.deepEqual(parseRoadmap(withRelease('正式使用的 vault 現在是 `0.5.9`（2026-11-20）')).vault, { version: '0.5.9', date: '2026-11-20' });
 });
 
+void test('L2 R8 待發布以選中的那一次升版切；「正式 vault 升到」只在完成那一句開頭才算升版', () => {
+  const rows = (...lines: string[]) => SAMPLE.replace('| 2026-11-16 | 接句卡合併進 `main`：細節 |', [...lines, '| 2026-11-16 | 接句卡合併進 `main`：細節 |'].join('\n'));
+  // 那句（0.7.0，12-05）比升版的列（0.6.0，12-03）新：12-04 合併的已經在 0.7.0 裡，不是待發布；12-06 的才是。
+  const stated = rows(generated('2026-12-06', '新', '已合併'), generated('2026-12-04', '舊', '已合併'),
+    '| 2026-12-03 | **發版**：正式 vault 升到 `0.6.0`（已結案，[入口](tasks/r.md)） |')
+    .replace('正式使用的 vault 現在是 `0.5.0`（2026-11-14，見已完成）', '正式使用的 vault 現在是 `0.7.0`（2026-12-05）');
+  const parsed = parseRoadmap(stated);
+  assert.deepEqual(parsed.vault, { version: '0.7.0', date: '2026-12-05' });
+  assert.deepEqual(parsed.unreleased.map(d => d.date), ['2026-12-06']);
+  // 同一天：同一版照列的位置切（升版之後才合併的是待發布）；不同版以那句為準，照那句的日期切。
+  const sameDay = (version: string) => parseRoadmap(rows(generated('2026-12-05', '後', '已合併'), '| 2026-12-05 | **發版**：正式 vault 升到 `0.7.0`（已結案，[入口](tasks/r.md)） |')
+    .replace('正式使用的 vault 現在是 `0.5.0`（2026-11-14，見已完成）', `正式使用的 vault 現在是 \`${version}\`（2026-12-05）`));
+  assert.deepEqual(sameDay('0.7.0').vault, { version: '0.7.0', date: '2026-12-05' });
+  assert.deepEqual(sameDay('0.7.0').unreleased.map(d => d.work.text), ['後：做完了（已合併，入口）']);
+  assert.deepEqual(sameDay('0.7.1').vault, { version: '0.7.1', date: '2026-12-05' });
+  assert.deepEqual(sameDay('0.7.1').unreleased, []);
+  // 只是提到計畫中的版本，不是升版：版本照舊、12-04 那列照樣待發布。
+  const mention = rows(generated('2026-12-04', '相容', '已合併').replace('做完了', '完成相容測試，等正式 vault 升到 `0.7.0` 再公開'));
+  assert.deepEqual(parseRoadmap(mention).vault, { version: '0.5.0', date: '2026-11-14' });
+  assert.deepEqual(parseRoadmap(mention).unreleased.map(d => d.date), ['2026-12-04', '2026-11-16']);
+  const handwritten = rows('| 2026-12-04 | 完成相容測試，等正式 vault 升到 `0.7.0` 再公開，合併進 `main` |');
+  assert.deepEqual(parseRoadmap(handwritten).vault, { version: '0.5.0', date: '2026-11-14' });
+});
+
 void test('最近完成合併每份 roadmap 的〈已完成〉：照日期新到舊，同一天照 roadmap 的順序與原本的順序；沒有表的那份是空的', () => {
   const table = (rows: string[]) => `# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n${rows.join('\n')}\n`;
   const top = parseDone(table(['| 2026-11-22 | 頂甲 |', '| 2026-11-20 | 頂乙 |']), ROADMAP);
