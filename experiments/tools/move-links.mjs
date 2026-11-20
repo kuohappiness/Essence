@@ -1,15 +1,24 @@
 #!/usr/bin/env node
-// 搬檔之後改 Markdown 連結（D-208 第二步 §A6，B 也用）：在 git mv 之後、commit 之前，在 repo 根目錄執行。
+// 搬檔之後改 Markdown 連結（D-208 第二步 §A6 與 B）：在 git mv（與拆檔）之後、commit 之前，在 repo 根目錄執行。
 //
-//   node experiments/tools/move-links.mjs [--check] <舊路徑>=<新路徑> ...
+//   node experiments/tools/move-links.mjs [--check] [--plan <計畫.json>] [<舊路徑>=<新路徑> ...]
 //
 // 路徑是 repo 根目錄算的；資料夾的對照也套到底下每個檔（src=plugins/cards/src）。
-// - 連結目標用和 tools/check-docs.ts 同一個 Markdown 解析器（markdown-it，html: true）取：行內、引用式、角括號的都算，
-//   程式碼框、HTML 區塊與行內程式碼裡的不算。
-// - 從檔案現在的位置解得開的連結不動；解不開的，從那個檔搬家前的位置解，目標照對照換成新路徑、而且存在，才換成新的相對寫法。
-//   錨點、查詢字串與結尾的斜線照留。所以第二次執行不改任何字，rebase 之後可以再跑一次。
-// - 指到這個 repo `blob/main/`（舊名 Essence-Cards 與新名 Essence 都算）的舊路徑網址，換成新路徑。
-// - 「存在」照 git 的索引（git ls-files）：搬家的 git mv 要先做。
+// 計畫檔（B 用）：{ "moves": [["舊", "新"], …], "pieces": { "拆出的新檔": "原檔" }, "split": { "原檔": { "default": "沒有錨點時去的檔", "anchors": { "錨點": "那一段現在在的檔" }, "stay": ["錨點"] } },
+//   "frozen": [{ "dir": "資料夾/", "marker": "標記" }], "settled": true }（settled：連結已照這份計畫改過一次（rebase 之後重跑），
+//   搬走或拆出的檔裡兩種解法不同的也列成要人看；frozen：這個資料夾的檔，標記以下的連結不改，例如製卡規則送給 AI 的部分；
+//   stay：拆完後原檔也有同名一節的錨點，沒搬的檔連到它時留在原檔，例如最上層 backlog 的〈技術債〉放共用工具的）
+// - 連結目標用和 tools/check-docs.ts 同一個 Markdown 解析器（markdown-it，html: true）取：行內、引用式、角括號、自動連結都算，
+//   程式碼框、HTML 區塊與行內程式碼裡的不算。原文裡找到的每個候選位置，都要對得上解析器在同一段（同幾行）取到的連結，
+//   引用式定義要對得上解析器登記的定義；重疊的位置只改一次（R4：角括號網址被兩個寫法同時選到改壞過）。
+//   目的地可以在下一行（`](` 或 `]:` 之後換行），照改。
+// - 連結的意思以搬家前為準：從這個檔搬家前的位置（拆出的新檔是原檔的位置）解開，目標照對照換成新路徑；
+//   目標是拆開的原檔時，照錨點換到那一段現在在的檔。從現在的位置解得開、而且是同一個目標的不動，所以第二次執行不改任何字。
+//   兩種解法都存在卻是不同的檔：搬走或拆出的檔照搬家前的意思；沒搬的檔（原路徑搬走後又有同名的新檔）不猜、不改，列成「要人看」（結束碼 1）。
+//   搬走或拆出的檔裡只有照現在的位置解得到的連結，是搬家時照新位置寫的，不改。
+// - 錨點、查詢字串與結尾的斜線照留；拆開的原檔裡連到本頁、但那一段已搬走的錨點，換成新檔的錨點。
+// - 指到這個 repo（kuohappiness/Essence，舊名 Essence-Cards）`blob/main/`、`tree/main/` 的網址，路徑照對照換；別人的 repo 不動。
+// - 「存在」照 git 的索引（git ls-files）：搬家的 git mv 與拆出的新檔要先 git add。
 // --check：只列出會改的連結，不寫檔；有要改的結束碼是 1。
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -19,6 +28,7 @@ import { pathToFileURL } from 'node:url';
 
 const require = createRequire(new URL('../../tools/package.json', import.meta.url));
 const { default: MarkdownIt } = await import(pathToFileURL(require.resolve('markdown-it')).href);
+const { default: GithubSlugger } = await import(pathToFileURL(require.resolve('github-slugger')).href);
 const markdown = new MarkdownIt({ html: true });
 
 /** 舊路徑 → 新路徑；不在對照裡的回傳原值。資料夾的對照套到底下的檔。 */
@@ -34,10 +44,22 @@ export function mapper(moves) {
   return { forward, backward };
 }
 
+const FRONT = /^---\n[\s\S]*?\n---(?:\n|$)/;
+
+/** 標題的純文字（和 tools/check-docs.ts 的 plainText 相同）：行內程式碼取內容、連結取連結文字、HTML 不算。 */
+function plainText(children) {
+  return children.map(child => {
+    if (child.type === 'text' || child.type === 'code_inline') return child.content;
+    if (child.type === 'softbreak' || child.type === 'hardbreak') return ' ';
+    if (child.type === 'image') return plainText(child.children ?? []);
+    return '';
+  }).join('');
+}
+
 /** 一個字串裡跟著長度不變的遮罩：程式碼框、HTML 區塊、front matter 的行與行內程式碼換成空白，位置不變。 */
 function masked(text, tokens) {
   const lines = text.split('\n');
-  const front = /^---\n[\s\S]*?\n---(?:\n|$)/.exec(text);
+  const front = FRONT.exec(text);
   const hidden = new Set();
   if (front) for (let i = 0; i < front[0].split('\n').length - 1; i++) hidden.add(i);
   for (const token of tokens) {
@@ -47,39 +69,112 @@ function masked(text, tokens) {
   return lines.map((line, i) => hidden.has(i) ? line.replace(/[^\n]/g, ' ') : line.replace(/(`+)[^`]*?\1/g, span => ' '.repeat(span.length))).join('\n');
 }
 
-/** 解析器認得的連結與圖片的目的地（正規化之後的 href）。 */
-function parsedHrefs(text) {
-  const blank = text.replace(/^---\n[\s\S]*?\n---(?:\n|$)/, front => front.replace(/[^\n]/g, ''));
-  const tokens = markdown.parse(blank, {});
-  const hrefs = new Set();
+/**
+ * 解析器取到的連結：每一段（inline token 的行範圍）裡的目的地（正規化後的 href，可重複），與引用式定義。
+ * front matter 換成同樣行數的空行，行號不變。
+ */
+function parsed(text) {
+  const blank = text.replace(FRONT, front => front.replace(/[^\n]/g, ''));
+  const env = {};
+  const tokens = markdown.parse(blank, env);
+  const blocks = [];
+  // 定義照留（語法才會和整份解析的相同），目的地換成 null：再解析時引用式連結沒有 href，只有行內連結與自動連結是真的目的地。
+  // 不用佔位字串：真的連結或錨點可能剛好同名（B 的 L2 第四輪）。markdown-it 對引用式連結直接取定義的 href，不再正規化。
+  const placeholders = { references: Object.fromEntries(Object.entries(env.references ?? {}).map(([label, ref]) => [label, { ...ref, href: null }])) };
+  let map;
   for (const token of tokens) {
-    if (token.type !== 'inline') continue;
-    for (const child of token.children ?? []) {
+    // 表格儲存格的 inline 沒有行號，用所在那一列（tr_open）的。
+    if (token.map) map = token.map;
+    if (token.type !== 'inline' || !map) continue;
+    // 同一列的儲存格併成一段。
+    let block = blocks.at(-1);
+    if (!block || block.from !== map[0] || block.to !== map[1]) blocks.push(block = { from: map[0], to: map[1], hrefs: new Map() });
+    // 只數行內連結與自動連結：引用式連結（目的地在定義那一行）不算進這一段（B 的 L2 第二、三輪）。
+    for (const child of markdown.parseInline(token.content, structuredClone(placeholders))[0]?.children ?? []) {
       const href = child.type === 'link_open' ? child.attrGet('href') : child.type === 'image' ? child.attrGet('src') : null;
-      if (href !== null) hrefs.add(href);
+      if (href !== null) block.hrefs.set(href, (block.hrefs.get(href) ?? 0) + 1);
     }
   }
-  return { hrefs, tokens };
+  // 本頁的錨點，和 tools/check-docs.ts 同一套（github-slugger 對標題的純文字）。
+  const anchors = new Set();
+  const slugger = new GithubSlugger();
+  const htmlIds = html => { for (const [, id] of html.matchAll(/\b(?:id|name)\s*=\s*["']([^"']+)["']/g)) anchors.add(id); };
+  tokens.forEach((token, i) => {
+    if (token.type === 'heading_open') anchors.add(slugger.slug(plainText(tokens[i + 1].children ?? [])));
+    else if (token.type === 'html_block') htmlIds(token.content);
+    else if (token.type === 'inline') for (const child of token.children ?? []) if (child.type === 'html_inline') htmlIds(child.content);
+  });
+  return { tokens, blocks, references: env.references ?? {}, anchors };
 }
 
-/** 原文裡的連結目的地：[x](目的地)、![x](目的地)、[x]: 目的地、<網址>。回傳在原文的起訖與去掉角括號的內容。 */
-function* candidates(mask) {
-  const patterns = [
-    /\]\([ \t]*(<[^<>\n]*>|(?:[^\s()<>]|\([^\s()]*\))+)/g,
-    /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^<>\n]*>|\S+)/gm,
-    /(<https?:\/\/[^\s<>]+>)/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of mask.matchAll(pattern)) {
-      const raw = match[1];
-      const start = match.index + match[0].length - raw.length;
-      const angle = raw.startsWith('<') && raw.endsWith('>');
-      yield { start, end: start + raw.length, angle, inner: angle ? raw.slice(1, -1) : raw };
+/** 原文裡的連結目的地候選：[x](目的地)、![x](目的地)、[x]: 目的地、<網址>。回傳在原文的起訖、種類與去掉角括號的內容。 */
+function candidates(mask) {
+  const found = [];
+  const add = (match, raw, kind, label) => {
+    const start = match.index + match[0].length - raw.length;
+    const angle = raw.startsWith('<') && raw.endsWith('>');
+    found.push({ start, end: start + raw.length, kind, label, angle, inner: angle ? raw.slice(1, -1) : raw });
+  };
+  const destination = String.raw`(<[^<>\n]*>|(?:[^\s()<>\\]|\\.|\([^\s()]*\))+)`;
+  for (const match of mask.matchAll(new RegExp(String.raw`\]\([ \t]*(?:\n[ \t]*)?` + destination, 'g'))) add(match, match[1], 'inline');
+  for (const match of mask.matchAll(new RegExp(String.raw`^ {0,3}\[((?:[^\]\\\n]|\\.)+)\]:[ \t]*(?:\n[ \t]*)?(<[^<>\n]*>|\S+)`, 'gm'))) add(match, match[2], 'definition', match[1]);
+  for (const match of mask.matchAll(/<https?:\/\/[^\s<>]+>/g)) add(match, match[0], 'autolink');
+  // 同一段原文只認一個：起點早的先，同起點的取長的。
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  const kept = [];
+  for (const candidate of found) if (!kept.length || candidate.start >= kept.at(-1).end) kept.push(candidate);
+  return kept;
+}
+
+/**
+ * 候選位置對得上解析器的才留下：行內與自動連結要在同一段裡有同一個 href（用掉一個），定義要是解析器登記的那一個。
+ * 同一段裡同一個 href 的候選比解析器取到的多（例如前面一個 `[` 跳脫成純文字），分不出哪一個是真的連結：
+ * 這些候選都標成 ambiguous，會改的列成要人看、不改（B 的 L2 R2）。
+ */
+function confirmed(source, list, { blocks, references }) {
+  const lineOf = offset => source.slice(0, offset).split('\n').length - 1;
+  const usedLabels = new Set();
+  const out = [];
+  const hrefOf = candidate => markdown.normalizeLink(markdown.utils.unescapeAll(candidate.inner));
+  const blockOf = candidate => {
+    const line = lineOf(candidate.start);
+    return blocks.findIndex(item => line >= item.from && line < item.to);
+  };
+  const keyOf = candidate => blockOf(candidate) + '\0' + hrefOf(candidate);
+  const seen = new Map();
+  for (const candidate of list) if (candidate.kind !== 'definition' && blockOf(candidate) >= 0) seen.set(keyOf(candidate), (seen.get(keyOf(candidate)) ?? 0) + 1);
+  const ambiguous = candidate => {
+    const at = blockOf(candidate);
+    const parsedCount = at >= 0 ? (blocks[at].hrefs.get(hrefOf(candidate)) ?? 0) : 0;
+    // 解析器一個都沒取到的，原本就不改（不是連結），不算歧義。
+    return parsedCount > 0 && (seen.get(keyOf(candidate)) ?? 0) > parsedCount;
+  };
+  const flagged = new Set(list.filter(candidate => candidate.kind !== 'definition' && ambiguous(candidate)));
+  for (const candidate of list) {
+    if (flagged.has(candidate)) {
+      out.push({ ...candidate, ambiguous: true });
+      continue;
     }
+    const href = markdown.normalizeLink(markdown.utils.unescapeAll(candidate.inner));
+    const line = lineOf(candidate.start);
+    if (candidate.kind === 'definition') {
+      const key = markdown.utils.normalizeReference(candidate.label);
+      if (usedLabels.has(key) || references[key]?.href !== href) continue;
+      if (blocks.some(block => line >= block.from && line < block.to)) continue;
+      usedLabels.add(key);
+      out.push(candidate);
+      continue;
+    }
+    const block = blocks.find(item => line >= item.from && line < item.to);
+    const count = block?.hrefs.get(href) ?? 0;
+    if (!count) continue;
+    block.hrefs.set(href, count - 1);
+    out.push(candidate);
   }
+  return out;
 }
 
-const REPO_URL = /^(https:\/\/github\.com\/[^/]+\/(?:Essence-Cards|Essence)\/blob\/main\/)([^?#]*)(.*)$/;
+const REPO_URL = /^(https:\/\/github\.com\/kuohappiness\/(?:Essence-Cards|Essence)\/(?:blob|tree)\/main\/)([^?#]*)(.*)$/i;
 
 const decode = part => { try { return decodeURIComponent(part); } catch { return undefined; } };
 /** 新路徑寫回原文：原本有百分比編碼的照樣編碼，沒有的只把空白與括號編碼（不加角括號時）。 */
@@ -88,28 +183,68 @@ function encodeLike(path, raw, angle) {
   return angle ? path : path.replace(/[ ()]/g, char => encodeURIComponent(char));
 }
 
+/** 目標是拆開的原檔時，照錨點換到那一段現在在的檔；沒有錨點去 default；表上沒有的照原檔。 */
+// unmoved：連結所在的檔沒搬也不是拆出的；原檔的 stay 列的錨點（拆完後原檔也有同名的一節）對它們留在原檔。
+function splitter(split = {}, unmoved = false) {
+  return (target, rest) => {
+    const entry = split[target];
+    if (!entry) return target;
+    const hash = rest.indexOf('#');
+    if (hash < 0) return entry.default ?? target;
+    const anchor = decode(rest.slice(hash + 1)) ?? rest.slice(hash + 1);
+    if (unmoved && entry.stay?.includes(anchor)) return target;
+    return entry.anchors?.[anchor] ?? entry.anchors?.[anchor.toLowerCase()] ?? target;
+  };
+}
+
 /**
- * 一份 Markdown 的新內容與改了哪些連結。file 是它現在（搬家後）的 repo 路徑；exists 判斷 repo 路徑（檔或資料夾）存在。
+ * 一份 Markdown 的新內容、改了哪些連結與要人看的連結。file 是它現在（搬家後）的 repo 路徑；exists 判斷 repo 路徑（檔或資料夾）存在。
+ * plan：mapper() 的 forward、backward，加上可選的 pieces（拆出的新檔 → 原檔）與 split（原檔 → 錨點去哪個檔）。
  */
-export function rewrite(file, text, { forward, backward }, exists) {
-  const bom = text.startsWith('\uFEFF') ? '\uFEFF' : '';
+export function rewrite(file, text, plan, exists) {
+  const { forward, pieces = {} } = plan;
+  const backward = plan.backward ?? (path => path);
+  const bom = text.startsWith('﻿') ? '﻿' : '';
   const crlf = text.includes('\r\n');
   const source = text.slice(bom.length).replace(/\r\n/g, '\n');
-  const { hrefs, tokens } = parsedHrefs(source);
-  const mask = masked(source, tokens);
-  const oldFile = backward(file);
-  const edits = [];
-  for (const { start, end, angle, inner } of candidates(mask)) {
+  const info = parsed(source);
+  const mask = masked(source, info.tokens);
+  const origin = pieces[file] ?? backward(file);
+  const retarget = splitter(plan.split, origin === file);
+  const allEdits = [];
+  const conflicts = [];
+  const lineOf = start => source.slice(0, start).split('\n').length;
+  // 凍結的段落（例如製卡規則送給 AI 的部分：內容一變就是新版本）：標記以下的連結不改。
+  const freeze = (plan.frozen ?? []).find(rule => file.startsWith(rule.dir));
+  const frozenAt = freeze ? source.indexOf(freeze.marker) : -1;
+  for (const candidate of confirmed(source, candidates(mask), info)) {
+    const { start, end, angle, inner, kind } = candidate;
+    if (frozenAt >= 0 && start > frozenAt) continue;
+    // 分不出是不是真的連結的候選：會改的列成要人看，不改。
+    const edits = candidate.ambiguous ? { push: ({ to }) => conflicts.push({ line: lineOf(start), link: inner, ambiguous: to }) } : allEdits;
     const unescaped = markdown.utils.unescapeAll(inner);
-    if (!hrefs.has(markdown.normalizeLink(unescaped))) continue;
+    const wrap = written => angle ? `<${written}>` : written;
     const url = REPO_URL.exec(unescaped);
     if (url) {
       const path = decode(url[2]);
-      if (path === undefined || forward(path) === path) continue;
-      edits.push({ start, end, from: inner, to: (angle ? '<' : '') + url[1] + encodeLike(forward(path), url[2], false) + url[3] + (angle ? '>' : '') });
+      if (path === undefined) continue;
+      const slash = path.length > 1 && path.endsWith('/') ? '/' : '';
+      const target = retarget(forward(path.replace(/\/+$/, '')), url[3]);
+      if (target + slash === path) continue;
+      edits.push({ start, end, from: inner, to: wrap(url[1] + encodeLike(target + slash, url[2], false) + url[3]) });
       continue;
     }
-    if (unescaped === '' || /^[a-z][a-z0-9+.-]*:/i.test(unescaped) || unescaped.startsWith('//') || unescaped.startsWith('#')) continue;
+    if (unescaped === '' || /^[a-z][a-z0-9+.-]*:/i.test(unescaped) || unescaped.startsWith('//')) continue;
+    if (unescaped.startsWith('#')) {
+      // 本頁的錨點：只有拆開的原檔與拆出的新檔要看那一段搬去哪裡。
+      // 拆出的新檔先認自己的標題；原檔照錨點表（那一段搬走了就直接連過去，不經留下的一行）。
+      if (!plan.split?.[origin] || (file !== origin && info.anchors.has(decode(unescaped.slice(1)) ?? ''))) continue;
+      const target = retarget(origin, unescaped);
+      if (target === file) continue;
+      const written = posix.relative(posix.dirname(file), target) + unescaped;
+      edits.push({ start, end, from: inner, to: wrap(encodeLike(written, '', angle)) });
+      continue;
+    }
     const cut = unescaped.search(/[?#]/);
     const rawPath = cut < 0 ? unescaped : unescaped.slice(0, cut);
     const rest = cut < 0 ? '' : unescaped.slice(cut);
@@ -118,29 +253,47 @@ export function rewrite(file, text, { forward, backward }, exists) {
     const rooted = path.startsWith('/');
     const slash = path.length > 1 && path.endsWith('/') ? '/' : '';
     const resolveFrom = from => posix.normalize(rooted ? path.slice(1) : posix.join(posix.dirname(from), path)).replace(/\/+$/, '');
-    if (exists(resolveFrom(file))) continue;
-    const target = forward(resolveFrom(oldFile));
-    if (!exists(target)) continue;
-    const relativePath = rooted ? '/' + target : (posix.relative(posix.dirname(file), target) || posix.basename(target));
-    const written = encodeLike(relativePath, rawPath, angle) + slash + rest;
-    if (written === inner) continue;
-    edits.push({ start, end, from: inner, to: angle ? `<${written}>` : written });
+    const here = resolveFrom(file);
+    const before = forward(resolveFrom(origin));
+    const fromHere = exists(here) ? retarget(here, rest) : undefined;
+    const fromBefore = exists(before) ? retarget(before, rest) : undefined;
+    // 搬走或拆出的檔裡只有照現在的位置解得到的連結，是搬家時照新位置寫的（例如拆出的段落連回原檔留下的那一節），不改。
+    if (origin !== file && fromBefore === undefined) continue;
+    // 兩種解法都存在又不同：搬走或拆出的檔照搬家前的意思（寫的人當時指的是那裡）；沒搬的檔不猜，列成要人看。
+    // 計畫寫了 settled（連結已照搬家改過一次，例如 rebase 之後重跑）：搬走或拆出的檔也不猜，手修成新位置的連結才不會被改回去（B 的 L2 R1）。
+    if (fromHere !== undefined && fromBefore !== undefined && fromHere !== fromBefore && (origin === file || plan.settled)) {
+      conflicts.push({ line: lineOf(start), link: inner, here: fromHere, before: fromBefore });
+      continue;
+    }
+    const target = origin === file ? fromHere ?? fromBefore : fromBefore ?? fromHere;
+    if (target === undefined) continue;
+    const relativePath = rooted ? '/' + target : target === file && rest.startsWith('#') ? '' : (posix.relative(posix.dirname(file), target) || posix.basename(target));
+    const written = (relativePath ? encodeLike(relativePath, rawPath, angle) + slash : '') + rest;
+    if (target === here) continue;
+    edits.push({ start, end, from: inner, to: wrap(written) });
   }
-  edits.sort((a, b) => b.start - a.start);
+  allEdits.sort((a, b) => b.start - a.start);
   let out = source;
-  for (const edit of edits) out = out.slice(0, edit.start) + edit.to + out.slice(edit.end);
+  for (const edit of allEdits) out = out.slice(0, edit.start) + edit.to + out.slice(edit.end);
   if (crlf) out = out.replace(/\n/g, '\r\n');
-  return { text: bom + out, edits: edits.reverse().map(({ from, to, start }) => ({ line: source.slice(0, start).split('\n').length, from, to })) };
+  return { text: bom + out, edits: allEdits.reverse().map(({ from, to, start }) => ({ line: lineOf(start), from, to })), conflicts };
 }
+
+const USAGE = '用法：node experiments/tools/move-links.mjs [--check] [--plan <計畫.json>] [<舊路徑>=<新路徑> ...]';
 
 export function main(args, root = process.cwd()) {
   const check = args.includes('--check');
-  const moves = args.filter(arg => arg !== '--check').map(arg => {
+  const rest = args.filter(arg => arg !== '--check');
+  const at = rest.indexOf('--plan');
+  const plan = at < 0 ? {} : JSON.parse(readFileSync(posix.join(root.replaceAll('\\', '/'), rest[at + 1] ?? ''), 'utf8'));
+  if (at >= 0 && !rest[at + 1]) throw Error(USAGE);
+  const positional = at < 0 ? rest : rest.filter((_, i) => i !== at && i !== at + 1);
+  const moves = [...(plan.moves ?? []), ...positional.map(arg => {
     const [from, to, extra] = arg.split('=');
-    if (!from || !to || extra !== undefined) throw Error('用法：node experiments/tools/move-links.mjs [--check] <舊路徑>=<新路徑> ...');
-    return [from.replace(/\/+$/, ''), to.replace(/\/+$/, '')];
-  });
-  if (!moves.length) throw Error('沒有給搬檔的對照');
+    if (!from || !to || extra !== undefined) throw Error(USAGE);
+    return [from, to];
+  })].map(([from, to]) => [from.replace(/\/+$/, ''), to.replace(/\/+$/, '')]);
+  if (!moves.length && !plan.split) throw Error('沒有給搬檔的對照');
   const git = list => execFileSync('git', list, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const files = git(['ls-files', '-z']).split('\0').filter(Boolean);
   const paths = new Set();
@@ -148,18 +301,25 @@ export function main(args, root = process.cwd()) {
     const parts = file.split('/');
     for (let i = 1; i <= parts.length; i++) paths.add(parts.slice(0, i).join('/'));
   }
-  const map = mapper(moves);
+  const map = { ...mapper(moves), pieces: plan.pieces, split: plan.split, frozen: plan.frozen, settled: plan.settled };
   let changed = 0;
+  let review = 0;
   for (const file of files.filter(name => name.endsWith('.md'))) {
     const text = readFileSync(posix.join(root.replaceAll('\\', '/'), file), 'utf8');
     const result = rewrite(file, text, map, path => paths.has(path));
+    for (const item of result.conflicts) {
+      console.log(item.ambiguous === undefined
+        ? `要人看 ${file}:${item.line}  ${item.link}：現在的位置解成 ${item.here}，搬家前的位置解成 ${item.before}`
+        : `要人看 ${file}:${item.line}  ${item.link}：同一段有同一個目標的純文字，分不出哪一個是連結（會改成 ${item.ambiguous}）`);
+    }
+    review += result.conflicts.length;
     if (!result.edits.length) continue;
     changed += result.edits.length;
     for (const edit of result.edits) console.log(`${file}:${edit.line}  ${edit.from} → ${edit.to}`);
     if (!check) writeFileSync(posix.join(root.replaceAll('\\', '/'), file), result.text);
   }
-  console.log(check ? `要改 ${changed} 個連結` : `改了 ${changed} 個連結`);
-  return check && changed ? 1 : 0;
+  console.log(`${check ? `要改 ${changed} 個連結` : `改了 ${changed} 個連結`}${review ? `；要人看 ${review} 個` : ''}`);
+  return (check && changed) || review ? 1 : 0;
 }
 
 if (import.meta.main) process.exitCode = main(process.argv.slice(2));

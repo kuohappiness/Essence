@@ -1,6 +1,7 @@
 // 文件檢查（D-141、D-143、D-195）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、roadmap 有「現在在哪裡」一節、「已完成」的列數、任務、討論稿與 plans 的檔頭狀態行、結束的任務有「延後的測試：」一行。
-// 外掛的資料夾（D-208 第 4 點）：plugins/<外掛>/ 底下的 tasks、討論稿、docs/plans 與 docs/roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
+// 外掛的資料夾（D-208 第 4 點）：plugins/<外掛>/docs/ 底下的 tasks、討論稿、plans 與 roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
 // 外掛有 roadmap 時，最上層 roadmap 的〈現在在哪裡〉要連到它的〈現在在哪裡〉。
+// 任務與討論稿在 docs/ 底下（D-213）：最上層或 plugins/<外掛>/ 根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報錯。
 // 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
 //   預設：檔案清單取 Git 追蹤的檔案，內容讀工作樹（npm run check 與 CI 用）。
 //   --staged：清單與內容都讀暫存區（pre-commit 用）。
@@ -14,28 +15,31 @@ import GithubSlugger from 'github-slugger';
 
 export const ROADMAP = 'docs/roadmap.md';
 export const DONE_ROWS = 10;
-export const STATUS_DIRS = ['tasks', 'Claude Codex Discussion', 'docs/plans'];
+export const STATUS_DIRS = ['docs/tasks', 'docs/Claude Codex Discussion', 'docs/plans'];
 
 export const BACKLOG = 'docs/backlog.md';
+/** 「待補測與補做」算哪幾份 backlog 的技術債表（進度畫板也用）：最上層與 Cards（D-208 第二步 §B3）。 */
+export const DEFERRED_BACKLOGS = [BACKLOG, 'plugins/cards/docs/backlog.md'];
 
 const PLUGIN_ROADMAP = /^plugins\/([^/]+)\/docs\/roadmap\.md$/;
 
-/** tasks、討論稿與 docs/plans 第一層的檔（最上層與 plugins/<外掛>/ 底下都算），README 除外。 */
+/** docs/ 底下的 tasks、討論稿與 plans 第一層的檔（最上層與 plugins/<外掛>/ 底下都算），README 除外。 */
 function isStatusDoc(file: string): boolean {
   if (posix.basename(file) === 'README.md') return false;
   const dir = posix.dirname(file);
   return STATUS_DIRS.includes(dir) || STATUS_DIRS.includes(/^plugins\/[^/]+\/(.+)$/.exec(dir)?.[1] ?? '');
 }
 
-/** 任務對到的 backlog：最上層的 tasks/ 對最上層的 backlog，plugins/<外掛>/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
+/** 任務對到的 backlog：最上層的 docs/tasks/ 對最上層的 backlog，plugins/<外掛>/docs/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
 function taskBacklog(file: string): string | undefined {
   const dir = posix.dirname(file);
-  if (dir === 'tasks') return BACKLOG;
-  const plugin = /^plugins\/([^/]+)\/tasks$/.exec(dir)?.[1];
+  if (dir === 'docs/tasks') return BACKLOG;
+  const plugin = /^plugins\/([^/]+)\/docs\/tasks$/.exec(dir)?.[1];
   return plugin === undefined ? undefined : `plugins/${plugin}/docs/backlog.md`;
 }
 
-// D-195 之前就結束的任務，〈結果〉沒有「延後的測試：」，不回頭補。
+// D-195 之前就結束的任務，〈結果〉沒有「延後的測試：」，不回頭補。只放過這兩個資料夾裡的（那時的任務都在這裡），其他外掛的同名檔照查。
+const BEFORE_D195_DIRS = new Set(['docs/tasks', 'plugins/cards/docs/tasks']);
 export const BEFORE_D195 = new Set([
   'agents-md-rewrite.md', 'ai-quality-screen.md', 'archive-principles.md', 'docs-architecture.md', 'duplicate-ids.md',
   'elementary-social-sol-trial-2.md', 'elementary-social-sol-trial-3.md', 'elementary-social-sol-trial.md', 'error-log.md',
@@ -52,11 +56,47 @@ export interface Exception { file: string; target: string; reason: string }
 // 確實改不了的連結，逐項寫原因。target 是解碼後的連結目標，和輸出的「目標」一欄相同。
 export const EXCEPTIONS: Exception[] = [
   ...['decisions.md#d-066-作答方式', '#2-3-學習目標', 'decisions.md#d-116-打字卡的沒印象與自動朗讀', 'decisions.md#d-120-今天的佇列的細節', 'decisions.md#d-121-打字卡答錯時的三步流程']
-    .map(target => ({ file: 'tasks/w6-format-review-fixes.md', target, reason: '引用框與表格是貼進 syntax.md 的原文，以 docs/ 為基準' })),
-  { file: 'tasks/docs-architecture.md', target: 'docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: '要貼進 AGENTS.md 的原文，以根目錄為基準' },
-  { file: 'tasks/docs-architecture.md', target: '../../tasks/objective-architecture-r2-connection.md', reason: '要貼進 experiments/t4/README.md 的原文' },
-  { file: 'tasks/docs-architecture.md', target: 'decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: 'roadmap 已完成那一列的範例，以 docs/ 為基準' },
+    .map(target => ({ file: 'plugins/cards/docs/tasks/w6-format-review-fixes.md', target, reason: '引用框與表格是貼進 syntax.md 的原文，以 docs/ 為基準' })),
+  { file: 'docs/tasks/docs-architecture.md', target: 'docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: '要貼進 AGENTS.md 的原文，以根目錄為基準' },
+  { file: 'docs/tasks/docs-architecture.md', target: '../../tasks/objective-architecture-r2-connection.md', reason: '要貼進 experiments/t4/README.md 的原文' },
+  { file: 'docs/tasks/docs-architecture.md', target: 'decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: 'roadmap 已完成那一列的範例，以 docs/ 為基準' },
+  {
+    file: 'plugins/cards/docs/card-rules/elementary-social.md', target: '../../Claude Codex Discussion/2026-11-02-elementary-social-trial-fixes.md',
+    reason: '送給 AI 的部分不改（FROZEN_RULES），這份討論稿第二步 B 搬到 plugins/cards/docs/，搬家前的位置也找不到；下次改版時改連結',
+  },
 ];
+
+/**
+ * 製卡規則送給 AI 的部分（標記以下）嵌進外掛、算雜湊，改一個字就是新版本（D-151）：第二步 B 搬家時不改這一段，
+ * 裡面的連結照搬家前的位置（docs/card-rules/）解得到也算數；下次改那份規則的版本時再改成新位置（Cards 的技術債）。
+ * 只放過搬家時就在的檔與連結路徑（B 的 L2 R3）：新的規則檔、表上沒有的路徑照常查；改好了沒用到的要從表上刪掉。
+ */
+export const FROZEN_RULES = {
+  before: 'docs/card-rules/',
+  marker: '<!-- 以下送給 AI -->',
+  links: {
+    'plugins/cards/docs/card-rules/elementary-chinese.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'plugins/cards/docs/card-rules/elementary-social.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'plugins/cards/docs/card-rules/english.md': ['../decisions.md'],
+  } as Record<string, string[]>,
+};
+
+/** 標記那一行的行號（1 起算）；不是表上的規則檔或沒有標記時是 undefined。 */
+function frozenFrom(doc: Doc): number | undefined {
+  if (!Object.hasOwn(FROZEN_RULES.links, doc.file)) return undefined;
+  const at = doc.lines.findIndex(line => line.includes(FROZEN_RULES.marker));
+  return at < 0 ? undefined : at + 1;
+}
+
+/** 連結的路徑部分（去掉錨點與查詢字串），和 FROZEN_RULES.links 比。 */
+const linkPath = (href: string) => {
+  const path = href.replace(/[?#].*$/, '');
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 
@@ -308,17 +348,26 @@ function debtTable(doc: Doc | undefined): string[] | undefined {
 
 const isDeferredRow = (row: string) => /^(?:補測|補做)：/.test(row);
 
-/** backlog 技術債表還有幾列「補測：」「補做：」（進度畫板也用）。 */
+/** 一份 backlog 的技術債表還有幾列「補測：」「補做：」（進度畫板也用）。 */
 export const countDeferred = (backlog: string) => debtRows(parse(BACKLOG, backlog)).filter(isDeferredRow).length;
 
 // D-195：任務的狀態改成已完成、已合併、已結案時，以「結果」開頭的二級標題底下（含三級小節）要有恰好一行「延後的測試：」，
 // 寫「無」或技術債表的列名（「補測：…」「補做：…」）。debt 有給時（只對這次改到的檔）列名要對得到那個任務的 backlog
 // （最上層的任務對最上層的 backlog，外掛的任務對外掛的；rows 是 undefined 表示那份沒有技術債表）。
+/** 舊位置（D-213 第 4 點）：任務與討論稿搬進 docs/ 之後，最上層或外掛根目錄的 tasks/、Claude Codex Discussion/ 不再放檔。 */
+const OLD_PLACE = /^((?:plugins\/[^/]+\/)?)(tasks|Claude Codex Discussion)\//;
+function checkOldPlace(file: string): Problem[] {
+  const match = OLD_PLACE.exec(file);
+  if (!match) return [];
+  const [, plugin, dir] = match;
+  return [{ file, line: 0, target: `${plugin}docs/${dir}/`, reason: '任務與討論稿放 docs/ 底下（D-213）：搬到這個位置' }];
+}
+
 function checkDeferred(doc: Doc, debt?: { file: string; rows: string[] | undefined }): Problem[] {
   const name = posix.basename(doc.file);
   const backlog = taskBacklog(doc.file);
-  // BEFORE_D195 只放過最上層的舊任務：外掛的同名檔（例如 plugins/mindboard/tasks/w3.md）照查。
-  if (!backlog || name === 'README.md' || name.endsWith('review.md') || (backlog === BACKLOG && BEFORE_D195.has(name))) return [];
+  // BEFORE_D195 只放過那時的資料夾裡的舊任務：其他外掛的同名檔（例如 plugins/mindboard/docs/tasks/w3.md）照查。
+  if (!backlog || name === 'README.md' || name.endsWith('review.md') || (BEFORE_D195_DIRS.has(posix.dirname(doc.file)) && BEFORE_D195.has(name))) return [];
   const { index } = statusLine(doc);
   if (index === undefined || !FINISHED.test(doc.lines[index])) return [];
   const problem = (line: number, reason: string): Problem[] => [{ file: doc.file, line, target: '延後的測試：', reason: `${reason}（D-195）` }];
@@ -344,7 +393,7 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
   const docs = new Map([...texts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([file, text]) => [file, parse(file, text)]));
   const problems: Problem[] = [];
   const used = new Set<Exception>();
-  const rows = debtRows(docs.get(BACKLOG));
+  const usedFrozen = new Set<string>();
   // 列名只對照這次 commit 改到的任務：補完刪掉的列，不會讓以前結束的任務壞掉。-z 拿原本的路徑（檔名有空白、中文或引號都一樣）。
   const changed = staged ? new Set(git(root, ['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=ACMR']).toString('utf8').split('\0').filter(Boolean)) : new Set<string>();
   const tables = new Map<string, string[] | undefined>();
@@ -355,12 +404,19 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     return { file: backlog, rows: tables.get(backlog) };
   };
   let links = 0;
+  for (const file of files) problems.push(...checkOldPlace(file));
   for (const doc of docs.values()) {
+    const frozen = frozenFrom(doc);
     for (const { line, href } of linksOf(doc)) {
       if (isExternal(href)) continue;
       links++;
       const { target, reason } = checkLink(doc.file, href, tree, docs);
       if (!reason) continue;
+      if (frozen !== undefined && line > frozen && FROZEN_RULES.links[doc.file]?.includes(linkPath(href))
+        && !checkLink(FROZEN_RULES.before + posix.basename(doc.file), href, tree, docs).reason) {
+        usedFrozen.add(doc.file + '\0' + linkPath(href));
+        continue;
+      }
       const exception = exceptions.find(e => e.file === doc.file && e.target === target);
       if (exception) used.add(exception);
       else problems.push({ file: doc.file, line, target, reason });
@@ -371,7 +427,20 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     problems.push(...checkDeferred(doc, changed.has(doc.file) ? debtFor(doc.file) : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
-  return { problems, files: docs.size, links, deferred: rows.filter(isDeferredRow).length };
+  // 規則檔整份拿掉或改名（連整個資料夾一起搬也算）也要刪那一列，不然之後同名的新檔會被放過（第二、三輪）。
+  // 只看 Cards 外掛在的 repo（有 manifest）：測試的暫存 repo 沒有，不看。
+  const rulesHere = tree.paths.has('plugins/cards/manifest.json');
+  for (const [file, paths] of Object.entries(FROZEN_RULES.links)) {
+    if (!docs.has(file)) {
+      if (rulesHere) problems.push({ file, line: 0, target: file, reason: 'FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列' });
+      continue;
+    }
+    for (const path of paths.filter(path => !usedFrozen.has(file + '\0' + path))) {
+      problems.push({ file, line: 0, target: path, reason: 'FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉' });
+    }
+  }
+  const deferred = DEFERRED_BACKLOGS.reduce((sum, file) => sum + debtRows(docs.get(file)).filter(isDeferredRow).length, 0);
+  return { problems, files: docs.size, links, deferred };
 }
 
 export const formatProblem = (p: Problem) => `${p.file}${p.line ? `:${p.line}` : ''}  ${p.target}  ${p.reason}`;
@@ -388,5 +457,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     for (const problem of problems) console.error(formatProblem(problem));
     process.exit(1);
   }
-  console.log(`文件檢查通過（${staged ? '暫存區' : '工作樹'}）：${files} 個 Markdown 檔、${links} 個連結；待補測與補做 ${deferred} 列（backlog 技術債，D-195）`);
+  console.log(`文件檢查通過（${staged ? '暫存區' : '工作樹'}）：${files} 個 Markdown 檔、${links} 個連結；待補測與補做 ${deferred} 列（最上層與 Cards 的 backlog 技術債，D-195）`);
 }

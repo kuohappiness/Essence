@@ -105,7 +105,7 @@ void test('§2-3 提示 v4 之前存的工作（沒有 pick）照樣讀得懂；
 });
 
 void test('L2 第二輪 R1：國語預設寫到相似字名稱的括號組或完整的組時，同一條都說沒勾點選填空怎麼做', async () => {
-  const text = await readFile(new URL('../../../docs/card-rules/elementary-chinese.md', import.meta.url), 'utf8');
+  const text = await readFile(new URL('../docs/card-rules/elementary-chinese.md', import.meta.url), 'utf8');
   const lines = text.split(/\r?\n/).filter(line => line.startsWith('- ') && /（整組的字） 相似字|括號寫完整的組|相似字對照都建了組|括號裡是整組的字/.test(line));
   assert.equal(lines.length, 4);
   for (const line of lines) assert.match(line, /沒勾點選填空/, line);

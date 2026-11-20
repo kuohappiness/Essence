@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRoadmap, renderBoard } from '../roadmap-board.ts';
+import { RELEASE_ROADMAP, ROADMAP, RoadmapError, findPrivate, groupByWaiting, headline, parsePluginWorks, parseRelease, parseRoadmap, parseTopWorks, renderBoard } from '../roadmap-board.ts';
 
 const SAMPLE = `# 標題
 
@@ -33,11 +33,19 @@ const SAMPLE = `# 標題
 | 2026-11-13 | 設定合併進 \`main\`，已在 0.5.0 |
 `;
 
-void test('docs/roadmap.md 讀得出進行中的工作、已完成與正式 vault 的版本', () => {
-  const roadmap = parseRoadmap(readFileSync(new URL('../../' + ROADMAP, import.meta.url), 'utf8'));
-  assert.ok(roadmap.works.length >= 1);
-  assert.ok(roadmap.done.length >= 1);
-  assert.match(roadmap.vault?.version ?? '', /^\d+\.\d+\.\d+$/);
+void test('最上層的入口讀得出進行中的工作；Cards 的 roadmap 讀得出已完成與正式 vault 的版本', () => {
+  const read = (file: string) => readFileSync(new URL('../../' + file, import.meta.url), 'utf8');
+  assert.ok(parseTopWorks(read(ROADMAP)).length >= 1);
+  const release = parseRelease(read(RELEASE_ROADMAP));
+  assert.ok(release.done.length >= 1);
+  assert.match(release.vault?.version ?? '', /^\d+\.\d+\.\d+$/);
+  assert.ok(parsePluginWorks(read(RELEASE_ROADMAP), RELEASE_ROADMAP).every(work => work.name.text.startsWith('Cards｜')));
+});
+
+void test('最上層的入口不需要「已完成」；發布那份少了「已完成」照樣報', () => {
+  const top = SAMPLE.slice(0, SAMPLE.indexOf('## 已完成'));
+  assert.equal(parseTopWorks(top).length, 4);
+  assert.throws(() => parseRelease(top), /已完成/);
 });
 
 void test('格子裡跳脫的 \| 留在同一格，反引號裡的也是', () => {
@@ -143,15 +151,20 @@ void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析
     await writeFile(join(root, path), text);
   };
   const board = (...args: string[]) => execFileSync(process.execPath, [script, '--root', root, ...args], { encoding: 'utf8', stdio: 'pipe', env });
-  await put(ROADMAP, SAMPLE);
+  await put(ROADMAP, SAMPLE.slice(0, SAMPLE.indexOf('## 已完成')));
   await put(MINDBOARD, PLUGIN_SAMPLE);
   await put('plugins/capture/docs/backlog.md', '# 沒有 roadmap 的外掛不讀\n');
-  assert.match(board('--check'), /進度白板讀得出來：docs\/roadmap\.md、plugins\/mindboard\/docs\/roadmap\.md/);
+  // 沒有 Cards 的 roadmap：正式 vault 與已完成讀不到，報出那份檔。
+  assert.throws(() => board('--check'), (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes(`${RELEASE_ROADMAP}  找不到這份檔`));
+  await put(RELEASE_ROADMAP, SAMPLE.replace('| 甲 \\| 乙 |', '| 卡片 |'));
+  assert.match(board('--check'), /進度白板讀得出來：docs\/roadmap\.md、plugins\/cards\/docs\/roadmap\.md、plugins\/mindboard\/docs\/roadmap\.md/);
   await assert.rejects(access(join(root, '_site')), { code: 'ENOENT' });
   board('--out', 'out/board.html');
   const html = await readFile(join(root, 'out/board.html'), 'utf8');
   assert.match(html, /<span class="wname">Mindboard｜畫布<\/span>/);
-  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
+  assert.match(html, /<span class="wname">Cards｜卡片<\/span>/);
+  assert.match(html, /<code>0\.5\.0<\/code>/);
+  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/cards\/docs\/roadmap\.md"[^>]*>[^<]*<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
   // 寫壞的外掛 roadmap：--check 報檔案與行號。
   const broken = PLUGIN_SAMPLE.replace('| 工作 | 狀態 | 下一步 | 等誰 |', '| 工作 | 狀態 | 下一步 | 卡在 |');
   await put(MINDBOARD, broken);
@@ -160,7 +173,7 @@ void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析
   // --staged：工作樹修好了、暫存區還是壞的照樣擋。
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, stdio: 'pipe' });
   git('init', '-q');
-  git('add', '--', ROADMAP, MINDBOARD);
+  git('add', '--', ROADMAP, RELEASE_ROADMAP, MINDBOARD);
   await put(MINDBOARD, PLUGIN_SAMPLE);
   assert.match(board('--check'), /讀得出來/);
   assert.throws(() => board('--check', '--staged'), (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes(`${MINDBOARD}:5`));

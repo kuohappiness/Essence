@@ -24,7 +24,10 @@ type Runs = { tools?: Run; cards?: Run; capture?: 'full'; mindboard?: 'full'; te
 interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard', { run: string; tests: string[] }> }
 
 // 本 repo 的文件路徑用拼接寫：這份測試不讀那些文件，字面寫出來會被分派表當成它們的「相關測試」，改文件時白跑這份。
-const SYNTAX = 'docs/' + 'syntax.md';
+const SPEC = 'docs/' + 'transcript.md';
+// 本 repo 裡 Cards 的文件（第二步 B 搬進 plugins/cards/docs/）；上面幾個是暫存 repo 的路徑。
+const CARDS_SYNTAX = 'plugins/cards/docs/' + 'syntax.md';
+const CARDS_ENGLISH = 'plugins/cards/docs/card-rules/' + 'english.md';
 const DECISIONS = 'docs/' + 'decisions.md';
 const ENGLISH = 'docs/card-rules/' + 'english.md';
 const PRODUCT = 'docs/' + 'product.md';
@@ -36,11 +39,13 @@ const BASE: Record<string, string> = {
   [`${C}src/a.ts`]: 'export {};\n',
   // 嵌進 main.js 的規則檔路徑寫在 rules.ts（ai-rules 的特例），寫的是 repo 根算的路徑。
   [`${C}src/core/ai/rules.ts`]: `export const files = ['${ENGLISH}'];\n`,
-  [`${C}tests/syntax-a.test.ts`]: `new URL('../${SYNTAX}', import.meta.url);\n`,
-  [`${C}tests/nested/syntax-b.test.ts`]: `readFile('${SYNTAX}');\n`,
+  [`${C}tests/syntax-a.test.ts`]: `new URL('../${SPEC}', import.meta.url);\n`,
+  [`${C}tests/nested/syntax-b.test.ts`]: `readFile('${SPEC}');\n`,
   [`${C}tests/deck.test.ts`]: `'../${ENGLISH}';\n`,
+  // Cards 自己的文件從自己的資料夾寫（第二步 B 之後從 ../docs/ 讀）。
+  [`${C}tests/cards-doc.test.ts`]: `new URL('../docs/${'syntax.md'}', import.meta.url);\n`,
   // 經過 helper 讀規格（§A3：ai-add-move、ai-add-old-version 經 tests/helpers/add-cases.ts 讀轉錄稿格式）。
-  [`${C}tests/helpers/cases.ts`]: `export const spec = '${SYNTAX}';\n`,
+  [`${C}tests/helpers/cases.ts`]: `export const spec = '${SPEC}';\n`,
   [`${C}tests/via-helper.test.ts`]: "import { spec } from './helpers/cases.ts';\nvoid spec;\n",
   // helper 寫到的路徑，不是測試檔本身（照原本 pre-commit 的 --include='*.test.ts'）。
   [`${C}tests/helper.ts`]: `'${PRODUCT}';\n`,
@@ -60,7 +65,7 @@ const BASE: Record<string, string> = {
   '.github/workflows/check.yml': 'jobs:\n  plan:\n    steps:\n      - run: node tools/ci-gate.ts plan\n      - with:\n          cache-dependency-path: tools/package-lock.json\n',
   '.claude/hooks/cloud-setup.mjs': '\n', '.claude/settings.json': '{}\n',
   'experiments/tools/decisions-index.mjs': '\n',
-  [SYNTAX]: '# S\n', [DECISIONS]: '# D\n', [ENGLISH]: '# E\n', [PRODUCT]: '# P\n',
+  [SPEC]: '# S\n', [DECISIONS]: '# D\n', [ENGLISH]: '# E\n', [PRODUCT]: '# P\n',
   'NOTES.MD': '# N\n', [SKILL]: '# Q\n', '.gitignore': 'node_modules/\n',
   'plugins/capture/README.md': '# C\n', 'plugins/capture/package.json': '{ "scripts": { "check": "node -e 1" } }\n',
   // git mv 不建目的資料夾：搬到 plugins/capture/docs/ 的例子要它已經在。
@@ -223,7 +228,7 @@ const CASES: Case[] = [
     change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
   },
   {
-    name: `改 ${SYNTAX}（登錄表；經 helper 的測試也選）`, change: edit(SYNTAX),
+    name: `改 ${SPEC}（登錄表；經 helper 的測試也選）`, change: edit(SPEC),
     preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'] },
     ci: { cards: 'full', capture: 'full', tools: 'full' },
   },
@@ -234,13 +239,15 @@ const CASES: Case[] = [
   },
   { name: `改 ${PRODUCT}（沒有測試寫到它）`, change: edit(PRODUCT), preCommit: {}, ci: DOC_CI },
   { name: '改根目錄的 NOTES.MD（大寫副檔名）', change: edit('NOTES.MD'), preCommit: {}, ci: DOC_CI },
-  // 最上層的任務說明與討論稿：規劃文件的 commit 不跑完整檢查。
-  { name: '改 tasks/x.md', change: edit('tasks/x.md'), preCommit: {}, ci: DOC_CI },
-  { name: '改 Claude Codex Discussion/x.md（路徑有空白）', change: edit('Claude Codex Discussion/x.md'), preCommit: {}, ci: DOC_CI },
+  // 最上層的任務說明與討論稿（D-213 搬進 docs/）：規劃文件的 commit 不跑完整檢查。舊位置的落「以上都不是」（文件檢查也擋）。
+  { name: '改 docs/tasks/x.md', change: edit('docs/tasks/x.md'), preCommit: {}, ci: DOC_CI },
+  { name: '改 docs/Claude Codex Discussion/x.md（路徑有空白）', change: edit('docs/Claude Codex Discussion/x.md'), preCommit: {}, ci: DOC_CI },
+  { name: '改舊位置的 tasks/x.md', change: edit('tasks/x.md'), preCommit: ALL, ci: ALL },
+  { name: '改舊位置的 Claude Codex Discussion/x.md', change: edit('Claude Codex Discussion/x.md'), preCommit: ALL, ci: ALL },
   { name: `改 ${SKILL}`, change: edit(SKILL), preCommit: {}, ci: DOC_CI },
   {
-    name: `同一次改 ${C}src/core/files.ts、tools/check-docs.ts 與 ${SYNTAX}`,
-    change: async e => { for (const path of [`${C}src/core/files.ts`, 'tools/check-docs.ts', SYNTAX]) await edit(path)(e); },
+    name: `同一次改 ${C}src/core/files.ts、tools/check-docs.ts 與 ${SPEC}`,
+    change: async e => { for (const path of [`${C}src/core/files.ts`, 'tools/check-docs.ts', SPEC]) await edit(path)(e); },
     preCommit: { tools: 'full', cards: 'full', capture: 'full' }, ci: { tools: 'full', cards: 'full', capture: 'full' },
   },
   // 搬家前根目錄的 package.json 是 Cards 的；搬家後根目錄新出現的設定是「以上都不是」。
@@ -279,7 +286,7 @@ const CASES: Case[] = [
   ...(moved ? [
     {
       name: `改 ${C}docs/${'syntax.md'}（Cards 資料夾的文件，原路徑與去掉前綴的都比）`, change: edit(`${C}docs/${'syntax.md'}`),
-      preCommit: { cards: 'related', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'] }, ci: { cards: 'full' },
+      preCommit: { cards: 'related', tests: ['tests/cards-doc.test.ts'] }, ci: { cards: 'full' },
     },
     { name: `改 ${C}README.md（沒有測試寫到它）`, change: edit(`${C}README.md`), preCommit: {}, ci: { cards: 'full' } },
     { name: `改 ${C}NOTES.MD（大寫副檔名）`, change: edit(`${C}NOTES.MD`), preCommit: {}, ci: { cards: 'full' } },
@@ -368,7 +375,7 @@ void test('§2 分派表：相關測試照這次比較的內容找（L2 R2）：
   await e.put(`${C}tests/syntax-a.test.ts`, 'export {};\n');
   await e.put(`${C}src/core/ai/rules.ts`, 'export const files = [];\n');
   await e.put(`${C}tests/unstaged.test.ts`, `'${DECISIONS}';\n`);
-  for (const path of [SYNTAX, DECISIONS, ENGLISH]) await edit(path)(e);
+  for (const path of [SPEC, DECISIONS, ENGLISH]) await edit(path)(e);
   const tests = ['tests/ai-rules.test.ts', 'tests/deck.test.ts', 'tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'];
   assert.deepEqual((await e.dispatch('--staged')).targets.cards.tests, tests, '--staged');
   await e.git('commit', '-q', '-m', 'docs');
@@ -377,10 +384,10 @@ void test('§2 分派表：相關測試照這次比較的內容找（L2 R2）：
   await e.git('add', '--', `${C}tests/syntax-a.test.ts`);
   await e.git('commit', '-q', '-m', 'stub');
   const stub = (await e.git('rev-parse', 'HEAD')).trim();
-  await e.put(SYNTAX, '# S\n\n再改一次\n');
-  await e.git('add', '--', SYNTAX);
+  await e.put(SPEC, '# S\n\n再改一次\n');
+  await e.git('add', '--', SPEC);
   await e.git('commit', '-q', '-m', 'syntax again');
-  await e.put(`${C}tests/syntax-a.test.ts`, `'${SYNTAX}';\n`);
+  await e.put(`${C}tests/syntax-a.test.ts`, `'${SPEC}';\n`);
   assert.deepEqual((await e.dispatch('--range', stub, 'HEAD')).targets.cards.tests, ['tests/nested/syntax-b.test.ts', 'tests/via-helper.test.ts'], '--range 讀 head 的樹');
 });
 
@@ -388,13 +395,14 @@ void test('§A3 分派表：本 repo 的相關測試照實際搜尋找得到（�
   const cards = (path: string) => relatedTests(ROOT, { kind: 'staged' }, 'cards', [path]);
   const tools = (path: string) => relatedTests(ROOT, { kind: 'staged' }, 'tools', [path]);
   assert.ok(tools(DECISIONS).includes('tests/decisions-index.test.ts'));
-  const english = cards(ENGLISH);
+  const english = cards(CARDS_ENGLISH);
   assert.ok(english.includes('tests/deck.test.ts') && english.includes('tests/ai-rules.test.ts'), english.join(' '));
   // tests/helpers/add-cases.ts 讀轉錄稿格式，ai-add-move、ai-add-old-version 經由它讀（Codex 第一輪對 de3438f 實測漏選）。
-  const syntax = cards(SYNTAX);
+  const syntax = cards(CARDS_SYNTAX);
   for (const name of ['tests/ai-add-move.test.ts', 'tests/ai-add-old-version.test.ts']) assert.ok(syntax.includes(name), name + '：' + syntax.join(' '));
   // 這份測試自己不算：路徑用拼接寫。
-  for (const path of [SYNTAX, DECISIONS, ENGLISH, PRODUCT, SKILL]) assert.ok(!tools(path).includes('tests/dispatch.test.ts'), path);
+  assert.ok(cards(SPEC).includes('tests/lock.test.ts'), cards(SPEC).join(' '));
+  for (const path of [SPEC, CARDS_SYNTAX, DECISIONS, CARDS_ENGLISH, PRODUCT, SKILL]) assert.ok(!tools(path).includes('tests/dispatch.test.ts'), path);
   assert.deepEqual(cards(PRODUCT), []);
 });
 

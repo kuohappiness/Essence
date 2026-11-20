@@ -25,7 +25,8 @@ const WHERE = CARDS === '.' ? '根目錄' : C;
 const UP = C.split('/').filter(Boolean).map(() => '../').join('');
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 // 路徑拆開寫：分派表照路徑字串找相關測試，寫成一整串會讓改那份文件時也跑這個測試。
-const SYNTAX = 'docs/' + 'syntax.md';
+// 轉錄稿格式：分派表登錄的共用規格（D-208 第二步 B 從 syntax.md 拆出）。
+const SYNTAX = 'docs/' + 'transcript.md';
 const PRODUCT = 'docs/' + 'product.md';
 const SKILL = 'code-quality/' + 'SKILL.md';
 const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
@@ -74,6 +75,16 @@ async function clone(t: test.TestContext) {
   // 已經存在的 linked worktree：在還沒換上新的 hook 之前就建好，之後切到新的分支。
   await git(repo, 'worktree', 'add', '-q', '-b', 'old', linked);
 
+  // 文件也用這次要驗的版本：照本 repo 暫存區的檔案清單，clone 多的刪掉、少的與每一份 .md 從工作樹複製（D-208 第二步 B：
+  // 搬檔的 commit 時 clone 的 HEAD 還是舊位置，新的文件檢查會擋 tasks/ 這些舊位置，連結也照新位置改了）。
+  const listed = async (cwd: string) => (await git(cwd, '-c', 'core.quotepath=false', 'ls-files', '-z')).split('\0').filter(Boolean);
+  const wanted = new Set(await listed(SOURCE));
+  for (const path of await listed(repo)) if (!wanted.has(path)) await rm(join(repo, path), { force: true });
+  for (const path of wanted) {
+    if (!path.endsWith('.md') && (await access(join(repo, path)).then(() => true, () => false))) continue;
+    await mkdir(dirname(join(repo, path)), { recursive: true });
+    await copyFile(join(SOURCE, path), join(repo, path));
+  }
   // 要驗的 hook 與工具、替身，在 clone 裡 commit 成一個基準。
   for (const path of COPIED) {
     await mkdir(dirname(join(repo, path)), { recursive: true });
@@ -182,7 +193,7 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   r = await commit(['-m', 'syntax']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture', 'cards-related']);
-  assert.match(lastLine(r.out), /Cards：相關測試（寫到 docs\/syntax\.md 的 1 個測試檔）通過；Capture：完整檢查（改到 docs\/syntax\.md）通過；Mindboard：照分派表跳過/);
+  assert.match(lastLine(r.out), new RegExp(`Cards：相關測試（寫到 ${escaped(SYNTAX)} 的 1 個測試檔）通過；Capture：完整檢查（改到 ${escaped(SYNTAX)}）通過；Mindboard：照分派表跳過`));
 
   // 4. 刪檔。
   await git(repo, 'rm', '-q', '--', 'plugins/mindboard/src/a.ts');

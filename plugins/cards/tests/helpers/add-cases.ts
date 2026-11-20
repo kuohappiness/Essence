@@ -5,7 +5,7 @@ import { parseDeck } from '../../src/core/deck/index.ts';
 // tasks/ai-cards-add.md §2 的例子：tests/ai-add-move.test.ts 檢查搬移的結果，tests/deck.test.ts 把輸入與搬完的全文登錄進往返範例（deckCases）。
 // 只用 syntax.md 的例子與自編的內容。
 
-const syntax = readFileSync(new URL('../../../../docs/syntax.md', import.meta.url), 'utf8');
+const syntax = readFileSync(new URL('../../docs/syntax.md', import.meta.url), 'utf8');
 /** syntax §2-9 的例子存成草稿之後的樣子：加進已有的轉成連結、候選與本文補上 ID。 */
 export const savedExample = (): string => {
   const at = syntax.indexOf('### 2-9');

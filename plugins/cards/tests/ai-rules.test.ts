@@ -23,7 +23,7 @@ void test('§1 送出範圍：只送標記以下，換行統一成 \\n、拿掉 
   assert.throws(() => ruleText('# x\n' + RULE_MARKER + '\n\n', { path: 'e.md', marker: true }), /e\.md 送出的部分是空的/);
 });
 
-void test('§1 表：五科全開（§0），規則照表的順序；docs/card-rules 的每一份剛好一個標記，狀態框不送', async () => {
+void test('§1 表：五科全開（§0），規則照表的順序；card-rules 的每一份剛好一個標記，狀態框不送', async () => {
   assert.deepEqual(RULE_SUBJECTS.map(subject => subject.label), ['國語（國小）', '英文（國中）', '自然', '一般知識', '社會（國小）']);
   const r3 = ['格式', '短規則', '判斷邊界', '五步'];
   assert.deepEqual(Object.fromEntries(RULE_SUBJECTS.map(subject => [subject.key, subject.files.map(file => `${file.name} ${file.version}`)])), {
@@ -33,7 +33,10 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
     general: ['通用 v0.16', '一般知識 v0.5'],
     social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.9'],
   });
-  for (const path of ruleFiles().filter(path => path.startsWith('docs/'))) {
+  // 只挑 Cards 的製卡規則（R3 的實驗檔整份送、沒有標記）；挑不到時這一段會默默跳過，所以先確認有挑到。
+  const marked = ruleFiles().filter(path => path.startsWith('plugins/cards/docs/card-rules/'));
+  assert.ok(marked.length > 0, '一份 card-rules 都沒挑到');
+  for (const path of marked) {
     const text = await readFile(join(root, RULES_FROM_ROOT, path), 'utf8');
     assert.equal(text.split(RULE_MARKER).length - 1, 1, path + ' 的標記');
   }

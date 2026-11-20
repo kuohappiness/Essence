@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { mapper, main, rewrite } from './move-links.mjs';
 
 const MOVES = [['src', 'plugins/cards/src'], ['tools/build.mjs', 'plugins/cards/tools/build.mjs'], ['tests', 'plugins/cards/tests']];
@@ -32,7 +34,7 @@ const DOC = [
   '',
   '[根目錄算的](/src/a.ts)、[沒搬的](../tools/check-docs.ts)、[本來就壞的](../nope.md)、[本頁](#標題)',
   '',
-  '[舊名網址](https://github.com/o/Essence-Cards/blob/main/src/a.ts#L1)、[新名網址](https://github.com/o/Essence/blob/main/tools/build.mjs)、[沒搬的網址](https://github.com/o/Essence/blob/main/docs/x.md)、[別的 repo](https://github.com/o/Other/blob/main/src/a.ts)',
+  '[舊名網址](https://github.com/kuohappiness/Essence-Cards/blob/main/src/a.ts#L1)、[新名網址](https://github.com/kuohappiness/Essence/blob/main/tools/build.mjs)、[沒搬的網址](https://github.com/kuohappiness/Essence/blob/main/docs/x.md)、[別的 repo](https://github.com/o/Other/blob/main/src/a.ts)',
   '',
   '行內程式碼 `[a](../src/a.ts)` 不改；表格裡的要改：',
   '',
@@ -60,7 +62,7 @@ const EXPECTED = [
   '',
   '[根目錄算的](/plugins/cards/src/a.ts)、[沒搬的](../tools/check-docs.ts)、[本來就壞的](../nope.md)、[本頁](#標題)',
   '',
-  '[舊名網址](https://github.com/o/Essence-Cards/blob/main/plugins/cards/src/a.ts#L1)、[新名網址](https://github.com/o/Essence/blob/main/plugins/cards/tools/build.mjs)、[沒搬的網址](https://github.com/o/Essence/blob/main/docs/x.md)、[別的 repo](https://github.com/o/Other/blob/main/src/a.ts)',
+  '[舊名網址](https://github.com/kuohappiness/Essence-Cards/blob/main/plugins/cards/src/a.ts#L1)、[新名網址](https://github.com/kuohappiness/Essence/blob/main/plugins/cards/tools/build.mjs)、[沒搬的網址](https://github.com/kuohappiness/Essence/blob/main/docs/x.md)、[別的 repo](https://github.com/o/Other/blob/main/src/a.ts)',
   '',
   '行內程式碼 `[a](../src/a.ts)` 不改；表格裡的要改：',
   '',
@@ -85,7 +87,7 @@ void test('沒搬的文件：搬走的目標換成新的相對寫法；錨點、
 
 void test('第二次執行不改任何字；CRLF 與 BOM 照留', () => {
   const once = rewrite('docs/x.md', DOC, map, exists).text;
-  assert.deepEqual(rewrite('docs/x.md', once, map, exists), { text: once, edits: [] });
+  assert.deepEqual(rewrite('docs/x.md', once, map, exists), { text: once, edits: [], conflicts: [] });
   const bom = String.fromCharCode(0xfeff);
   const windows = rewrite('docs/x.md', bom + DOC.replace(/\n/g, '\r\n'), map, exists);
   assert.equal(windows.text, bom + EXPECTED.replace(/\n/g, '\r\n'));
@@ -96,6 +98,132 @@ void test('跟著搬的文件：從新位置解得開的不動，解不開的從
   const result = rewrite('plugins/cards/tests/README.md', text, map, exists);
   assert.equal(result.text, '[文件](../../../docs/x.md#標題) 與 [程式](../src/a.ts) 與 [深一層](../../../docs/sub/y.md)\n');
   assert.deepEqual(rewrite('plugins/cards/tests/README.md', result.text, map, exists).edits, []);
+});
+
+// 解析器眼中這份 Markdown 的連結目的地（含引用式），驗收改完之後還解析得到新位置。
+const require = createRequire(new URL('../../tools/package.json', import.meta.url));
+const { default: MarkdownIt } = await import(pathToFileURL(require.resolve('markdown-it')).href);
+const parser = new MarkdownIt({ html: true });
+function hrefsOf(text) {
+  const out = [];
+  for (const token of parser.parse(text, {})) {
+    for (const child of token.children ?? []) if (child.type === 'link_open') out.push(decodeURI(child.attrGet('href')));
+  }
+  return out;
+}
+
+// Codex 在 A 的 L2 第一輪 R4 的樣本（Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md）加上同類寫法。
+const R4 = [
+  '[Code](<https://github.com/kuohappiness/Essence/blob/main/src/a.ts#L11>)',
+  '',
+  '[引用][c]',
+  '',
+  '[c]: <https://github.com/kuohappiness/Essence/blob/main/src/a.ts#L11>',
+  '',
+  '[別人的同名 repo](https://github.com/someone-else/Essence/blob/main/src/a.ts) 與 <https://github.com/someone-else/Essence/blob/main/src/a.ts>',
+  '',
+  '[下一行的目的地](',
+  '  ../src/a.ts) 與 <https://github.com/kuohappiness/Essence/blob/main/src/a.ts>',
+  '',
+  '[跨行引用][d] 與 [資料夾網址](https://github.com/kuohappiness/Essence/tree/main/src)',
+  '',
+  '[d]:',
+  '  ../src/a.ts',
+  '',
+  '\\[不是連結](../src/a.ts) 與 [重複定義][c]',
+  '',
+  '[c]: ../src/a.ts',
+  '',
+].join('\n');
+
+void test('R4：角括號網址與引用式定義只改一次；別人的 repo 不動；目的地在下一行照改；解析器不認的不動', () => {
+  const result = rewrite('docs/x.md', R4, map, exists);
+  const lines = result.text.split('\n');
+  assert.equal(lines[0], '[Code](<https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts#L11>)');
+  assert.equal(lines[4], '[c]: <https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts#L11>');
+  assert.equal(lines[6], R4.split('\n')[6]);
+  assert.equal(lines[9], '  ../plugins/cards/src/a.ts) 與 <https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts>');
+  assert.equal(lines[11], '[跨行引用][d] 與 [資料夾網址](https://github.com/kuohappiness/Essence/tree/main/plugins/cards/src)');
+  assert.equal(lines[14], '  ../plugins/cards/src/a.ts');
+  assert.equal(lines.slice(16).join('\n'), R4.split('\n').slice(16).join('\n'));
+  assert.equal(result.edits.length, 6);
+  assert.deepEqual(hrefsOf(result.text), [
+    'https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts#L11',
+    'https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts#L11',
+    'https://github.com/someone-else/Essence/blob/main/src/a.ts',
+    'https://github.com/someone-else/Essence/blob/main/src/a.ts',
+    '../plugins/cards/src/a.ts',
+    'https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts',
+    '../plugins/cards/src/a.ts',
+    'https://github.com/kuohappiness/Essence/tree/main/plugins/cards/src',
+    'https://github.com/kuohappiness/Essence/blob/main/plugins/cards/src/a.ts#L11',
+  ]);
+  assert.deepEqual(rewrite('docs/x.md', result.text, map, exists), { text: result.text, edits: [], conflicts: [] });
+});
+
+// B：syntax.md 拆成 Cards 的一份與最上層的轉錄稿，原檔留每個標題與一行轉往新頁；任務從 tasks/ 搬進 docs/tasks/ 與 Cards。
+const B_MOVES = [['tasks/a.md', 'docs/tasks/a.md'], ['tasks/w3.md', 'plugins/cards/docs/tasks/w3.md'], ['docs/card-rules', 'plugins/cards/docs/card-rules']];
+const B_FILES = ['docs/syntax.md', 'docs/transcript.md', 'docs/decisions.md', 'docs/roadmap.md', 'docs/tasks/a.md', 'docs/tasks/b.md', 'plugins/cards/docs/syntax.md',
+  'plugins/cards/docs/card-rules/x.md', 'plugins/cards/docs/tasks/w3.md', 'plugins/cards/docs/tasks/b.md'];
+const B_PLAN = {
+  ...mapper(B_MOVES),
+  pieces: { 'plugins/cards/docs/syntax.md': 'docs/syntax.md', 'docs/transcript.md': 'docs/syntax.md' },
+  split: { 'docs/syntax.md': { default: 'plugins/cards/docs/syntax.md', anchors: { '0-總覽': 'plugins/cards/docs/syntax.md', '1-轉錄稿': 'docs/transcript.md', '2-卡組筆記': 'plugins/cards/docs/syntax.md' } } },
+};
+const bExists = existing(B_FILES);
+
+void test('B：連到拆開的原檔照錨點去新檔，沒有錨點去 default；拆出的新檔裡連到本頁、已搬走的錨點連到另一份', () => {
+  const roadmap = '[卡組](syntax.md#2-卡組筆記)、[轉錄稿](syntax.md#1-轉錄稿)、[整份](syntax.md)、[決定](decisions.md#d-1)\n';
+  const once = rewrite('docs/roadmap.md', roadmap, B_PLAN, bExists);
+  assert.equal(once.text, '[卡組](../plugins/cards/docs/syntax.md#2-卡組筆記)、[轉錄稿](transcript.md#1-轉錄稿)、[整份](../plugins/cards/docs/syntax.md)、[決定](decisions.md#d-1)\n');
+  assert.deepEqual(rewrite('docs/roadmap.md', once.text, B_PLAN, bExists).edits, []);
+
+  const cards = '## 0. 總覽\n\n[§1](#1-轉錄稿)、[§2](#2-卡組筆記)、[規則](card-rules/x.md)、[決定](decisions.md#d-1)\n\n## 2. 卡組筆記\n';
+  const piece = rewrite('plugins/cards/docs/syntax.md', cards, B_PLAN, bExists);
+  assert.equal(piece.text, '## 0. 總覽\n\n[§1](../../../docs/transcript.md#1-轉錄稿)、[§2](#2-卡組筆記)、[規則](card-rules/x.md)、[決定](../../../docs/decisions.md#d-1)\n\n## 2. 卡組筆記\n');
+  assert.deepEqual(rewrite('plugins/cards/docs/syntax.md', piece.text, B_PLAN, bExists).edits, []);
+  // 凍結的段落（製卡規則送給 AI 的部分）：標記以下的連結不改，標記以上照改。
+  const rule = '[決定](../decisions.md#d-1)\n\n<!-- 送 -->\n\n[決定](../decisions.md#d-1)\n';
+  const frozen = rewrite('plugins/cards/docs/card-rules/x.md', rule, { ...B_PLAN, frozen: [{ dir: 'plugins/cards/docs/card-rules/', marker: '<!-- 送 -->' }] }, bExists);
+  assert.equal(frozen.text, '[決定](../../../../docs/decisions.md#d-1)\n\n<!-- 送 -->\n\n[決定](../decisions.md#d-1)\n');
+  // stay：拆完後原檔也有同名的一節，沒搬的檔連到它留在原檔；拆出的新檔照錨點表。
+  const stayPlan = { ...B_PLAN, split: { 'docs/syntax.md': { ...B_PLAN.split['docs/syntax.md'], stay: ['0-總覽'] } } };
+  assert.equal(rewrite('docs/roadmap.md', '[總覽](syntax.md#0-總覽)\n', stayPlan, bExists).text, '[總覽](syntax.md#0-總覽)\n');
+  assert.equal(rewrite('docs/transcript.md', '[總覽](#0-總覽)\n', stayPlan, bExists).text, '[總覽](../plugins/cards/docs/syntax.md#0-總覽)\n');
+  // 拆的時候照新位置手寫、連回原檔留下的那一節：錨點表雖然說那一節搬到 Cards，也不改。
+  const handWritten = '見最上層的[〈總覽〉](../../../docs/syntax.md#0-總覽)\n';
+  assert.equal(rewrite('plugins/cards/docs/syntax.md', handWritten, B_PLAN, bExists).text, handWritten);
+
+  const transcript = '## 1. 轉錄稿\n\n[總覽](#0-總覽)、[本頁](#1-轉錄稿)\n';
+  assert.equal(rewrite('docs/transcript.md', transcript, B_PLAN, bExists).text, '## 1. 轉錄稿\n\n[總覽](../plugins/cards/docs/syntax.md#0-總覽)、[本頁](#1-轉錄稿)\n');
+
+  const stub = '## 0. 總覽\n\n搬到 [Cards](#0-總覽)。\n\n## 1. 轉錄稿\n\n搬到 [轉錄稿](#1-轉錄稿)。\n';
+  assert.equal(rewrite('docs/syntax.md', stub, B_PLAN, bExists).text, '## 0. 總覽\n\n搬到 [Cards](../plugins/cards/docs/syntax.md#0-總覽)。\n\n## 1. 轉錄稿\n\n搬到 [轉錄稿](transcript.md#1-轉錄稿)。\n');
+});
+
+void test('B：搬走的文件以搬家前的位置解；兩種解法不同時搬走的照搬家前，沒搬的列成要人看', () => {
+  const text = '[決定](../docs/decisions.md#d-1)、[w3](w3.md)、[規格](../docs/syntax.md#1-轉錄稿)、[b](b.md)\n';
+  const result = rewrite('docs/tasks/a.md', text, B_PLAN, bExists);
+  assert.equal(result.text, '[決定](../decisions.md#d-1)、[w3](../../plugins/cards/docs/tasks/w3.md)、[規格](../transcript.md#1-轉錄稿)、[b](b.md)\n');
+  assert.deepEqual(result.conflicts, []);
+  assert.deepEqual(rewrite('docs/tasks/a.md', result.text, B_PLAN, bExists), { text: result.text, edits: [], conflicts: [] });
+  // plugins/cards/docs/tasks/w3.md 搬家前在 tasks/：b.md 以前指 tasks/b.md（不存在），現在指 Cards 的 b.md；docs/tasks/b.md 也存在但不是它以前的意思。
+  const w3 = '[a](a.md) 與 [舊的 b](../tasks/b.md)\n';
+  const moved = rewrite('plugins/cards/docs/tasks/w3.md', w3, B_PLAN, bExists);
+  assert.equal(moved.text, '[a](../../../../docs/tasks/a.md) 與 [舊的 b](../tasks/b.md)\n');
+  assert.deepEqual(moved.conflicts, []);
+  const both = existing([...B_FILES, 'docs/x.md', 'plugins/cards/docs/x.md']);
+  // 搬走的檔：現在的位置解成 docs/x.md、搬家前解成搬走的 x.md，照搬家前的意思；改完再跑不動。
+  const plan = mapper([['tasks/a.md', 'docs/tasks/a.md'], ['x.md', 'plugins/cards/docs/x.md']]);
+  const before = rewrite('docs/tasks/a.md', '[x](../x.md)\n', plan, both);
+  assert.equal(before.text, '[x](../../plugins/cards/docs/x.md)\n');
+  assert.deepEqual(before.conflicts, []);
+  assert.deepEqual(rewrite('docs/tasks/a.md', before.text, plan, both), { text: before.text, edits: [], conflicts: [] });
+  // 沒搬的檔：原路徑搬走後又有同名的新檔，不猜。
+  const again = existing(['docs/x.md', 'plugins/cards/docs/x.md', 'docs/y.md']);
+  const conflict = rewrite('docs/y.md', '[x](x.md)\n', mapper([['docs/x.md', 'plugins/cards/docs/x.md']]), again);
+  assert.deepEqual(conflict.edits, []);
+  assert.deepEqual(conflict.conflicts, [{ line: 1, link: 'x.md', here: 'docs/x.md', before: 'plugins/cards/docs/x.md' }]);
 });
 
 void test('main：在 repo 根目錄跑；--check 只列出、結束碼 1，寫完再 --check 是 0', t => {
@@ -117,4 +245,45 @@ void test('main：在 repo 根目錄跑；--check 只列出、結束碼 1，寫�
   assert.equal(main(['--check', 'src=plugins/cards/src'], root), 0);
   assert.ok(log.mock.calls.some(call => call.arguments[0] === 'docs/x.md:1  ../src/a.ts → ../plugins/cards/src/a.ts'));
   assert.throws(() => main(['src'], root), /用法/);
+});
+
+void test('B 的 L2 R1：settled（rebase 之後重跑）時，拆出的檔裡兩種解法不同的列成要人看，手修成新位置的連結不改回去', () => {
+  // Cards backlog 是從 docs/backlog.md 拆出的；手修成 Cards 自己的 tasks/ 之後，從搬家前的位置解成最上層的 docs/tasks/。
+  const files = existing(['docs/backlog.md', 'docs/tasks/a.md', 'plugins/cards/docs/backlog.md', 'plugins/cards/docs/tasks/w3.md']);
+  const plan = { ...mapper([]), pieces: { 'plugins/cards/docs/backlog.md': 'docs/backlog.md' }, split: { 'docs/backlog.md': { anchors: {} } } };
+  const text = '已交付規格放 [tasks/](tasks/)\n';
+  const first = rewrite('plugins/cards/docs/backlog.md', text, plan, files);
+  assert.equal(first.text, '已交付規格放 [tasks/](../../../docs/tasks/)\n', '沒有 settled：照搬家前的意思（第一次搬家用）');
+  const settled = rewrite('plugins/cards/docs/backlog.md', text, { ...plan, settled: true }, files);
+  assert.equal(settled.text, text);
+  assert.deepEqual(settled.conflicts, [{ line: 1, link: 'tasks/', here: 'plugins/cards/docs/tasks', before: 'docs/tasks' }]);
+});
+
+void test('B 的 L2 R2：同一段有同一個目標的純文字與真的連結，分不出時不改、列成要人看；沒有歧義的照改', () => {
+  const text = '\\[literal](../src/a.ts) [real](../src/a.ts)\n\n[另一段](../src/a.ts)\n';
+  const result = rewrite('docs/x.md', text, map, exists);
+  assert.equal(result.text, '\\[literal](../src/a.ts) [real](../src/a.ts)\n\n[另一段](../plugins/cards/src/a.ts)\n');
+  assert.deepEqual(result.conflicts.map(item => [item.line, item.ambiguous]), [[1, '../plugins/cards/src/a.ts'], [1, '../plugins/cards/src/a.ts']]);
+  assert.deepEqual(rewrite('docs/x.md', result.text, map, exists).edits, []);
+  // 第二輪：同一段的引用式連結不算進行內連結的數，純文字就認得出不是連結：不改、也不用人看；定義照改。
+  const reference = '\\[literal](../src/a.ts) [ref][id]\n\n[id]: ../src/a.ts\n';
+  const referenced = rewrite('docs/x.md', reference, map, exists);
+  assert.equal(referenced.text, '\\[literal](../src/a.ts) [ref][id]\n\n[id]: ../plugins/cards/src/a.ts\n');
+  assert.deepEqual(referenced.conflicts, []);
+  // 第三輪：引用式連結（完整、折疊、圖片）後面緊接的括號是純文字，不改；拿掉定義再解析會把它看成行內連結。
+  for (const use of ['[shown][id]', '[id][]', '![圖][id]']) {
+    const text = `${use}(../src/a.ts)\n\n[id]: decisions.md\n`;
+    assert.deepEqual(rewrite('docs/x.md', text, map, exists), { text, edits: [], conflicts: [] }, use);
+  }
+  // 第四輪：再解析時引用式連結沒有目的地（不是佔位字串），真的連結、本頁錨點怎麼寫都不會和它撞名。
+  const anchorPlan = { ...mapper([]), pieces: { 'docs/moved.md': 'docs/x.md' }, split: { 'docs/x.md': { anchors: { 'move-links-reference-0': 'docs/moved.md' } } } };
+  const anchorFiles = existing(['docs/x.md', 'docs/moved.md', 'docs/fixed.md']);
+  const mixed = '[shown][id] [real](#move-links-reference-0) \\[literal](#move-links-reference-0)\n\n[id]: fixed.md\n';
+  const collided = rewrite('docs/x.md', mixed, anchorPlan, anchorFiles);
+  assert.equal(collided.text, mixed);
+  assert.deepEqual(collided.conflicts.map(item => [item.line, item.ambiguous]), [[1, 'moved.md#move-links-reference-0'], [1, 'moved.md#move-links-reference-0']]);
+  for (const use of ['[shown][id]', '![圖][id]']) {
+    const text = `${use}(#move-links-reference-0)\n\n[id]: fixed.md\n`;
+    assert.deepEqual(rewrite('docs/x.md', text, anchorPlan, anchorFiles), { text, edits: [], conflicts: [] }, use);
+  }
 });

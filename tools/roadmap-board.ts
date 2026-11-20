@@ -1,6 +1,6 @@
-// 開發進度白板：把 docs/roadmap.md 的「現在在哪裡」與「已完成」換成手機好讀的一頁（D-141：roadmap 是唯一來源，這頁只換樣子顯示）。
-// 外掛有自己的 roadmap（plugins/<外掛>/docs/roadmap.md，D-208 第 4 點）時，也讀它的「現在在哪裡」，名稱前加外掛名；
-// 正式 vault 的版本與「已完成」只從最上層讀（過渡期都是 Cards）。
+// 開發進度白板：把 roadmap 的「現在在哪裡」與「已完成」換成手機好讀的一頁（D-141：roadmap 是唯一來源，這頁只換樣子顯示）。
+// 最上層的 docs/roadmap.md 是入口，只讀它的「現在在哪裡」；外掛有自己的 roadmap（plugins/<外掛>/docs/roadmap.md，D-208 第 4 點）時，
+// 也讀它的「現在在哪裡」，名稱前加外掛名。正式 vault 的版本與「已完成」只從 Cards 的 roadmap 讀（D-208 第二步 §B3）。
 // main 上的 roadmap 一改，GitHub Actions（.github/workflows/progress-board.yml）就產生並發布到 GitHub Pages：https://kuohappiness.github.io/Essence/roadmap.html
 // 本機預覽：node tools/roadmap-board.ts（要先在 tools/ 裝過相依），輸出 _site/roadmap.html（_site/ 在 .gitignore）；--out <檔案> 改輸出位置。
 // --check：只讀、只解析每一份 roadmap 並查會不會帶出私人資訊，不寫網頁（tools 的 npm run check 與 pre-commit 用；--staged 讀暫存區）。--root <資料夾> 給測試用。
@@ -15,6 +15,8 @@ import { LIST_PAGE as PROGRESS_MAP, TOKENS, escape } from './progress-board-data
 export const ROADMAP = 'docs/roadmap.md';
 /** 外掛的 roadmap：存在的才讀（由外掛的第一個任務建，建了就自動出現在白板上）。 */
 export const PLUGIN_ROADMAP = /^plugins\/([^/]+)\/docs\/roadmap\.md$/;
+/** 正式 vault 的版本與「已完成」從這份讀（現在只有 Cards 發布）。 */
+export const RELEASE_ROADMAP = 'plugins/cards/docs/roadmap.md';
 const REPO = 'https://github.com/kuohappiness/Essence';
 const BLOB = `${REPO}/blob/main/`;
 /** 發布在 GitHub Pages 同一站（https://kuohappiness.github.io/Essence/）的檔名。 */
@@ -133,11 +135,19 @@ function worksOf(tables: Map<string, Table>): Work[] {
   })).filter(work => work.name.text);
 }
 
-/** 讀最上層的 roadmap：欄位照表頭的名稱找，欄的順序與列數怎麼變都可以。file 是它在 repo 裡的路徑（相對連結的基準）。 */
-export function parseRoadmap(source: string, file = ROADMAP): Roadmap {
-  const tables = tablesOf(source, file);
-  const works = worksOf(tables);
+/** 最上層的入口只讀「現在在哪裡」：欄位照表頭的名稱找，欄的順序與列數怎麼變都可以。 */
+export function parseTopWorks(source: string, file = ROADMAP): Work[] {
+  return worksOf(tablesOf(source, file));
+}
 
+/** 讀一份完整的 roadmap（「現在在哪裡」與「已完成」）。file 是它在 repo 裡的路徑（相對連結的基準）。 */
+export function parseRoadmap(source: string, file = ROADMAP): Roadmap {
+  return { works: worksOf(tablesOf(source, file)), ...parseRelease(source, file) };
+}
+
+/** 發布那份 roadmap 的「已完成」、正式 vault 的版本與已合併還沒發布的列。 */
+export function parseRelease(source: string, file = RELEASE_ROADMAP): Omit<Roadmap, 'works'> {
+  const tables = tablesOf(source, file);
   const finished = need(tables, '已完成');
   const [date, work] = ['日期', '工作'].map(n => column(finished, '已完成', n));
   const done = finished.rows.map(row => ({ date: row[date]?.text ?? '', work: row[work] ?? EMPTY })).filter(d => d.work.text);
@@ -152,7 +162,7 @@ export function parseRoadmap(source: string, file = ROADMAP): Roadmap {
   const newer = releaseAt >= 0 ? done.slice(0, releaseAt) : done.filter(d => vault && d.date > vault.date);
   const unreleased = newer.filter(d => /\bmain\b/.test(d.work.text));
 
-  return { works, done, vault, unreleased };
+  return { done, vault, unreleased };
 }
 
 /** 外掛的 roadmap 只讀「現在在哪裡」，名稱前加外掛名（「Mindboard｜」）；連結以它自己所在的資料夾為準。 */
@@ -218,12 +228,12 @@ export function renderBoard(roadmap: Roadmap, generated: string, commit?: string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Essence Cards 進度白板</title>
+<title>Essence 進度白板</title>
 <style>${CSS}</style>
 </head>
 <body>
 <header class="top">
-<h1>Essence Cards 進度</h1>
+<h1>Essence 進度</h1>
 <p class="sub">${escape(generated)} 從 roadmap 產生</p>
 <div class="facts">${vault}${pending}</div>
 <nav class="chips" aria-label="卡在誰">${chips}</nav>
@@ -333,22 +343,27 @@ function main(): void {
     console.error(`${ROADMAP}  找不到這份檔`);
     process.exit(1);
   }
-  let roadmap: Roadmap | undefined;
+  if (!roadmaps.some(r => r.file === RELEASE_ROADMAP)) {
+    console.error(`${RELEASE_ROADMAP}  找不到這份檔（正式 vault 的版本與「已完成」從這裡讀）`);
+    process.exit(1);
+  }
+  let release: Omit<Roadmap, 'works'> | undefined;
   const works: Work[] = [];
   let failed = false;
   for (const { file, text } of roadmaps) {
     try {
-      if (file === ROADMAP) roadmap = parseRoadmap(text, file);
+      if (file === ROADMAP) works.push(...parseTopWorks(text, file));
       else works.push(...parsePluginWorks(text, file));
+      if (file === RELEASE_ROADMAP) release = parseRelease(text, file);
     } catch (error) {
       if (!(error instanceof RoadmapError)) throw error;
       console.error(`${file}${error.line ? `:${error.line}` : ''}  ${error.message}`);
       failed = true;
     }
   }
-  if (failed || !roadmap) process.exit(1);
+  if (failed || !release) process.exit(1);
   const files = roadmaps.map(r => r.file);
-  roadmap = { ...roadmap, works: [...roadmap.works, ...works] };
+  const roadmap: Roadmap = { ...release, works };
   const generated = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
   const html = renderBoard(roadmap, generated, process.env.GITHUB_SHA, files);
   // --check 也查：會帶出私人資訊時 Pages 一樣產生不了，commit 就擋。

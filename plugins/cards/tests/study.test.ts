@@ -5,7 +5,7 @@ import { formatTime, dayOf, dayStart, encodeEntry, parseLine, mergeHistory, repl
 import type { NewEntry } from '../src/core/study/index.ts';
 import { seeded } from './helpers/seeded.ts';
 
-const syntax = readFileSync(new URL('../../../docs/syntax.md', import.meta.url), 'utf8');
+const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = syntax.slice(syntax.indexOf('## 5.'), syntax.indexOf('### 5-4')).split(/\r?\n/).filter(line => line.startsWith('{"t":'));
 const rows: { t: string; entry: NewEntry; kind: string }[] = [
   { t: '2026-10-16T20:14:58.031+08:00', entry: { set: 'app', val: '0.1.0+1a2b3c4' }, kind: 'change' },

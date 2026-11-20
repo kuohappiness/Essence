@@ -2,7 +2,7 @@
 
 狀態：持續記錄；每次量完把結論加在〈量測紀錄〉最上面
 
-這份放每次量 Claude 與 Codex 用量的方法、結論與數據。省 token 的做法是 [D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，討論經過在[討論稿](<../../Claude Codex Discussion/2026-11-03-token-saving.md>)。
+這份放每次量 Claude 與 Codex 用量的方法、結論與數據。省 token 的做法是 [D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，討論經過在[討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>)。
 
 ## 怎麼量
 
@@ -48,4 +48,4 @@
 
 ### 2026-11-03：第一次盤點
 
-見[討論稿](<../../Claude Codex Discussion/2026-11-03-token-saving.md>) §1：Codex 週額度五天用完；一件高風險任務同一個 Codex 對話沿用 20 小時、上下文到 41 萬；電腦上的 Claude 98% 是快取讀，前 10 個長 session 佔 46%。
+見[討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>) §1：Codex 週額度五天用完；一件高風險任務同一個 Codex 對話沿用 20 小時、上下文到 41 萬；電腦上的 Claude 98% 是快取讀，前 10 個長 session 佔 46%。

@@ -216,7 +216,8 @@ void test('I7 不是卡組筆記：不鎖', () => {
 });
 
 void test('鎖定的範圍和 parseDeck 對照：每個有 ID 的明確目標都鎖住；屬性區、圍欄、題目行與縮排的項目不鎖', () => {
-  const syntax = readFileSync(new URL('../../../docs/syntax.md', import.meta.url), 'utf8');
+  // 出題語法與轉錄稿格式（2026-11 從 syntax.md §1 拆出）兩份的範例都比。
+  const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8') + readFileSync(new URL('../../../docs/transcript.md', import.meta.url), 'utf8');
   const examples = [...syntax.matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
   assert.ok(examples.length >= 3);
   const extra = [

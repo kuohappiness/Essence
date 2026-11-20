@@ -31,7 +31,7 @@
 
 ## 舊外掛分析
 
-- **提供 repo**：使用者提供舊外掛 AI-Enriched Flashcards 的 repo。助理讀完全部程式，寫成[分析報告](../../research/old-flashcard-plugin.md)。
+- **提供 repo**：使用者提供舊外掛 AI-Enriched Flashcards 的 repo。助理讀完全部程式，寫成[分析報告](../../../plugins/cards/docs/research/old-flashcard-plugin.md)。
 - **使用原則**：使用者強調舊 repo 只用來找出有幫助的觀念，不直接拿來用；要先以最高標準想最好的做法（寫進 AGENTS.md）。
   - 報告第二版依此重新設計 14 個項目。
 - **使用者確認**：

@@ -32,7 +32,7 @@ Codex 認為概念可行，建議把功能更新與內容更新分開處理：�
 
 使用者要求把上述規劃放入未來準備開發的計畫，形成 [D-129](../../decisions.md#d-129-獨立-app-列入未來開發計畫)：以 Obsidian 版為主要開發與更新入口，獨立 App 共用核心與筆記資料，成本原則沿用 D-128。此處記錄的是後續確認，前文保留當時的提案狀態。
 
-準備工作與最小相容驗證已列入[路線圖](../../roadmap.md#未來準備開發獨立-app)；具體技術、同步供應商及時程仍待設計。尚未實作。
+準備工作與最小相容驗證已列入[路線圖](../../../plugins/cards/docs/roadmap.md#未來準備開發獨立-app)；具體技術、同步供應商及時程仍待設計。尚未實作。
 
 ## 技術參考
 
@@ -41,4 +41,4 @@ Codex 認為概念可行，建議把功能更新與內容更新分開處理：�
 - [Obsidian：跨裝置同步](https://obsidian.md/help/sync-notes)：列出各平台支援限制，並指出 Windows 的 iCloud Drive 可能造成檔案重複或損壞。此為現有工具的經驗，不能直接當成 Essence 獨立版已驗證的結果。
 - [Obsidian：Build a plugin](https://docs.obsidian.md/Plugins/Getting%20started/Build%20a%20plugin)：外掛建置產物由 Obsidian 載入；共用程式與資料格式仍需各自的宿主入口。
 
-後續問題集中在 [backlog](../../backlog.md#脫離-obsidian-的通用軟體2026-10-23-使用者)。
+後續問題集中在 [backlog](../../../plugins/cards/docs/backlog.md#脫離-obsidian-的通用軟體2026-10-23-使用者)。

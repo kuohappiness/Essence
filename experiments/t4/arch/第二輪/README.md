@@ -21,9 +21,9 @@
 ## 每個檔案改了什麼
 
 - `格式.md`：第一輪 `../格式.md` 的範例從密度換成國一自然的酵素，先備的例子從「國一數學 比例式」換成「國一自然 細胞的構造」；其他文字不變。
-- `判斷邊界.md`（R1、R3）：只在教材有對照、例題有必要的分支、兩個學過的觀念容易混在一起時，寫出還不合格的回答，並附出處（[討論稿〈Codex 回應第一輪結果〉§3](<../../../../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#3-第二輪保留三個主要提示組先不展開成兩模型的大矩陣>)）。
+- `判斷邊界.md`（R1、R3）：只在教材有對照、例題有必要的分支、兩個學過的觀念容易混在一起時，寫出還不合格的回答，並附出處（[討論稿〈Codex 回應第一輪結果〉§3](<../../../../plugins/cards/docs/Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#3-第二輪保留三個主要提示組先不展開成兩模型的大矩陣>)）。
 - `詳細規則-單次.md`（R2）：處理詳細規則和實驗格式的重疊：判斷照詳細規則，回應照實驗格式，卡組段可以照詳細規則寫類型、重要性與候選卡片。
-- `五步.md`（R3）：[Astra 稿〈結論〉](<../../../../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)的五步與放寬的範圍。評分口徑不寫進提示。
+- `五步.md`（R3）：[Astra 稿〈結論〉](<../../../../plugins/cards/docs/Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)的五步與放寬的範圍。評分口徑不寫進提示。
 
 ## 標註與評分
 

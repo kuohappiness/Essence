@@ -2,7 +2,7 @@
 // 建置時 tools/build.mjs 照這張表讀檔、嵌進 main.js、記 SHA-256；家長在製卡畫面看得到這一科用哪些規則與版號。
 // 「重整製卡規則」做完時只改這張表、版號與標記（§0〈相鄰的工作〉）。
 
-/** 一份規則檔：repo 根目錄算的路徑、給家長看的名稱與版號（手寫）。marker：只送標記以下（docs/card-rules/ 的檔）；false 是整份送（凍結的 R3）。 */
+/** 一份規則檔：repo 根目錄算的路徑、給家長看的名稱與版號（手寫）。marker：只送標記以下（plugins/cards/docs/card-rules/ 的檔）；false 是整份送（凍結的 R3）。 */
 export interface RuleFile { path: string; name: string; version: string; marker: boolean }
 
 /** 製卡畫面列的一科（§0 的表）。subject 是卡組屬性 `科目` 的值；一般知識不是學業卡組，是 null（syntax §2-1）。 */
@@ -32,14 +32,14 @@ const R3: readonly RuleFile[] = [
   { path: 'experiments/t4/arch/第二輪/判斷邊界.md', name: '判斷邊界', version: R3_VERSION, marker: false },
   { path: 'experiments/t4/arch/第二輪/五步.md', name: '五步', version: R3_VERSION, marker: false },
 ];
-const COMMON: RuleFile = { path: 'docs/card-rules/common.md', name: '通用', version: 'v0.16', marker: true };
+const COMMON: RuleFile = { path: 'plugins/cards/docs/card-rules/common.md', name: '通用', version: 'v0.16', marker: true };
 
 export const RULE_SUBJECTS: readonly RuleSubject[] = [
-  { key: 'chinese', label: '國語（國小）', subject: '國語', r3: true, supplement: true, pick: true, files: [...R3, { path: 'docs/card-rules/elementary-chinese.md', name: '國小國語', version: 'v0.9', marker: true }] },
-  { key: 'english', label: '英文（國中）', subject: '英文', r3: false, supplement: false, pick: true, files: [COMMON, { path: 'docs/card-rules/english.md', name: '英文', version: 'v0.16', marker: true }] },
+  { key: 'chinese', label: '國語（國小）', subject: '國語', r3: true, supplement: true, pick: true, files: [...R3, { path: 'plugins/cards/docs/card-rules/elementary-chinese.md', name: '國小國語', version: 'v0.9', marker: true }] },
+  { key: 'english', label: '英文（國中）', subject: '英文', r3: false, supplement: false, pick: true, files: [COMMON, { path: 'plugins/cards/docs/card-rules/english.md', name: '英文', version: 'v0.16', marker: true }] },
   { key: 'science', label: '自然', subject: '自然', r3: true, supplement: true, pick: false, files: R3 },
-  { key: 'general', label: '一般知識', subject: null, r3: false, supplement: false, pick: false, files: [COMMON, { path: 'docs/card-rules/general.md', name: '一般知識', version: 'v0.5', marker: true }] },
-  { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, pick: false, files: [...R3, { path: 'docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.9', marker: true }] },
+  { key: 'general', label: '一般知識', subject: null, r3: false, supplement: false, pick: false, files: [COMMON, { path: 'plugins/cards/docs/card-rules/general.md', name: '一般知識', version: 'v0.5', marker: true }] },
+  { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, pick: false, files: [...R3, { path: 'plugins/cards/docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.9', marker: true }] },
 ];
 
 /**

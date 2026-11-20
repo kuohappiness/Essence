@@ -18,5 +18,5 @@ description: 和使用者一次討論一個 Essence 專案的設計問題，直�
 ## 結束
 
 - 談定的題目：用 Skill tool 載入 "essence-decision" 寫成 D-ID。
-- 沒談完：還沒解的問題與目前傾向寫在主文，同一個問題只有一份主文，依序選：已交付實作且沒另開討論的 → `tasks/`；Claude 與 Codex 正在往返的 → 該討論稿；其他已展開的規畫 → `docs/plans/`；短點子 → `docs/backlog.md`（D-141）。roadmap 的狀態板只更新那一列的狀態與下一步。
+- 沒談完：還沒解的問題與目前傾向寫在主文，同一個問題只有一份主文，依序選：已交付實作且沒另開討論的 → 任務說明（`docs/tasks/`，外掛專用的在外掛的 `docs/tasks/`）；Claude 與 Codex 正在往返的 → 該討論稿；其他已展開的規畫 → `docs/plans/`；短點子 → 那個外掛的 `docs/backlog.md`，跨外掛的在最上層（D-141）。roadmap 的狀態板只更新那一列的狀態與下一步。
 - 沒有討論稿的重要討論：結束時在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`（摘要，不冒充逐字紀錄），更新該目錄 README 的索引；有討論稿的不另寫（D-106、D-143）。
