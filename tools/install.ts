@@ -248,3 +248,4 @@ export async function main(args: readonly string[]): Promise<void> {
   const kind = { dev: '開發版（測試 vault）', test: '正式建置（測試 vault）', release: '正式版' }[result.kind];
   console.log(`已安裝 Essence Cards ${result.build}：${kind}`);
 }
+// 探針：搬家前的分支只改這個檔（第二步 L2 R1），不合併
