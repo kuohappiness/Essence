@@ -5,6 +5,9 @@
 const STATES = ['規劃中', '討論中', '實作中', '待審', '待實機', '等觸發點', '已合併', '已結案'];
 const WHO = ['使用者', 'Claude', 'Codex', '實機'];
 const NONE = '—';
+/** 「已結案 →」後面的下一站：一個以上的 D-ID 或行內連結，用「、」接（L2 R9）。 */
+const STATION = String.raw`(?:D-\d+|\[[^\]]+\]\((?:<[^>]+>|[^)\s]+)\))`;
+const NEXT = new RegExp(String.raw`^${STATION}(?:\s*、\s*${STATION})*$`);
 
 export interface Status {
   /** 狀態那一欄的原文（例如「已結案 → [D-218](…)」「暫停（等發布）」）。 */
@@ -41,7 +44,7 @@ export function parseStatus(line: string): { status: Status } | { error: string 
     state = '暫停';
   } else if (arrow) {
     if (arrow[1] !== '已結案') return { error: `箭頭只能接在「已結案」後面，現在是「${arrow[1]}」` };
-    if (!arrow[2]) return { error: '「已結案 →」後面要接下一站（D-ID 或連結）' };
+    if (!NEXT.test(arrow[2])) return { error: '「已結案 →」後面接下一站：D-ID 或連結，好幾站用「、」接，備註寫在「完成：」' };
     state = '已結案';
   } else if (STATES.includes(label)) {
     state = label;

@@ -263,6 +263,17 @@ void test('「→」與「來自」互相連回；日期要是真的；backlog�
   ]);
 });
 
+void test('L2 R9「→」連到外部網址報錯：下一站要是 repo 裡的一站；引用框與程式碼裡的範例不看', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/plans/x.md', [
+    '# X', '', '狀態：討論中｜下一步：x｜等誰：使用者', '', '## 一', '',
+    '→ [外連](https://example.invalid/example)（2026-12-05）', '',
+    '> → [範例](https://example.invalid/quote)（2026-12-05）', '',
+    '```text', '→ [範例](https://example.invalid/code)（2026-12-05）', '```', '',
+  ].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/x.md:7  →  「→」要連到 repo 裡的一站（任務、討論稿、plans、backlog 的項目或決定），不連外部網址']);
+});
+
 void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一個非空行要有狀態；README、子資料夾與其他資料夾不查', async t => {
   const { add, run } = await repo(t);
   await add('docs/tasks/ok.md', '# 任務\n\n狀態：進行中\n');

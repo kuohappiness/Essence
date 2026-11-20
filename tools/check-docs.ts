@@ -414,6 +414,7 @@ function arrowsOf(doc: Doc, problems: Problem[]): Arrow[] {
       continue;
     }
     const [, href, y, m, d] = match;
+    if (isExternal(href.replace(/^<|>$/g, ''))) add('「→」要連到 repo 裡的一站（任務、討論稿、plans、backlog 的項目或決定），不連外部網址');
     if (!realDate(y, m, d)) add(`${y}-${m}-${d} 不是真的日期`);
     if (pendingLines && line > pendingLines[0] && line < pendingLines[1]) add('轉出的項目搬到〈已轉出〉：〈待處理〉裡不能有「→」（D-214 第 4 點）');
     arrows.push({ file: doc.file, line, station: backlog ? stationAnchor(doc, line) : undefined, to: resolveHref(doc.file, href) });
