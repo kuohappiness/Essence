@@ -60,6 +60,15 @@ void test('§4 gate：共用工具（第二步 §A4）要跑卻跳過、不該�
   assert.match(missing.problems.join('\n'), /共用工具：job 沒有結果/);
 });
 
+void test('§4 gate：共用工具要跑且 success 才過；旗標不是 true／false 不過（第二步驗收第 A6 項）', () => {
+  const ran = gate(needs(n => { n.plan.outputs!.tools = 'true'; n.tools.result = 'success'; }));
+  assert.equal(ran.ok, true, ran.problems.join('\n'));
+  assert.match(summary(ran), /\| 共用工具 \| 跑 \| .* \| success \|/);
+  const badFlag = gate(needs(n => { n.plan.outputs!.tools = 'yes'; }));
+  assert.equal(badFlag.ok, false);
+  assert.match(badFlag.problems.join('\n'), /共用工具：plan 的旗標不合法（yes）/);
+});
+
 void test('§4 gate：要跑的 failure、cancelled、skipped 都不過', () => {
   for (const [result, message] of [['failure', /Cards：要跑，結果是 failure/], ['cancelled', /Cards：要跑，結果是 cancelled/], ['skipped', /Cards：要跑卻跳過/]] as const) {
     const g = gate(needs(n => { n.cards.result = result; }));

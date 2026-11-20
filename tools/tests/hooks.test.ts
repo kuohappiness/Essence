@@ -205,6 +205,14 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   assert.deepEqual(r.marks, ['tools']);
   assert.match(lastLine(r.out), /共用工具：完整檢查（改到 tools\/check-docs\.ts）通過；Cards：照分派表跳過/);
 
+  // 7. 改 .githooks/（第 6 條）：共用工具與三個外掛都跑完整檢查（第二步 §A3、驗收第 A6 項）。
+  await appendFile(join(repo, '.githooks/commit-msg'), '# 探針\n');
+  await git(repo, 'add', '--', '.githooks/commit-msg');
+  r = await commit(['-m', 'githooks']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['capture', 'cards', 'mindboard', 'tools']);
+  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：完整檢查（改到 \.githooks\/commit-msg）通過；Cards：完整檢查（改到 \.githooks\/commit-msg）通過；Capture：完整檢查（改到 \.githooks\/commit-msg）通過；Mindboard：完整檢查（改到 \.githooks\/commit-msg）通過$/);
+
   // 外掛的檢查失敗就擋下，commit 不會進去。
   const head = await git(repo, 'rev-parse', 'HEAD');
   await put('plugins/mindboard/src/fail.ts', 'export const f = 1;\n');
