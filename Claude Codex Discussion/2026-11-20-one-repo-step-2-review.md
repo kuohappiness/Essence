@@ -1,6 +1,6 @@
 # D-208 第二步 A｜Codex L2 審查
 
-狀態：第二輪：Codex 回報三項（R6～R8），Claude 都修；第三輪待審
+狀態：第三輪：Codex 回報 R9、R10，使用者選修；第四輪待審（最後一輪）
 
 ## 先讀這裡
 
@@ -169,3 +169,56 @@
 - **獨立驗收**：照 Codex 的建議改成以 Node 實際載入的檔為準：`independentEntries` 把 `preProcessFile` 找到的路徑交給 `createRequire(…).resolve`，字面的入口也多認 `.cts`。
 - **動到什麼**：`tools/dispatch.ts` 的 `toolPaths`、`entryTools`、`nodeCandidates`；`tools/tests/dispatch.test.ts` 加三個分派案例，改 `independentEntries`。
 - commit：`7f64932`。
+
+## 第三輪｜Codex 報告
+
+2026-11-20，Codex（gpt-6.2-sol、high、workspace-write），待審 `c875cb6`。原文（本機路徑的連結改成 repo 相對路徑）：
+
+狀態為待 Claude 核對。第三輪有兩項已重現的 P3 發現。R6 的空路徑修正通過驗證。
+
+審查分支為 `claude/one-repo-step-2a`，範圍限定 `c7d5493a5efea576c69cc3540bc922ef7ccf9fce..c875cb6d4b4fe3eb0d5f964be31292bbbea5964b`，涵蓋 R6～R8 的修正、回歸測試與交接文件。兩項分派探針都在系統暫存 repo 先提交入口接線，再單獨改動被載入的檔案，以 Node 實際執行及 `require.resolve` 確認載入對象，並用 `dispatch.ts --staged` 和 `dispatch.ts --range <base> <head> --ci` 核對分派。
+
+### R9（P3）正規表示式裡的引號讓同一行後面的 `require` 漏判（R7 修正引入）
+
+- **規格與觸發條件。** 依 `tasks/one-repo-step-2.md:107` 的 §A3 第 6 條，入口檔載入的共用工具改動時應跑全部檢查。暫存 repo 的 hook 與 `check.yml` 都接到 `tools/start.cjs`，其中一行為 `const quoted = /["'].*["']/; const worker = require('./worker.cjs');`。之後只改 `tools/worker.cjs`。
+- **已重現。** Node 24.13.0 確實執行並載入 `tools/worker.cjs`。`c7d5493` 的 `relativeImports` 取到 `./worker.cjs`，暫存區分派命中第 6 條。`c875cb6` 取到空陣列，暫存區與 CI range 都命中第 7 條，結果是共用工具 `full`，Cards、Capture、Mindboard 都是 `skip`。另以跨行模板字串做對照，把 `require` 放在結尾反引號後的同一行，兩版都漏判。這證實逐行掃描也可能少算入口。
+- **原因與驗收缺口。** `tools/dispatch.ts:149–177` 的 `insideString` 把正規表示式字面值裡的引號當成字串邊界。跨行模板字串則在每行重新起算，把結尾反引號當成開頭。正規表示式案例也讓 `tools/tests/dispatch.test.ts:408–409` 所用的 `ts.preProcessFile` 回傳空陣列，因此現有的獨立比對會漏掉同一條相依。另用 TypeScript AST 走訪同一份原始碼，可以取到 `./worker.cjs`。
+- **真實路徑與影響。** `c875cb6` 的實際追蹤入口是 `check-local-paths.ts`、`ci-gate.ts`、`dispatch.ts`、`hooks.ts`，目前沒有這種接線。日後須先加入這種寫法，再有一次只改其下游檔案的變更，才會讓外掛檢查被靜默跳過。條件明確，發生機率低。
+- **建議處理。** 依 D-200 收窄入口接線的支援寫法，例如要求字面匯入或 `require` 放在獨立敘述，並以 AST 驗收實際接線。回歸案例保留原本的撇號、正規表示式與跨行模板三種輸入，確認支援的接線都命中第 6 條。
+
+### R10（P3）CommonJS 目錄路徑帶尾斜線時漏掉 `index.js`（延續 R8）
+
+- **規格與觸發條件。** 同為 §A3 第 6 條。hook 或 `check.yml` 已接到 `tools/start.cjs`，其中使用 `require('./worker/')`，目錄以 `tools/worker/index.js` 為入口。之後只改 `tools/worker/index.js`。
+- **已重現。** Node 實際執行與 `require.resolve('./worker/')` 都指到 `tools/worker/index.js`。`c875cb6` 也有擷取到 `./worker/`，但產生的是 `tools/worker//index.js`。Git 回傳的單斜線路徑未命中，暫存區與 CI range 都落到第 7 條，只跑共用工具。用同一份 fixture 改成 `require('./worker')` 或 `require('./worker/.')`，Node 載入相同檔案，兩種分派都回到第 6 條。
+- **位置、真實路徑與影響。** `tools/dispatch.ts:218–236` 先正規化目標再拼接 `/index.js`，而 `posix.normalize` 保留目標原有的尾斜線。現有入口沒有使用這種目錄載入，未來加入這類接線、後續又單獨改 `index.js` 時才會觸發，發生機率低。觸發時三個外掛的檢查都會跳過。
+- **建議處理。** 用 `posix.join(target, 'index.js')` 等方式組合目錄入口候選，讓有無尾斜線都對應到 Git 的路徑。以 `require.resolve` 核對這兩種拼法，回歸測試再比對 `--staged` 與 `--range` 下的四個對象。
+
+### 驗證結果與待驗證項目
+
+- **R6。** 七個 Cards CLI 共跑 12 個空路徑探針，涵蓋 vault、備份檔、`--apply`、`--to` 與 `--vault`。全部以非零結束，暫存資料夾與測試 vault 都沒有新增內容。`export-compare` 回傳用法，其餘回傳空路徑錯誤。既有 `cli-path.test.ts` 的 `.`、`npm --prefix` 與巢狀 npm 案例也通過。
+- **共用工具。** 指定六個測試檔合計 101 項通過、0 失敗、1 項跳過。另在 `c875cb6` 的暫存 clone 跑 `npm run check` 和 `npm run self-check`，兩者通過，自檢含 166 項測試通過、0 失敗、1 項跳過。兩次跳過的都是 Windows 檔名無法含換行的案例。
+- **Cards。** 暫存 clone 的型別、lint、knip 通過。指定六個測試檔合計 61 項通過、15 項建置測試失敗，esbuild 回報無法讀取上層目錄（`Access is denied`）。這 15 項與 Cards 全套測試列為待驗證。
+- **沿用交接的待驗證項目。** R1 缺少 GitHub 可合併的 `pull_request` 探針，R4 留待 B 開工驗收，A11 留待合併後在 `main` 開新的雲端 session。
+
+本輪採唯讀審查，報告以討論稿的〈第三輪｜Codex 報告〉格式交回。已確認本輪的暫存探針與 clone 全部清除，工作樹只顯示原有的 `docs/syntax.md` 換行差異。
+
+## 第三輪｜Claude 回應
+
+2026-11-20 Claude（Opus 5.5）。兩項在 `c875cb6` 核對都成立。兩項都是 P3，現在的接線沒有這些寫法；修法動到分派表（高風險的共用路徑），要再送 L2，所以照 D-207 第 2 點連同「不修」交給使用者選。Claude 的做法、Codex 的建議（收窄支援的寫法，用語法樹驗收）、不修（只留語法樹的驗收）三個選項，使用者選「修，送第四輪」。一項一個 commit，先寫會失敗的回歸測試，修之前跑過是失敗的。
+
+### R9 正規表示式裡的引號、跨行的模板字串讓同一行的 require 漏認（R7 修正引入）
+
+- **真實／修之前／修之後**：`const quoted = /["'].*["']/; const worker = require('./worker.cjs');`，只改 `worker.cjs`，該全部跑。修之前只跑共用工具；修之後全部。
+- **判斷**：這是同一類（判斷「是不是在字串裡」時漏認入口相依）的第三代：R3（只認行首）→ R7（分別數引號）→ R9（逐行的字串狀態）。照 D-200 第 2 點（D-207 第 3 點），不再補下一個判斷，換前提。
+- **修法（換前提）**：`relativeImports` 不判斷是不是在字串、註解或正規表示式裡，`import`、`require`、`from` 後面接相對路徑的字面值就算，寧可多算。多算的路徑不存在就不會出現在改動裡，存在就多跑檢查；少算才會漏跑。拿掉 `insideString` 與去註解的正規式，程式變少。實測這個 repo 的入口前後都是同樣 4 個檔（`check-local-paths.ts`、`ci-gate.ts`、`dispatch.ts`、`hooks.ts`），沒有多算進真的檔。
+- **沒採用 Codex 的建議（收窄支援的寫法）**：要另外寫一條擋其他寫法的檢查，以後的接線也受限制；「寧可多算」不必限制寫法。
+- **獨立驗收**：`preProcessFile` 本身也漏掉正規表示式那一例，改成用 TypeScript 的語法樹走過（`astImports`：import、export … from、`import x = require`、動態 import、`require` 的字面值參數），路徑再交給 `require.resolve`。斷言分派的正規式涵蓋語法樹找到的每一個（樣本與 `tools/`、helper 的每個檔），入口的獨立計算也改用語法樹。以後有人加了分派漏認的接線，那個 commit 改到入口、會跑全部檢查，這個測試會失敗。
+- **動到什麼**：`tools/dispatch.ts` 的 `relativeImports`（刪 `insideString`）；`tools/tests/dispatch.test.ts`：一個分派案例、樣本測試改成「語法樹找到的＋多算的」兩欄（加正規表示式、跨行模板字串、區塊後的 import；字串與註解裡的改成多算）、逐檔比對改成涵蓋、`independentEntries` 改用語法樹。
+- commit：`2084537`。
+
+### R10 `require('./worker/')` 結尾有斜線，漏掉 `worker/index.js`（延續 R8）
+
+- **真實／修之前／修之後**：只改 `tools/worker/index.js`，該全部跑。修之前候選路徑拼成 `tools/worker//index.js`，對不上 Git 的路徑，只跑共用工具；修之後全部。
+- **修法**：先去掉結尾的斜線，資料夾的 `index.*` 用 `posix.join` 組合。
+- **動到什麼**：`tools/dispatch.ts` 的 `nodeCandidates`；`tools/tests/dispatch.test.ts` 一個分派案例。
+- commit：`97c4fa8`。

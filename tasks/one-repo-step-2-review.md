@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步 A：L2 獨立審查（給 Codex）
 
-狀態：第三輪待審（2026-11-20；報告與回應見〈第二輪〉開頭連結的討論稿）
+狀態：第四輪待審（2026-11-20；報告與回應見〈第二輪〉開頭連結的討論稿）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -182,3 +182,40 @@
 ### 回報（第三輪）
 
 照第一輪〈回報與權限〉。延續的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」，發現請編號（接著 R9）。報告接在同一份討論稿的最後，加〈第三輪｜Codex 報告〉一節。
+
+## 第四輪
+
+第三輪（Codex，`c875cb6`）回報 R9（R7 修正引入）、R10（延續 R8），核對都成立。兩項都是 P3、修法動到分派表，照 D-207 交給使用者選，使用者選「修，送第四輪」。R9 是同一類的第三代，照 D-200 第 2 點換了前提。報告與回應在討論稿〈第三輪｜Codex 報告〉〈第三輪｜Claude 回應〉。**這是第四輪**：之後還有擋合併的發現，照 D-171 第 3 點停下來交給使用者。這一輪只審修正：
+
+### 審查對象
+
+- 分支 `claude/one-repo-step-2a`（已 push）。沒有未提交的修改（`docs/syntax.md` 同第一輪）。`main` 仍在 `1153ba8`。
+- 只審 `c875cb6d4b4fe3eb0d5f964be31292bbbea5964b..<最後的 commit>`。新的 commit（由舊到新）：
+  - `2084537` R9 `relativeImports` 寫到就算，不判斷字串與註解；獨立驗收改用語法樹
+  - `97c4fa8` R10 資料夾的 `index.*` 去掉結尾斜線再組合
+  - 最後一個是這一節所在的 commit（第三輪的報告與回應、這一節）
+- 看差異：`git diff c875cb6d4b4fe3eb0d5f964be31292bbbea5964b <最後的 commit>`；最後的 commit 是 `git log -1 --format=%H -- tasks/one-repo-step-2-review.md`。
+
+### 受影響的路徑
+
+- `tools/dispatch.ts` 的 `relativeImports`、`nodeCandidates`；呼叫端照第一輪（第 6 條：pre-commit、pre-merge-commit、CI 的 plan）。入口集合只會變大；這個 repo 實際的入口前後都是 4 個檔。
+
+### 實作者自己選的做法（第四輪）
+
+1. R9 換前提：寫到就算，字串、註解、正規表示式裡的也算。代價是多算：多算的路徑存在時那個檔的改動會跑全部檢查。實測這個 repo 沒有多算進任何真的檔；`check-docs.ts`、兩個白板與 `codex.ts` 不是入口的斷言照舊。
+2. 正規式認的形式：`import(…)`、`require(…)` 的第一個參數（單、雙引號或不含 `${` 的反引號），`import '…'`，`from '…'`；前面不能是識別字或 `.`（`foo.require(` 不算）。不認的：參數不是字面值（例如 `require(path.join(…))`），語法樹也取不到，獨立驗收照樣涵蓋不到；資料夾 `package.json` 的 `main`（同第三輪）。
+3. 獨立驗收的語法樹只看 `import`、`export … from`、`import x = require`、`import()`、`require()`，不看 `module.require`、`createRequire(…)(…)` 這類間接的寫法。
+
+### 驗證方式
+
+- 回歸測試都先寫，修之前跑過是失敗的：
+  - R9：`tools/tests/dispatch.test.ts` 的分派案例「hook 跑 node tools/start.cjs、它在正規表示式 /["'].*["']/ 之後 require('./worker.cjs')…」，與樣本測試「import 的正規式涵蓋語法樹找到的每個相依，字串與註解裡的寧可多算…」（修之前停在正規表示式那一例）。逐檔的涵蓋測試在修之前就通過（現有的檔沒有漏認的相依）。
+  - R10：分派案例「hook 跑 node tools/start.cjs、它 require('./worker/')（Node 載入 worker/index.js）…」。修之前只跑共用工具。
+- 入口前後的比較：用 `2084537^` 與 `2084537` 的 `entryTools` 在這個 repo 的暫存區各算一次，存在的檔都是 4 個、相同。
+- 每個 commit 都經過 pre-commit 的分派與完整檢查（改到入口，全部跑）。
+- GitHub：這一節所在的 commit 的 run：`gh run list --commit <最後的 commit> --workflow check.yml --event push`（Claude 確認全綠後才交給 Codex）。
+- 沒驗的：同第三輪。
+
+### 回報（第四輪）
+
+照第一輪〈回報與權限〉。延續的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」，發現接著編 R11。報告接在同一份討論稿的最後，加〈第四輪｜Codex 報告〉一節。
