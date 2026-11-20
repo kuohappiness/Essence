@@ -365,18 +365,30 @@ void test('§B3 舊位置：最上層或外掛根目錄的 tasks/、Claude Codex
   ]);
 });
 
-void test('§B3 製卡規則送給 AI 的部分：標記以下的連結照搬家前的位置解得到也算；標記以上照常查', async t => {
+void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記以下照搬家前的位置解得到也算；新的檔、表上沒有的路徑照常查；沒用到的要刪（L2 R3）', async t => {
   const { add, run } = await repo(t);
   await add('docs/decisions.md', '# D\n\n## d-1\n');
   await add('plugins/cards/docs/backlog.md', '# B\n');
   const rule = '# 規則\n\n[上](../decisions.md#d-1)\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[backlog](../backlog.md)、[沒有](../nowhere.md)\n';
-  await add('plugins/cards/docs/card-rules/x.md', rule);
+  // english.md 在 FROZEN_RULES 的表上（只有 ../decisions.md）；review-probe.md 是搬家後新增的規則檔（Codex 的探針）。
+  await add('plugins/cards/docs/card-rules/english.md', rule);
+  await add('plugins/cards/docs/card-rules/review-probe.md', rule);
   await add('plugins/cards/docs/other/x.md', rule);
+  // elementary-social.md 在表上，這裡只連 ../decisions.md 與中文檔名的短規則（解析器取到的是百分比編碼）：試作場的其他三條沒用到，要刪。
+  await add('experiments/t4/arch/短規則.md', '# 短規則\n');
+  await add('plugins/cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
+  const social = (path: string) => 'plugins/cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
   assert.deepEqual(run(), [
-    'plugins/cards/docs/card-rules/x.md:3  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/card-rules/x.md:7  ../nowhere.md  找不到檔案',
+    'plugins/cards/docs/card-rules/english.md:3  ../decisions.md#d-1  找不到檔案',
+    'plugins/cards/docs/card-rules/english.md:7  ../nowhere.md  找不到檔案',
+    'plugins/cards/docs/card-rules/review-probe.md:3  ../decisions.md#d-1  找不到檔案',
+    'plugins/cards/docs/card-rules/review-probe.md:7  ../decisions.md#d-1  找不到檔案',
+    'plugins/cards/docs/card-rules/review-probe.md:7  ../nowhere.md  找不到檔案',
     'plugins/cards/docs/other/x.md:3  ../decisions.md#d-1  找不到檔案',
     'plugins/cards/docs/other/x.md:7  ../decisions.md#d-1  找不到檔案',
     'plugins/cards/docs/other/x.md:7  ../nowhere.md  找不到檔案',
+    social('../../experiments/t4/arch/第二輪/判斷邊界.md'),
+    social('../../experiments/t4/arch/第二輪/五步.md'),
+    social('../../experiments/t4/arch/第二輪/格式.md'),
   ]);
 });

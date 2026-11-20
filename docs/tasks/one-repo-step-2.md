@@ -393,7 +393,7 @@ A 的驗收全部完成。
 
 已驗的驗收項目（腳本在本機的暫存資料夾，另存一份在 session 的共用筆記資料夾；結果以這裡為準）：
 
-- 第 1 項：清單在 `894fa07` 先 commit。整份搬的 244 列，新路徑都在、舊路徑都不在；每一列 `git log --follow --name-only` 都有舊路徑，也有那個檔搬之前最後一次被改的 commit（不算合併 commit，同 A）。`plugins/cards/docs/plans/practice.md`、`updates.md` 兩份很短、每行很長，改連結後相似度 40%，要加 `-M30%`（清單沒有另外註明，記在這裡）。逐段拆出的段落：取 `894fa07` 的原段落和新位置比，連結目標換成佔位字串後相同，只有三段刻意改過：`product.md` 的〈3. 使用者與情境〉（目標使用者留最上層，Cards 那份連過去）、〈4. 產品原則〉（全專案的第 8 條與品質目標留最上層，Cards 那份連過去）、`backlog.md` 的〈v1 需要做的任務〉以下（技術債表前加一行連到最上層的技術債、多一列下面「實作者自己選的做法」第 1 點的技術債）。D-208 第 8 點連到這份說明（`894fa07`）。
+- 第 1 項：清單在 `894fa07` 先 commit，列了 243 份；實際搬了 244 份，多的是清單自己（`tasks/` → `docs/tasks/`，R100，L2 R4 後補記在清單）。整份搬的 244 列，新路徑都在、舊路徑都不在；每一列 `git log --follow --name-only` 都有舊路徑，也有那個檔搬之前最後一次被改的 commit（不算合併 commit，同 A）。`plugins/cards/docs/plans/practice.md`、`updates.md` 兩份很短、每行很長，改連結後相似度 40%，要加 `-M30%`（L2 R4 後在清單那兩列註明）。逐段拆出的段落：取 `894fa07` 的原段落和新位置比，連結目標換成佔位字串後相同，只有三段刻意改過：`product.md` 的〈3. 使用者與情境〉（目標使用者留最上層，Cards 那份連過去）、〈4. 產品原則〉（全專案的第 8 條與品質目標留最上層，Cards 那份連過去）、`backlog.md` 的〈v1 需要做的任務〉以下（技術債表前加一行連到最上層的技術債、多一列下面「實作者自己選的做法」第 1 點的技術債）。D-208 第 8 點連到這份說明（`894fa07`）。
 - 第 2 項：`node tools/check-docs.ts` 通過（385 個 Markdown 檔、7957 個連結）；文件檢查本身就是用 Markdown 解析器查每個連結的檔與錨點，舊路徑都不在了，連到舊路徑或拿掉的錨點都會報。例外是製卡規則送給 AI 的部分（第 1 點）。
 - 第 3 項：三份拆開的文件（加上 roadmap、backlog 共五份）搬家前每個 `##` 錨點在原檔都還在，被搬走的那一節都有一行連到新位置；`embedRules()` 用 `894fa07` 的規則檔內容算一次，和 `<B 搬檔>` 的 `deepEqual`（5 個科目、18 份規則的雜湊都相同）；`ai-rules.test.ts` 挑到的 Cards 規則檔 5 份。
 - 第 4 項：`tools/tests/dispatch.test.ts` 在本 repo 實際找：改 `plugins/cards/docs/syntax.md` 選到 `ai-add-move`、`ai-add-old-version`（經 helper）、`ai-add`、`deck`、`errors`、`lock`、`study` 七個；改 `docs/transcript.md` 分派到 Capture 的完整檢查、選到 Cards 的 `lock.test.ts`；舊的 `tasks/`、`Claude Codex Discussion/` 落第 10 條「全部」。`hooks.test.ts` 在乾淨 clone 改 `docs/transcript.md`，Cards 跑相關測試、Capture 跑完整檢查。
@@ -402,12 +402,12 @@ A 的驗收全部完成。
 - 第 7 項：`check-docs.test.ts` 的「BEFORE_D195 也放過 Cards 的舊任務」：`plugins/cards/docs/tasks/w3.md` 放過、不在清單上的照查；Mindboard 的同名任務照查（第一步的測試照留）。
 - 第 8 項：`git ls-files tasks "Claude Codex Discussion" "plugins/*/tasks" "plugins/*/Claude Codex Discussion"` 是空的。`check-docs.test.ts` 的暫存 repo 在四種舊位置各放一個檔，都報、訊息有新位置；`docs/tasks/`、`plugins/capture/docs/tasks/` 沒有狀態行的照常報。
 - 檢查：`<B 搬檔>` 之前在工作樹跑 Cards 的 `npm run check`（2904 個測試全過）、`tools/` 的 `npm run check` 與 `npm run self-check`；self-check 原本 3 個失敗，修了再 commit（第 3 點與 `dispatch.test.ts` 一行註解）。
-- 第 9 項：L2 待送。
+- 第 9 項：L2 第一輪（`7c4828c`）七項都修了（[報告與回應](<../Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md>)）：R1 重跑改連結的腳本會把手修的 Cards backlog 連結改回共用目錄（腳本加 `settled`、那一處改成純文字）；R2 同一段的純文字當成連結；R3 `FROZEN_RULES` 範圍太寬（改成逐檔列路徑）；R4～R7 文件。第二輪待送。
 
 實作者自己選的做法（規格沒寫到的）：
 
-1. **製卡規則送給 AI 的部分不改連結**：國語、社會、英文三份規則在 `<!-- 以下送給 AI -->` 以下有連到決定、試作場與討論稿的相對路徑；改了就是改送出的內容，嵌入的雜湊會變（D-151，驗收第 B3 項要相同）。那一段照搬之前的位置留著，文件檢查用 `FROZEN_RULES` 照搬家前的位置解（解不到照樣報），社會那份一條連到已搬走的討論稿的放進例外清單；Cards backlog 記一列技術債，下次改那份規則的版本時一起改。代價：在 Obsidian 或 GitHub 上點那幾條連結打不開。
-2. **改連結的腳本加三條**：拆出的新檔與整份搬的檔裡，連結先照搬之前的位置解，搬之前解不到、搬之後解得到的（手寫成新位置的）不動；`stay`：沒搬的檔裡連到拆開的原檔、指定錨點（backlog 的〈技術債〉〈已知的限制〉）的連結留在原檔，不跟著那一節的大部分去 Cards；`frozen`：上面第 1 點的範圍不改。合併前 rebase 之後要重跑，用另存的計畫檔（加了 `stay`），在 `<B 搬檔>` 上 `--check` 是 0 個修改。
+1. **製卡規則送給 AI 的部分不改連結**：國語、社會、英文三份規則在 `<!-- 以下送給 AI -->` 以下有連到決定、試作場與討論稿的相對路徑；改了就是改送出的內容，嵌入的雜湊會變（D-151，驗收第 B3 項要相同）。那一段照搬之前的位置留著，文件檢查用 `FROZEN_RULES` 照搬家前的位置解（逐檔列出搬家時就在的路徑，L2 R3；表上沒有的、解不到的照樣報，改好了要從表上刪），社會那份一條連到已搬走的討論稿的放進例外清單；Cards backlog 記一列技術債，下次改那份規則的版本時一起改。代價：在 Obsidian 或 GitHub 上點那幾條連結打不開。
+2. **改連結的腳本加三條**：拆出的新檔與整份搬的檔裡，連結先照搬之前的位置解，搬之前解不到、搬之後解得到的（手寫成新位置的）不動；`stay`：沒搬的檔裡連到拆開的原檔、指定錨點（backlog 的〈技術債〉〈已知的限制〉）的連結留在原檔，不跟著那一節的大部分去 Cards；`frozen`：上面第 1 點的範圍不改。合併前 rebase 之後要重跑，用另存的計畫檔（加了 `stay` 與 `settled`：連結已照計畫改過一次，搬走或拆出的檔裡兩種解法不同的也列成要人看，L2 R1），在修正後的樹 `--check` 是 0 個修改、0 個要人看。
 3. **連到資料夾的連結**（`../tasks/`、`../../../docs/research/` 這類）腳本不處理，手改。
 4. `tools/tests/hooks.test.ts` 的乾淨 clone：文件照本 repo 暫存區的檔案清單同步（多的刪、少的與每一份 `.md` 從工作樹複製）。搬檔的 commit 時 clone 的 HEAD 還是舊位置，新的文件檢查會擋，pre-commit 就過不了；之後的 commit 照樣有效。
 5. `experiments/t4/` 的腳本與設定檔裡的規則檔路徑改成新位置；那裡的自我測試要在 `experiments/t4/` 另外安裝相依，沒跑。

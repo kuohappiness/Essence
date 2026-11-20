@@ -69,15 +69,34 @@ export const EXCEPTIONS: Exception[] = [
 /**
  * 製卡規則送給 AI 的部分（標記以下）嵌進外掛、算雜湊，改一個字就是新版本（D-151）：第二步 B 搬家時不改這一段，
  * 裡面的連結照搬家前的位置（docs/card-rules/）解得到也算數；下次改那份規則的版本時再改成新位置（Cards 的技術債）。
+ * 只放過搬家時就在的檔與連結路徑（B 的 L2 R3）：新的規則檔、表上沒有的路徑照常查；改好了沒用到的要從表上刪掉。
  */
-export const FROZEN_RULES = { dir: 'plugins/cards/docs/card-rules/', before: 'docs/card-rules/', marker: '<!-- 以下送給 AI -->' };
+export const FROZEN_RULES = {
+  before: 'docs/card-rules/',
+  marker: '<!-- 以下送給 AI -->',
+  links: {
+    'plugins/cards/docs/card-rules/elementary-chinese.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'plugins/cards/docs/card-rules/elementary-social.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'plugins/cards/docs/card-rules/english.md': ['../decisions.md'],
+  } as Record<string, string[]>,
+};
 
-/** 標記那一行的行號（1 起算）；不是規則檔或沒有標記時是 undefined。 */
+/** 標記那一行的行號（1 起算）；不是表上的規則檔或沒有標記時是 undefined。 */
 function frozenFrom(doc: Doc): number | undefined {
-  if (posix.dirname(doc.file) + '/' !== FROZEN_RULES.dir) return undefined;
+  if (!Object.hasOwn(FROZEN_RULES.links, doc.file)) return undefined;
   const at = doc.lines.findIndex(line => line.includes(FROZEN_RULES.marker));
   return at < 0 ? undefined : at + 1;
 }
+
+/** 連結的路徑部分（去掉錨點與查詢字串），和 FROZEN_RULES.links 比。 */
+const linkPath = (href: string) => {
+  const path = href.replace(/[?#].*$/, '');
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 
@@ -374,6 +393,7 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
   const docs = new Map([...texts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([file, text]) => [file, parse(file, text)]));
   const problems: Problem[] = [];
   const used = new Set<Exception>();
+  const usedFrozen = new Set<string>();
   // 列名只對照這次 commit 改到的任務：補完刪掉的列，不會讓以前結束的任務壞掉。-z 拿原本的路徑（檔名有空白、中文或引號都一樣）。
   const changed = staged ? new Set(git(root, ['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=ACMR']).toString('utf8').split('\0').filter(Boolean)) : new Set<string>();
   const tables = new Map<string, string[] | undefined>();
@@ -392,7 +412,11 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
       links++;
       const { target, reason } = checkLink(doc.file, href, tree, docs);
       if (!reason) continue;
-      if (frozen !== undefined && line > frozen && !checkLink(FROZEN_RULES.before + posix.basename(doc.file), href, tree, docs).reason) continue;
+      if (frozen !== undefined && line > frozen && FROZEN_RULES.links[doc.file]?.includes(linkPath(href))
+        && !checkLink(FROZEN_RULES.before + posix.basename(doc.file), href, tree, docs).reason) {
+        usedFrozen.add(doc.file + '\0' + linkPath(href));
+        continue;
+      }
       const exception = exceptions.find(e => e.file === doc.file && e.target === target);
       if (exception) used.add(exception);
       else problems.push({ file: doc.file, line, target, reason });
@@ -403,6 +427,13 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     problems.push(...checkDeferred(doc, changed.has(doc.file) ? debtFor(doc.file) : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
+  // 規則檔整份拿掉或改名時不報（表上那一列跟著刪）。
+  for (const [file, paths] of Object.entries(FROZEN_RULES.links)) {
+    if (!docs.has(file)) continue;
+    for (const path of paths.filter(path => !usedFrozen.has(file + '\0' + path))) {
+      problems.push({ file, line: 0, target: path, reason: 'FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉' });
+    }
+  }
   const deferred = DEFERRED_BACKLOGS.reduce((sum, file) => sum + debtRows(docs.get(file)).filter(isDeferredRow).length, 0);
   return { problems, files: docs.size, links, deferred };
 }

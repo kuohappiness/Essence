@@ -1,6 +1,6 @@
 # 三個外掛同一個 repo 第二步 B：L2 獨立審查（給 Codex）
 
-狀態：待審
+狀態：第一輪報告與回應見討論稿；第二輪待審
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -67,3 +67,26 @@
 - 只審查與回報，不改檔；可以在隔離的暫存 repo 或 clone 重現。不要 push、不要開 PR、不要動 `main` 的設定；需要在 GitHub 上實際跑的，寫成探針步驟交給 Claude。不要碰 iCloud 裡的任何 vault。
 - 每項發現寫：哪一軸（規格／規範與設計）、觸發條件、預期／實際、影響、位置、證據（已重現／靜態推斷／待驗證）、**真實路徑會不會發生**與發生機率、建議處理。可以回報「規格本身有漏洞」。
 - 報告寫在 `docs/Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md`，標題下第一行寫狀態；頭尾寫待審 commit、審查範圍、測試結果與沒驗的項目及原因。
+
+## 第二輪
+
+第一輪的報告與 Claude 的回應在[討論稿](<../Claude Codex Discussion/2026-11-20-one-repo-step-2b-review.md>)。請**新開一個 session**，只讀討論稿的〈先讀這裡〉、〈第一輪｜Claude 回應〉和這一節。
+
+### 審查對象
+
+- 這一節所在的 commit（`git log -1 --format=%H -- docs/tasks/one-repo-step-2b-review.md`），差異只看 `git diff 7c4828c <那個 commit>`。
+
+### 受影響的路徑
+
+- `experiments/tools/move-links.mjs` 與測試：`settled`（R1）、同一段分不出的候選（R2）。
+- `tools/check-docs.ts` 與測試：`FROZEN_RULES` 逐檔列路徑、沒用到的要刪、比對前解碼（R3）。
+- 文件：清單的補記（R4）、Cards 的架構與產品定義、國小社會試用任務的連結（R5）、兩份產品定義的原則（R6）、Capture 的 backlog（R7）、〈結果〉。
+
+### 驗證方式
+
+- 每一項的修法是不是解了原本的問題、有沒有引入新的；R1 用另存的重跑計畫（[任務說明〈結果〉](one-repo-step-2.md#結果)的〈B 的進度〉「實作者自己選的做法」第 2 點）或照清單重建的計畫加 `settled: true`，在待審樹跑 `node experiments/tools/move-links.mjs --check --plan <計畫>`。
+- `node --test experiments/tools/move-links.test.mjs`；在 `tools/`：`node --test tests/check-docs.test.ts`；`node tools/check-docs.ts`。
+
+### 回報（第二輪）
+
+照〈回報與權限〉，報告接在討論稿後面的〈第二輪｜Codex 報告〉（Claude 會貼進去；你寫在 `.local/codex/` 的回報即可）。

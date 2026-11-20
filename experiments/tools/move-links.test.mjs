@@ -246,3 +246,23 @@ void test('main：在 repo 根目錄跑；--check 只列出、結束碼 1，寫�
   assert.ok(log.mock.calls.some(call => call.arguments[0] === 'docs/x.md:1  ../src/a.ts → ../plugins/cards/src/a.ts'));
   assert.throws(() => main(['src'], root), /用法/);
 });
+
+void test('B 的 L2 R1：settled（rebase 之後重跑）時，拆出的檔裡兩種解法不同的列成要人看，手修成新位置的連結不改回去', () => {
+  // Cards backlog 是從 docs/backlog.md 拆出的；手修成 Cards 自己的 tasks/ 之後，從搬家前的位置解成最上層的 docs/tasks/。
+  const files = existing(['docs/backlog.md', 'docs/tasks/a.md', 'plugins/cards/docs/backlog.md', 'plugins/cards/docs/tasks/w3.md']);
+  const plan = { ...mapper([]), pieces: { 'plugins/cards/docs/backlog.md': 'docs/backlog.md' }, split: { 'docs/backlog.md': { anchors: {} } } };
+  const text = '已交付規格放 [tasks/](tasks/)\n';
+  const first = rewrite('plugins/cards/docs/backlog.md', text, plan, files);
+  assert.equal(first.text, '已交付規格放 [tasks/](../../../docs/tasks/)\n', '沒有 settled：照搬家前的意思（第一次搬家用）');
+  const settled = rewrite('plugins/cards/docs/backlog.md', text, { ...plan, settled: true }, files);
+  assert.equal(settled.text, text);
+  assert.deepEqual(settled.conflicts, [{ line: 1, link: 'tasks/', here: 'plugins/cards/docs/tasks', before: 'docs/tasks' }]);
+});
+
+void test('B 的 L2 R2：同一段有同一個目標的純文字與真的連結，分不出時不改、列成要人看；沒有歧義的照改', () => {
+  const text = '\\[literal](../src/a.ts) [real](../src/a.ts)\n\n[另一段](../src/a.ts)\n';
+  const result = rewrite('docs/x.md', text, map, exists);
+  assert.equal(result.text, '\\[literal](../src/a.ts) [real](../src/a.ts)\n\n[另一段](../plugins/cards/src/a.ts)\n');
+  assert.deepEqual(result.conflicts.map(item => [item.line, item.ambiguous]), [[1, '../plugins/cards/src/a.ts'], [1, '../plugins/cards/src/a.ts']]);
+  assert.deepEqual(rewrite('docs/x.md', result.text, map, exists).edits, []);
+});

@@ -5,7 +5,8 @@
 //
 // 路徑是 repo 根目錄算的；資料夾的對照也套到底下每個檔（src=plugins/cards/src）。
 // 計畫檔（B 用）：{ "moves": [["舊", "新"], …], "pieces": { "拆出的新檔": "原檔" }, "split": { "原檔": { "default": "沒有錨點時去的檔", "anchors": { "錨點": "那一段現在在的檔" }, "stay": ["錨點"] } },
-//   "frozen": [{ "dir": "資料夾/", "marker": "標記" }] }（frozen：這個資料夾的檔，標記以下的連結不改，例如製卡規則送給 AI 的部分；
+//   "frozen": [{ "dir": "資料夾/", "marker": "標記" }], "settled": true }（settled：連結已照這份計畫改過一次（rebase 之後重跑），
+//   搬走或拆出的檔裡兩種解法不同的也列成要人看；frozen：這個資料夾的檔，標記以下的連結不改，例如製卡規則送給 AI 的部分；
 //   stay：拆完後原檔也有同名一節的錨點，沒搬的檔連到它時留在原檔，例如最上層 backlog 的〈技術債〉放共用工具的）
 // - 連結目標用和 tools/check-docs.ts 同一個 Markdown 解析器（markdown-it，html: true）取：行內、引用式、角括號、自動連結都算，
 //   程式碼框、HTML 區塊與行內程式碼裡的不算。原文裡找到的每個候選位置，都要對得上解析器在同一段（同幾行）取到的連結，
@@ -121,12 +122,35 @@ function candidates(mask) {
   return kept;
 }
 
-/** 候選位置對得上解析器的才留下：行內與自動連結要在同一段裡有同一個 href（用掉一個），定義要是解析器登記的那一個。 */
+/**
+ * 候選位置對得上解析器的才留下：行內與自動連結要在同一段裡有同一個 href（用掉一個），定義要是解析器登記的那一個。
+ * 同一段裡同一個 href 的候選比解析器取到的多（例如前面一個 `[` 跳脫成純文字），分不出哪一個是真的連結：
+ * 這些候選都標成 ambiguous，會改的列成要人看、不改（B 的 L2 R2）。
+ */
 function confirmed(source, list, { blocks, references }) {
   const lineOf = offset => source.slice(0, offset).split('\n').length - 1;
   const usedLabels = new Set();
   const out = [];
+  const hrefOf = candidate => markdown.normalizeLink(markdown.utils.unescapeAll(candidate.inner));
+  const blockOf = candidate => {
+    const line = lineOf(candidate.start);
+    return blocks.findIndex(item => line >= item.from && line < item.to);
+  };
+  const keyOf = candidate => blockOf(candidate) + '\0' + hrefOf(candidate);
+  const seen = new Map();
+  for (const candidate of list) if (candidate.kind !== 'definition' && blockOf(candidate) >= 0) seen.set(keyOf(candidate), (seen.get(keyOf(candidate)) ?? 0) + 1);
+  const ambiguous = candidate => {
+    const at = blockOf(candidate);
+    const parsedCount = at >= 0 ? (blocks[at].hrefs.get(hrefOf(candidate)) ?? 0) : 0;
+    // 解析器一個都沒取到的，原本就不改（不是連結），不算歧義。
+    return parsedCount > 0 && (seen.get(keyOf(candidate)) ?? 0) > parsedCount;
+  };
+  const flagged = new Set(list.filter(candidate => candidate.kind !== 'definition' && ambiguous(candidate)));
   for (const candidate of list) {
+    if (flagged.has(candidate)) {
+      out.push({ ...candidate, ambiguous: true });
+      continue;
+    }
     const href = markdown.normalizeLink(markdown.utils.unescapeAll(candidate.inner));
     const line = lineOf(candidate.start);
     if (candidate.kind === 'definition') {
@@ -183,7 +207,7 @@ export function rewrite(file, text, plan, exists) {
   const mask = masked(source, info.tokens);
   const origin = pieces[file] ?? backward(file);
   const retarget = splitter(plan.split, origin === file);
-  const edits = [];
+  const allEdits = [];
   const conflicts = [];
   const lineOf = start => source.slice(0, start).split('\n').length;
   // 凍結的段落（例如製卡規則送給 AI 的部分：內容一變就是新版本）：標記以下的連結不改。
@@ -192,6 +216,8 @@ export function rewrite(file, text, plan, exists) {
   for (const candidate of confirmed(source, candidates(mask), info)) {
     const { start, end, angle, inner, kind } = candidate;
     if (frozenAt >= 0 && start > frozenAt) continue;
+    // 分不出是不是真的連結的候選：會改的列成要人看，不改。
+    const edits = candidate.ambiguous ? { push: ({ to }) => conflicts.push({ line: lineOf(start), link: inner, ambiguous: to }) } : allEdits;
     const unescaped = markdown.utils.unescapeAll(inner);
     const wrap = written => angle ? `<${written}>` : written;
     const url = REPO_URL.exec(unescaped);
@@ -230,7 +256,8 @@ export function rewrite(file, text, plan, exists) {
     // 搬走或拆出的檔裡只有照現在的位置解得到的連結，是搬家時照新位置寫的（例如拆出的段落連回原檔留下的那一節），不改。
     if (origin !== file && fromBefore === undefined) continue;
     // 兩種解法都存在又不同：搬走或拆出的檔照搬家前的意思（寫的人當時指的是那裡）；沒搬的檔不猜，列成要人看。
-    if (fromHere !== undefined && fromBefore !== undefined && fromHere !== fromBefore && origin === file) {
+    // 計畫寫了 settled（連結已照搬家改過一次，例如 rebase 之後重跑）：搬走或拆出的檔也不猜，手修成新位置的連結才不會被改回去（B 的 L2 R1）。
+    if (fromHere !== undefined && fromBefore !== undefined && fromHere !== fromBefore && (origin === file || plan.settled)) {
       conflicts.push({ line: lineOf(start), link: inner, here: fromHere, before: fromBefore });
       continue;
     }
@@ -241,11 +268,11 @@ export function rewrite(file, text, plan, exists) {
     if (target === here) continue;
     edits.push({ start, end, from: inner, to: wrap(written) });
   }
-  edits.sort((a, b) => b.start - a.start);
+  allEdits.sort((a, b) => b.start - a.start);
   let out = source;
-  for (const edit of edits) out = out.slice(0, edit.start) + edit.to + out.slice(edit.end);
+  for (const edit of allEdits) out = out.slice(0, edit.start) + edit.to + out.slice(edit.end);
   if (crlf) out = out.replace(/\n/g, '\r\n');
-  return { text: bom + out, edits: edits.reverse().map(({ from, to, start }) => ({ line: lineOf(start), from, to })), conflicts };
+  return { text: bom + out, edits: allEdits.reverse().map(({ from, to, start }) => ({ line: lineOf(start), from, to })), conflicts };
 }
 
 const USAGE = '用法：node experiments/tools/move-links.mjs [--check] [--plan <計畫.json>] [<舊路徑>=<新路徑> ...]';
@@ -270,13 +297,17 @@ export function main(args, root = process.cwd()) {
     const parts = file.split('/');
     for (let i = 1; i <= parts.length; i++) paths.add(parts.slice(0, i).join('/'));
   }
-  const map = { ...mapper(moves), pieces: plan.pieces, split: plan.split, frozen: plan.frozen };
+  const map = { ...mapper(moves), pieces: plan.pieces, split: plan.split, frozen: plan.frozen, settled: plan.settled };
   let changed = 0;
   let review = 0;
   for (const file of files.filter(name => name.endsWith('.md'))) {
     const text = readFileSync(posix.join(root.replaceAll('\\', '/'), file), 'utf8');
     const result = rewrite(file, text, map, path => paths.has(path));
-    for (const item of result.conflicts) console.log(`要人看 ${file}:${item.line}  ${item.link}：現在的位置解成 ${item.here}，搬家前的位置解成 ${item.before}`);
+    for (const item of result.conflicts) {
+      console.log(item.ambiguous === undefined
+        ? `要人看 ${file}:${item.line}  ${item.link}：現在的位置解成 ${item.here}，搬家前的位置解成 ${item.before}`
+        : `要人看 ${file}:${item.line}  ${item.link}：同一段有同一個目標的純文字，分不出哪一個是連結（會改成 ${item.ambiguous}）`);
+    }
     review += result.conflicts.length;
     if (!result.edits.length) continue;
     changed += result.edits.length;

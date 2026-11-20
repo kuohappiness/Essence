@@ -22,7 +22,7 @@
 
 ## 要做什麼
 
-1. **轉錄**：照 transcribe.md，由你自己看原頁轉錄，不呼叫付費 API（同 [第二輪的轉錄](objective-architecture-r2-transcription.md)）。課本與習作各一份，或合成一份並標出習作的部分。康軒的圖號每兩頁重新編號，錨點要帶頁碼才不會重複（[backlog](../../../../docs/backlog.md) 的轉錄稿圖號項目）；照現有工具做得到的寫法，並在結果寫下用了什麼寫法。抽查 3 頁對照原頁。
+1. **轉錄**：照 transcribe.md，由你自己看原頁轉錄，不呼叫付費 API（同 [第二輪的轉錄](objective-architecture-r2-transcription.md)）。課本與習作各一份，或合成一份並標出習作的部分。康軒的圖號每兩頁重新編號，錨點要帶頁碼才不會重複（[backlog](../../../capture/docs/backlog.md#待決問題) 的轉錄稿圖號項目）；照現有工具做得到的寫法，並在結果寫下用了什麼寫法。抽查 3 頁對照原頁。
 2. **接提示**：系統提示照 R3 的順序，最後接上預設：`格式.md`、`../短規則.md`、`判斷邊界.md`、`五步.md`、`docs/card-rules/elementary-social.md`。任務資料：
    - 學生：國小五年級（小五上）
    - 科目：社會
