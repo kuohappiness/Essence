@@ -229,6 +229,23 @@ void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相�
   assert.equal(map.sourcesContent.length, map.sources.length);
 });
 
+// D-208 第二步驗收第 A3 項：搬家前後的建置要逐位元組比，建置版本（第一行與程式本體的 BUILD）由驗收填成同一個。
+void test('D-208 buildPlugin 的 version 選項：第一行與程式本體都用給定的版本，其餘和預設建置相同', async t => {
+  const fixed = await mkdtemp(join(tmpdir(), 'essence-fixed-'));
+  const plain = await mkdtemp(join(tmpdir(), 'essence-fixed-'));
+  t.after(async () => { await rm(fixed, { recursive: true, force: true }); await rm(plain, { recursive: true, force: true }); });
+  const { buildPlugin } = await import('../tools/build.mjs');
+  const given = '9.9.9+fixed00';
+  assert.deepEqual(await buildPlugin({ root, outdir: fixed, version: given }), { version: given, dev: false });
+  const { version } = await buildPlugin({ root, outdir: plain });
+  const code = await readFile(join(fixed, 'main.js'), 'utf8');
+  assert.equal(code.split('\n')[0], `/*! Essence Cards build=${given} dev=false */`);
+  assert.ok(code.split(given).length > 2, '程式本體的 BUILD 也是給定的版本');
+  assert.ok(!code.includes(version), '沒有預設的版本');
+  assert.equal(code.replaceAll(given, version), await readFile(join(plain, 'main.js'), 'utf8'));
+  assert.deepEqual(await readFile(join(fixed, 'styles.css')), await readFile(join(plain, 'styles.css')));
+});
+
 // D-148 第 3 點（建置）：Node 與 Electron 只在 src/desktop/ 引入、只能用明列的；src/desktop/ 只由 main.ts 動態載入。
 void test('D-148 建置擋下 src/desktop/ 以外引入 Node、明列以外的模組、靜態載入 src/desktop/', async t => {
   const cases: [string, Record<string, string>, RegExp][] = [

@@ -102,9 +102,10 @@ export async function embedRules(rulesRoot = resolve(defaultRoot, RULES_FROM_ROO
  * sourcemap：對照表（main.js.map）另外寫到這個路徑（D-155 第 5 點）；用 esbuild 的 external，main.js 逐位元組不變、
  * 不加 sourceMappingURL。sources 改成相對 repo 根目錄，內容（sourcesContent）一起存，定位時不用那一版的原始碼。
  * rulesRoot：規則檔的基準，預設是 root 往上 RULES_FROM_ROOT（測試的暫存專案可以另外指定）。
+ * version：只給測試與驗收用，固定建置版本（D-208 第二步驗收第 A3 項：搬家前後逐位元組比）；安裝與發布的流程不傳。
  */
-export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root, RULES_FROM_ROOT), dev = false, outdir = root, sourcemap } = {}) {
-  const version = await buildVersion(root);
+export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root, RULES_FROM_ROOT), dev = false, outdir = root, sourcemap, version: fixed } = {}) {
+  const version = fixed ?? await buildVersion(root);
   const rules = await embedRules(rulesRoot);
   await mkdir(outdir, { recursive: true });
   const outfile = resolve(outdir, 'main.js');
