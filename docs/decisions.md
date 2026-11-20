@@ -5980,6 +5980,7 @@
    - 先在隔離的工作樹與測試 vault 演練。比較工具能判定新舊兩種外掛根，判不出或兩邊都符合就停。驗收舊版重裝、舊 ZIP 還原、搬後的 Windows 更新與 iPhone 載入；tag、外掛 ID 與資料格式不變。路徑搬動、工具調整、規格提取分開 commit。
    - `product.md`、`architecture.md`、`syntax.md` 逐段拆成共用與 Cards 專用；文件先列舊路徑、新路徑與引用處，有外部依賴的舊錨點留一行轉往新頁。
    - 這時 D-110 的「程式放在 repo 最上層」改成 `plugins/cards/`。
+   - 遷移任務：[第二步任務說明](../tasks/one-repo-step-2.md)。
 9. **D-143 的一次性例外**：僅在本 D-ID 所連遷移任務列出的路徑（第一步的 Capture、Mindboard 規畫；第二步的 Cards 文件），一次隨 repo 結構調整搬移已完成的任務、討論稿與規畫，保留內容及狀態，更新引用並驗證舊入口。遷移任務結案後，新舊文件的日常結案一律照 D-143。
 10. **照舊**：各外掛各自安裝、各自可用（D-006）。外掛之間不互相 import，由機械檢查擋；互通只走最上層的格式文件，或 Cards 執行時開放的介面（D-056）。共用程式等兩個外掛真的要用才建。自己家用從這個 repo 直接裝；給別人裝時，每個外掛一個公開 repo 放發布檔（發布流程見[討論稿第一輪的 Claude 回應](<../Claude Codex Discussion/2026-11-09-one-repo-three-plugins.md#claude-回應-codex-第一輪2026-11-09>)）；現有的 `Essence-Capture` repo 留著，之後當 Capture 的公開 repo。
 11. Capture 要不要回到 v1（D-206）不在這條決定，另外決定。
