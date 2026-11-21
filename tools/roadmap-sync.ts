@@ -321,6 +321,15 @@ const doneKey = (row: { date: string; work: string }) => `${row.date}|${row.work
 
 const stripBold = (work: string) => work.replace(/^\*\*(.*)\*\*$/, '$1');
 
+/** YYYY-MM-DD 而且是真的日期（重播時只比「不晚於今天」，字串比較擋不住 2026-1-5，L2 第二輪 N6）。 */
+const isDate = (text: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
 /**
  * 〈已完成〉新加的列（照 doneKey 比，HEAD 沒有的）要是工具寫的，各份 roadmap 一起看（D-217 第 4 點；L2 R2、R3、R5）：
  * - 格式、入口已結束、「完成」那一句和入口一致；
@@ -373,7 +382,8 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
         const moved = moveText(status.text, entry, file);
         if ('error' in moved || moved.text !== match[2]) add(`和入口 ${entry} 的「完成」那一句不一樣`);
         const expected = doneDate(entry, source, today);
-        if (replay ? row.date > today : row.date !== expected) add(replay ? `日期不能晚於今天（${today}）` : `日期要是 ${expected}（入口收尾的那天）`);
+        if (!isDate(row.date)) add(`日期要寫成 YYYY-MM-DD 的真實日期（現在是「${row.date}」）`);
+        else if (replay ? row.date > today : row.date !== expected) add(replay ? `日期不能晚於今天（${today}）` : `日期要是 ${expected}（入口收尾的那天）`);
         const name = before.get(entry);
         if (name && stripBold(name.work) !== match[1]) add(`工作名稱要和 HEAD 狀態板的「${stripBold(name.work)}」一樣`);
         if (first) add(`入口 ${entry} 在 ${first} 已經有一筆新的完成列`);

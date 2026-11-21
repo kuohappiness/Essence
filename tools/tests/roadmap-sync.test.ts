@@ -339,6 +339,29 @@ void test('L2 N1 N4 掛真的 hook：合併（pre-merge-commit 時還沒有 MERG
   assert.match(git(['show', '-s', '--format=%s', 'HEAD']), /^x$/m);
 });
 
+void test('L2 N6 重播時新的完成列的日期也要是 YYYY-MM-DD 的真實日期', async t => {
+  const { add, git, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  const done = (date: string) => roadmap([], [], [`| ${date} | **甲**：做完（已合併，[入口](tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']);
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  commit();
+  git(['branch', '-M', 'main']);
+  git(['checkout', '-q', '-b', 'feature']);
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', done('2026-11-23'));
+  commit('2026-11-23T10:00:00+08:00');
+  git(['checkout', '-q', 'main']);
+  await add('docs/other.md', '# 別的\n');
+  commit('2026-11-24T10:00:00+08:00');
+  git(['merge', '-q', '--no-ff', '--no-commit', 'feature']);
+  assert.equal(check().status, 0, check().stderr);
+  for (const date of ['2026-1-5', '2026-02-30', '']) {
+    await add('docs/roadmap.md', done(date));
+    assert.match(check().stderr, new RegExp(`docs/roadmap\\.md:19  .*日期要寫成 YYYY-MM-DD 的真實日期（現在是「${date}」）`), date);
+  }
+});
+
 void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
