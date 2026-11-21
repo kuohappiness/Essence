@@ -340,6 +340,86 @@ void test('L2 N1 N4 掛真的 hook：合併（pre-merge-commit 時還沒有 MERG
   assert.match(git(['show', '-s', '--format=%s', 'HEAD']), /^x$/m);
 });
 
+void test('L2 M1 合併、squash 帶進來的完成列是另一邊驗過的：另一邊做了好幾步也放行；解衝突時丟掉另一邊的列照擋', async t => {
+  const { root, put, read, git, sync } = await repo(t);
+  const hooks = git(['rev-parse', '--git-path', 'hooks']).trim();
+  const slash = (path: string) => path.replace(/\\/g, '/');
+  const hook = `#!/bin/sh\nexec "${slash(process.execPath)}" "${slash(script)}" --check --staged --root "${slash(root)}" --today ${TODAY}\n`;
+  await mkdir(join(root, hooks), { recursive: true });
+  for (const name of ['pre-commit', 'pre-merge-commit']) await writeFile(join(root, hooks, name), hook, { mode: 0o755 });
+  const run = (args: string[]) => spawnSync('git', ['-c', 'core.autocrlf=false', '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.editor=true', ...args], { cwd: root, encoding: 'utf8' });
+  // 每一步照規範做：改入口、跑同步、stage、commit（掛著 hook，每一步自己都要通過）。
+  const step = async (message: string, files: Record<string, string>, edit = (text: string) => text) => {
+    for (const [path, text] of Object.entries(files)) await put(path, text);
+    await put('docs/roadmap.md', edit(await read('docs/roadmap.md')));
+    // 同步只讀追蹤的檔：新檔先 stage。
+    git(['add', '--', 'docs']);
+    const synced = sync();
+    assert.equal(synced.status, 0, `${message}：${synced.stderr}`);
+    git(['add', '--', 'docs']);
+    const done = run(['commit', '-q', '-m', message]);
+    assert.equal(done.status, 0, `${message}：${done.stderr}`);
+  };
+  const BOARD_RULE = '|---|---|---|---|---|\n';
+  const DONE_HEAD = '| 日期 | 工作 |\n|---|---|\n';
+  const close = (text: string) => () => step(`收尾：${text}`, { 'docs/tasks/x.md': entry(`狀態：已合併｜完成：${text}｜等誰：—`) });
+  const reopen = () => step('重新開工', { 'docs/tasks/x.md': entry('狀態：實作中｜下一步：再做｜等誰：Claude') },
+    text => text.replace(BOARD_RULE, `${BOARD_RULE}| 甲 | 實作中 | 再做 | Claude | [任務](tasks/x.md) |\n`));
+  await put('docs/tasks/x.md', entry('狀態：實作中｜下一步：做｜等誰：Claude'));
+  await put('docs/plans/p.md', entry('狀態：討論中｜下一步：談｜等誰：使用者'));
+  await put('docs/roadmap.md', roadmap(['| 甲 | 舊 | 舊 | 舊 | [任務](tasks/x.md) |', '| 乙 | 舊 | 舊 | 舊 | [主文](plans/p.md) |']));
+  await step('base', {});
+  git(['branch', '-M', 'base']);
+  // 功能分支在另一邊動手之前開，只改無關的檔。
+  git(['checkout', '-q', '-b', 'feature']);
+  await step('feature', { 'docs/other.md': '# 別的\n' });
+  const scenarios: [string, (() => Promise<void>)[]][] = [
+    ['收尾後補寫完成那一句', [close('做完'), close('做完，補一句')]],
+    ['收尾後改成已結案', [close('做完'), () => step('改成已結案', { 'docs/tasks/x.md': entry('狀態：已結案｜完成：做完｜等誰：—') })]],
+    ['收尾後重新開工', [close('做完'), reopen]],
+    ['收尾、重新開工、再收尾', [close('做完'), reopen, close('又做完')]],
+    ['換入口再收尾', [
+      () => step('換入口', { 'docs/plans/p.md': entry('狀態：已結案 → [任務](../tasks/q.md)｜完成：交給任務｜等誰：—'), 'docs/tasks/q.md': entry('狀態：實作中｜下一步：做｜等誰：Claude') },
+        text => text.replace('[主文](plans/p.md)', '[任務](tasks/q.md)')),
+      () => step('任務收尾', { 'docs/tasks/q.md': entry('狀態：已合併｜完成：做完｜等誰：—') }),
+    ]],
+    ['改工作名稱再收尾', [() => step('改名', {}, text => text.replace('| 甲 |', '| 甲二 |')), close('做完')]],
+  ];
+  for (const [k, [name, steps]] of scenarios.entries()) {
+    git(['checkout', '-q', '-B', `side${k}`, 'base']);
+    for (const s of steps) await s();
+    // 另一邊併進功能分支：真的合併（pre-merge-commit）與 squash（pre-commit）；再反過來把功能分支併回另一邊。
+    git(['checkout', '-q', '-B', 'work', 'feature']);
+    const merged = run(['merge', '-q', '--no-ff', '-m', 'merge', `side${k}`]);
+    assert.equal(merged.status, 0, `${name}（合併）：${merged.stderr}`);
+    git(['reset', '-q', '--hard', 'feature']);
+    assert.equal(run(['merge', '-q', '--squash', `side${k}`]).status, 0, name);
+    const squashed = run(['commit', '-q', '-m', 'squash']);
+    assert.equal(squashed.status, 0, `${name}（squash）：${squashed.stderr}`);
+    git(['checkout', '-q', `side${k}`]);
+    const back = run(['merge', '-q', '--no-ff', '-m', 'back', 'feature']);
+    assert.equal(back.status, 0, `${name}（併回）：${back.stderr}`);
+  }
+  // 兩邊各收尾一件，〈已完成〉在同一處衝突：丟掉另一邊那一列（那件工作不在這邊的狀態板上）照擋，兩列都留著放行。
+  git(['checkout', '-q', '-B', 'other', 'base']);
+  await step('丙開工', { 'docs/tasks/z.md': entry('狀態：實作中｜下一步：做｜等誰：Claude') },
+    text => text.replace(BOARD_RULE, `${BOARD_RULE}| 丙 | 舊 | 舊 | 舊 | [任務](tasks/z.md) |\n`));
+  await step('丙收尾', { 'docs/tasks/z.md': entry('狀態：已合併｜完成：丙做完｜等誰：—') });
+  git(['checkout', '-q', '-B', 'work', 'feature']);
+  await close('甲做完')();
+  assert.notEqual(run(['merge', '-q', '--no-ff', '-m', 'merge', 'other']).status, 0);
+  git(['checkout', '--ours', '--', 'docs/roadmap.md']);
+  git(['add', '--', 'docs/roadmap.md']);
+  const dropped = run(['commit', '-q', '--no-edit']);
+  assert.notEqual(dropped.status, 0);
+  assert.match(dropped.stderr, /docs\/roadmap\.md:\d+  合併進來的 [0-9a-f]{7} 的〈已完成〉有「\| 2026-11-25 \| \*\*丙\*\*：丙做完（已合併，\[入口\]\(tasks\/z\.md\)） \|」這一列，現在不見了/);
+  const theirs = git(['show', 'other:docs/roadmap.md']).split('\n').find(line => line.includes('**丙**'))!;
+  await put('docs/roadmap.md', (await read('docs/roadmap.md')).replace(DONE_HEAD, `${DONE_HEAD}${theirs}\n`));
+  git(['add', '--', 'docs/roadmap.md']);
+  const kept = run(['commit', '-q', '--no-edit']);
+  assert.equal(kept.status, 0, kept.stderr);
+});
+
 void test('L2 N6 重播時新的完成列的日期也要是 YYYY-MM-DD 的真實日期', async t => {
   const { add, git, sync, commit } = await repo(t);
   const check = () => sync('--check', '--staged');

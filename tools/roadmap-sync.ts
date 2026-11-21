@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt from 'markdown-it';
-import { replaying } from './git-state.ts';
+import { replaySides, replaying } from './git-state.ts';
 import { parseStatus, type Status } from './status-line.ts';
 
 const ROADMAP = /^(?:plugins\/[^/]+\/)?docs\/roadmap\.md$/;
@@ -36,6 +36,8 @@ export interface Source {
   files(): string[];
   /** 正在重播別處已經 commit 的內容（合併、squash、cherry-pick、rebase）：另一邊帶來的完成列，日期是它那邊收尾的那天。 */
   replaying(): boolean;
+  /** 重播時另一邊的 commit 和那時這份檔的內容；whole 是真的合併（另一邊的內容整個併進來）。 */
+  sides(path: string): { rev: string; whole: boolean; text: string | undefined }[];
 }
 
 const markdown = new MarkdownIt();
@@ -319,6 +321,21 @@ function doneRowsOf(text: string): { date: string; work: string; line: number }[
 /** 比對 HEAD 用的鍵：日期＋拿掉連結目標的文字（只改連結目標的舊列還是舊列，L2 R2）。 */
 const doneKey = (row: { date: string; work: string }) => `${row.date}|${row.work.replace(INLINE_LINK, '[$1]')}`;
 
+/** 〈已完成〉的列照 doneKey 數：同一個鍵有幾列，列的原文給「不見了」的訊息用。 */
+type Tally = Map<string, { row: string; count: number }>;
+const tally = (rows: readonly { date: string; work: string }[]): Tally => {
+  const counts: Tally = new Map();
+  for (const row of rows) counts.set(doneKey(row), { row: rowOf([row.date, row.work]), count: (counts.get(doneKey(row))?.count ?? 0) + 1 });
+  return counts;
+};
+/** 對到一列就扣一次；沒有剩的回傳 false。 */
+const take = (counts: Tally, key: string) => {
+  const kept = counts.get(key);
+  if (!kept?.count) return false;
+  kept.count--;
+  return true;
+};
+
 const stripBold = (work: string) => work.replace(/^\*\*(.*)\*\*$/, '$1');
 
 /** 「已結案 → <下一站>」連到的 Markdown 檔（從入口所在的資料夾算的 repo 路徑）；D-ID 與其他狀態是空的。 */
@@ -339,15 +356,15 @@ const isDate = (text: string) => {
 };
 
 /**
- * 〈已完成〉新加的列（照 doneKey 比，HEAD 沒有的）要是工具寫的，各份 roadmap 一起看（D-217 第 4 點；L2 R2、R3、R5）：
+ * 〈已完成〉新加的列（照 doneKey 比，HEAD 和重播時另一邊都沒有的）要是工具寫的，各份 roadmap 一起看（D-217 第 4 點；L2 R2、R3、R5）：
  * - 格式、入口已結束、「完成」那一句和入口一致；
- * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時另一邊的列只要不晚於今天）；
+ * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時只要不晚於今天）；
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
- * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外）；
- * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；沒結束的列也不能刪；
- *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有新列）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
- * - HEAD 的〈已完成〉每一列都還在。
- * HEAD 沒有的 roadmap 不看。
+ * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外），不和另一邊帶進來的列重複；
+ * - HEAD 有列的入口結束了、列不見了，就要有它的新列或另一邊帶進來的列（手動刪掉的列會漏記）；沒結束的列也不能刪；
+ *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有完成列）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
+ * - HEAD 的〈已完成〉每一列都還在；真的合併時另一邊的也是。
+ * 另一邊已經 commit 的列只查格式與日期，不照這邊的入口重驗（L2 第三輪 M1）。HEAD 沒有的 roadmap 不看。
  */
 export function checkDone(roadmaps: readonly { file: string; text: string }[], source: Source, today: string): Problem[] {
   const problems: Problem[] = [];
@@ -357,33 +374,42 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
   for (const [file, head] of headOf) for (const row of head === undefined ? [] : placedRows(file, lf(head))) if (!before.has(row.path)) before.set(row.path, { work: row.work, file });
   const placed = new Set(roadmaps.flatMap(({ file, text }) => placedRows(file, lf(text)).map(row => row.path)));
 
-  // 每一列的入口；新的列另外記下第一筆在哪。
+  // 每一列的入口；新的列另外記下第一筆在哪，另一邊帶進來的列也是。
   const fresh = new Map<string, string>();
+  const carried = new Map<string, string>();
   const old: { path: string; date: string; at: string }[] = [];
   const checks: (() => void)[] = [];
-  // 上線前的 roadmap（HEAD 沒有〈等觸發點〉）：上線那次改了格式、換了入口、舊列搬去封存，HEAD 的列不能照新規則比（L2 第二輪 N2、N3）。
-  const legacy = new Set([...headOf].filter(([, head]) => head !== undefined && !sectionsOf(lf(head)).some(s => s.title === WAITING.section)).map(([file]) => file));
+  // 上線前的 roadmap（沒有〈等觸發點〉）：上線那次改了格式、換了入口、舊列搬去封存，那時的列不能照新規則比（L2 第二輪 N2、N3）。
+  const isLegacy = (text: string) => !sectionsOf(lf(text)).some(s => s.title === WAITING.section);
+  const legacy = new Set([...headOf].filter(([, head]) => head !== undefined && isLegacy(head)).map(([file]) => file));
   for (const { file, text } of roadmaps) {
     const head = headOf.get(file);
     if (head === undefined) continue;
-    const left = new Map<string, { row: string; count: number }>();
-    for (const row of doneRowsOf(lf(head))) {
-      const key = doneKey(row);
-      left.set(key, { row: rowOf([row.date, row.work]), count: (left.get(key)?.count ?? 0) + 1 });
-    }
+    // 要留著的列：HEAD 的，和重播時另一邊的（上線前格式的另一邊不算）；同一列兩邊都有，對到一次就兩邊各扣一次（L2 第三輪 M1）。
+    const left = tally(doneRowsOf(lf(head)));
+    const sides = source.sides(file).flatMap(side => side.text === undefined || isLegacy(side.text) ? [] : [{ ...side, left: tally(doneRowsOf(lf(side.text))) }]);
     for (const row of doneRowsOf(lf(text))) {
       const match = DONE_CELL.exec(row.work);
       const found = match ? entryOf(`[入口](${match[4]})`, file) : undefined;
       const path = found && 'path' in found ? found.path : undefined;
-      const kept = left.get(doneKey(row));
-      if (kept?.count) {
-        kept.count--;
+      const key = doneKey(row);
+      const inHead = take(left, key);
+      const inSide = sides.map(side => take(side.left, key)).includes(true);
+      if (inHead) {
         if (path) old.push({ path, date: row.date, at: `${file}:${row.line}` });
         continue;
       }
       const add = (reason: string) => problems.push({ file, line: row.line, reason: `〈已完成〉新加的列要由工具產生（入口的狀態改成已合併或已結案，再跑 node tools/roadmap-sync.ts）：${reason}` });
       if (!match) {
+        // 另一邊帶進來的也查：上線前開的分支手寫的列，先併進新的 main 再併回來時照樣擋（規範〈roadmap〉的遷移步驟）。
         add('格式不是「**工作**：完成（已合併，[入口](…)）」');
+        continue;
+      }
+      // 另一邊已經 commit 的列：入口之後可能又改了（補一句、重新開工、換名字），不照這邊的入口重驗，只查日期（L2 第三輪 M1）。
+      if (inSide) {
+        if (!isDate(row.date)) add(`日期要寫成 YYYY-MM-DD 的真實日期（現在是「${row.date}」）`);
+        else if (row.date > today) add(`日期不能晚於今天（${today}）`);
+        if (path && !carried.has(path)) carried.set(path, `${file}:${row.line}`);
         continue;
       }
       const first = path ? fresh.get(path) : undefined;
@@ -402,29 +428,36 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
         const name = before.get(entry);
         if (name && stripBold(name.work) !== match[1]) add(`工作名稱要和 HEAD 狀態板的「${stripBold(name.work)}」一樣`);
         if (first) add(`入口 ${entry} 在 ${first} 已經有一筆新的完成列`);
+        const elsewhere = carried.get(entry);
+        if (elsewhere) add(`入口 ${entry} 在 ${elsewhere} 已經有合併帶進來的完成列`);
         // 重新開工（HEAD 的狀態板或〈等觸發點〉有它）又在同一天結束的第二筆放行（L2 第二輪 N5）。
         const same = old.find(o => o.path === entry && o.date === row.date);
         if (same && !before.has(entry)) add(`入口 ${entry} 在 ${same.at} 已經有同一天的完成列`);
       });
     }
-    // HEAD 的列沒有對到的：被刪掉或搬走了（解衝突時丟掉一邊也是），L2 第二輪 N3。
-    if (legacy.has(file)) continue;
     const at = sectionsOf(lf(text)).find(s => s.title === DONE.section);
-    for (const { row, count } of left.values()) {
-      for (let k = 0; k < count; k++) problems.push({ file, line: at ? at.start + 1 : 0, reason: `HEAD 的〈已完成〉有「${row}」這一列，現在不見了：舊的列不刪也不搬（只能改連結的目標），把它加回來` });
-    }
+    const missing = (counts: Tally, owner: string, hint: string) => {
+      for (const { row, count } of counts.values()) {
+        for (let k = 0; k < count; k++) problems.push({ file, line: at ? at.start + 1 : 0, reason: `${owner}的〈已完成〉有「${row}」這一列，現在不見了：${hint}` });
+      }
+    };
+    // HEAD 的列沒有對到的：被刪掉或搬走了（解衝突時丟掉自己那一列也是），L2 第二輪 N3。
+    if (!legacy.has(file)) missing(left, 'HEAD ', '舊的列不刪也不搬（只能改連結的目標），把它加回來');
+    // 真的合併：另一邊的列也要都在（解衝突時丟掉另一邊那一列），L2 第三輪 M1。
+    for (const side of sides) if (side.whole) missing(side.left, `合併進來的 ${side.rev.slice(0, 7)} `, '解衝突時兩邊的完成列都留著，把它加回來');
   }
   for (const check of checks) check();
 
+  const closed = (path: string) => fresh.has(path) || carried.has(path);
   for (const [path, { file }] of before) {
-    if (placed.has(path) || fresh.has(path) || legacy.has(file)) continue;
+    if (placed.has(path) || closed(path) || legacy.has(file)) continue;
     const text = source.read(path);
     const line = text === undefined ? undefined : statusLineOf(text);
     const parsed = line ? parseStatus(line) : undefined;
     if (!parsed || 'error' in parsed) continue;
     // 換入口（例如討論稿結案、交給任務）：舊入口寫「已結案 → <新入口>」，新入口在狀態板或〈等觸發點〉、或有新的完成列，
     // 工作沒有結束。只看舊入口自己寫的下一站，不看別處有沒有同名的列（L2 第二輪 N2、第三輪 M2）。
-    if (parsed.status.done && nextStations(parsed.status, path).some(next => placed.has(next) || fresh.has(next))) continue;
+    if (parsed.status.done && nextStations(parsed.status, path).some(next => placed.has(next) || closed(next))) continue;
     const sections = sectionsOf(lf(roadmaps.find(r => r.file === file)!.text));
     const at = sections.find(s => s.title === (parsed.status.done ? DONE.section : BOARD.section));
     problems.push({ file, line: at ? at.start + 1 : 0, reason: parsed.status.done
@@ -451,6 +484,7 @@ export function gitSource(root: string, staged: boolean): Source {
   const hasHead = tryGit(root, ['rev-parse', '--verify', '-q', 'HEAD']) !== undefined;
   const tracked = git(root, ['ls-files', '-z']).split('\0').filter(Boolean);
   const trackedSet = new Set(tracked);
+  let sides: ReturnType<typeof replaySides> | undefined;
   return {
     files: () => tracked,
     read: path => {
@@ -465,6 +499,7 @@ export function gitSource(root: string, staged: boolean): Source {
     },
     head: path => (hasHead ? tryGit(root, ['show', `HEAD:${path}`]) : undefined),
     replaying: () => replaying(root),
+    sides: path => (sides ??= replaySides(root)).map(side => ({ ...side, text: tryGit(root, ['show', `${side.rev}:${path}`]) })),
     history: path => {
       if (!hasHead) return [];
       const log = tryGit(root, ['log', '--format=%H %cI', 'HEAD', '--', path]) ?? '';
