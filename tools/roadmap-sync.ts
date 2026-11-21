@@ -321,11 +321,13 @@ function doneRowsOf(text: string): { date: string; work: string; line: number }[
 /** 比對 HEAD 用的鍵：日期＋拿掉連結目標的文字（只改連結目標的舊列還是舊列，L2 R2）。 */
 const doneKey = (row: { date: string; work: string }) => `${row.date}|${row.work.replace(INLINE_LINK, '[$1]')}`;
 
-/** 〈已完成〉的列照 doneKey 數：同一個鍵有幾列，列的原文給「不見了」的訊息用。 */
-type Tally = Map<string, { row: string; count: number }>;
+/** 〈已完成〉的列照 doneKey 數：同一個鍵有幾列，列的原文給「不見了」的訊息用，tool 是工具的格式。 */
+type Tally = Map<string, { row: string; tool: boolean; count: number }>;
 const tally = (rows: readonly { date: string; work: string }[]): Tally => {
   const counts: Tally = new Map();
-  for (const row of rows) counts.set(doneKey(row), { row: rowOf([row.date, row.work]), count: (counts.get(doneKey(row))?.count ?? 0) + 1 });
+  for (const row of rows) {
+    counts.set(doneKey(row), { row: rowOf([row.date, row.work]), tool: DONE_CELL.test(row.work), count: (counts.get(doneKey(row))?.count ?? 0) + 1 });
+  }
   return counts;
 };
 /** 對到一列就扣一次；沒有剩的回傳 false。 */
@@ -363,7 +365,7 @@ const isDate = (text: string) => {
  * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外），不和另一邊帶進來的列重複；
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列或另一邊帶進來的列（手動刪掉的列會漏記）；沒結束的列也不能刪；
  *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有完成列）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
- * - HEAD 的〈已完成〉每一列都還在；真的合併時另一邊的也是。
+ * - HEAD 的〈已完成〉每一列都還在；真的合併時另一邊的也是（這邊是新格式時只要工具格式的列，K1）。
  * 另一邊已經 commit 的列只查格式與日期，不照這邊的入口重驗（L2 第三輪 M1）；這邊是上線前的格式時照收不查（K0）。
  * HEAD 沒有的 roadmap 不看。
  */
@@ -443,15 +445,17 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
       });
     }
     const at = sectionsOf(lf(text)).find(s => s.title === DONE.section);
-    const missing = (counts: Tally, owner: string, hint: string) => {
-      for (const { row, count } of counts.values()) {
+    const missing = (counts: Tally, owner: string, hint: string, toolOnly = false) => {
+      for (const { row, tool, count } of counts.values()) {
+        if (toolOnly && !tool) continue;
         for (let k = 0; k < count; k++) problems.push({ file, line: at ? at.start + 1 : 0, reason: `${owner}的〈已完成〉有「${row}」這一列，現在不見了：${hint}` });
       }
     };
     // HEAD 的列沒有對到的：被刪掉或搬走了（解衝突時丟掉自己那一列也是），L2 第二輪 N3。
     if (!legacy.has(file)) missing(left, 'HEAD ', '舊的列不刪也不搬（只能改連結的目標），把它加回來');
-    // 真的合併：另一邊的列也要都在（解衝突時丟掉另一邊那一列），L2 第三輪 M1。
-    for (const side of sides) if (side.whole) missing(side.left, `合併進來的 ${side.rev.slice(0, 7)} `, '解衝突時兩邊的完成列都留著，把它加回來');
+    // 真的合併：另一邊的列也要都在（解衝突時丟掉另一邊那一列），L2 第三輪 M1。這邊是新格式時，另一邊手寫的列
+    // 留著一定擋在格式、要照規範的遷移步驟刪掉，不要求留著（K1）。
+    for (const side of sides) if (side.whole) missing(side.left, `合併進來的 ${side.rev.slice(0, 7)} `, '解衝突時兩邊的完成列都留著，把它加回來', !legacy.has(file));
   }
   for (const check of checks) check();
 
