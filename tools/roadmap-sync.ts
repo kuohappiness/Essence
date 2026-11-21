@@ -1,5 +1,5 @@
 // 狀態板、〈等觸發點〉與〈已完成〉由入口的狀態行產生（D-217；寫法見 docs/agents/workflow.md〈roadmap〉）。
-// 每份 roadmap（最上層與 apps/<外掛>/docs/roadmap.md）各自一套，列從哪一份來就留在那一份（使用者 2026-11-21 選 A）。
+// 每份 roadmap（最上層與 apps/<軟體>/docs/roadmap.md）各自一套，列從哪一份來就留在那一份（使用者 2026-11-21 選 A）。
 // 用法：
 //   node tools/roadmap-sync.ts                改寫工作樹的 roadmap
 //   node tools/roadmap-sync.ts --check        只比對、不寫；對不上就印「檔案:行號  原因」與修法，exit 1（npm run check、CI）

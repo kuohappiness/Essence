@@ -584,3 +584,11 @@ void test('往下游的鏈：拆分、退回、backlog 的一站、決定來自�
   texts.set('docs/tasks/d.md', ['# D', '', status('實作中'), '', '來自：[B](b.md)', ''].join('\n'));
   assert.deepEqual(downstreamOf(texts, 'docs/plans/p.md'), ['docs/tasks/a.md', 'docs/tasks/d.md']);
 });
+
+// 寫錯大小寫的樣本是這份測試故意寫的，在 check-app-imports 的例外表上（D-218 §3 第 3 點）。
+void test('D-218 驗收第 8 項：Markdown 連到大小寫不對的軟體資料夾（../apps/cards/AGENTS.md）算找不到，Windows 上也是', async t => {
+  const { add, run } = await repo(t);
+  await add('apps/Cards/AGENTS.md', '# Cards\n');
+  await add('docs/a.md', '# A\n\n[Cards](../apps/cards/AGENTS.md)、[對的](../apps/Cards/AGENTS.md)\n');
+  assert.deepEqual(run(), ['docs/a.md:3  ../apps/cards/AGENTS.md  大小寫不符（實際是 apps/Cards/AGENTS.md）']);
+});

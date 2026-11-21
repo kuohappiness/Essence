@@ -29,7 +29,7 @@ void test('L2 R2 cliPath：npm run 的是這支工具的 script 才照 INIT_CWD�
 void test('L2 R2 cliPath：真的 npm（--prefix 從上層、在套件裡、套件的另一個 script 再叫一次）', async t => {
   const top = await realpath(await mkdtemp(join(tmpdir(), 'essence-cli-path-')));
   t.after(() => rm(top, { recursive: true, force: true }));
-  const pkg = join(top, 'apps', 'Cards');
+  const pkg = join(top, 'apps/Cards');
   await mkdir(pkg, { recursive: true });
   const helper = pathToFileURL(resolve(import.meta.dirname, '../tools/cli-path.ts')).href;
   await writeFile(join(pkg, 'probe.mjs'), `import { cliPath } from ${JSON.stringify(helper)};\nconsole.log('PATH=' + cliPath(process.argv[2], 'probe'));\n`);

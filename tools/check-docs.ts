@@ -1,7 +1,7 @@
 // 文件檢查（D-141、D-143、D-195）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、任務、討論稿與 plans 的檔頭狀態行、結束的任務有「延後的測試：」一行。
-// 外掛的資料夾（D-208 第 4 點）：apps/<外掛>/docs/ 底下的 tasks、討論稿、plans 與 roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
+// 外掛的資料夾（D-208 第 4 點）：apps/<軟體>/docs/ 底下的 tasks、討論稿、plans 與 roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
 // 外掛有 roadmap 時，最上層 roadmap 的〈現在在哪裡〉要連到它的〈現在在哪裡〉。
-// 任務與討論稿在 docs/ 底下（D-213）：最上層或 apps/<外掛>/ 根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報錯。
+// 任務與討論稿在 docs/ 底下（D-213）：最上層或 apps/<軟體>/ 根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報錯。
 // 工作流程（D-214、D-217，寫法見 docs/agents/workflow.md）：凍結清單外的狀態檔、與看起來是新格式的狀態行照新格式查；「來自」與「→ 下一站」要互相連回；
 // backlog 只有〈待處理〉〈已轉出〉兩節；roadmap 依序有〈現在在哪裡〉〈等觸發點〉〈已完成〉（〈已完成〉不設列數上限）。
 // 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
@@ -33,19 +33,19 @@ const ANY_BACKLOG = /^(?:apps\/[^/]+\/)?docs\/backlog\.md$/;
 export const ROADMAP_SECTIONS = ['現在在哪裡', '等觸發點', '已完成'];
 const BACKLOG_SECTIONS = ['待處理', '已轉出'];
 
-/** docs/ 底下的 tasks、討論稿與 plans 第一層的檔（最上層與 apps/<外掛>/ 底下都算），README 除外。 */
+/** docs/ 底下的 tasks、討論稿與 plans 第一層的檔（最上層與 apps/<軟體>/ 底下都算），README 除外。 */
 export function isStatusDoc(file: string): boolean {
   if (posix.basename(file) === 'README.md') return false;
   const dir = posix.dirname(file);
   return STATUS_DIRS.includes(dir) || STATUS_DIRS.includes(/^apps\/[^/]+\/(.+)$/.exec(dir)?.[1] ?? '');
 }
 
-/** 任務對到的 backlog：最上層的 docs/tasks/ 對最上層的 backlog，apps/<外掛>/docs/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
+/** 任務對到的 backlog：最上層的 docs/tasks/ 對最上層的 backlog，apps/<軟體>/docs/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
 function taskBacklog(file: string): string | undefined {
   const dir = posix.dirname(file);
   if (dir === 'docs/tasks') return BACKLOG;
-  const plugin = /^apps\/([^/]+)\/docs\/tasks$/.exec(dir)?.[1];
-  return plugin === undefined ? undefined : `apps/${plugin}/docs/backlog.md`;
+  const app = /^(apps\/[^/]+)\/docs\/tasks$/.exec(dir)?.[1];
+  return app === undefined ? undefined : `${app}/docs/backlog.md`;
 }
 
 // D-195 之前就結束的任務，〈結果〉沒有「延後的測試：」，不回頭補。只放過這兩個資料夾裡的（那時的任務都在這裡），其他外掛的同名檔照查。

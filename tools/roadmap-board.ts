@@ -1,5 +1,5 @@
 // 開發進度白板：把 roadmap 的「現在在哪裡」與「已完成」換成手機好讀的一頁（D-141：roadmap 是唯一來源，這頁只換樣子顯示）。
-// 最上層的 docs/roadmap.md 是入口，只讀它的「現在在哪裡」；外掛有自己的 roadmap（apps/<外掛>/docs/roadmap.md，D-208 第 4 點）時，
+// 最上層的 docs/roadmap.md 是入口，只讀它的「現在在哪裡」；外掛有自己的 roadmap（apps/<軟體>/docs/roadmap.md，D-208 第 4 點）時，
 // 也讀它的「現在在哪裡」，名稱前加外掛名。正式 vault 的版本與「已完成」只從 Cards 的 roadmap 讀（D-208 第二步 §B3）。
 // main 上的 roadmap 一改，GitHub Actions（.github/workflows/progress-board.yml）就產生並發布到 GitHub Pages：https://kuohappiness.github.io/Essence/roadmap.html
 // 本機預覽：node tools/roadmap-board.ts（要先在 tools/ 裝過相依），輸出 _site/roadmap.html（_site/ 在 .gitignore）；--out <檔案> 改輸出位置。
@@ -14,6 +14,7 @@ import { LIST_PAGE as PROGRESS_MAP, TOKENS, escape } from './progress-board-data
 import { downstreamOf, headingTitle, markdownTexts } from './check-docs.ts';
 import { DecisionsError, linksOf, parseDecisions, summariesOf } from './decisions.ts';
 import { parseStatus } from './status-line.ts';
+import { APPS_ROOT } from './apps.ts';
 
 export const ROADMAP = 'docs/roadmap.md';
 /** 外掛的 roadmap：存在的才讀（由外掛的第一個任務建，建了就自動出現在白板上）。 */
@@ -414,7 +415,7 @@ function readRoadmaps(root: string, staged: boolean): { file: string; text: stri
     files = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 }).split('\0').filter(wanted);
     read = file => execFileSync('git', ['show', `:${file}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   } else {
-    const plugins = existsSync(join(root, 'apps')) ? readdirSync(join(root, 'apps')).map(name => `apps/${name}/docs/roadmap.md`) : [];
+    const plugins = existsSync(join(root, APPS_ROOT)) ? readdirSync(join(root, APPS_ROOT)).map(name => `${APPS_ROOT}${name}/docs/roadmap.md`) : [];
     files = [ROADMAP, ...plugins].filter(file => wanted(file) && existsSync(join(root, file)));
     read = file => readFileSync(join(root, file), 'utf8');
   }

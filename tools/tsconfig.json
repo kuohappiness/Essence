@@ -11,6 +11,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
   "include": ["*.ts", "tests/**/*.ts"],

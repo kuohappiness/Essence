@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FOLDERS } from '../apps.ts';
+import { EXCEPTIONS, checkText } from '../check-app-imports.ts';
 import { CARDS } from '../dispatch.ts';
 
 const run = promisify(execFile);
@@ -38,6 +39,7 @@ const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
 const HOOK_FILES = ['.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json'];
 const copied = (tracked: Iterable<string>): string[] =>
   [...HOOK_FILES, ...[...tracked].filter(path => /^tools\/[^/]+\.(ts|mjs|json)$/.test(path))];
+const EXCEPTED = new Set(EXCEPTIONS.map(e => e.file));
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
 // 外掛的資料夾裡有 flag.txt 時連內容一起記，內容是 bad 就失敗：看得出檢查讀的是暫存區還是工作樹（§10）。
@@ -77,13 +79,12 @@ async function clone(t: test.TestContext) {
   // 已經存在的 linked worktree：在還沒換上新的 hook 之前就建好，之後切到新的分支。
   await git(repo, 'worktree', 'add', '-q', '-b', 'old', linked);
 
-  // 文件也用這次要驗的版本：照本 repo 暫存區的檔案清單，clone 多的刪掉、少的與每一份 .md 從工作樹複製（D-208 第二步 B：
-  // 搬檔的 commit 時 clone 的 HEAD 還是舊位置，新的文件檢查會擋 tasks/ 這些舊位置，連結也照新位置改了）。
+  // 每個檔都用這次要驗的版本：照本 repo 的檔案清單，clone 多的刪掉、其餘從工作樹複製（D-208 第二步 B：搬檔的 commit 時
+  // clone 的 HEAD 還是舊位置；D-218：共用檢查掃全部的文字檔，HEAD 的舊內容會被擋）。
   const listed = async (cwd: string) => (await git(cwd, '-c', 'core.quotepath=false', 'ls-files', '-z')).split('\0').filter(Boolean);
   const wanted = new Set(await listed(SOURCE));
   for (const path of await listed(repo)) if (!wanted.has(path)) await rm(join(repo, path), { force: true });
   for (const path of wanted) {
-    if (!path.endsWith('.md') && (await access(join(repo, path)).then(() => true, () => false))) continue;
     await mkdir(dirname(join(repo, path)), { recursive: true });
     await copyFile(join(SOURCE, path), join(repo, path));
   }
@@ -108,7 +109,9 @@ async function clone(t: test.TestContext) {
   await writeFile(join(repo, 'tools/package.json'), JSON.stringify(toolsPkg, null, 2) + '\n');
   // 照本 repo 的清單找：搬家的 commit 時新位置的檔在 clone 裡還沒追蹤，用 clone 的 ls-files 會漏掉。
   for (const path of [...wanted].filter(path => path.endsWith('.test.ts') && ['tests/', `${C}tests/`, 'tools/tests/'].some(dir => path.startsWith(dir)))) {
-    await writeFile(join(repo, path), 'export {};\n');
+    // 例外表上的檔留下被允許的寫法（註解），共用檢查才不會報「已經沒有被允許的寫法」（D-218 §3 第 3 點）。
+    const kept = EXCEPTED.has(path) ? checkText(path, await readFile(join(SOURCE, path), 'utf8')).map(p => `// ${p.target}\n`).join('') : '';
+    await writeFile(join(repo, path), 'export {};\n' + kept);
   }
   await mkdir(join(repo, C, 'tests'), { recursive: true });
   await writeFile(join(repo, C, 'tests/syntax-stub.test.ts'), [

@@ -11,10 +11,10 @@ import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
 
-export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
-export type Plugin = (typeof PLUGINS)[number];
+export const APPS = ['cards', 'capture', 'mindboard'] as const;
+export type App = (typeof APPS)[number];
 /** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）與三個外掛。 */
-export const TARGETS = ['tools', ...PLUGINS] as const;
+export const TARGETS = ['tools', ...APPS] as const;
 export type Target = (typeof TARGETS)[number];
 /** 完整：在對象的資料夾跑完整檢查；相關測試（Cards 與共用工具）：只跑寫到這些路徑的測試檔；跳過。 */
 export type Run = 'full' | 'related' | 'skip';
@@ -53,7 +53,7 @@ const SHARED_TOOL_FILES = new Set(['.claude/settings.json', 'experiments/tools/d
  * 共用規格的登錄表（第 8 條）：兩個以上外掛都讀的最上層檔案；外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
  * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/transcript.md 時）。
  */
-export const SHARED_SPECS: Record<string, Partial<Record<Plugin, Run>>> = {
+export const SHARED_SPECS: Record<string, Partial<Record<App, Run>>> = {
   // 轉錄稿格式：Capture 寫、Cards 讀（D-208 第 6 點；第二步 B 從 syntax.md §1 搬出來）。
   'docs/transcript.md': { cards: 'related', capture: 'full' },
 };

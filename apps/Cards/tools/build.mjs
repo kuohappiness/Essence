@@ -106,8 +106,8 @@ export async function embedRules(rulesRoot = resolve(defaultRoot, RULES_FROM_ROO
  * version：只給測試與驗收用，固定建置版本（D-208 第二步驗收第 A3 項：搬家前後逐位元組比）；安裝與發布的流程不傳。
  */
 export async function buildPlugin({ root: given = defaultRoot, rulesRoot, dev = false, outdir, sourcemap, version: fixed } = {}) {
-  // 磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上打 npm --prefix apps/cards 時，import.meta.url 與 cwd 照打的字，
-  // 對照表的 sources 會跟著變成 apps/cards/…；path.relative 在 Windows 比對不分大小寫、尾段取自第二個參數，只轉基準沒用。
+  // 磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上 npm --prefix 打錯資料夾的大小寫時，import.meta.url 與 cwd 照打的字，
+  // 對照表的 sources 會跟著變成打錯的寫法；path.relative 在 Windows 比對不分大小寫、尾段取自第二個參數，只轉基準沒用。
   const root = realpathSync.native(given);
   rulesRoot ??= resolve(root, RULES_FROM_ROOT);
   outdir ??= root;
