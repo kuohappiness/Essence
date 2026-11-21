@@ -6,17 +6,17 @@
 
 依據：[D-218](../decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)（修改 [D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）；做法沿用 [第二步任務說明](one-repo-step-2.md)（改連結的腳本、跨版本的外掛根、雲端的開場訊息），那份的〈結果〉記了踩過的坑，開工前讀 A、B 的進度兩節。
 
-基準：`main` 的 `8a03736`（2026-11-21）。開工時換成當下的 `main`，重算下面的數字。
+基準：`main` 的 `252d85d`（2026-11-21，工作流程 PR #30 合併後；分支在 `bc0e51d` 用 merge 併進來）。下面的數字在這個基準重算過。
 
 **不在這一步**：外掛 ID（`essence-cards`）、vault 裡的 `.obsidian/plugins/essence-cards/`、套件名稱（`package.json` 的 `name`）、tag、任何寫進 vault 的格式、產品程式的行為；寫 `apps/Portal/` 的文件（D-218 第 1 點：第一份文件出現時建，由網頁版的討論串在這個 PR 合併後寫；這一步只把 Portal 登記進分派表與 §3 的表）；`experiments/plugin/`（試作外掛自己的資料夾名，不是這一層）。
 
 ## 和「不做」比較（D-153、D-177）
 
-見 [D-218](../decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)〈理由〉〈曾考慮的做法〉。這裡只補做的成本（2026-11-21 在 `8a03736` 的暫存複本量的）：
+見 [D-218](../decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)〈理由〉〈曾考慮的做法〉。這裡只補做的成本（最早在 `8a03736` 量；2026-11-21 在分支的 `bc0e51d`（含 `252d85d`）的暫存 clone 重量，Windows）：
 
-- 搬 614 個追蹤檔（`plugins/` 底下全部）。
+- 搬 615 個追蹤檔（`plugins/` 底下全部）。
 - 改連結的腳本照 `plugins/cards=apps/Cards plugins/capture=apps/Capture plugins/mindboard=apps/Mindboard` 跑，要改 715 個連結、0 個要人看；改完再跑 `--check` 是 0。
-- 連結以外還寫著 `plugins/` 的（去掉 `essence-cards` 那些 vault 路徑）約 1,100 處：675 處在 `docs/tasks/`、56 處在討論稿（紀錄，不改）；其餘在共用工具與它們的測試、Cards 的工具與測試、CI、雲端 hook、試作場與現行文件，見 §2、§4。
+- 搬家並跑完腳本後，還寫著路徑寫法的 `plugins`（〈驗收〉第 5 項的寬 pattern，去掉 vault 路徑）約 1,470 行：約 870 行在決定、任務、討論稿與 archive（紀錄，不改）；其餘在 `tools/legacy-status-docs.json`（192 行）、共用工具與它們的測試、Cards 的工具與測試（含不改的歷史路徑與跳脫過的 vault 路徑）、CI、雲端 hook、試作場與現行文件，見 §2、§4。
 
 ## 停手時段
 
@@ -64,7 +64,9 @@ D-208 第 8 點：路徑搬動與工具調整分開 commit。每個 commit 都�
 | `tools/ci-gate.ts`、`tools/eslint.config.js` | 註解 |
 | `tools/tests/` | `check-docs`、`dispatch`、`hooks`、`plugin-imports`（改名 `app-imports`）、`ci-gate`、`roadmap-board`、`quality` 的路徑與預期訊息，含跳脫過的 `plugins\/…`；暫存 repo 建資料夾的地方（例如 `hooks.test.ts` 的 `join(repo, 'plugins', plugin)`）用 §3 的表，不用小寫代號組；`hooks.test.ts` 的 `COPIED`、`quality.test.ts` 複製工具的三處見 §1 第 1 點 |
 | `.github/workflows/check.yml` | `working-directory`、`cache-dependency-path`（job 的 id 照舊小寫） |
-| `.github/workflows/progress-board.yml` | `paths` 的 `plugins/*/docs/…`；加上表所在的檔（只改表時白板也重產） |
+| `.github/workflows/progress-board.yml` | `paths` 的 `plugins/*/docs/**`；加上表所在的檔（只改表時白板也重產） |
+| `tools/legacy-status-docs.json`（工作流程 PR #30 加的） | 192 個 `plugins/…` 路徑（舊格式狀態行的凍結清單）。JSON 不歸改連結的腳本管：照資料夾對照機械改，驗收每個路徑改完仍是追蹤的檔（〈驗收〉第 18 項） |
+| `tools/decisions.ts`、`tools/roadmap-sync.ts`（PR #30 加的） | `decisions.ts:297-301` 判規範文件的正規式（`^plugins\/[^/]+\/…`）、`roadmap-sync.ts` 的 `ROADMAP` 正規式與檔頭註解：改成 `apps\/[^/]+\/`，資料夾名照 §3 第 3 點抓整段前綴；`tools/tests/roadmap-sync.test.ts`、`decisions-index.test.ts` 的路徑跟著改 |
 | `.claude/hooks/cloud-setup.mjs` | `DIRS`；清單測試 |
 | `.gitignore` | `/plugins/cards/main.js`、`/plugins/cards/styles.css` |
 | `apps/Cards/src/core/ai/rules.ts` | 5 個規則檔路徑（`apps/Cards/docs/card-rules/…`）。路徑不進嵌入內容與雜湊（`tools/build.mjs` 的 `embedRules` 只讀檔），`embedRules()` 的結果要和改名前 `deepEqual`（〈驗收〉第 4 項）。但 `RULE_SUBJECTS` 是執行時的資料表（`src/obsidian/ai-cards.ts`、`deepen.ts` import），路徑字串會進 `main.js`；它在執行時只用在 `ruleText` 的錯誤訊息（`rules.ts:54-59`，建置時才呼叫），所以 §5 第 1 項換回舊字串再比 |
@@ -108,8 +110,8 @@ Windows 不分大小寫、Linux 分：在 Windows 寫成 `apps/cards` 本機照�
   - `docs/agents/quality.md`：〈本機或雲端〉`cloud-setup` 的資料夾清單、〈檢查指令〉的安裝、`npm --prefix`、`check-plugin-imports` 的名字與其他路徑。
   - `apps/Cards/AGENTS.md`、`apps/Capture/AGENTS.md`、`apps/Mindboard/AGENTS.md`、各自的 `README.md`。
   - `.claude/skills/` 與 `.agents/skills/` 的 `essence-decision`（兩份一起改，skill 一致性檢查會比）；其他 skill 有寫到的照改。
-  - `docs/roadmap.md`、`docs/backlog.md`、`apps/*/docs/roadmap.md`、`apps/*/docs/backlog.md` 現行的段落與表格；`docs/agents/token-usage.md`。
-- **狀態板**：`docs/roadmap.md`〈現在在哪裡〉跨外掛的工作加一列，入口連到這份說明（D-217 起狀態從這份的狀態行讀）。
+  - `docs/roadmap.md`、`docs/backlog.md`、`apps/*/docs/roadmap.md`、`apps/*/docs/backlog.md` 現行的段落與表格；`docs/agents/token-usage.md`；`docs/agents/workflow.md`（第 7 行「外掛」指 `plugins/<外掛>/`，PR #30 加的）。
+- **狀態板**：`docs/roadmap.md`〈現在在哪裡〉跨外掛的工作加一列（`bc0e51d` 已加，只手寫工作與入口），狀態由這份的狀態行經 `roadmap-sync` 產生（D-217）。
 
 ## §5 演練（本機）
 
@@ -152,6 +154,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 15. 合併前 L2：新的 Fable 5.2 high 子代理（見〈本機或雲端〉的審查者），請求照 code-quality 的 `review.md` 寫在 `docs/tasks/rename-plugins-to-apps-review.md`。
 16. **建置產物照 Linux 的規則被忽略**：常駐測試（兩個平台都跑）對真的 `.gitignore` 跑 `git -c core.ignorecase=false check-ignore -q apps/Cards/main.js`（`styles.css` 同），之後 `.gitignore` 寫錯大小寫 Windows 本機就會紅；CI 的 cards job 在 `apps/Cards/` `npm run build` 之後 `git status --porcelain` 是空的（§3 第 7 點）。
 17. **大小寫的防線也擋父資料夾與組字串**（暫存 repo）：追蹤 `Apps/Cards/x.md`、`plugins/cards/a.ts` 各被 §3 第 2 點擋下；`tools/` 的程式寫 `` `apps/${code}` ``、文件的行內程式碼寫 `npm --prefix apps/cards run check` 各被 §3 第 3 點擋下；`apps/Portal/src/a.ts`（表上只有文件）被 §3 第 1 點擋下；例外表上的檔拿掉允許的寫法、或被刪 → 報錯。
+18. **凍結清單改完仍對得到檔**：`tools/legacy-status-docs.json` 改完沒有 `plugins/` 開頭的路徑，每個路徑都是 `git ls-files` 裡的檔（大小寫相同），條數和改之前相同；`tools/` 的 `npm run check`（含 `roadmap-sync --check`）通過，舊格式狀態行的文件照舊被放過。
 
 ## 平台事實
 
