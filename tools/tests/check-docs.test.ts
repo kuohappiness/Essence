@@ -175,15 +175,15 @@ void test('roadmap 依序有〈現在在哪裡〉〈等觸發點〉〈已完成�
 void test('backlog 的二級標題只有〈待處理〉〈已轉出〉，依這個順序；外掛的也是，更深的資料夾不查', async t => {
   const { add, run } = await repo(t);
   await add(BACKLOG, '# B\n\n## 待處理\n\n### 技術債\n\n#### 更深\n\n## 已轉出\n\n### 已定案對照\n');
-  await add('plugins/capture/docs/backlog.md', '# C\n\n## 待處理\n\n## v1\n\n## 已轉出\n');
-  await add('plugins/mindboard/docs/backlog.md', '# M\n\n## 已轉出\n\n## 待處理\n');
-  await add('plugins/cards/docs/backlog.md', '# Cards\n\n## 待處理\n');
-  await add('plugins/cards/docs/x/backlog.md', '# 不查\n\n## 別的\n');
+  await add('apps/Capture/docs/backlog.md', '# C\n\n## 待處理\n\n## v1\n\n## 已轉出\n');
+  await add('apps/Mindboard/docs/backlog.md', '# M\n\n## 已轉出\n\n## 待處理\n');
+  await add('apps/Cards/docs/backlog.md', '# Cards\n\n## 待處理\n');
+  await add('apps/Cards/docs/x/backlog.md', '# 不查\n\n## 別的\n');
   const reason = 'backlog 的二級標題只有〈待處理〉、〈已轉出〉，依這個順序；其他分類降成三級放進這兩節';
   assert.deepEqual(run(), [
-    `plugins/capture/docs/backlog.md:5  ## v1  ${reason}`,
-    `plugins/cards/docs/backlog.md:1  ## 待處理  ${reason}`,
-    `plugins/mindboard/docs/backlog.md:1  ## 待處理  ${reason}`,
+    `apps/Capture/docs/backlog.md:5  ## v1  ${reason}`,
+    `apps/Cards/docs/backlog.md:1  ## 待處理  ${reason}`,
+    `apps/Mindboard/docs/backlog.md:1  ## 待處理  ${reason}`,
   ]);
 });
 
@@ -196,15 +196,15 @@ void test('狀態行：凍結清單外的狀態檔照新格式；清單裡的照
   await add('docs/tasks/new-old.md', '# 新的用舊寫法\n\n狀態：進行中\n');
   await add('docs/plans/quoted.md', '# 引用框\n\n> 狀態：規劃中｜下一步：x｜等誰：使用者\n');
   await add('docs/Claude Codex Discussion/2026-11-21-x.md', '# 討論\n\n狀態：已結案 → D-218｜完成：談定｜等誰：—\n');
-  await add('plugins/cards/docs/card-rules/a.md', '# 規則\n\n狀態：實作中｜下一步：試一課｜等誰：新教材\n\n> 版本：第 2 版\n');
-  await add('plugins/cards/docs/card-rules/b.md', '# 規則\n\n> 狀態：第 2 版（舊寫法，不是狀態行）\n');
+  await add('apps/Cards/docs/card-rules/a.md', '# 規則\n\n狀態：實作中｜下一步：試一課｜等誰：新教材\n\n> 版本：第 2 版\n');
+  await add('apps/Cards/docs/card-rules/b.md', '# 規則\n\n> 狀態：第 2 版（舊寫法，不是狀態行）\n');
   await add('docs/x.md', '# 不是狀態檔\n');
   const problems = checkDocs(root, { exceptions: [] }).problems.map(formatProblem);
   assert.deepEqual(problems, [
+    'apps/Cards/docs/card-rules/a.md:3  狀態：  等誰只收使用者、Claude、Codex、實機、—（好幾個用「、」接）；「新教材」不是',
     'docs/plans/quoted.md:3  狀態：  狀態行要是標題下的一般段落（不在引用框、清單或程式碼區塊裡）',
     'docs/tasks/new-old.md:3  狀態：  要剛好三欄、用全形「｜」分，現在是 1 欄（欄裡的「｜」改用「，」）。寫法：狀態：<狀態值>｜下一步：<一句>｜等誰：<值>；結束時「狀態：已合併｜完成：<一句>｜等誰：—」',
     'docs/tasks/old-new.md:3  狀態：  「進行中」不是狀態值；可用：規劃中、討論中、實作中、待審、待實機、等觸發點、已合併、已結案、已結案 → <下一站>、暫停（<原因>）',
-    'plugins/cards/docs/card-rules/a.md:3  狀態：  等誰只收使用者、Claude、Codex、實機、—（好幾個用「、」接）；「新教材」不是',
     `${LEGACY_STATUS}  docs/tasks/gone.md  凍結清單的這一項不在了（或不是任務、討論稿、plans 第一層的檔），請刪掉這一列`,
     `${LEGACY_STATUS}  docs/x.md  凍結清單的這一項不在了（或不是任務、討論稿、plans 第一層的檔），請刪掉這一列`,
   ]);
@@ -401,26 +401,26 @@ void test('命令列：有問題時 exit code 1 並逐行列出，沒有時印�
 // D-208 第一步 §7：外掛的資料夾照最上層的規則查。
 void test('§7 外掛的 tasks、討論稿與 docs/plans 第一層也要有狀態；README、子資料夾與外掛的其他資料夾不查', async t => {
   const { add, run } = await repo(t);
-  await add('plugins/mindboard/docs/tasks/ok.md', '# 任務\n\n狀態：進行中\n');
-  await add('plugins/mindboard/docs/tasks/missing.md', '# 任務\n\n建議模型：Opus\n');
-  await add('plugins/capture/docs/Claude Codex Discussion/2026-11-17-x.md', '# 討論\n\n日期：2026-11-17\n');
-  await add('plugins/capture/docs/plans/x.md', '# 主題\n\n規畫中\n');
-  await add('plugins/mindboard/docs/tasks/README.md', '# 不查\n');
-  await add('plugins/mindboard/docs/tasks/sub/deep.md', '# 不查\n');
-  await add('plugins/mindboard/docs/backlog.md', '# 不查狀態\n\n## 待處理\n\n## 已轉出\n');
-  await add('plugins/mindboard/notes/x.md', '# 不查\n');
+  await add('apps/Mindboard/docs/tasks/ok.md', '# 任務\n\n狀態：進行中\n');
+  await add('apps/Mindboard/docs/tasks/missing.md', '# 任務\n\n建議模型：Opus\n');
+  await add('apps/Capture/docs/Claude Codex Discussion/2026-11-17-x.md', '# 討論\n\n日期：2026-11-17\n');
+  await add('apps/Capture/docs/plans/x.md', '# 主題\n\n規畫中\n');
+  await add('apps/Mindboard/docs/tasks/README.md', '# 不查\n');
+  await add('apps/Mindboard/docs/tasks/sub/deep.md', '# 不查\n');
+  await add('apps/Mindboard/docs/backlog.md', '# 不查狀態\n\n## 待處理\n\n## 已轉出\n');
+  await add('apps/Mindboard/notes/x.md', '# 不查\n');
   assert.deepEqual(run(), [
-    'plugins/capture/docs/Claude Codex Discussion/2026-11-17-x.md:3  狀態：  標題下第一個非空行沒有狀態',
-    'plugins/capture/docs/plans/x.md:3  狀態：  標題下第一個非空行沒有狀態',
-    'plugins/mindboard/docs/tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'apps/Capture/docs/Claude Codex Discussion/2026-11-17-x.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'apps/Capture/docs/plans/x.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'apps/Mindboard/docs/tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
   ]);
 });
 
 void test('§7 外掛的 roadmap：三節都要有、已完成不設列數上限；最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉', async t => {
   const { add, run } = await repo(t);
   const rows = (n: number) => Array.from({ length: n }, (_, i) => `第 ${i + 1} 件`);
-  const plugin = 'plugins/mindboard/docs/roadmap.md';
-  const target = '../plugins/mindboard/docs/roadmap.md#現在在哪裡';
+  const plugin = 'apps/Mindboard/docs/roadmap.md';
+  const target = '../apps/Mindboard/docs/roadmap.md#現在在哪裡';
   const missing = (line: number) => `${ROADMAP}:${line}  ${target}  外掛有自己的 roadmap，最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉（D-208 第 4 點）`;
   const top = (now: string, after = '') => ['# 路線圖', '', '## 現在在哪裡', '', now, '', '## 等觸發點', '', '## 已完成', '', after, ''].join('\n');
   // 外掛沒有 roadmap：最上層不用連。
@@ -436,11 +436,11 @@ void test('§7 外掛的 roadmap：三節都要有、已完成不設列數上限
   await add(plugin, roadmap(rows(11)));
   // 最上層沒連、連到錯的錨點、連結在〈現在在哪裡〉以外都要報。
   assert.deepEqual(run(), [missing(3)]);
-  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../plugins/mindboard/docs/roadmap.md#已完成)。'));
+  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../apps/Mindboard/docs/roadmap.md#已完成)。'));
   assert.deepEqual(run(), [missing(3)]);
-  await add(ROADMAP, top('Cards 的進度。', '[Mindboard](../plugins/mindboard/docs/roadmap.md#現在在哪裡)'));
+  await add(ROADMAP, top('Cards 的進度。', '[Mindboard](../apps/Mindboard/docs/roadmap.md#現在在哪裡)'));
   assert.deepEqual(run(), [missing(3)]);
-  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../plugins/mindboard/docs/roadmap.md#現在在哪裡)。'));
+  await add(ROADMAP, top('Mindboard 見 [它的路線圖](../apps/Mindboard/docs/roadmap.md#現在在哪裡)。'));
   assert.deepEqual(run(), []);
 });
 
@@ -449,84 +449,84 @@ void test('§7 外掛的任務對外掛自己的 backlog；BEFORE_D195 只放過
   const task = (result: string) => `# 任務\n\n狀態：已完成\n\n## 結果\n\n${result}\n`;
   const debt = (...rows: string[]) => `# B\n\n## 待處理\n\n### 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n${rows.map(row => `| ${row} | 空檔 |`).join('\n')}\n\n## 已轉出\n`;
   await add('docs/backlog.md', debt('補測：最上層才有'));
-  await add('plugins/capture/docs/backlog.md', debt('補測：外掛的列'));
-  await add('plugins/mindboard/docs/backlog.md', '# Mindboard 的待做\n\n## 待處理\n\n還沒有技術債表。\n\n## 已轉出\n');
-  await add('plugins/capture/docs/tasks/ok.md', task('延後的測試：「補測：外掛的列」'));
-  await add('plugins/capture/docs/tasks/轉錄 稿.md', task('延後的測試：「補測：最上層才有」'));
-  await add('plugins/mindboard/docs/tasks/no-table.md', task('延後的測試：「補測：外掛的列」'));
-  await add('plugins/mindboard/docs/tasks/none.md', task('延後的測試：無'));
-  await add('plugins/mindboard/docs/tasks/w3.md', task('合併了。'));
+  await add('apps/Capture/docs/backlog.md', debt('補測：外掛的列'));
+  await add('apps/Mindboard/docs/backlog.md', '# Mindboard 的待做\n\n## 待處理\n\n還沒有技術債表。\n\n## 已轉出\n');
+  await add('apps/Capture/docs/tasks/ok.md', task('延後的測試：「補測：外掛的列」'));
+  await add('apps/Capture/docs/tasks/轉錄 稿.md', task('延後的測試：「補測：最上層才有」'));
+  await add('apps/Mindboard/docs/tasks/no-table.md', task('延後的測試：「補測：外掛的列」'));
+  await add('apps/Mindboard/docs/tasks/none.md', task('延後的測試：無'));
+  await add('apps/Mindboard/docs/tasks/w3.md', task('合併了。'));
   await add('docs/tasks/w3.md', task('合併了。'));
-  const w3 = 'plugins/mindboard/docs/tasks/w3.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）';
+  const w3 = 'apps/Mindboard/docs/tasks/w3.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）';
   assert.deepEqual(run(true), [
-    'plugins/capture/docs/tasks/轉錄 稿.md:7  延後的測試：  plugins/capture/docs/backlog.md 的技術債表找不到「補測：最上層才有」開頭的列（D-195）',
-    'plugins/mindboard/docs/tasks/no-table.md:7  延後的測試：  plugins/mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）',
+    'apps/Capture/docs/tasks/轉錄 稿.md:7  延後的測試：  apps/Capture/docs/backlog.md 的技術債表找不到「補測：最上層才有」開頭的列（D-195）',
+    'apps/Mindboard/docs/tasks/no-table.md:7  延後的測試：  apps/Mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）',
     w3,
   ]);
   // 外掛沒有 backlog 也一樣。
-  git(root, 'rm', '-q', '--cached', '--', 'plugins/mindboard/docs/backlog.md');
-  assert.deepEqual(run(true).filter(p => p.includes('no-table.md')), ['plugins/mindboard/docs/tasks/no-table.md:7  延後的測試：  plugins/mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）']);
+  git(root, 'rm', '-q', '--cached', '--', 'apps/Mindboard/docs/backlog.md');
+  assert.deepEqual(run(true).filter(p => p.includes('no-table.md')), ['apps/Mindboard/docs/tasks/no-table.md:7  延後的測試：  apps/Mindboard/docs/backlog.md 沒有技術債表（或沒有這份檔），對不到列名（D-195）']);
   // 補完刪掉列的歷史任務：沒改到就不對照列名。
-  await add('plugins/capture/docs/tasks/轉錄 稿.md', task('延後的測試：「補測：外掛的列」'));
+  await add('apps/Capture/docs/tasks/轉錄 稿.md', task('延後的測試：「補測：外掛的列」'));
   git(root, 'commit', '-q', '-m', 'x', '--no-verify');
-  await add('plugins/capture/docs/backlog.md', debt('補測：別的列'));
+  await add('apps/Capture/docs/backlog.md', debt('補測：別的列'));
   assert.deepEqual(run(true), [w3]);
 });
 
 void test('§B3 BEFORE_D195 也放過 Cards 的舊任務（那時都在最上層），只放過清單上的檔名', async t => {
   const { add, run } = await repo(t);
   const task = (result: string) => `# 任務\n\n狀態：已完成\n\n## 結果\n\n${result}\n`;
-  await add('plugins/cards/docs/tasks/w3.md', task('合併了。'));
-  await add('plugins/cards/docs/tasks/new.md', task('合併了。'));
-  assert.deepEqual(run(), ['plugins/cards/docs/tasks/new.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）']);
+  await add('apps/Cards/docs/tasks/w3.md', task('合併了。'));
+  await add('apps/Cards/docs/tasks/new.md', task('合併了。'));
+  assert.deepEqual(run(), ['apps/Cards/docs/tasks/new.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）']);
 });
 
 void test('§B3 舊位置：最上層或外掛根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報，寫出新位置', async t => {
   const { add, run } = await repo(t);
   await add('tasks/a.md', '# 任務\n\n狀態：進行中\n');
   await add('Claude Codex Discussion/x.png', 'x');
-  await add('plugins/capture/tasks/b.md', '# 任務\n\n狀態：進行中\n');
-  await add('plugins/mindboard/Claude Codex Discussion/c.md', '# 討論\n\n狀態：進行中\n');
+  await add('apps/Capture/tasks/b.md', '# 任務\n\n狀態：進行中\n');
+  await add('apps/Mindboard/Claude Codex Discussion/c.md', '# 討論\n\n狀態：進行中\n');
   await add('docs/tasks/ok.md', '# 任務\n\n狀態：進行中\n');
   await add('docs/x/tasks/ok.md', '# 不是舊位置\n');
   // 新位置照常查狀態行。
   await add('docs/tasks/no-status.md', '# 任務\n\n建議模型：Opus\n');
-  await add('plugins/capture/docs/tasks/no-status.md', '# 任務\n\n建議模型：Opus\n');
+  await add('apps/Capture/docs/tasks/no-status.md', '# 任務\n\n建議模型：Opus\n');
   assert.deepEqual(run(), [
     'Claude Codex Discussion/x.png  docs/Claude Codex Discussion/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
-    'plugins/capture/tasks/b.md  plugins/capture/docs/tasks/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
-    'plugins/mindboard/Claude Codex Discussion/c.md  plugins/mindboard/docs/Claude Codex Discussion/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
+    'apps/Capture/tasks/b.md  apps/Capture/docs/tasks/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
+    'apps/Mindboard/Claude Codex Discussion/c.md  apps/Mindboard/docs/Claude Codex Discussion/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
     'tasks/a.md  docs/tasks/  任務與討論稿放 docs/ 底下（D-213）：搬到這個位置',
+    'apps/Capture/docs/tasks/no-status.md:3  狀態：  標題下第一個非空行沒有狀態',
     'docs/tasks/no-status.md:3  狀態：  標題下第一個非空行沒有狀態',
-    'plugins/capture/docs/tasks/no-status.md:3  狀態：  標題下第一個非空行沒有狀態',
   ]);
 });
 
 void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記以下照搬家前的位置解得到也算；新的檔、表上沒有的路徑照常查；沒用到的要刪（L2 R3）', async t => {
   const { add, run } = await repo(t);
   await add('docs/decisions.md', '# D\n\n## d-1\n');
-  await add('plugins/cards/docs/backlog.md', '# B\n\n## 待處理\n\n## 已轉出\n');
+  await add('apps/Cards/docs/backlog.md', '# B\n\n## 待處理\n\n## 已轉出\n');
   const rule = '# 規則\n\n[上](../decisions.md#d-1)\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[backlog](../backlog.md)、[沒有](../nowhere.md)\n';
   // english.md 在 FROZEN_RULES 的表上（只有 ../decisions.md）；review-probe.md 是搬家後新增的規則檔（Codex 的探針）。
-  await add('plugins/cards/docs/card-rules/english.md', rule);
-  await add('plugins/cards/docs/card-rules/review-probe.md', rule);
-  await add('plugins/cards/docs/other/x.md', rule);
+  await add('apps/Cards/docs/card-rules/english.md', rule);
+  await add('apps/Cards/docs/card-rules/review-probe.md', rule);
+  await add('apps/Cards/docs/other/x.md', rule);
   // elementary-social.md 在表上，這裡只連 ../decisions.md 與中文檔名的短規則（解析器取到的是百分比編碼）：試作場的其他三條沒用到，要刪。
   await add('experiments/t4/arch/短規則.md', '# 短規則\n');
-  await add('plugins/cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
-  await add('plugins/cards/manifest.json', '{}\n');
-  const social = (path: string) => 'plugins/cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
+  await add('apps/Cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
+  await add('apps/Cards/manifest.json', '{}\n');
+  const social = (path: string) => 'apps/Cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
   // elementary-chinese.md 在表上但這裡沒有這份檔（像是改名或拿掉）：那一列要刪，之後同名的新檔才不會被放過（第二輪）。
   assert.deepEqual(run(), [
-    'plugins/cards/docs/card-rules/english.md:3  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/card-rules/english.md:7  ../nowhere.md  找不到檔案',
-    'plugins/cards/docs/card-rules/review-probe.md:3  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/card-rules/review-probe.md:7  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/card-rules/review-probe.md:7  ../nowhere.md  找不到檔案',
-    'plugins/cards/docs/other/x.md:3  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/other/x.md:7  ../decisions.md#d-1  找不到檔案',
-    'plugins/cards/docs/other/x.md:7  ../nowhere.md  找不到檔案',
-    'plugins/cards/docs/card-rules/elementary-chinese.md  plugins/cards/docs/card-rules/elementary-chinese.md  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列',
+    'apps/Cards/docs/card-rules/english.md:3  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/card-rules/english.md:7  ../nowhere.md  找不到檔案',
+    'apps/Cards/docs/card-rules/review-probe.md:3  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/card-rules/review-probe.md:7  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/card-rules/review-probe.md:7  ../nowhere.md  找不到檔案',
+    'apps/Cards/docs/other/x.md:3  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/other/x.md:7  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/other/x.md:7  ../nowhere.md  找不到檔案',
+    'apps/Cards/docs/card-rules/elementary-chinese.md  apps/Cards/docs/card-rules/elementary-chinese.md  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列',
     social('../../experiments/t4/arch/第二輪/判斷邊界.md'),
     social('../../experiments/t4/arch/第二輪/五步.md'),
     social('../../experiments/t4/arch/第二輪/格式.md'),
@@ -537,9 +537,9 @@ void test('§B3 製卡規則整個資料夾搬走：表上的三列都要刪（L
   const { add, run } = await repo(t);
   await add('docs/x.md', '# X\n');
   assert.deepEqual(run(), []);
-  await add('plugins/cards/manifest.json', '{}\n');
-  await add('plugins/cards/docs/rules/english.md', '# 英文\n');
-  const gone = (file: string) => `plugins/cards/docs/card-rules/${file}  plugins/cards/docs/card-rules/${file}  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列`;
+  await add('apps/Cards/manifest.json', '{}\n');
+  await add('apps/Cards/docs/rules/english.md', '# 英文\n');
+  const gone = (file: string) => `apps/Cards/docs/card-rules/${file}  apps/Cards/docs/card-rules/${file}  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列`;
   assert.deepEqual(run(), [gone('elementary-chinese.md'), gone('elementary-social.md'), gone('english.md')]);
 });
 

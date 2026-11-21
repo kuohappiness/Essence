@@ -1,5 +1,5 @@
 // D-208 第二步 L2 R2：命令列給的相對路徑，經 `npm run <script>` 執行時照叫 npm 的資料夾算，
-// 從 repo 根用 `npm --prefix plugins/cards run …` 和搬家前從根目錄跑的結果相同；其他情況照目前的資料夾。
+// 從 repo 根用 `npm --prefix apps/Cards run …` 和搬家前從根目錄跑的結果相同；其他情況照目前的資料夾。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -13,7 +13,7 @@ import { cliPath } from '../tools/cli-path.ts';
 const run = promisify(execFile);
 
 void test('L2 R2 cliPath：npm run 的是這支工具的 script 才照 INIT_CWD；別的 script 的子程序、直接執行照目前的資料夾；絕對路徑不變', () => {
-  const cwd = resolve('/repo/plugins/cards');
+  const cwd = resolve('/repo/apps/Cards');
   const root = resolve('/repo');
   const env = (event?: string, init?: string): NodeJS.ProcessEnv => ({ ...(event ? { npm_lifecycle_event: event } : {}), ...(init ? { INIT_CWD: init } : {}) });
   assert.equal(cliPath('vault', 'backup', env('backup', root), cwd), join(root, 'vault'));
@@ -29,7 +29,7 @@ void test('L2 R2 cliPath：npm run 的是這支工具的 script 才照 INIT_CWD�
 void test('L2 R2 cliPath：真的 npm（--prefix 從上層、在套件裡、套件的另一個 script 再叫一次）', async t => {
   const top = await realpath(await mkdtemp(join(tmpdir(), 'essence-cli-path-')));
   t.after(() => rm(top, { recursive: true, force: true }));
-  const pkg = join(top, 'plugins', 'cards');
+  const pkg = join(top, 'apps', 'Cards');
   await mkdir(pkg, { recursive: true });
   const helper = pathToFileURL(resolve(import.meta.dirname, '../tools/cli-path.ts')).href;
   await writeFile(join(pkg, 'probe.mjs'), `import { cliPath } from ${JSON.stringify(helper)};\nconsole.log('PATH=' + cliPath(process.argv[2], 'probe'));\n`);
@@ -43,15 +43,15 @@ void test('L2 R2 cliPath：真的 npm（--prefix 從上層、在套件裡、套�
     assert.ok(line, stdout);
     return line.slice('PATH='.length);
   };
-  assert.equal(await npm(top, ['--prefix', 'plugins/cards', 'run', 'probe', '--', 'vault']), join(top, 'vault'));
+  assert.equal(await npm(top, ['--prefix', 'apps/Cards', 'run', 'probe', '--', 'vault']), join(top, 'vault'));
   assert.equal(await npm(pkg, ['run', 'probe', '--', 'vault']), join(pkg, 'vault'));
-  assert.equal(await npm(top, ['--prefix', 'plugins/cards', 'run', 'outer']), join(pkg, 'vault'));
+  assert.equal(await npm(top, ['--prefix', 'apps/Cards', 'run', 'outer']), join(pkg, 'vault'));
 });
 
 // 第二步 L2 第二輪：空字串不能變成「目前的資料夾」（搬家前 realpath('') 報 ENOENT；呼叫的腳本把空變數加引號傳進來時會碰到）。
 // 明寫的 `.` 照舊是目前的資料夾。
 void test('L2 第二輪 cliPath：空字串的路徑丟錯，`.` 照舊', () => {
-  const cwd = resolve('/repo/plugins/cards');
+  const cwd = resolve('/repo/apps/Cards');
   assert.throws(() => cliPath('', 'backup', {}, cwd), /空的/);
   assert.throws(() => cliPath('', 'backup', { npm_lifecycle_event: 'backup', INIT_CWD: resolve('/repo') }, cwd), /空的/);
   assert.equal(cliPath('.', 'backup', {}, cwd), cwd);

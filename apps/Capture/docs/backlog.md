@@ -18,7 +18,7 @@ Capture 的定位見 [D-076](../../../docs/decisions.md#d-076-capture-是知識�
 
 ### 待決問題
 
-- 💬 轉錄稿的圖號會重複（國小社會試用，Claude 2026-10-26）：康軒國小社會的圖號每兩頁重新編（p.42 有圖 2，p.44 也有圖 2），[轉錄稿格式](../../../docs/transcript.md#1-轉錄稿) 的 `^fig2` 在同一篇轉錄稿會重複，出處的「圖 2」也指不到一張。可能的做法：這類課本的圖 ID 加頁碼（`^p44-fig2`），出處寫 `p.44 圖 2`。轉錄稿格式是兩個外掛的接點（最上層的 docs/transcript.md，D-208 第 6 點），要改時 Capture 寫端與 Cards 讀端一起改；寫 Capture 的轉錄或 AI 製卡模組時定。2026-11-03 Sol 對照（[任務說明](../../cards/docs/tasks/elementary-social-sol-trial.md)〈結果〉）用了 `to-formal.mjs` 的退路 `^p48-fig3`（頁碼加這一頁第幾張，不等於課本圖號；課本圖號留在圖說開頭），68 個錨點沒有重複。
+- 💬 轉錄稿的圖號會重複（國小社會試用，Claude 2026-10-26）：康軒國小社會的圖號每兩頁重新編（p.42 有圖 2，p.44 也有圖 2），[轉錄稿格式](../../../docs/transcript.md#1-轉錄稿) 的 `^fig2` 在同一篇轉錄稿會重複，出處的「圖 2」也指不到一張。可能的做法：這類課本的圖 ID 加頁碼（`^p44-fig2`），出處寫 `p.44 圖 2`。轉錄稿格式是兩個外掛的接點（最上層的 docs/transcript.md，D-208 第 6 點），要改時 Capture 寫端與 Cards 讀端一起改；寫 Capture 的轉錄或 AI 製卡模組時定。2026-11-03 Sol 對照（[任務說明](../../Cards/docs/tasks/elementary-social-sol-trial.md)〈結果〉）用了 `to-formal.mjs` 的退路 `^p48-fig3`（頁碼加這一頁第幾張，不等於課本圖號；課本圖號留在圖說開頭），68 個錨點沒有重複。
 - 💬 課本加習作時，轉錄稿與出處怎麼寫（國小社會 Sol 對照，Claude 2026-11-03）：這次把課本 p.40～51 和習作 p.12～15 合成一份轉錄稿，Sol 兩次都把出處寫成 `課本 p.42`、`習作 p.12～13`，`check-syntax.mjs` 認不得（53、56 處）。課本和習作的頁碼也可能重疊。要定的是：習作是另一份轉錄稿，還是同一份裡的一節；出處怎麼指到習作的頁（例如連到習作那一份的頁碼錨點）。和上一項一起，寫 Capture 的轉錄或 AI 製卡模組時定，改法同上一項。
 - Capture 的協作規則要獨立（使用者 2026-10-20 提出）：Capture 完成、準備發布前，把只指向本 repo 的 AGENTS.md（D-076 補充）改成一份完整、獨立的 AGENTS.md 與說明，因為它是可以獨立使用的外掛。
 
@@ -40,6 +40,6 @@ Capture 的定位見 [D-076](../../../docs/decisions.md#d-076-capture-是知識�
 
 ### 和 Cards 有關、留在 Cards 的項目
 
-- 外掛內的備份還沒排除 Capture 的轉錄教材：Cards 的技術債，見 [backlog 技術債](../../cards/docs/backlog.md#技術債)（[D-150](../../../docs/decisions.md#d-150-備份與還原) 第 4 點）。
+- 外掛內的備份還沒排除 Capture 的轉錄教材：Cards 的技術債，見 [backlog 技術債](../../Cards/docs/backlog.md#技術債)（[D-150](../../../docs/decisions.md#d-150-備份與還原) 第 4 點）。
 - 三個外掛共用設定（API 金鑰設一次）：見 [AI 與外掛生態](../../../docs/plans/ai-and-ecosystem.md#三個外掛共用設定)。
-- 和 Mindboard 共用教材庫：見 [Essence Mindboard](../../mindboard/docs/backlog.md)。
+- 和 Mindboard 共用教材庫：見 [Essence Mindboard](../../Mindboard/docs/backlog.md)。

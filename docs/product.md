@@ -1,6 +1,6 @@
 # Essence｜產品定義
 
-更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡留北極星、三個外掛的目標使用者與全專案的原則，Cards 的成功標準、使用者與情境、產品原則與範圍搬到 [Cards 的產品定義](../plugins/cards/docs/product.md)。搬走的每一節留標題與一行轉往新頁。
+更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡留北極星、三個外掛的目標使用者與全專案的原則，Cards 的成功標準、使用者與情境、產品原則與範圍搬到 [Cards 的產品定義](../apps/Cards/docs/product.md)。搬走的每一節留標題與一行轉往新頁。
 
 這份文件回答「為什麼做、為誰做」中三個外掛共同的部分。三個外掛的定位與接點見[架構](architecture.md)；每項決定的理由見[決策紀錄](decisions.md)。
 
@@ -12,11 +12,11 @@
 
 檢驗方式：任何功能都要能說明它如何縮短複習時間、加深記憶或提升學業表現；說明不了的不進入目前範圍（[D-001](decisions.md#d-001-北極星)）。
 
-Cards 的核心差異（以學習目標為單位，[D-114](decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)）見 [Cards 的產品定義 §1](../plugins/cards/docs/product.md#1-北極星-)。
+Cards 的核心差異（以學習目標為單位，[D-114](decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)）見 [Cards 的產品定義 §1](../apps/Cards/docs/product.md#1-北極星-)。
 
 ## 2. 成功標準 ✅（第 1 步）
 
-搬到 Cards 的[〈2. 成功標準 ✅（第 1 步）〉](../plugins/cards/docs/product.md#2-成功標準-第-1-步)（D-208 第二步）。
+搬到 Cards 的[〈2. 成功標準 ✅（第 1 步）〉](../apps/Cards/docs/product.md#2-成功標準-第-1-步)（D-208 第二步）。
 
 ## 3. 使用者與情境 🔁（第 2 步）
 
@@ -24,9 +24,9 @@ Cards 的核心差異（以學習目標為單位，[D-114](decisions.md#d-114-�
 
 - **Essence Cards**：以學生為主，國小與國中起步，希望陪學生一路用到大學考試。學業以外的知識也能用，例如攝影、醫學影片（[D-038](decisions.md#d-038-知識領域不限學業)）。
 - **Essence Capture**：通用型使用者都能用，不限學生。
-- **Essence Mindboard**：還沒定（未來的第三個外掛，[backlog](../plugins/mindboard/docs/backlog.md)）。
+- **Essence Mindboard**：還沒定（未來的第三個外掛，[backlog](../apps/Mindboard/docs/backlog.md)）。
 
-Cards 的角色、已知條件與情境搬到 Cards 的[〈3. 使用者與情境 🔁（第 2 步）〉](../plugins/cards/docs/product.md#3-使用者與情境-第-2-步)（D-208 第二步）。
+Cards 的角色、已知條件與情境搬到 Cards 的[〈3. 使用者與情境 🔁（第 2 步）〉](../apps/Cards/docs/product.md#3-使用者與情境-第-2-步)（D-208 第二步）。
 
 ## 4. 產品原則 ✅（第 3 步）
 
@@ -35,8 +35,8 @@ Cards 的角色、已知條件與情境搬到 Cards 的[〈3. 使用者與情境
 - **非必要不出現**：軟體的每一項功能都要有必要性；拿掉了孩子或家長也不會做錯、不會卡住的，就不放；畫面看得出來的不再用文字說一次（[D-179](decisions.md#d-179-介面的每一項都要有必要性非必要不出現)）。
 - 品質目標 ✅：程式碼盡量簡潔；手機與電腦都要流暢（[D-015](decisions.md#d-015-品質目標)）。
 
-D-023 的其餘七條與說明搬到 Cards 的[〈4. 產品原則 ✅（第 3 步）〉](../plugins/cards/docs/product.md#4-產品原則-第-3-步)（D-208 第二步）。
+D-023 的其餘七條與說明搬到 Cards 的[〈4. 產品原則 ✅（第 3 步）〉](../apps/Cards/docs/product.md#4-產品原則-第-3-步)（D-208 第二步）。
 
 ## 5. 範圍 ✅（第 7 步）
 
-搬到 Cards 的[〈5. 範圍 ✅（第 7 步）〉](../plugins/cards/docs/product.md#5-範圍-第-7-步)（D-208 第二步）。
+搬到 Cards 的[〈5. 範圍 ✅（第 7 步）〉](../apps/Cards/docs/product.md#5-範圍-第-7-步)（D-208 第二步）。

@@ -1,6 +1,6 @@
 # Essence｜跨外掛的 backlog
 
-更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡只放共用工具的技術債與已知的限制、repo 結構；Cards 的任務、技術債、待決問題與第二階段清單搬到 [Cards 的 backlog](../plugins/cards/docs/backlog.md)。搬走的每一節留標題與一行轉往新頁。
+更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡只放共用工具的技術債與已知的限制、repo 結構；Cards 的任務、技術債、待決問題與第二階段清單搬到 [Cards 的 backlog](../apps/Cards/docs/backlog.md)。搬走的每一節留標題與一行轉往新頁。
 
 收錄不等於採用。每項保留原意與來源。分〈待處理〉〈已轉出〉兩區：一項需要展開、談成決定或做成任務時，搬到〈已轉出〉，下一行寫「→ 下一站（日期）」；開工只讀〈待處理〉（[工作流程規範〈backlog〉](agents/workflow.md#backlog)、[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 4 點）。技術債做完就刪那一列（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 
@@ -45,8 +45,8 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 | 外掛 | 目前狀態 | 清單 |
 |---|---|---|
-| Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../plugins/capture/docs/backlog.md) |
-| Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `plugins/mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../plugins/mindboard/docs/backlog.md) |
+| Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../apps/Capture/docs/backlog.md) |
+| Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `plugins/mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../apps/Mindboard/docs/backlog.md) |
 
 #### 三個外掛併進同一個 repo
 
@@ -56,22 +56,22 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 - **轉錄稿格式**：第二步 B 就搬到最上層的 `docs/transcript.md`（使用者 2026-11-20 調整第 6 點的時機）；共用範例與相容檢查等第一個需要共同規格的 Capture 任務。
 - **`plugins/` 改名 `apps/`、首字大寫**：定案 [D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)（使用者 2026-11-21），[任務說明](tasks/rename-plugins-to-apps.md)；入口網站放 `apps/Portal/`（第一份文件出現時建，網頁版的討論串在改名合併後寫）。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
-- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
+- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../apps/Cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
 
 ## 已轉出
 
 ### v1 需要做的任務
 
-搬到 Cards 的[〈v1 需要做的任務〉](../plugins/cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（〈待處理〉的[〈技術債〉](#技術債)、[〈已知的限制〉](#已知的限制)）。
+搬到 Cards 的[〈v1 需要做的任務〉](../apps/Cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（〈待處理〉的[〈技術債〉](#技術債)、[〈已知的限制〉](#已知的限制)）。
 
 ### 第二階段想做的事
 
-搬到 Cards 的[〈第二階段想做的事〉](../plugins/cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
+搬到 Cards 的[〈第二階段想做的事〉](../apps/Cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
 
 ### 歷史索引
 
-搬到 Cards 的[〈歷史索引〉](../plugins/cards/docs/backlog.md#歷史索引)（D-208 第二步）。
+搬到 Cards 的[〈歷史索引〉](../apps/Cards/docs/backlog.md#歷史索引)（D-208 第二步）。
 
 ### 已定案對照
 
-搬到 Cards 的[〈已定案對照〉](../plugins/cards/docs/backlog.md#已定案對照)（D-208 第二步）。
+搬到 Cards 的[〈已定案對照〉](../apps/Cards/docs/backlog.md#已定案對照)（D-208 第二步）。

@@ -8,7 +8,7 @@
 
 技術實作方向與驗證順序另見[技術架構與開發路線圖](technical-roadmap.md)，Essence Cards 與未來 Essence Capture 都是獨立 Obsidian 外掛，Capture repo 尚未建立；完整功能與算法仍待細化。
 
-參考軟體研究後的[架構細化與特色功能提案](../../../plugins/cards/docs/research/design-opportunities.md)提供來源跳轉、手機待處理、版本影響清單等候選；部分方向已依 C-017 納入[功能目錄](function-discussions.md)，具體操作及第一版範圍仍待 T-010、T-005／T-006 細化。
+參考軟體研究後的[架構細化與特色功能提案](../../../apps/Cards/docs/research/design-opportunities.md)提供來源跳轉、手機待處理、版本影響清單等候選；部分方向已依 C-017 納入[功能目錄](function-discussions.md)，具體操作及第一版範圍仍待 T-010、T-005／T-006 細化。
 
 視覺總覽見[架構圖總入口](diagrams/README.md)，保留知識學習圖，新增[功能 Mermaid 總覽](diagrams/functions.md)對照 F-ID；與技術、開發路線圖依 C-019 持續核對更新。
 

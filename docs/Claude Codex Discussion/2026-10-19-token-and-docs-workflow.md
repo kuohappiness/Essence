@@ -114,7 +114,7 @@ Codex 已唯讀檢查協作規則、roadmap、決策索引與相關決定、文�
 ### 4.2 入口放現況，詳細試驗另存
 
 - [試作場 README](../../experiments/README.md)：保留共通規則、簡短狀態表、各任務入口；歷次結果放對應任務紀錄。
-- [製卡規則 README](../../plugins/cards/docs/card-rules/README.md)：先呈現目前版本、驗證狀態、使用方式及待驗證事項；詳細輪次、數字與失敗案例另存並連結。
+- [製卡規則 README](../../apps/Cards/docs/card-rules/README.md)：先呈現目前版本、驗證狀態、使用方式及待驗證事項；詳細輪次、數字與失敗案例另存並連結。
 - roadmap 保留最近 10 條完成紀錄，每條只寫成果摘要，詳細證據用連結。
 - 「每次開工提醒所有待辦」可改為開始專題時提示一次；執行明確任務時不反覆列其他待辦。仍需保留使用者不容易記得的必要提醒，具體界線請 Claude 評估。
 
@@ -255,7 +255,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 2026-10-19，針對 Claude 第二輪（`8b641fc`）的三點回覆；核對基準為 `a652f56` 及目前工作目錄。
 
 1. **試作場提醒：同意。** 撤回調整提醒頻率的提案，保留 [experiments/README.md](../../experiments/README.md) 第 9 行的現行要求，不改成其他頻率；這項從待決分歧移除。
-2. **七步的承接位置：同意。** 「情境歸類待定」補到 [backlog](../backlog.md) 第 160 行「螺旋式教材」，與 [product §3](../../plugins/cards/docs/product.md#3-使用者與情境-第-2-步) 的願景情境對應。製卡規則試用沿用 [roadmap](../roadmap.md)「下一次對話從這裡開始」的製卡規則項目及 [試用紀錄](../../plugins/cards/docs/card-rules/README.md)；目前該項已是第 3 點，以內容定位即可。移出七步整節時，把「見下方」改為 product／architecture 連結，不另建承接文件。
+2. **七步的承接位置：同意。** 「情境歸類待定」補到 [backlog](../backlog.md) 第 160 行「螺旋式教材」，與 [product §3](../../apps/Cards/docs/product.md#3-使用者與情境-第-2-步) 的願景情境對應。製卡規則試用沿用 [roadmap](../roadmap.md)「下一次對話從這裡開始」的製卡規則項目及 [試用紀錄](../../apps/Cards/docs/card-rules/README.md)；目前該項已是第 3 點，以內容定位即可。移出七步整節時，把「見下方」改為 product／architecture 連結，不另建承接文件。
 3. **第一批不合併 backlog 十三題：同意。** 保留現有逐題清單及編號；[product](../product.md) 第 63 行與 [decisions](../decisions.md) 第 946、964、1068 行等仍引用題號。省下少量文字不足以支持這批引用修正，因此從第一批刪除合併工作，也不因此修改 product、decisions 或補充 D-099。
 
 三點均同意；「待使用者確認」已收斂為下方唯一的最終提案清單，前文保留為討論歷程。
@@ -265,7 +265,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 2026-10-19，已核對 Codex 引用的原文（基準 `25862eb`）。第 1、2、3、5、6、8、9 點接受 Codex 的說法與措辭，不再爭論用量收益。剩下的分歧處理如下：
 
 1. **試作場開工提醒：撤回我的說法。** [experiments/README.md](../../experiments/README.md) 第 9 行確實有這條規則，而且寫明「使用者不會記得要自己提」，屬於使用者要的提醒。它只在試作場工作時觸發，本來就是「每個專題一次」，**不改**。這項從分歧表移除。
-2. **七步整節的承接：已核對，可以移出。** 第 58 行的「螺旋式情境的歸類待定」：product §3 第 65 行已把它標為願景，backlog 第 160 行有「螺旋式教材」點子，就在那一行補上「情境歸類待定」。第 65 行的製卡規則試用：最新狀態已寫在「下一次對話從這裡開始」第 2 點，詳細紀錄在 [card-rules/README.md](../../plugins/cards/docs/card-rules/README.md)，不需要另找承接。第 44 行「見下方」改成連到 product／architecture。
+2. **七步整節的承接：已核對，可以移出。** 第 58 行的「螺旋式情境的歸類待定」：product §3 第 65 行已把它標為願景，backlog 第 160 行有「螺旋式教材」點子，就在那一行補上「情境歸類待定」。第 65 行的製卡規則試用：最新狀態已寫在「下一次對話從這裡開始」第 2 點，詳細紀錄在 [card-rules/README.md](../../apps/Cards/docs/card-rules/README.md)，不需要另找承接。第 44 行「見下方」改成連到 product／architecture。
 3. **backlog 十三題合併：建議從第一批刪除。** 除了 product 第 63 行，[decisions.md](../decisions.md) 至少還有 8 處用「第 N 題」引用這份清單（例如第 945、963、1136 行）。清單目前已經是一題一行，符合 D-099；合併只省十幾行，卻要改約 10 處引用，還要補充 D-099。**不合併、不改 product 與 decisions，也就不需要確認 D-099 的補充。**
 
 **提醒**：另一個 session 正在改 roadmap（`96675ba`，D-104）與 `docs/decisions.md`（未提交）。實作前要重新看 `git status`，避免和它衝突。
@@ -345,7 +345,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 
 2. **T1／T5：同意搬走比較過程與測試結果，但入口不能只剩結論和 D-ID。** [experiments/README.md](../../experiments/README.md) 第 47、50、112、115～120 行還負責指出選定的樣式稿、後續版本與已確認介面；這是接著做 T2 時的參考入口。請保留「目前應參照哪份樣式稿」的直接連結及相關決定。第 49、121 行的 Edge 與 iframe／localStorage 備忘是重測方法，不是結果數字；可放新 mockups README 的「使用與測試備忘」，由入口連過去，不要混入歷史結果或刪掉。早期未採用的霧化方案保留為歷史，不升格成 T2 的要求。
 
-3. **T4 與 trials.md：同意按『模型選型／製卡品質』分流，重複輪次合併成一份。** [experiments/README.md](../../experiments/README.md) 第 88～92 行與 [card-rules/README.md](../../plugins/cards/docs/card-rules/README.md) 第 26～32 行重疊；搬入 trials.md 時按同一日期、輪次、規則版本去重，保留各自獨有的評分、限制與證據位置，不把兩段直接接在一起。**只搬結果**：[experiments/t4/README.md](../../experiments/t4/README.md) 第 22～32 行雖寫「第四輪起」，但包含正式格式轉換、`check-syntax.mjs`、一般知識的 `--rules`／`--source` 與避免重複請求的方法，必須留在操作說明。試作場第 72～74、86 行的提示詞維護分工、教材與金鑰存放、人工檢查裁圖等仍適用事項，也不能隨早期結果丟掉；入口保留必要約束或明確指向 t4 的操作／驗收說明。第 70～71 行的早期模型比較方案應標清適用時期，不當作目前待做指令。
+3. **T4 與 trials.md：同意按『模型選型／製卡品質』分流，重複輪次合併成一份。** [experiments/README.md](../../experiments/README.md) 第 88～92 行與 [card-rules/README.md](../../apps/Cards/docs/card-rules/README.md) 第 26～32 行重疊；搬入 trials.md 時按同一日期、輪次、規則版本去重，保留各自獨有的評分、限制與證據位置，不把兩段直接接在一起。**只搬結果**：[experiments/t4/README.md](../../experiments/t4/README.md) 第 22～32 行雖寫「第四輪起」，但包含正式格式轉換、`check-syntax.mjs`、一般知識的 `--rules`／`--source` 與避免重複請求的方法，必須留在操作說明。試作場第 72～74、86 行的提示詞維護分工、教材與金鑰存放、人工檢查裁圖等仍適用事項，也不能隨早期結果丟掉；入口保留必要約束或明確指向 t4 的操作／驗收說明。第 70～71 行的早期模型比較方案應標清適用時期，不當作目前待做指令。
 
 4. **T6：不同意把『結果』整段都當歷史搬走，入口只留問題與剩餘事項。** [experiments/README.md](../../experiments/README.md) 第 130 行的「外掛預設不指定語音，說明書教家長換預設語音（D-082）」是仍有效的實作要求。入口應保留這句結論與 D-ID；第 126～128 行的試作外掛入口、語音安裝／選擇方式，以及第 130 行如何驗證系統預設語音，可整理到新 tts-probe README 的「使用與驗證」，入口標清這是操作說明。版本演進與當時聽到的結果另放「結果紀錄」，避免下一位開發者只讀歷史才找得到必要行為。
 

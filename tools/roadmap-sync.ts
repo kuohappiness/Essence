@@ -1,5 +1,5 @@
 // 狀態板、〈等觸發點〉與〈已完成〉由入口的狀態行產生（D-217；寫法見 docs/agents/workflow.md〈roadmap〉）。
-// 每份 roadmap（最上層與 plugins/<外掛>/docs/roadmap.md）各自一套，列從哪一份來就留在那一份（使用者 2026-11-21 選 A）。
+// 每份 roadmap（最上層與 apps/<外掛>/docs/roadmap.md）各自一套，列從哪一份來就留在那一份（使用者 2026-11-21 選 A）。
 // 用法：
 //   node tools/roadmap-sync.ts                改寫工作樹的 roadmap
 //   node tools/roadmap-sync.ts --check        只比對、不寫；對不上就印「檔案:行號  原因」與修法，exit 1（npm run check、CI）
@@ -13,7 +13,7 @@ import MarkdownIt from 'markdown-it';
 import { replaySides, replaying } from './git-state.ts';
 import { parseStatus, type Status } from './status-line.ts';
 
-const ROADMAP = /^(?:plugins\/[^/]+\/)?docs\/roadmap\.md$/;
+const ROADMAP = /^(?:apps\/[^/]+\/)?docs\/roadmap\.md$/;
 const DECISIONS = 'docs/decisions.md';
 const BOARD = { section: '現在在哪裡', columns: ['工作', '狀態', '下一步', '等誰', '入口'] };
 const WAITING = { section: '等觸發點', columns: ['工作', '觸發點', '入口'] };

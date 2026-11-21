@@ -6,16 +6,16 @@
 
 ## 目前的主題文件
 
-- [學習動機設計](../../plugins/cards/docs/plans/motivation.md)
-- [題庫、拼句與錯題回饋](../../plugins/cards/docs/plans/practice.md)
-- [知識庫、依能力複習與精熟循環](../../plugins/cards/docs/plans/learning-growth.md)
-- [複習體驗與卡片管理](../../plugins/cards/docs/plans/experience.md)
+- [學習動機設計](../../apps/Cards/docs/plans/motivation.md)
+- [題庫、拼句與錯題回饋](../../apps/Cards/docs/plans/practice.md)
+- [知識庫、依能力複習與精熟循環](../../apps/Cards/docs/plans/learning-growth.md)
+- [複習體驗與卡片管理](../../apps/Cards/docs/plans/experience.md)
 - [AI 與外掛生態](ai-and-ecosystem.md)
-- [相似字比較卡](../../plugins/cards/docs/plans/similar-chars.md)
-- [獨立 App](../../plugins/cards/docs/plans/standalone-app.md)
-- [更新與相容](../../plugins/cards/docs/plans/updates.md)
-- [入口與目錄（四批）](../../plugins/cards/docs/plans/entry-and-catalog.md)
-- [維修與查修的準備](../../plugins/cards/docs/plans/maintenance.md)
+- [相似字比較卡](../../apps/Cards/docs/plans/similar-chars.md)
+- [獨立 App](../../apps/Cards/docs/plans/standalone-app.md)
+- [更新與相容](../../apps/Cards/docs/plans/updates.md)
+- [入口與目錄（四批）](../../apps/Cards/docs/plans/entry-and-catalog.md)
+- [維修與查修的準備](../../apps/Cards/docs/plans/maintenance.md)
 - [工作流程優化：點子到完成的路線](workflow.md)
 
-Capture、Mindboard 的待做與待決已搬到各自的 `docs/backlog.md`（[Capture](../../plugins/capture/docs/backlog.md)、[Mindboard](../../plugins/mindboard/docs/backlog.md)，[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。
+Capture、Mindboard 的待做與待決已搬到各自的 `docs/backlog.md`（[Capture](../../apps/Capture/docs/backlog.md)、[Mindboard](../../apps/Mindboard/docs/backlog.md)，[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。

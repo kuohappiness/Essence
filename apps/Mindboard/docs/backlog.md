@@ -26,7 +26,7 @@
 
 ### 參考軟體的待評估清單
 
-使用者 2026-11-08 要求：討論階段一定要評估、分析這些參考資料（照 AGENTS.md「參考既有實作時先想最佳解」）。評估結果寫進 [docs/research/](../../cards/docs/research/)，這裡只留清單與連結。
+使用者 2026-11-08 要求：討論階段一定要評估、分析這些參考資料（照 AGENTS.md「參考既有實作時先想最佳解」）。評估結果寫進 [docs/research/](../../Cards/docs/research/)，這裡只留清單與連結。
 
 | 參考對象 | 為什麼看（摘自介紹文章，未核對原始專案） | 連結 | 狀態 |
 |---|---|---|---|
@@ -40,8 +40,8 @@
 
 這些是 Cards 自己的功能，只是可能交給 Mindboard 呈現，主文留在原處：
 
-- 心智圖當考題（挖掉節點再回想，[D-056](../../../docs/decisions.md#d-056-保留和心智圖外掛對接的彈性) 補充）：見[複習體驗的多種呈現方式](../../cards/docs/plans/experience.md#其他待評估的操作與呈現)。
-- 說明書用心智圖展開：見[複習體驗](../../cards/docs/plans/experience.md#其他待評估的操作與呈現)（D-048 補充）。
-- 學習地圖的視覺化與誰存資料：見[學習動機設計](../../cards/docs/plans/motivation.md#使用者提議把學習地圖做成有質感的視覺化)。
+- 心智圖當考題（挖掉節點再回想，[D-056](../../../docs/decisions.md#d-056-保留和心智圖外掛對接的彈性) 補充）：見[複習體驗的多種呈現方式](../../Cards/docs/plans/experience.md#其他待評估的操作與呈現)。
+- 說明書用心智圖展開：見[複習體驗](../../Cards/docs/plans/experience.md#其他待評估的操作與呈現)（D-048 補充）。
+- 學習地圖的視覺化與誰存資料：見[學習動機設計](../../Cards/docs/plans/motivation.md#使用者提議把學習地圖做成有質感的視覺化)。
 - 三個外掛共用設定：見 [AI 與外掛生態](../../../docs/plans/ai-and-ecosystem.md#三個外掛共用設定)。
-- 教材庫由 Capture 寫入、Mindboard 讀：見 [Essence Capture](../../capture/docs/backlog.md)。
+- 教材庫由 Capture 寫入、Mindboard 讀：見 [Essence Capture](../../Capture/docs/backlog.md)。

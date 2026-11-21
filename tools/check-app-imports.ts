@@ -1,9 +1,10 @@
-// 外掛之間不 import（D-208 第 10 點，tasks/one-repo-step-1.md §6）：三個外掛各自安裝、各自可用（D-006），程式不跨出自己的資料夾。
+// 軟體之間不 import（D-208 第 10 點，tasks/one-repo-step-1.md §6；D-218 起資料夾是 apps/<軟體>/）：各自安裝、各自可用（D-006），
+// 程式不跨出自己的資料夾。
 // 用法：node tools/check-app-imports.ts [--staged]
 //   預設：Git 追蹤的檔，內容讀工作樹（npm run check 與 CI 用）。--staged：清單與內容都讀暫存區（pre-commit 用）。
-// 擋：plugins/<外掛>/ 的程式用相對路徑跑出自己的資料夾；根目錄 src/、tests/、tools/ 的程式用相對路徑進到 plugins/；
-//     plugins/<外掛>/ 追蹤的 symlink 指到外掛外；plugins/<外掛>/package.json 的本機相依（file:、link:、沒有協定的路徑等）
-//     不是外掛裡只用英數與 . _ - / 的相對路徑。
+// 擋：apps/<軟體>/ 的程式用相對路徑跑出自己的資料夾；根目錄 src/、tests/、tools/ 的程式用相對路徑進到 apps/；
+//     apps/<軟體>/ 追蹤的 symlink 指到軟體外；apps/<軟體>/package.json 的本機相依（file:、link:、沒有協定的路徑等）
+//     不是軟體裡只用英數與 . _ - / 的相對路徑。資料夾名從追蹤的路徑整段抓（D-218 §3 第 3 點），不用代號重組。
 // 路徑用 TypeScript 的 preProcessFile 取字面值：註解與字串裡的不算，import、export … from、require、import()、
 // import x = require() 與沒有代換的模板字面值都取得到；import('../../src/' + name) 取到字面的前段，照前段判斷（偏嚴）。
 // 套件名稱、node:、網址照常。執行時才組出來的路徑、tsconfig 的 paths、打包工具的 alias 這裡看不到（backlog〈已知的限制〉）。
@@ -13,12 +14,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { APPS_ROOT } from './apps.ts';
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 interface Entry { path: string; mode: string; object: string }
 
 const SOURCE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
-const PLUGIN = /^plugins\/([^/]+)\//;
+/** 軟體的資料夾（第 1 組是整段，例如 apps/Cards）。 */
+const PLUGIN = /^(apps\/[^/]+)\//;
+const PACKAGE = /^(apps\/[^/]+)\/package\.json$/;
 const ROOT_CODE = /^(?:src|tests|tools)\//;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
@@ -43,10 +47,10 @@ export function checkSource(path: string, text: string): Problem[] {
   for (const { fileName, pos } of importedFiles) {
     if (!isRelative(fileName)) continue;
     const target = resolveFrom(path, fileName);
-    if (plugin && !inside(target, `plugins/${plugin}`)) {
-      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `跑出 plugins/${plugin}/：外掛不 import 其他外掛與最上層的程式（D-208 第 10 點）` });
-    } else if (rootCode && inside(target, 'plugins')) {
-      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: '根目錄的程式不 import plugins/ 裡的外掛（D-208 第 10 點）' });
+    if (plugin && !inside(target, plugin)) {
+      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `跑出 ${plugin}/：軟體不 import 其他軟體與最上層的程式（D-208 第 10 點）` });
+    } else if (rootCode && target.startsWith(APPS_ROOT)) {
+      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `根目錄的程式不 import ${APPS_ROOT} 裡的軟體（D-208 第 10 點）` });
     }
   }
   return problems;
@@ -57,8 +61,8 @@ export function checkLink(path: string, target: string): Problem[] {
   const plugin = PLUGIN.exec(path)?.[1];
   if (!plugin) return [];
   const absolute = /^(?:[a-z]:)?[\\/]/i.test(target);
-  if (!absolute && inside(resolveFrom(path, target), `plugins/${plugin}`)) return [];
-  return [{ file: path, line: 1, target, reason: `symlink 指到 plugins/${plugin}/ 外（D-208 第 10 點）` }];
+  if (!absolute && inside(resolveFrom(path, target), plugin)) return [];
+  return [{ file: path, line: 1, target, reason: `symlink 指到 ${plugin}/ 外（D-208 第 10 點）` }];
 }
 
 /**
@@ -82,7 +86,7 @@ const LOCAL_PATH = /^[A-Za-z0-9._/-]+$/;
 
 /** 外掛 package.json 的本機相依（file:、link: 等）不是外掛裡的相對路徑。 */
 export function checkPackage(path: string, text: string): Problem[] {
-  const plugin = /^plugins\/([^/]+)\/package\.json$/.exec(path)?.[1];
+  const plugin = PACKAGE.exec(path)?.[1];
   if (!plugin) return [];
   let pkg: Record<string, unknown>;
   try {
@@ -100,10 +104,10 @@ export function checkPackage(path: string, text: string): Problem[] {
       const local = localPath(value);
       if (local === undefined) continue;
       const allowed = LOCAL_PATH.test(local) && !local.startsWith('/');
-      if (allowed && inside(posix.normalize(posix.join(`plugins/${plugin}`, local)).replace(/\/+$/, ''), `plugins/${plugin}`)) continue;
+      if (allowed && inside(posix.normalize(posix.join(plugin, local)).replace(/\/+$/, ''), plugin)) continue;
       const line = lines.findIndex(l => l.includes(JSON.stringify(name))) + 1 || 1;
-      const reason = allowed ? `${field} 的 ${name} 指到 plugins/${plugin}/ 外（D-208 第 10 點）`
-        : `${field} 的 ${name} 是本機路徑，只接受外掛裡只用英數與 . _ - / 的相對路徑（npm 會把 ~/ 展開成家目錄、反斜線當成分隔，D-208 第 10 點）`;
+      const reason = allowed ? `${field} 的 ${name} 指到 ${plugin}/ 外（D-208 第 10 點）`
+        : `${field} 的 ${name} 是本機路徑，只接受軟體裡只用英數與 . _ - / 的相對路徑（npm 會把 ~/ 展開成家目錄、反斜線當成分隔，D-208 第 10 點）`;
       problems.push({ file: path, line, target: value, reason });
     }
   }
@@ -144,7 +148,7 @@ function blobs(root: string, objects: string[]): Buffer[] {
 export function checkPluginImports(root: string, { staged = false }: { staged?: boolean } = {}): Problem[] {
   const all = entries(root).filter(e => !e.path.split('/').includes('node_modules'));
   const links = all.filter(e => e.mode === '120000');
-  const files = all.filter(e => e.mode !== '120000' && e.mode !== '160000' && (SOURCE.test(e.path) || /^plugins\/[^/]+\/package\.json$/.test(e.path)))
+  const files = all.filter(e => e.mode !== '120000' && e.mode !== '160000' && (SOURCE.test(e.path) || PACKAGE.test(e.path)))
     .filter(e => PLUGIN.test(e.path) || ROOT_CODE.test(e.path));
   const problems: Problem[] = [];
   // symlink 的內容一律讀索引裡的物件：Windows 沒開 symlink 時工作樹是一般檔。

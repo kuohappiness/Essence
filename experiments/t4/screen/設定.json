@@ -3,12 +3,12 @@
   "model": { "provider": "openai", "model": "gpt-5.6-terra" },
   "groups": {
     "精簡指令": ["screen/格式.md", "screen/精簡指令.md"],
-    "完整規則": ["screen/格式.md", "../../plugins/cards/docs/card-rules/common.md", "{科目預設}", "screen/完整規則.md"]
+    "完整規則": ["screen/格式.md", "../../apps/Cards/docs/card-rules/common.md", "{科目預設}", "screen/完整規則.md"]
   },
   "materials": {
     "自然2-2": {
       "教材": null,
-      "科目預設": "../../plugins/cards/docs/card-rules/science.md",
+      "科目預設": "../../apps/Cards/docs/card-rules/science.md",
       "checkSyntax": { "subject": "自然", "unit": "2-2" },
       "任務資料": [
         "學生：國中二年級",
@@ -23,7 +23,7 @@
     },
     "熱的傳播": {
       "教材": "screen/熱的傳播.md",
-      "科目預設": "../../plugins/cards/docs/card-rules/science.md",
+      "科目預設": "../../apps/Cards/docs/card-rules/science.md",
       "checkSyntax": { "subject": "自然", "unit": "熱的傳播" },
       "任務資料": [
         "學生：國中二年級",

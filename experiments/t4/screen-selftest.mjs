@@ -68,7 +68,7 @@ export async function selftest() {
     const brief = await buildPrompt(ROOT, actual, actual.materials['自然2-2'], '精簡指令');
     const full = await buildPrompt(ROOT, actual, actual.materials['自然2-2'], '完整規則');
     assert.deepEqual(brief.files.map(f => f.path), actual.groups['精簡指令']);
-    assert.deepEqual(full.files.map(f => f.path), ['screen/格式.md', '../../plugins/cards/docs/card-rules/common.md', '../../plugins/cards/docs/card-rules/science.md', 'screen/完整規則.md']);
+    assert.deepEqual(full.files.map(f => f.path), ['screen/格式.md', '../../apps/Cards/docs/card-rules/common.md', '../../apps/Cards/docs/card-rules/science.md', 'screen/完整規則.md']);
     assert(!brief.system.includes('{{') && !full.system.includes('{{'));
     const ending = '請先完整讀完上面的製卡規則，輸出前照通用規則最後的自我檢查逐項確認。';
     assert.equal((await readText(path.join(ROOT, 'screen/完整規則.md'))).replace(ending, ''), await readText(path.join(ROOT, 'screen/精簡指令.md')));
@@ -120,7 +120,7 @@ export async function selftest() {
     await put(path.join(temp, '來源/圖/前.png'), 'changed PNG');
     await assert.rejects(runScreen({ out, materials }, deps), /新的 --out/);
     await put(path.join(temp, '來源/圖/前.png'), 'fake PNG');
-    for (const dirty of [' M experiments/t4/screen/格式.md', ' M plugins/cards/docs/card-rules/common.md'])
+    for (const dirty of [' M experiments/t4/screen/格式.md', ' M apps/Cards/docs/card-rules/common.md'])
       assert.throws(() => cleanCommit(undefined, (...args) => args[0] === 'status' ? dirty : 'test-commit'), /未 commit/);
     assert.equal((await readJSON(path.join(out, '生成/自然2-2/精簡指令-1.送出.json'))).commit, 'test-commit');
     const metadata = await readJSON(path.join(out, '生成/自然2-2/精簡指令-1.回覆.json'));

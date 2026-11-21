@@ -92,7 +92,7 @@ async function main() {
       : [values.transcript ? path.resolve(out, values.transcript) : path.join(out, slug(config.transcribe[0].model), '轉錄稿.md')];
     for (const source of sources) if (!(await exists(source))) { console.log(`cards：缺少 ${source}，跳過；轉錄成功後再重跑 cards`); return false; }
     // --prompt 換掉 prompts/cards.md，例如試不同的家長調整；--rules 換掉 science.md，例如一般知識的 general.md。
-    const system = (await Promise.all(['../../plugins/cards/docs/card-rules/common.md', values.rules ? path.resolve(values.rules) : '../../plugins/cards/docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
+    const system = (await Promise.all(['../../apps/Cards/docs/card-rules/common.md', values.rules ? path.resolve(values.rules) : '../../apps/Cards/docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
       .map(file => fs.readFile(path.resolve(ROOT, file), 'utf8')))).join('\n\n');
     const content = [];
     for (const source of sources) {

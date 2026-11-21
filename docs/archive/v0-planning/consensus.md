@@ -218,7 +218,7 @@
 
 確認範圍：確認上述功能方向與討論安排；來源格式、欄位、狀態名稱、操作細節、算法、驗收門檻及第一版正式範圍仍未定案。沒有將研究的所有 A／U 候選全數採用，也沒有完成產品實作或真實裝置驗證。P0 與 Git 設計繼續保留。
 
-[功能目錄](function-discussions.md)、[研究統整](../../../plugins/cards/docs/research/design-opportunities.md)與[本次討論摘要](../discussions/2026-10-07-function-catalog-refinement.md)保存詳細內容。
+[功能目錄](function-discussions.md)、[研究統整](../../../apps/Cards/docs/research/design-opportunities.md)與[本次討論摘要](../discussions/2026-10-07-function-catalog-refinement.md)保存詳細內容。
 
 ## C-018 自訂教材介面與可丟棄的最小驗證｜已確認
 

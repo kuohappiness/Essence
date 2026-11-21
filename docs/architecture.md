@@ -1,6 +1,6 @@
 # Essence｜架構
 
-更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡留三個外掛的定位與接點（§3）與 repo 結構（§9），Cards 的術語、概念模型、平台、資料存放、AI 的位置、製卡規則與分工搬到 [Cards 的架構](../plugins/cards/docs/architecture.md)。搬走的每一節留標題與一行轉往新頁。
+更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡留三個外掛的定位與接點（§3）與 repo 結構（§9），Cards 的術語、概念模型、平台、資料存放、AI 的位置、製卡規則與分工搬到 [Cards 的架構](../apps/Cards/docs/architecture.md)。搬走的每一節留標題與一行轉往新頁。
 
 這份文件回答「三個外掛技術上怎麼組成」。為什麼做、為誰做見[產品定義](product.md)；兩個外掛之間唯一的檔案接點見[轉錄稿格式](transcript.md)。
 
@@ -8,11 +8,11 @@
 
 ## 1. 術語表
 
-搬到 Cards 的[〈1. 術語表〉](../plugins/cards/docs/architecture.md#1-術語表)（D-208 第二步）。
+搬到 Cards 的[〈1. 術語表〉](../apps/Cards/docs/architecture.md#1-術語表)（D-208 第二步）。
 
 ## 2. 概念模型 ✅（第 4 步）
 
-搬到 Cards 的[〈2. 概念模型 ✅（第 4 步）〉](../plugins/cards/docs/architecture.md#2-概念模型-第-4-步)（D-208 第二步）。
+搬到 Cards 的[〈2. 概念模型 ✅（第 4 步）〉](../apps/Cards/docs/architecture.md#2-概念模型-第-4-步)（D-208 第二步）。
 
 ## 3. 模組邊界 ✅（第 5 步）
 
@@ -20,7 +20,7 @@
 |---|---|---|
 | Essence Cards（在本 repo 的 `plugins/cards/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 製卡、複習、檢核、排程、選用的 AI 輔助 | ✅ |
 | Essence Capture（在本 repo 的 `plugins/capture/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)；原本的 [repo](https://github.com/kuohappiness/Essence-Capture) 之後當公開 repo） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；PDF 與圖片的忠實轉錄移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上後成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
-| 題庫（Cards 內的獨立模組，第二階段討論） | 計算與應用題、選擇題、考古題模擬考；題目寫在題庫筆記，和閃卡共用今日佇列、排程與複習紀錄（[D-090](decisions.md#d-090-題庫併入-cards變式題以題型排程)） | ✅ 方向；細節見[第二階段規畫](../plugins/cards/docs/plans/practice.md) |
+| 題庫（Cards 內的獨立模組，第二階段討論） | 計算與應用題、選擇題、考古題模擬考；題目寫在題庫筆記，和閃卡共用今日佇列、排程與複習紀錄（[D-090](decisions.md#d-090-題庫併入-cards變式題以題型排程)） | ✅ 方向；細節見[第二階段規畫](../apps/Cards/docs/plans/practice.md) |
 | Essence Mindboard（未來，尚未建立；在本 repo 的 `plugins/mindboard/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
 
 已確認 ✅（[D-006](decisions.md#d-006-兩個獨立外掛)、[D-008](decisions.md#d-008-學習紀錄與來源修改)、[D-009](decisions.md#d-009-一般筆記可直接使用)）：
@@ -40,11 +40,11 @@ v1 的材料來源 ✅（[D-032](decisions.md#d-032-v1-的材料來源)）：
 - 卡組從 Obsidian 筆記製作：手寫、其他工具產生的筆記，或第二階段 Capture 轉錄的教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。v1 的課本與講義由家長在自己的 AI 對話附上（照片或 PDF），Cards 不讀 PDF（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；錯題照片仍由 Cards 分析（D-061）。
 - Cards 不依賴 Capture：筆記帶有交接資訊就使用，沒有也能運作。
 
-和心智圖外掛對接的做法 💡（助理提案；[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)）。使用者 2026-10-11 決定：細節列入未來的專門討論（[Essence Mindboard](../plugins/mindboard/docs/backlog.md)）；用區塊 ID 連結學習目標的方式已同意，並寫進使用說明書（D-048 補充）：
+和心智圖外掛對接的做法 💡（助理提案；[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)）。使用者 2026-10-11 決定：細節列入未來的專門討論（[Essence Mindboard](../apps/Mindboard/docs/backlog.md)）；用區塊 ID 連結學習目標的方式已同意，並寫進使用說明書（D-048 補充）：
 
 - **用檔案對接，不用程式綁在一起**：和 Capture 一樣，各自安裝、各自可用。心智圖外掛直接讀 vault 裡的卡組筆記和複習紀錄。
 - **v1 只要做到三件事，幾乎不增加工作**：
-  - 學習目標 ID 寫成 Obsidian 原生的區塊 ID（[舊外掛分析 §7-4](../plugins/cards/docs/research/old-flashcard-plugin.md#7-4-id-的字元與位置) 已經這樣建議）。這樣心智圖的節點、Canvas、一般筆記都能用 `[[卡組#^k3m9x2]]` 連到學習目標。
+  - 學習目標 ID 寫成 Obsidian 原生的區塊 ID（[舊外掛分析 §7-4](../apps/Cards/docs/research/old-flashcard-plugin.md#7-4-id-的字元與位置) 已經這樣建議）。這樣心智圖的節點、Canvas、一般筆記都能用 `[[卡組#^k3m9x2]]` 連到學習目標。
     - 連結可以自訂顯示文字：`[[卡組#^k3m9x2|密度]]` 顯示「密度」，同一個 ID 在不同筆記、不同節點可以顯示不同文字。嵌入 `![[卡組#^k3m9x2]]` 則顯示原文，包括答案，適合閱讀，不適合拿來複習。心智圖外掛也可以只把 ID 當連結，畫面怎麼呈現由外掛決定。
     - 已知限制：學習目標搬到另一篇卡組時，Obsidian 不會更新寫著舊檔名的連結。對策：ID 在整個 vault 不重複（D-034），外掛用 ID 找學習目標，檔名只當提示；之後可以提供「修復連結」指令。目標之間的連結（第二階段）也照這個做法，修復的界線見 [D-167](decisions.md#d-167-學習目標的連結與整理)。
     - 清單項目加上區塊 ID 後，嵌入時子項目的縮排是否正常，在複習畫面原型一起實測。
@@ -58,23 +58,23 @@ v1 的材料來源 ✅（[D-032](decisions.md#d-032-v1-的材料來源)）：
 
 ## 4. 平台與裝置 ✅
 
-搬到 Cards 的[〈4. 平台與裝置 ✅〉](../plugins/cards/docs/architecture.md#4-平台與裝置-)（D-208 第二步）。
+搬到 Cards 的[〈4. 平台與裝置 ✅〉](../apps/Cards/docs/architecture.md#4-平台與裝置-)（D-208 第二步）。
 
 ## 5. 資料存放 ✅（第 6 步）
 
-搬到 Cards 的[〈5. 資料存放 ✅（第 6 步）〉](../plugins/cards/docs/architecture.md#5-資料存放-第-6-步)（D-208 第二步）。
+搬到 Cards 的[〈5. 資料存放 ✅（第 6 步）〉](../apps/Cards/docs/architecture.md#5-資料存放-第-6-步)（D-208 第二步）。
 
 ## 6. AI 的位置 ✅（細節之後專門討論）
 
-搬到 Cards 的[〈6. AI 的位置 ✅（細節之後專門討論）〉](../plugins/cards/docs/architecture.md#6-ai-的位置-細節之後專門討論)（D-208 第二步）。
+搬到 Cards 的[〈6. AI 的位置 ✅（細節之後專門討論）〉](../apps/Cards/docs/architecture.md#6-ai-的位置-細節之後專門討論)（D-208 第二步）。
 
 ## 7. 製卡規則 ✅
 
-搬到 Cards 的[〈7. 製卡規則 ✅〉](../plugins/cards/docs/architecture.md#7-製卡規則-)（D-208 第二步）。
+搬到 Cards 的[〈7. 製卡規則 ✅〉](../apps/Cards/docs/architecture.md#7-製卡規則-)（D-208 第二步）。
 
 ## 8. 整條鏈的分工 ✅
 
-搬到 Cards 的[〈8. 整條鏈的分工 ✅〉](../plugins/cards/docs/architecture.md#8-整條鏈的分工-)（D-208 第二步）。
+搬到 Cards 的[〈8. 整條鏈的分工 ✅〉](../apps/Cards/docs/architecture.md#8-整條鏈的分工-)（D-208 第二步）。
 
 ## 9. repo 結構 ✅（D-208）
 

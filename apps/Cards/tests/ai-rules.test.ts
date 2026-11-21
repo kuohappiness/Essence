@@ -34,7 +34,7 @@ void test('§1 表：五科全開（§0），規則照表的順序；card-rules 
     social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.9'],
   });
   // 只挑 Cards 的製卡規則（R3 的實驗檔整份送、沒有標記）；挑不到時這一段會默默跳過，所以先確認有挑到。
-  const marked = ruleFiles().filter(path => path.startsWith('plugins/cards/docs/card-rules/'));
+  const marked = ruleFiles().filter(path => path.startsWith('apps/Cards/docs/card-rules/'));
   assert.ok(marked.length > 0, '一份 card-rules 都沒挑到');
   for (const path of marked) {
     const text = await readFile(join(root, RULES_FROM_ROOT, path), 'utf8');

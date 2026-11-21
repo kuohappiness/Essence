@@ -9,7 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { APPS_ROOT, FOLDERS } from './apps.ts';
+import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
 
 export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
 export type Plugin = (typeof PLUGINS)[number];
@@ -68,10 +68,12 @@ export const RULES: Rule[] = [
   },
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
-    id: 4, name: 'Capture、Mindboard 的資料夾', matches: under(prefix('capture'), prefix('mindboard')),
-    effect: path => ({ [path.startsWith(prefix('capture')) ? 'capture' : 'mindboard']: 'full' }),
+    // 只有文件的軟體（現在是 Portal，D-218）只跑共用檢查；寫第一行程式時移進 FOLDERS、加自己的檢查。
+    id: 4, name: 'Capture、Mindboard 與只有文件的軟體的資料夾',
+    matches: under(prefix('capture'), prefix('mindboard'), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
+    effect: path => (path.startsWith(prefix('capture')) ? { capture: 'full' } : path.startsWith(prefix('mindboard')) ? { mindboard: 'full' } : {}),
   },
-  { id: 5, name: 'plugins/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
+  { id: 5, name: 'apps/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
@@ -165,13 +167,13 @@ function toolPaths(text: string, base: string | undefined): string[] {
 
 /**
  * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
- * repo 底下，寫成 ../../tools/… 也解得開）與 plugins/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
+ * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
  */
 export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
-    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^plugins\/[^/]+\/package\.json$/.test(path) || isSource(path));
+    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^apps\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
   for (const [path, text] of texts) {
     if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);

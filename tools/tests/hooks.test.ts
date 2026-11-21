@@ -106,7 +106,8 @@ async function clone(t: test.TestContext) {
   const toolsPkg = JSON.parse(await readFile(join(repo, 'tools/package.json'), 'utf8')) as { scripts: Record<string, string> };
   toolsPkg.scripts['self-check'] = 'node ../mark.mjs tools';
   await writeFile(join(repo, 'tools/package.json'), JSON.stringify(toolsPkg, null, 2) + '\n');
-  for (const path of (await git(repo, 'ls-files', '-z', '--', 'tests', `${C}tests`, 'tools/tests')).split('\0').filter(path => path.endsWith('.test.ts'))) {
+  // 照本 repo 的清單找：搬家的 commit 時新位置的檔在 clone 裡還沒追蹤，用 clone 的 ls-files 會漏掉。
+  for (const path of [...wanted].filter(path => path.endsWith('.test.ts') && ['tests/', `${C}tests/`, 'tools/tests/'].some(dir => path.startsWith(dir)))) {
     await writeFile(join(repo, path), 'export {};\n');
   }
   await mkdir(join(repo, C, 'tests'), { recursive: true });
@@ -165,13 +166,13 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
 
   // 1. 只改 Mindboard：Cards 的資料夾沒有 node_modules 也能 commit。
   await assert.rejects(access(join(repo, C, 'node_modules')), { code: 'ENOENT' });
-  await put('plugins/mindboard/src/a.ts', 'export const a = 1;\n');
-  await put('plugins/mindboard/src/b.ts', 'export const b = 1;\n');
-  await git(repo, 'add', '--', 'plugins/mindboard/src');
+  await put('apps/Mindboard/src/a.ts', 'export const a = 1;\n');
+  await put('apps/Mindboard/src/b.ts', 'export const b = 1;\n');
+  await git(repo, 'add', '--', 'apps/Mindboard/src');
   let r = await commit(['-m', 'mindboard only']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
-  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 plugins\/mindboard\/src\/a\.ts、plugins\/mindboard\/src\/b\.ts）通過$/);
+  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）通過$/);
   await assert.rejects(access(join(repo, C, 'node_modules')), { code: 'ENOENT' });
 
   // 2. 只改 Cards：Cards 的資料夾沒有 node_modules 擋下，裝過（空的 node_modules）才跑。
@@ -198,14 +199,14 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   assert.match(lastLine(r.out), new RegExp(`Cards：相關測試（寫到 ${escaped(SYNTAX)} 的 1 個測試檔）通過；Capture：完整檢查（改到 ${escaped(SYNTAX)}）通過；Mindboard：照分派表跳過`));
 
   // 4. 刪檔。
-  await git(repo, 'rm', '-q', '--', 'plugins/mindboard/src/a.ts');
+  await git(repo, 'rm', '-q', '--', 'apps/Mindboard/src/a.ts');
   r = await commit(['-m', 'delete']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
 
   // 5. 跨外掛改名：兩邊都跑。
-  await mkdir(join(repo, 'plugins/capture/src'), { recursive: true });
-  await git(repo, 'mv', 'plugins/mindboard/src/b.ts', 'plugins/capture/src/b.ts');
+  await mkdir(join(repo, 'apps/Capture/src'), { recursive: true });
+  await git(repo, 'mv', 'apps/Mindboard/src/b.ts', 'apps/Capture/src/b.ts');
   r = await commit(['-m', 'move']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture', 'mindboard']);
@@ -228,13 +229,13 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
 
   // 外掛的檢查失敗就擋下，commit 不會進去。
   const head = await git(repo, 'rev-parse', 'HEAD');
-  await put('plugins/mindboard/src/fail.ts', 'export const f = 1;\n');
-  await git(repo, 'add', '--', 'plugins/mindboard/src/fail.ts');
+  await put('apps/Mindboard/src/fail.ts', 'export const f = 1;\n');
+  await git(repo, 'add', '--', 'apps/Mindboard/src/fail.ts');
   r = await commit(['-m', 'fail'], { fail: 'mindboard' });
   assert.equal(r.ok, false);
   assert.match(r.out, /mindboard 的替身照設定失敗/);
   assert.equal(await git(repo, 'rev-parse', 'HEAD'), head);
-  await git(repo, 'rm', '-q', '--cached', '--', 'plugins/mindboard/src/fail.ts');
+  await git(repo, 'rm', '-q', '--cached', '--', 'apps/Mindboard/src/fail.ts');
 });
 
 void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a、skill 只 stage 一份、linked worktree、缺 tools 的相依', async t => {
@@ -242,32 +243,32 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   const { repo, linked, base, git, commit, put } = c;
 
   // 從外掛的資料夾裡 commit。
-  await put('plugins/mindboard/src/c.ts', 'export const c = 1;\n');
-  await git(join(repo, 'plugins/mindboard'), 'add', '--', 'src/c.ts');
-  let r = await commit(['-m', 'from subfolder'], { cwd: join(repo, 'plugins/mindboard') });
+  await put('apps/Mindboard/src/c.ts', 'export const c = 1;\n');
+  await git(join(repo, 'apps/Mindboard'), 'add', '--', 'src/c.ts');
+  let r = await commit(['-m', 'from subfolder'], { cwd: join(repo, 'apps/Mindboard') });
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
 
   // §10：外掛的檢查在只有暫存內容的副本跑。工作樹裡沒 stage 的改動，不會讓檢查通過，也不會讓它擋下。
-  await put('plugins/mindboard/flag.txt', 'bad\n');
-  await git(repo, 'add', '--', 'plugins/mindboard/flag.txt');
-  await put('plugins/mindboard/flag.txt', 'good\n');
+  await put('apps/Mindboard/flag.txt', 'bad\n');
+  await git(repo, 'add', '--', 'apps/Mindboard/flag.txt');
+  await put('apps/Mindboard/flag.txt', 'good\n');
   r = await commit(['-m', 'staged bad']);
   assert.equal(r.ok, false);
   assert.deepEqual(r.marks, ['mindboard:bad']);
-  await put('plugins/mindboard/flag.txt', 'staged\n');
-  await git(repo, 'add', '--', 'plugins/mindboard/flag.txt');
-  await put('plugins/mindboard/flag.txt', 'bad\n');
+  await put('apps/Mindboard/flag.txt', 'staged\n');
+  await git(repo, 'add', '--', 'apps/Mindboard/flag.txt');
+  await put('apps/Mindboard/flag.txt', 'bad\n');
   r = await commit(['-m', 'staged good']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard:staged']);
 
   // git commit -- <路徑>：Capture 已經 stage 了，只照這次 commit 的路徑分派。副本照這次 commit 用的暫時索引取出：
   // flag.txt 是 HEAD 的 staged，不是工作樹的 bad。
-  await put('plugins/capture/src/d.ts', 'export const d = 1;\n');
-  await git(repo, 'add', '--', 'plugins/capture/src/d.ts');
-  await put('plugins/mindboard/src/c.ts', 'export const c = 2;\n');
-  r = await commit(['-m', 'only path', '--', 'plugins/mindboard/src/c.ts']);
+  await put('apps/Capture/src/d.ts', 'export const d = 1;\n');
+  await git(repo, 'add', '--', 'apps/Capture/src/d.ts');
+  await put('apps/Mindboard/src/c.ts', 'export const c = 2;\n');
+  r = await commit(['-m', 'only path', '--', 'apps/Mindboard/src/c.ts']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard:staged']);
   r = await commit(['-m', 'pre-staged capture']);
@@ -275,8 +276,8 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   assert.deepEqual(r.marks, ['capture']);
 
   // git commit -a：沒 stage 的改動也照分派表，副本也有它們。
-  await put('plugins/capture/src/d.ts', 'export const d = 2;\n');
-  await put('plugins/mindboard/flag.txt', 'all\n');
+  await put('apps/Capture/src/d.ts', 'export const d = 2;\n');
+  await put('apps/Mindboard/flag.txt', 'all\n');
   r = await commit(['-a', '-m', 'all']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['capture', 'mindboard:all']);
@@ -318,8 +319,8 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   // 已經存在的 linked worktree 切到新的分支：hook 照跑（core.hooksPath 是相對的，讀那個 worktree 自己的 .githooks）。
   await git(linked, 'checkout', '-q', '-b', 'new', base);
   await c.borrow(linked);
-  await put('plugins/mindboard/src/w.ts', 'export const w = 1;\n', linked);
-  await git(linked, 'add', '--', 'plugins/mindboard/src/w.ts');
+  await put('apps/Mindboard/src/w.ts', 'export const w = 1;\n', linked);
+  await git(linked, 'add', '--', 'apps/Mindboard/src/w.ts');
   r = await commit(['-m', 'linked'], { cwd: linked });
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
@@ -332,8 +333,8 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   const marked = original.replace('set -eu\n', 'set -eu\nnode mark.mjs own-hook\n');
   assert.notEqual(marked, original);
   await writeFile(own, marked);
-  await put('plugins/mindboard/src/w.ts', 'export const w = 2;\n', linked);
-  await git(linked, 'add', '--', 'plugins/mindboard/src/w.ts');
+  await put('apps/Mindboard/src/w.ts', 'export const w = 2;\n', linked);
+  await git(linked, 'add', '--', 'apps/Mindboard/src/w.ts');
   r = await commit(['-m', 'delegated'], { cwd: linked });
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard', 'own-hook']);
@@ -342,8 +343,8 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
 
   // 沒有 tools/node_modules：擋下，說在 tools/ 執行 npm ci。
   await unlink(c.toolsLink);
-  await put('plugins/mindboard/src/e.ts', 'export const e = 1;\n');
-  await git(repo, 'add', '--', 'plugins/mindboard/src/e.ts');
+  await put('apps/Mindboard/src/e.ts', 'export const e = 1;\n');
+  await git(repo, 'add', '--', 'apps/Mindboard/src/e.ts');
   r = await commit(['-m', 'no tools']);
   assert.equal(r.ok, false);
   assert.match(r.out, /先在 tools\/ 執行 npm ci/);

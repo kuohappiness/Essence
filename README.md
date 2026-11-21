@@ -8,9 +8,9 @@ Essence 是三個 Obsidian 外掛，在同一個 repo 開發、各自安裝、�
 
 | 外掛 | 是什麼 | 進度 | 協作規則 |
 |---|---|---|---|
-| [Essence Cards](plugins/cards/README.md) | 把筆記變成閃卡，讓學生用間隔重複在手機上快速複習；v1 開發中 | [roadmap](plugins/cards/docs/roadmap.md) | [AGENTS.md](plugins/cards/AGENTS.md) |
-| Essence Capture | 可靠的知識入口：想保存任何資料進知識庫就用它；PDF 與圖片的忠實轉錄移到第二階段（[D-206](docs/decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；原本的 [repo](https://github.com/kuohappiness/Essence-Capture) 之後當公開 repo | [backlog](plugins/capture/docs/backlog.md) | [AGENTS.md](plugins/capture/AGENTS.md) |
-| Essence Mindboard | 把知識架構視覺化；還沒開始，Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)） | [backlog](plugins/mindboard/docs/backlog.md) | [AGENTS.md](plugins/mindboard/AGENTS.md) |
+| [Essence Cards](apps/Cards/README.md) | 把筆記變成閃卡，讓學生用間隔重複在手機上快速複習；v1 開發中 | [roadmap](apps/Cards/docs/roadmap.md) | [AGENTS.md](apps/Cards/AGENTS.md) |
+| Essence Capture | 可靠的知識入口：想保存任何資料進知識庫就用它；PDF 與圖片的忠實轉錄移到第二階段（[D-206](docs/decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；原本的 [repo](https://github.com/kuohappiness/Essence-Capture) 之後當公開 repo | [backlog](apps/Capture/docs/backlog.md) | [AGENTS.md](apps/Capture/AGENTS.md) |
+| Essence Mindboard | 把知識架構視覺化；還沒開始，Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)） | [backlog](apps/Mindboard/docs/backlog.md) | [AGENTS.md](apps/Mindboard/AGENTS.md) |
 
 ## 共用的文件
 

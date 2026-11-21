@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: plugins/cards
+        working-directory: apps/Cards
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: plugins/cards/package-lock.json
+          cache-dependency-path: apps/Cards/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm run build
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: plugins/capture
+        working-directory: apps/Capture
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: plugins/mindboard
+        working-directory: apps/Mindboard
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

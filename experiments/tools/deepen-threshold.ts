@@ -3,8 +3,8 @@
 // 跑法：node experiments/tools/deepen-threshold.ts
 // 答對機率 = 當下的 recall；答錯（沒印象）一分鐘後再答對一次（同一輪重學）。答對的 15% 按「太簡單」。
 // 「記穩了」= 穩定度 ≥ STABLE 天，而且最後一次是記住了或太簡單。
-import { dueAt, recall, review } from '../../plugins/cards/src/core/study/fsrs.ts';
-import type { Memory, Rating, ReviewEntry } from '../../plugins/cards/src/core/study/types.ts';
+import { dueAt, recall, review } from '../../apps/Cards/src/core/study/fsrs.ts';
+import type { Memory, Rating, ReviewEntry } from '../../apps/Cards/src/core/study/types.ts';
 
 const DAY = 86_400_000;
 const OFFSET = 480;

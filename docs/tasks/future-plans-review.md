@@ -42,12 +42,12 @@
   - **原意**：搬過去之後意思有沒有變。例如縮短時丟了條件、限定或例子；把「待討論」寫成「要做」；把使用者的原話改寫到認不出來。
   - **來源**：誰、哪一天、出處的連結都還在。
   - **身分**：和原文一樣；使用者沒同意的，沒有變成 ✅ 或「方向已定」。
-- 交接稿第 2 點的「以學習目標的熟練度當作升級標準」：確認 [動機設計](../../plugins/cards/docs/plans/motivation.md) 只把它記成使用者提議。
+- 交接稿第 2 點的「以學習目標的熟練度當作升級標準」：確認 [動機設計](../../apps/Cards/docs/plans/motivation.md) 只把它記成使用者提議。
 
 ## 3. 核對 v1／第二階段的界線
 
 - v1 範圍的依據：
-  - [product.md §5](../../plugins/cards/docs/product.md#5-範圍-第-7-步)，統整前（`45e8928~1`）和現在的版本都要看。
+  - [product.md §5](../../apps/Cards/docs/product.md#5-範圍-第-7-步)，統整前（`45e8928~1`）和現在的版本都要看。
   - D-039，以及修改它的後續決定（`node experiments/tools/decisions-index.mjs D-039` 會列出明示的後續條目）。
   - D-048、D-076、D-111、D-126、D-136、D-137。
   - decisions 裡其他寫明「v1」的決定（`grep -n 'v1' docs/decisions.md`）。
