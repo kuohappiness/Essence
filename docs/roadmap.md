@@ -16,7 +16,7 @@
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| `plugins/` 改名 `apps/`、首字大寫 | 實作中 | 搬家的 commit（§1 第 2 點），停手時段從這裡開始 | Claude | [任務說明](tasks/rename-plugins-to-apps.md) |
+| `plugins/` 改名 `apps/`、首字大寫 | 待審 | 合併前 L2（Fable 5.2 high，見審查紀錄），之後請使用者開雲端 session | Claude | [任務說明](tasks/rename-plugins-to-apps.md) |
 
 ## 等觸發點
 

@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`，資料夾首字大寫（D-218，給 Claude，本機執行）
 
-狀態：實作中｜下一步：搬家的 commit（§1 第 2 點），停手時段從這裡開始｜等誰：Claude
+狀態：待審｜下一步：合併前 L2（Fable 5.2 high，見審查紀錄），之後請使用者開雲端 session｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**；寫規格、改完後的一致性檢查（〈驗收〉第 6～9 項）用 xhigh。這件改到 pre-commit、CI、分派表、跨版本比較的工具與雲端的開場 hook，合併前做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。
 
@@ -179,4 +179,37 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 
 ## 結果
 
-延後的測試：（實作後填）
+2026-11-21，Claude（Opus 5.5 high）在 worktree `D:\程式開發\Essence-apps` 施工，commit：`e565135`（準備）、`bc0e51d`（合併 `main`）、`9b7486b`（搬家）、`c704d40`（防線）、`555f814`（現行文件）。
+
+**和規格不同的地方**（都寫進[合併前 L2 請求](rename-plugins-to-apps-review.md)〈實作者自己選的做法〉）：
+
+- 搬家的 commit 沒另開探針分支，直接推到這個分支（push 的 CI 一樣跑七個 job）。
+- `tools/tests/ci-gate.test.ts` 不在例外表：它的情境要照現在的分派表才成立，整份換成 `apps/`。例外表是十一列：歷史路徑九列（規格列的十個扣掉 `ci-gate.test.ts`）、故意寫錯的樣本兩列（`app-imports.test.ts`、`check-docs.test.ts`；`plugin-root.test.ts` 已經在歷史路徑那一列）、檢查本身一列。
+- Portal 放在 `tools/apps.ts` 另一張 `DOCS_ONLY` 表；分派表第 4 條帶上它、效果是空的（只跑共用檢查），不加新條目。
+- hook 的乾淨 clone 測試改成從工作樹複製每一個追蹤的檔：共用檢查現在掃全部文字檔。
+
+**驗收**（Windows 11、Node 24.13、Git 2.52；Linux 是 CI）：
+
+1. `git ls-files plugins` 是 0 行；`apps/` 底下是 `Capture`、`Cards`、`Mindboard`。
+2. `9b7486b` 的 `plugins/` 底下 615 個檔都是 `R`，沒有 D 加 A；`252d85d..555f814` 在 `src/` 的內容差異只有 `rules.ts` 的 5 個路徑字串與一行註解。`git log --follow` 待 L2 抽查。
+3. `tools/`：`npm run check` 通過，`npm run self-check` 238 個測試（237 通過、1 個 Windows 跳過），`<基準>` 228 個；多的 10 個是 8 個「D-218 …」開頭的測試與分派表的「只改 apps/Capture/a.ts」「新增 apps/Portal/docs/backlog.md」。`apps/Cards/`：`npm run check` 2906 個測試全過，`<基準>` 2904 個；多的 2 個是準備 commit 加的「D-218 Cards 根的大小寫打錯（只在 Windows）…」「D-218 root 的大小寫打錯（只在 Windows）…」；`npm run build` 通過。Linux CI 在 `9b7486b` 七個 job 都成功，`555f814` 見 PR。
+4. `embedRules()` 在 `252d85d` 與 `555f814` 的結果 `deepEqual`（五科，路徑不在內容裡，不用換回）；`ai-rules.test.ts` 照常通過。
+5. 改連結的腳本 `--check` 是「要改 0 個連結」。寬 pattern（`plugins` 接 `/`、`\/`、引號或 `*`，正規化後）：vault 與 Obsidian 的寫法 101 行、紀錄 883 行、例外表上的檔 118 行、現行文件寫歷史的列 8 行（`apps/Cards/docs/roadmap.md` 64、65 行〈已完成〉、`docs/agents/token-usage.md` 13 行（同一行另寫了 D-218 之後的路徑）、`docs/architecture.md` 83 行（第二步的經過）、`docs/backlog.md` 55、59 行（D-208 第一、二步的經過）與 57 行、`docs/roadmap.md` 19 行（這件自己的列）），剩 3 行都是 Obsidian 的 `plugins` 資料夾（`experiments/plugin/` 兩行、`rename-local-folder.test.mjs` 一行 Codex 設定的 `[plugins`），實際殘留 0。`PLUGINS` 已改 `APPS`。`node tools/check-docs.ts` 通過。
+6. `plugin-root.test.ts` 與讀舊版的測試在 Cards 的 `npm run check` 裡通過；§5 第 3 項見下。
+7. `dispatch.test.ts` 全部換成新路徑通過，另加 `apps/Capture/a.ts`、`apps/Portal/docs/backlog.md`、`apps/Other/a.ts` 三例；`app-imports.test.ts` 的「D-218 §3 第 1、2 點」「驗收第 7、17 項」兩個測試涵蓋 `apps/Portal/package.json`、`apps/Other/a.ts`、`plugins/cards/a.ts` 與 `apps/portal/…` 的兩段式改法。
+8. 四種在 Windows 都擋下：前兩種是 `app-imports.test.ts`「§3 第 3 點」的測試、第三種是 `check-docs.test.ts`「驗收第 8 項」、第四種在暫存 clone 的 `apps/Cards/src/core/` 寫 `import './Files.ts'` 跑 `tsc`，報 TS1149（只差大小寫）。
+9. `app-imports.test.ts` 的 §6 測試：第二步 A7 的兩例換成新路徑照樣擋，另加 `apps/Capture/src/a.ts` import `../../Cards/src/core/files.ts`。
+10. （合併前的雲端 session：待使用者開）
+11. （探針 draft PR 與合併後的 Pages：待做）
+12. `apps/Cards/manifest.json` 的 `id` 是 `essence-cards`、`version` 是 `0.6.0`，和 `252d85d` 相同；這次沒有新增或移動 tag。
+13. Windows 跑第 3、8、9 項（上面）；Linux 由 CI 跑第 3 項。`plugin-root.test.ts`、`build.test.ts` 的大寫路徑測試只在 Windows 跑（Linux 那個資料夾不存在）。
+14. §5：
+    - 建置：`252d85d` 與 `555f814` 各在 `core.autocrlf=false` 的 clone 用固定版本建置正式版與 dev 版。head 的 `main.js` 恰好 5 個 `apps/Cards/docs/card-rules/`、0 個 `plugins/cards/`；換回之後兩版都和 `<基準>` 逐位元組相同，`styles.css` 逐位元組相同。
+    - 測試 vault：先留存外掛資料夾的三個檔與雜湊；從 repo 外的 clone（`555f814`）登錄測試 vault、`install-vault --dev`；Obsidian 原本沒開，從檔案總管開，開發命令 `version` 的結果檔 `plugin` 是 `0.6.0+555f814e`（Obsidian 1.15.1）。之後放回留存的三個檔，雜湊相同。Obsidian 要使用者關掉（我這邊的權限關不了）；放回的檔下次開 Obsidian 才載入。
+    - 跨版本：同一份測試 vault 的備份（2026-11-20 的 `0.6.0+4536a17`），`v0.6.0`（根目錄的外掛根）對 `555f814`、`8a03736`（`plugins/cards`）對 `555f814` 都跑完，差異 0 項。
+15. 合併前 L2 見[審查紀錄](rename-plugins-to-apps-review.md)。
+16. `app-imports.test.ts`「驗收第 16 項」在 Windows 用 `core.ignorecase=false` 跑 `check-ignore` 通過；CI 的 cards job 在建置後加了一步：`git status --porcelain` 不是空的就失敗（L2 前補，結果見 PR 的 CI）。
+17. 同第 7 項的兩個測試，加上「§3 第 3 點：紀錄不查；例外表上的檔…」。
+18. `tools/legacy-status-docs.json` 224 條（和 `<基準>` 相同），0 條 `plugins/` 開頭，每條都在 `git ls-files` 裡；`tools/` 的 `npm run check` 通過。
+
+延後的測試：（L2 後填）

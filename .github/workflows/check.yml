@@ -80,6 +80,8 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      # 建置產物照 Linux 的規則（分大小寫）被 .gitignore 忽略，檢查與建置也沒留下別的檔（D-218 驗收第 16 項）。
+      - run: test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
       - run: npm audit --omit=dev --audit-level=high
 
   capture:
