@@ -1,6 +1,6 @@
 # Essence｜跨外掛的 backlog
 
-更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡只放共用工具的技術債與已知的限制、repo 結構；Cards 的任務、技術債、待決問題與第二階段清單搬到 [Cards 的 backlog](../plugins/cards/docs/backlog.md)。搬走的每一節留標題與一行轉往新頁。
+更新：2026-11-20｜狀態：三個外掛共用的部分；2026-11-20 拆開（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 8 點，第二步 B）：這裡只放共用工具的技術債與已知的限制、repo 結構；Cards 的任務、技術債、待決問題與第二階段清單搬到 [Cards 的 backlog](../apps/Cards/docs/backlog.md)。搬走的每一節留標題與一行轉往新頁。
 
 收錄不等於採用。每項保留原意與來源。分〈待處理〉〈已轉出〉兩區：一項需要展開、談成決定或做成任務時，搬到〈已轉出〉，下一行寫「→ 下一站（日期）」；開工只讀〈待處理〉（[工作流程規範〈backlog〉](agents/workflow.md#backlog)、[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 4 點）。技術債做完就刪那一列（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 
@@ -14,7 +14,7 @@
 
 | 項目與影響 | 觸發點 | 完成條件 | 來源 |
 |---|---|---|---|
-| 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `plugins/<外掛>/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
+| 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `apps/Capture/`、`apps/Mindboard/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
 | 補做：查詢工具的現行寫在只算有連結的引用：`node tools/decisions-index.ts D-xxx` 的「現行寫在」只比對字串 `D-xxx`，沒分辨是依據還是只是提到，可能多列和規則無關的出處；多列的人看了跳過，查無引用時照實印「沒有規範文件引用」 | 查詢時列出的出處有一半以上和規則無關 | 只算有連結的引用，或排除〈曾考慮的做法〉這類段落；測試加一份只提到、沒有連結的規範文件 | [工作流程上線〈技術債〉](tasks/workflow-impl.md#技術債) |
 | 〈已完成〉的核對只在本機的 hook：GitHub 上合併 PR、快轉、沒衝突的 cherry-pick、rebase 與 `git revert` 都不經過 pre-commit／pre-merge-commit；CI 的 `roadmap-sync --check` 是 HEAD 比自己，手寫或刪掉的〈已完成〉列可以進 `main`（狀態板和入口對不上，CI 照擋）。進去之後的後果：手寫的列在 `main` 刪不掉（是 HEAD 的舊列），比它早開的分支併 `main` 進來要刪、併回去又要加回來；繞過 hook 進了某個分支、格式對但日期不對的列，把那個分支用 `git merge` 併進來時留也擋、刪也擋 | 第一次在 GitHub 網頁上解〈已完成〉的衝突，或合併工作流程上線前開、帶手寫〈已完成〉列的分支 | CI 在分支 push 與 PR 時，拿和 `main` 的合併基點當比較對象跑完成列的核對（日期只查不晚於今天）；測試加一個分支手寫完成列、CI 擋下的案例 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N13；`git revert` 是[第三輪](tasks/workflow-impl-review.md#第三輪的回報)補的，進去之後的後果是[第五輪](tasks/workflow-impl-review.md#第五輪的回報) J2、J3 補的 |
 
@@ -37,7 +37,11 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | octopus 合併加 `--no-commit`、之後再 `git commit`，只認得第一個分支是另一邊（`git rev-parse MERGE_HEAD` 只回第一個）；`hooks.ts` 合併進 `main` 前查 CI 也只查第一個 | `git merge --no-commit a b`，第二個以後的分支收尾過、又多做了一步（補一句、重新開工等） | 那些分支帶進來的列被當成新的列重驗而擋下，它們的列也不要求留著；合併進 `main` 前只查到第一個分支的 CI。避開：octopus 不加 `--no-commit`，或一次併一個分支 | [工作流程上線的 L2 第四輪](tasks/workflow-impl-review.md#第四輪的回報) K3 |
 | 放棄的 squash 用 `git restore --staged --worktree .` 時 `SQUASH_MSG` 留著，之後一般的 commit 仍當成 squash 那個分支的重播 | 放棄 squash 後沒用 `git reset` 清掉，接著在一般的 commit 手抄那個分支的完成列 | 抄來的列只查格式與日期：入口還沒結束、狀態板那一列還在也通過，〈已完成〉多一筆和入口對不上的列。避開：放棄 squash 用 `git reset` | [工作流程上線的 L2 第四輪](tasks/workflow-impl-review.md#第四輪的回報) K3 |
 | 〈已完成〉照「日期＋拿掉連結目標的文字」對 HEAD 的列：同一天、同名、「完成」那一句一字不差、入口不同的兩列分不出來 | 同一件工作同一天收尾、重新開工、換入口、新入口收尾，兩次的「完成」那一句一樣、工作名稱沒改 | 新入口收尾的 commit 被擋，訊息指到舊入口（舊的列被當成新的列，照已經「已結案 →」的舊入口重驗）。不會寫壞資料。避開：第二次的「完成」那一句寫得不一樣 | [工作流程上線的 L2 第五輪](tasks/workflow-impl-review.md#第五輪的回報) J1（第一輪 R2 的做法就有） |
-| 外掛之間不 import 的檢查（`tools/check-plugin-imports.ts`）只看寫死的相對路徑：執行時才組出來的路徑、`tsconfig` 的 `paths`、打包工具的 alias、自訂 resolver 讓套件名稱指到別的外掛，都看不到 | 程式用字串組路徑再 import（`import('../../src/' + name)` 只取得到前段），或外掛設了 paths、alias、resolver | 這類跨外掛的引用不會被擋。避開：import 寫成固定的相對路徑；第一個用到 paths、alias 或 resolver 的外掛任務，把解析後不出外掛的邊界加進測試（外掛的 AGENTS.md 有寫） | [三個外掛併進同一個 repo 第一步 §6](tasks/one-repo-step-1.md#6-外掛之間不-importtoolscheck-plugin-importsts)（設計時就知道的限制，不是 L2 找到的） |
+| 軟體之間不 import 的檢查（`tools/check-app-imports.ts`）只看寫死的相對路徑：執行時才組出來的路徑、`tsconfig` 的 `paths`、打包工具的 alias、自訂 resolver 讓套件名稱指到別的外掛，都看不到 | 程式用字串組路徑再 import（`import('../../src/' + name)` 只取得到前段），或外掛設了 paths、alias、resolver | 這類跨外掛的引用不會被擋。避開：import 寫成固定的相對路徑；第一個用到 paths、alias 或 resolver 的外掛任務，把解析後不出外掛的邊界加進測試（外掛的 AGENTS.md 有寫） | [三個外掛併進同一個 repo 第一步 §6](tasks/one-repo-step-1.md#6-外掛之間不-importtoolscheck-plugin-importsts)（設計時就知道的限制，不是 L2 找到的） |
+| 共用檢查（`tools/check-app-imports.ts`）擋不到的幾種組路徑寫法 | 程式或 workflow 寫 `APPS_ROOT + 代號`、`join(root, APPS_ROOT, 'cards')`、字串裡雙重跳脫的正規式、大括號與群組（`apps/{cards,capture}`、`apps\/(cards\|capture)`）、`cd apps && cd cards`、`cd apps/$APP`（不加大括號的 shell 變數）、`'x/apps/' + code`、`'apps/%s'`、`` `apps${sep}${code}` ``；紀錄（`docs/tasks/` 等）不查 | 本機照過，Linux CI（分大小寫）才紅；只在雲端 session 或手動跑的腳本，到雲端才壞。避開：從代號找資料夾一律查 `tools/apps.ts` 的 `FOLDERS` | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R5、第二輪 S4 |
+| 共用檢查的組字串那條只查程式與 workflow | 之後追蹤 `.sh`、`.ps1`、`.cmd`、`.py`，或在 `package.json` 的 scripts、`.claude/settings.json` 的 hook 指令裡組 `apps/` 路徑（`CODE_FILE` 是白名單：`ts`／`js` 各種、`yml`、`yaml`、`.githooks/`）；現在沒有 | 組出來的路徑不被擋（大小寫與 `plugins` 兩條仍查全部檔案）。避開：新增這類腳本時把副檔名加進 `CODE_FILE` | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第二輪 S6 |
+| 共用檢查的誤報 | 程式或 workflow 裡：路由與連結 `'/apps'`、介面文字 `'Apps'`、網址模板 `` `https://…/apps/${slug}` ``（組字串那條）；別的 repo 的網址、英文句子、`node_modules` 路徑碰到大小寫不符的 `apps/<軟體名>`（大小寫那條，查全部文字檔）；vault 路徑的正規式從 `configDir` 組（前面不是字面 `obsidian\/`）；任務標題寫了打錯的樣本，同步到 `docs/roadmap.md` 那一列 | 擋下引入那一行的 commit。避開：改寫法（路由字串拆開、vault 路徑從 `.obsidian\/plugins\/` 寫起或接 `essence-` ID），真的需要時加進例外表並寫明放行哪幾條；任務標題不寫打錯的樣本 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R4、第二輪 S1 |
+| 共用檢查的訊息在少數情況帶錯路 | `apps/` 正下方放檔（`apps/README.md`）；Portal 這類只有文件的軟體放 `.gitkeep`、PDF、CSV、txt；同一個資料夾有好幾個問題 | 前者報「不在表上」，看不出是「這一層不放檔」；後者算成程式被擋；同一個資料夾只報第一個，要一個一個修。等 Portal 的第一個任務碰到再調 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R9 |
 
 ### Essence Capture 與 Essence Mindboard
 
@@ -45,8 +49,8 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 | 外掛 | 目前狀態 | 清單 |
 |---|---|---|
-| Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../plugins/capture/docs/backlog.md) |
-| Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `plugins/mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../plugins/mindboard/docs/backlog.md) |
+| Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../apps/Capture/docs/backlog.md) |
+| Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `apps/Mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../apps/Mindboard/docs/backlog.md) |
 
 #### 三個外掛併進同一個 repo
 
@@ -54,23 +58,24 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 - **第一步**：Capture 或 Mindboard 寫第一行程式之前，建 `plugins/capture/`、`plugins/mindboard/` 與分派檢查（D-208 第 5 點），合併前 L2。已合併進 `main`（2026-11-18，[PR #21](https://github.com/kuohappiness/Essence-Cards/pull/21)），結果見[任務說明](tasks/one-repo-step-1.md)。
 - **轉錄稿格式**：第二步 B 就搬到最上層的 `docs/transcript.md`（使用者 2026-11-20 調整第 6 點的時機）；共用範例與相容檢查等第一個需要共同規格的 Capture 任務。
+- **`plugins/` 改名 `apps/`、首字大寫**：定案 [D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)（使用者 2026-11-21），[任務說明](tasks/rename-plugins-to-apps.md)；入口網站放 `apps/Portal/`（第一份文件出現時建，網頁版的討論串在改名合併後寫）。
 - **改名 `Essence`**：和第一步分開，各自挑停手的時段；本機資料夾先演練（第 7 點）。
-- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../plugins/cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
+- **第二步**：Cards 搬進 `plugins/cards/`，觸發點是穩定基線（第 8 點）。基線是 `0.6.0`（[上線前清單](../apps/Cards/docs/tasks/release-0.6.0.md)第五項第 10 步）；裝好之後先搬家，AI 製卡第 4、5 批（錯題補強、補記憶錨點）排在搬家之後（使用者 2026-11-18 選定。理由：第 4、5 批還沒開工，先搬家停手的代價小；先做它們，就成了要一起帶進去的功能，基線要等 `0.7.0`）。[任務說明](tasks/one-repo-step-2.md)寫好（2026-11-19）。A（程式）已合併進 `main`（2026-11-20，[PR #27](https://github.com/kuohappiness/Essence/pull/27)）；B（文件）也合併進 `main`（2026-11-21，[PR #28](https://github.com/kuohappiness/Essence/pull/28)），第二步做完。
 
 ## 已轉出
 
 ### v1 需要做的任務
 
-搬到 Cards 的[〈v1 需要做的任務〉](../plugins/cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（〈待處理〉的[〈技術債〉](#技術債)、[〈已知的限制〉](#已知的限制)）。
+搬到 Cards 的[〈v1 需要做的任務〉](../apps/Cards/docs/backlog.md#v1-需要做的任務)（D-208 第二步）。跨外掛的技術債與已知的限制留在這裡（〈待處理〉的[〈技術債〉](#技術債)、[〈已知的限制〉](#已知的限制)）。
 
 ### 第二階段想做的事
 
-搬到 Cards 的[〈第二階段想做的事〉](../plugins/cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
+搬到 Cards 的[〈第二階段想做的事〉](../apps/Cards/docs/backlog.md#第二階段想做的事)（D-208 第二步）。
 
 ### 歷史索引
 
-搬到 Cards 的[〈歷史索引〉](../plugins/cards/docs/backlog.md#歷史索引)（D-208 第二步）。
+搬到 Cards 的[〈歷史索引〉](../apps/Cards/docs/backlog.md#歷史索引)（D-208 第二步）。
 
 ### 已定案對照
 
-搬到 Cards 的[〈已定案對照〉](../plugins/cards/docs/backlog.md#已定案對照)（D-208 第二步）。
+搬到 Cards 的[〈已定案對照〉](../apps/Cards/docs/backlog.md#已定案對照)（D-208 第二步）。

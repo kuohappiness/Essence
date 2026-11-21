@@ -33,7 +33,7 @@ node check-syntax.mjs <卡片.md>… --transcript <轉錄稿.md> --unit 2-2 [--t
 
 ## AI 品質初篩
 
-固定條件與評分方式見 [任務說明](../../plugins/cards/docs/tasks/ai-quality-screen.md)。比較同一個模型在兩組提示下的草稿，結果只放 repo 外；這不是學業成效驗證。先執行三個離線自測：
+固定條件與評分方式見 [任務說明](../../apps/Cards/docs/tasks/ai-quality-screen.md)。比較同一個模型在兩組提示下的草稿，結果只放 repo 外；這不是學業成效驗證。先執行三個離線自測：
 
 ```powershell
 node screen.mjs selftest
@@ -49,7 +49,7 @@ node screen.mjs blind --out <結果資料夾>
 
 ## 學習目標架構實驗
 
-規格見 [任務說明](../../plugins/cards/docs/tasks/objective-architecture.md)。Node 24 可直接載入 W2 的 `parseDeck`；不增加套件。先安裝本目錄與 repo 根目錄既有依賴。
+規格見 [任務說明](../../apps/Cards/docs/tasks/objective-architecture.md)。Node 24 可直接載入 W2 的 `parseDeck`；不增加套件。先安裝本目錄與 repo 根目錄既有依賴。
 
 ```powershell
 node arch.mjs selftest
@@ -67,7 +67,7 @@ node arch.mjs blind --out <repo外結果資料夾> [--materials 2-1,2-2] [--run 
 
 ### 第二輪（已完成：2026-10-23～24 生成與盲評，結論 D-132）
 
-已照[第二輪任務說明](../../plugins/cards/docs/tasks/objective-architecture-r2-connection.md)分三段完成（接法凍結：方案額度、Sol high）。要重跑時用下面的指令；設定與提示讀 `arch/第二輪/設定.json`，不改第一輪輸出。Obsidian 內登入（G4）不在這次驗證範圍，仍未驗證，見 [backlog 的訂閱製卡接法驗證](../../plugins/cards/docs/backlog.md#訂閱製卡接法驗證d-126)。
+已照[第二輪任務說明](../../apps/Cards/docs/tasks/objective-architecture-r2-connection.md)分三段完成（接法凍結：方案額度、Sol high）。要重跑時用下面的指令；設定與提示讀 `arch/第二輪/設定.json`，不改第一輪輸出。Obsidian 內登入（G4）不在這次驗證範圍，仍未驗證，見 [backlog 的訂閱製卡接法驗證](../../apps/Cards/docs/backlog.md#訂閱製卡接法驗證d-126)。
 
 ```powershell
 node arch.mjs run --round 2 --out <第二輪資料夾> --plan 接法驗證 --dry-run
@@ -86,7 +86,7 @@ node arch.mjs blind --round 2 --out <第二輪資料夾>
 
 預試存在 `接法驗證/`，正式結果在 `生成/`；各自保存原始提示檔雜湊、材料與圖片指紋、參數、停止原因及完整／未完成狀態。只在一份預試明確因長度截斷時重試一次；兩份都截斷或重試仍截斷就停。網路、登入、額度、缺段及未確認的停止原因不自動重送。第二輪的 S0 API 預算在這個 out 獨立計，上限 $5。
 
-別的教材用同一條接法時，另寫一份設定檔，用 `--settings <相對本目錄的路徑>` 指定（只適用 `run`）。設定檔寫 `"不需考題凍結": true` 就只檢查 `材料/凍結.md`；例子是[國小社會的對照](../../plugins/cards/docs/tasks/elementary-social-sol-trial.md)用的 `arch/第二輪/國小社會設定.json`。`--dry-run` 不送請求，方案接法會印字數、圖數與輸入 token 上界（文字算 UTF-8 bytes、每張圖 16k，比實際高很多）。教材的設定寫 `"已有目標檔": "<相對 --out 的檔名>"` 時，檔案內容會取代任務資料的「學生已有的學習目標」；清單來自真實卡組，只放 `--out`，用 `--materials` 指定這一節才會讀它。
+別的教材用同一條接法時，另寫一份設定檔，用 `--settings <相對本目錄的路徑>` 指定（只適用 `run`）。設定檔寫 `"不需考題凍結": true` 就只檢查 `材料/凍結.md`；例子是[國小社會的對照](../../apps/Cards/docs/tasks/elementary-social-sol-trial.md)用的 `arch/第二輪/國小社會設定.json`。`--dry-run` 不送請求，方案接法會印字數、圖數與輸入 token 上界（文字算 UTF-8 bytes、每張圖 16k，比實際高很多）。教材的設定寫 `"已有目標檔": "<相對 --out 的檔名>"` 時，檔案內容會取代任務資料的「學生已有的學習目標」；清單來自真實卡組，只放 `--out`，用 `--materials` 指定這一節才會讀它。
 
 盲評使用產品的 `parseDeck` 分正面／背面，保留家長備註與候選，異常附原文與行號。卡組、架構各自產生隨機代碼、每份重新命名圖片；對照及完成清單只存 `紀錄/`。`selftest` 同時跑第一輪與第二輪的假請求回歸，不會登入或生成。
 
@@ -98,7 +98,7 @@ AI 寫小程式送出，檢查格式、繁體與台灣用語、和課本不符�
 
 ## 模型選型結果紀錄
 
-適用時期：2026-10-13～14 的第一～三輪。結論寫在 [D-085](../../docs/decisions.md#d-085-首選-openai-gpt-56-terra) 與 [AI 模型推薦](../../docs/ai-models.md)；第四輪起改測製卡規則，紀錄在[製卡規則試用紀錄](../../plugins/cards/docs/card-rules/trials.md)。
+適用時期：2026-10-13～14 的第一～三輪。結論寫在 [D-085](../../docs/decisions.md#d-085-首選-openai-gpt-56-terra) 與 [AI 模型推薦](../../docs/ai-models.md)；第四輪起改測製卡規則，紀錄在[製卡規則試用紀錄](../../apps/Cards/docs/card-rules/trials.md)。
 
 第一輪的做法（當時的計畫，模型清單已過時，不是目前的待做）：同一份提示（製卡規則加教材）送給 Gemini 3.8 Flash、Gemini 3.5 Flash-Lite 與 OpenRouter 的一個免費模型。教材是一節自然課本（2～4 頁）與 2～3 題錯題照片；教材與結果都只放測試 vault。Gemini 的免費和付費是同一個模型，測免費的就知道付費的品質。轉錄：同一節課本由兩個 Gemini 各轉錄一次，對照原頁計算錯字與漏掉的圖表；再分別用「原頁加轉錄稿」和「只有轉錄稿」製卡，比較差多少。
 

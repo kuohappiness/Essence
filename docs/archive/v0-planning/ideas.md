@@ -20,7 +20,7 @@
 初始參考：
 - [RemNote](https://www.remnote.com/)
 - [Memory Toast](https://www.memory-toast.com/zh-TW)
-- [參考軟體研究筆記](../../../plugins/cards/docs/research/software.md)
+- [參考軟體研究筆記](../../../apps/Cards/docs/research/software.md)
 
 助理提出的比較面向，尚未確認為產品需求：
 - 如何從教材或筆記建立閃卡，以及製卡的操作負擔。
@@ -30,7 +30,7 @@
 
 研究進度：2026-10-06 依使用者要求擴充並補齊官方資料。保留 RemNote／Memory Toast，新增 Anki、Quizlet、Brainscape、Mochi、SuperMemo、Readwise Reader、NotebookLM、Recall、Knowt、StudySmarter；每項記錄定位、功能、成本、平台／離線／同步、匯出限制、借鑑方向與待實測事項。官網查核不等於實際試用，沒有證據的欄位仍標未確認。
 
-2026-10-07 已依使用者要求完成[架構與特色功能統整](../../../plugins/cards/docs/research/design-opportunities.md)，收錄六項架構細化、九項功能候選及第一版優先順序；見 I-015，具體採用仍待討論。
+2026-10-07 已依使用者要求完成[架構與特色功能統整](../../../apps/Cards/docs/research/design-opportunities.md)，收錄六項架構細化、九項功能候選及第一版優先順序；見 I-015，具體採用仍待討論。
 
 下一步（助理提案）：以同份繁體中文生物教材優先比較 RemNote、Anki、Mochi、Readwise Reader、NotebookLM、Recall，另測 Memory Toast 的手機輸入與複習；優先順序及具體功能尚未決定採用。
 
@@ -334,7 +334,7 @@
 - 選段製卡、混淆對照、份量控制、反覆答錯補強、提示紀錄及同源題錯開。
 - 先驗證資料保存與人工學習循環，再接入 AI；具體題型、算法與第一版交付範圍尚未確認。
 
-完整提案與官方依據見[設計統整](../../../plugins/cards/docs/research/design-opportunities.md)；透過 T-010 的[功能討論目錄](function-discussions.md)逐項細化，相關任務 T-005／T-006，真實裝置驗證仍由 T-008 追蹤。
+完整提案與官方依據見[設計統整](../../../apps/Cards/docs/research/design-opportunities.md)；透過 T-010 的[功能討論目錄](function-discussions.md)逐項細化，相關任務 T-005／T-006，真實裝置驗證仍由 T-008 追蹤。
 
 採用進度：2026-10-07 使用者同意依助理建議修改功能目錄；C-017 保存已確認的方向，[F-019](functions/issue-queue.md)獨立討論手機問題至電腦結案。研究文件中的其他特色與全部實作細節仍是提案，不把整個 I-015 標為已採用。
 

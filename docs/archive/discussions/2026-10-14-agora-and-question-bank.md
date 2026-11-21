@@ -10,7 +10,7 @@
 
 ## Ágora 研究
 
-使用者要求把 Ágora Learning 加入研究，看看有沒有適合的靈感。結果寫在 [Ágora 研究](../../../plugins/cards/docs/research/agora.md)。助理提出四項提案，結果如下：
+使用者要求把 Ágora Learning 加入研究，看看有沒有適合的靈感。結果寫在 [Ágora 研究](../../../apps/Cards/docs/research/agora.md)。助理提出四項提案，結果如下：
 
 | 提案 | 結果 |
 |---|---|

@@ -9,12 +9,13 @@ on:
       # 白板的狀態板、〈已完成〉由入口的狀態行同步而來，「最近定案」讀決策紀錄與各站的「來自」「→」（D-214、D-217）：
       # 最上層與外掛的 docs/ 底下任何一份改了都可能改變白板。
       - docs/**
-      - plugins/*/docs/**
+      - apps/*/docs/**
       - tools/check-docs.ts
       - tools/decisions.ts
       - tools/status-line.ts
       - tools/progress-board*.ts
       - tools/roadmap-board.ts
+      - tools/apps.ts
       - tools/package-lock.json
       - .github/workflows/progress-board.yml
   workflow_dispatch:

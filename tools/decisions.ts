@@ -294,11 +294,11 @@ export function decisionPart(body: string): string | undefined {
 
 /** 規範文件：「現行寫在哪」從這些檔反推（D-214 第 9 點）。路徑是 repo 根目錄算的。 */
 export function isNormative(path: string): boolean {
-  if (path === 'AGENTS.md' || /^plugins\/[^/]+\/AGENTS\.md$/.test(path)) return true;
-  if (/^(?:plugins\/[^/]+\/)?docs\/(?:product|architecture)\.md$/.test(path)) return true;
+  if (path === 'AGENTS.md' || /^apps\/[^/]+\/AGENTS\.md$/.test(path)) return true;
+  if (/^(?:apps\/[^/]+\/)?docs\/(?:product|architecture)\.md$/.test(path)) return true;
   if (path === 'docs/transcript.md' || path === 'docs/ai-models.md') return true;
-  if (/^plugins\/[^/]+\/docs\/(?:syntax|question-types)\.md$/.test(path)) return true;
-  if (/^plugins\/[^/]+\/docs\/card-rules\/[^/]+\.md$/.test(path)) return !path.endsWith('/trials.md');
+  if (/^apps\/[^/]+\/docs\/(?:syntax|question-types)\.md$/.test(path)) return true;
+  if (/^apps\/[^/]+\/docs\/card-rules\/[^/]+\.md$/.test(path)) return !path.endsWith('/trials.md');
   if (/^docs\/agents\/[^/]+\.md$/.test(path)) return path !== 'docs/agents/token-usage.md';
   return /^\.claude\/skills\/.+\.md$/.test(path);
 }

@@ -8,7 +8,7 @@
   "transcribe": { "provider": "openai", "model": "gpt-6-sol", "parameters": { "max_completion_tokens": 32768 } },
   "configs": {
     "S0": [
-      { "model": "terra", "system": ["../screen/格式.md", "../../../plugins/cards/docs/card-rules/common.md", "../../../plugins/cards/docs/card-rules/science.md", "../screen/完整規則.md"], "input": [], "output": ["卡組"] }
+      { "model": "terra", "system": ["../screen/格式.md", "../../../apps/Cards/docs/card-rules/common.md", "../../../apps/Cards/docs/card-rules/science.md", "../screen/完整規則.md"], "input": [], "output": ["卡組"] }
     ],
     "S1": [
       { "model": "opus", "system": ["格式.md", "短規則.md", "單次.md"], "input": [], "output": ["架構", "卡組"] }

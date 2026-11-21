@@ -27,7 +27,7 @@
 - 共識：[C-004、C-006](../v0-planning/consensus.md)。
 - 點子：[I-001](../v0-planning/ideas.md)。
 - 任務：[T-001、T-004](../v0-planning/tasks.md)。
-- 研究：[RemNote、Memory Toast](../../../plugins/cards/docs/research/software.md)。
+- 研究：[RemNote、Memory Toast](../../../apps/Cards/docs/research/software.md)。
 
 ## 後續釐清（2026-10-06）
 

@@ -1,6 +1,6 @@
 # 2026-10-11｜複習與檢核細節
 
-摘要，不是逐字紀錄。決定的完整內容見[決策紀錄](../../decisions.md)。題目清單見 [backlog](../../../plugins/cards/docs/backlog.md#複習與檢核細節v1-範圍確定後展開)。
+摘要，不是逐字紀錄。決定的完整內容見[決策紀錄](../../decisions.md)。題目清單見 [backlog](../../../apps/Cards/docs/backlog.md#複習與檢核細節v1-範圍確定後展開)。
 
 ## 第 1 題：自評要分幾段
 
