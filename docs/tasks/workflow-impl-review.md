@@ -1,6 +1,6 @@
 # 工作流程上線：L2 獨立審查（給 Codex）
 
-狀態：待審｜下一步：第三輪由 Fable 5.2（high）子代理審，通過就不再請 Codex｜等誰：Claude
+狀態：待審｜下一步：第四輪由 Fable 5.2（high）子代理審，通過就不再請 Codex｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。由 Claude 用 `node tools/codex.ts l2` 送出，新的 session。
 
@@ -455,3 +455,186 @@ Fable 5.2（high）子代理 2026-11-21 09:04～09:20 交回，審 `3cd78c1`；�
 - 在 `4f73393`：`fences.ts` 和 markdown-it 比 repo 裡追蹤的 392 份 Markdown，0 份不同；`node tools/decisions-index.ts D-117 --deep` 和舊工具的輸出逐位元組相同。
 - clone 模擬（`4f73393`）：從 `8a03736`（現在的 `origin/main`，上線前的格式）開分支、`--no-ff --no-commit` 併入本分支，`roadmap-sync --check --staged` 當天與 `--today 2026-11-28` 都通過；把本任務改成已合併，先擋，同步後通過，狀態板那一列變成〈已完成〉的一列。
 - 沒驗：真的 `.githooks` 在 clone 裡跑完整的 pre-merge-commit（clone 沒裝 `tools/` 的相依，改用上面的 shell hook）；GitHub Actions 的 Ubuntu 實跑要 push 後才有；Pages 與驗收第 11 項要合併後才有。
+
+## 第三輪的回報
+
+Fable 5.2（high）子代理，2026-11-21，審 `f9023bf`；約 20 分鐘、53 次工具呼叫。下面是回報原文，標題降兩級。
+
+### Fable 回報（原文）
+
+狀態：待修
+
+第二輪的 13 項裡 9 項修到了、4 項部分修到；N1 的修法只放寬了日期，合併時另一邊已經 commit 過的完成列仍被當成新的列、拿現在的入口重新驗一次，所以「把 main 併進功能分支」在幾種正常的操作之後還是會被擋（M1，P2，六種觸發都用真的合併加 hook 重現）。其餘四項是 P3。建議修完 M1 再合併。
+
+- **待審 commit**：`f9023bf523de63f11a91354fa9506e08d37b6aea`，分支 `claude/workflow-impl-68afda`。
+- **審查範圍**：`git diff 3cd78c1 f9023bf`（10 個修正 commit 與文件）與受影響的路徑：`tools/git-state.ts`（`mergeHeads`、`replaying`）、`roadmap-sync.ts` 的 `checkDone`、`status-line.ts` 的 `parseStatus`、`check-docs.ts` 的 `resolveHref`／`arrowsOf`／`checkStations`、`roadmap-board.ts` 的 `releaseOf`、`fences.ts`，以及工作流程規範、backlog 的限制與技術債。
+- **環境**：Windows 11、Git for Windows 2.52、Node 24.13.0。重現都在系統暫存資料夾的 `mkdtemp` 小 repo 與一份 clone（掛 shell 寫的 pre-commit／pre-merge-commit，呼叫這個 worktree 的 `roadmap-sync.ts --check --staged --root <暫存 repo>`），結束前都刪了；worktree 的 `git status` 乾淨、HEAD 仍是 `f9023bf`、分支沒換。
+
+#### 跑了什麼
+
+| 指令 | 結果 |
+|---|---|
+| `tools/` 裡一次一個檔：`roadmap-sync`、`fences`、`status-line`、`check-docs`、`roadmap-board` | 15、2、5、26、21 個測試全過，0 失敗、0 跳過 |
+| `node tools/roadmap-sync.ts --check`、`node tools/check-docs.ts`、`node tools/roadmap-board.ts --check` | 都通過（392 個 Markdown、8,071 個連結） |
+| `fences.ts` 對 markdown-it：repo 追蹤的 392 份 Markdown | 0 份不同 |
+| clone：`8a03736` 加一個無關的 commit，掛 hook 跑真的 `git merge --no-ff f9023bf` | 通過（hook 裡 `GITHEAD_*` 有 1 個、沒有 `MERGE_HEAD`）；接著把本任務改成已合併：沒同步先擋，同步後通過，狀態板那一列變成〈已完成〉的一列 |
+| clone：上線前開的分支（沒動 roadmap）把新的 main 併進來，再用非快轉併回 main | 兩次都通過 |
+| clone：上線前開的分支在舊格式的 Cards roadmap 手寫一筆完成列，把新的 main 併進來，再併回 main | 併進來通過（HEAD 是舊格式、那一列在 HEAD 裡）；併回 main 時擋在「格式不是…」，和規範寫的遷移步驟一致 |
+| 小 repo 掛 hook：兩邊各收尾一件工作，真的合併、解衝突兩列都留後 `git commit` | 通過；丟掉對方那一列會擋 |
+| 小 repo 掛 hook：有衝突的 rebase 後 `--continue` | 通過 |
+| `git merge --squash` 後 `git reset --hard` | `SQUASH_MSG` 被清掉，之後手寫別天的日期照樣擋 |
+| 這個 worktree（路徑有中文）：`git rev-parse --git-path` 的結果經 `resolve` 後找得到檔 | 正確；`replaying()` 是 false |
+
+#### 發現
+
+##### P2 M1　合併、squash 帶進來的完成列被當成新的列，拿現在的入口重新驗；另一邊做過兩步以上就擋（延續 N1、N2、N5；規格漏洞）
+
+**規格與設計｜已重現**（六種都用真的 `git merge --no-ff` 加 pre-merge-commit）。
+
+- **原因**：`checkDone` 的「新的列」是「暫存區有、HEAD 沒有」（任務說明 `docs/tasks/workflow-impl.md:99`）。合併時這些列是另一邊各自過了 hook 才 commit 的，`replaying()` 只放寬日期（`tools/roadmap-sync.ts:393`）；入口的狀態、完成那一句、工作名稱、一份入口一筆、同一天、「HEAD 有列就要有新列」（`:385-399`、`:413-424`）仍照「暫存區只比 HEAD 多一步」驗。另一邊在分岔之後對同一件工作做了兩步，兩步合起來就過不了。
+- **觸發條件與實際**（`feature` 在第一步之前開、沒動過 roadmap，之後 `git merge main`；方向反過來、或 `merge --squash` 後 `git commit` 也一樣）：
+
+| main 上分開的 commit（各自通過 hook） | 合併時的錯誤 |
+|---|---|
+| 收尾 → 之後補寫入口的「完成」那一句 | 「和入口 … 的『完成』那一句不一樣」 |
+| 收尾（已合併）→ 之後改成已結案 | 「入口 … 的狀態是『已結案』」 |
+| 收尾 → 重新開工（照規範手寫一列） | 「入口 … 的狀態是『實作中』」 |
+| 收尾 → 重新開工 → 再收尾（不同天也一樣） | 「完成那一句不一樣」加「已經有一筆新的完成列」；第一次收尾之後才開的分支、同一天時是「已經有同一天的完成列」（N5 放行的那條路） |
+| 換入口（討論稿已結案 → 任務，同名）→ 任務收尾 | 「入口 docs/plans/p.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列」（N2 的同名放行只在單一 commit 裡成立） |
+| 改工作名稱 → 收尾 | 「工作名稱要和 HEAD 狀態板的『甲』一樣」 |
+
+- **預期**：另一邊已經 commit 的完成列是它那邊驗過的，合併只該確認兩邊的列都還在。
+- **影響**：
+  - 和這件工作無關的分支沒辦法把 main 併進來；`AGENTS.md` 不准 `--no-verify`，沒有出口。
+  - 訊息的修法是錯的：照「把那一列加回來再同步」會在分支上多出一筆討論稿的「已結案」完成列；照訊息改完成列的字，之後併回 main 會和 main 自己那一列衝突，或被「HEAD 的列不見了」擋下。
+- **真實路徑**：會發生，機率中。
+  - 這個 repo 過去約 60 個本機合併 commit 大多是「把 origin/main 併進分支」，都走 pre-merge-commit；同時開好幾個 session 的分支是常態。
+  - main 那邊只要在某個分支分岔之後收尾一件工作、之後又動到那份入口的狀態行（補一句、改狀態值、重新開工），或「換入口再收尾」（討論稿 → 任務 → 完成，這個流程設計的正常路線；本分支自己就是 `plans/workflow.md` → `tasks/workflow-impl.md`）。
+  - 上線這一次不受影響（上面的 clone 模擬通過）。在 GitHub 上合併 PR 與快轉不經過 hook，也不受影響。
+- **位置**：`tools/roadmap-sync.ts:366-400`、`:411-425`；`tools/git-state.ts:26`；`docs/agents/workflow.md:95`（規範也只寫日期放寬）。
+- **建議**：合併前修。兩個方向：
+  - **用已有的來源**：真的合併時（`mergeHeads()` 有值）把另一邊那個 commit 的同一份 roadmap 讀出來，它已有的完成列算舊的列（不重驗、也不能少），HEAD 狀態板有而現在沒有的列，另一邊也沒有就不看。cherry-pick、rebase 有 `CHERRY_PICK_HEAD`、`REBASE_HEAD` 可以比照；squash 沒有 ref。
+  - **更小的收窄**：重播時新的列只查格式與日期，其餘不查。代價是解衝突時丟掉對方的列不再擋（現在擋得到）。
+  - 測試改成「另一邊兩個以上的 commit」的整類，不只補這六個例子。
+
+##### P3 M2　同名放行太寬：別處有同名的列，就能刪列不留完成紀錄（N2 修正引入）
+
+**規格｜已重現**（`--check --staged`）。
+
+- **觸發條件**：最上層與 Cards 的 roadmap 各有一列同名的工作（不同入口），或同一份 roadmap 兩列同名。刪掉其中一列（入口還沒結束），或入口改成已合併又刪列，都 exit 0。另外，換入口時舊入口還是「討論中」也放行，舊入口留在板外沒有人提醒。
+- **原因**：`works` 是所有 roadmap 現在的工作名稱（`tools/roadmap-sync.ts:412-414`），不看是不是「同一列換了入口」。
+- **影響**：N12、R2 要擋的漏記在這個條件下又走得通。
+- **真實路徑**：會發生，機率低（要有同名的兩列，或換入口時忘了結案）。
+- **建議**：可延後或和 M1 一起做：同名只看同一份 roadmap、而且那個名稱的列數沒有變少；或改用入口狀態行「已結案 →」的下一站判斷換入口（下一站在板上或有完成列才算）。
+
+##### P3 M3　工具寫的發版列，版本號帶連結或粗體時認不出升版（N7 修正引入）
+
+**規格｜已重現**（`parseRelease`）。
+
+- **觸發條件**：`**發版**：正式 vault 升到 [`0.7.0`](…)（已合併，[入口](…)）` 或 `…升到 **0.7.0**…`。
+- **實際**：版本停在 0.6.0，發版那一列自己被列成待發布。`3cd78c1` 用純文字比對時認得；現在比 html，只接受 `<code>` 或沒有標記（`tools/roadmap-board.ts:140`）。照規範寫 `` `x.y.z` `` 的不受影響。
+- **真實路徑**：會發生，機率低（把版本連到 tag 或 release 頁）。
+- **建議**：可延後或順手修：版本前容許任意標籤；或在規範那一句註明版本只用反引號。
+
+##### P3 M4　圍欄判斷的兩個殘留（延續 N10）
+
+**樣本已重現；repo 的 392 份都一致。**
+
+- 頂層的開頭縮排 1～3 格、裡面有一行縮排 4～6 格的 ```` ``` ````：仍被當成收尾（CommonMark 的上限是所在區塊加 3 格，不是開頭加 3 格），後面的 `## x` 被當成真標題。和 N10 第一種同一個形狀，只修了開頭頂格的。
+- 引用框裡 `> ` 後面接 tab 的收尾：markdown-it 算縮排 2 格、是收尾；`fences.ts` 拿掉 `> ` 後才算 tab，算成 4 格（`tools/fences.ts:30-36`）。影響只到引用框結束。
+- **真實路徑**：機率極低。**建議**：記進 backlog〈已知的限制〉N10 那一列。
+
+##### P3 M5　重播的判斷漏掉沒有狀態檔的搬法（延續 N4）
+
+**已重現**（`git cherry-pick -n` 後 `git commit`）。
+
+- **實際**：`cherry-pick -n` 不寫 `CHERRY_PICK_HEAD`，隔天 commit 時報「日期要是今天」。`git checkout <分支> -- <檔>`、`git restore --source` 拿別的分支的 roadmap 是同一類（靜態推斷）。照訊息把日期改成今天，記下的就不是收尾那天。
+- **真實路徑**：會發生，機率低。主資料夾 cherry-pick 狀態文件的做法沒有衝突時不跑 hook，不受影響。
+- **建議**：記成已知的限制，寫明「用會留狀態的指令：`cherry-pick`、`merge --squash`」。
+
+#### 實作者自己選的做法
+
+1. **重播的判斷清單**：來源選得對（真的 hook 裡驗過 `GITHEAD_*`，中文路徑的 worktree 也對），沒清掉的狀態只放寬日期也合理。問題在放寬的範圍只有日期（M1），另漏沒有狀態檔的搬法（M5）。
+2. **同名是拿掉粗體後相同、各份一起看**：太寬（M2）。
+3. **上線前的格式是 HEAD 沒有〈等觸發點〉**：合理，clone 裡真的合併驗過；同步要求這一節存在，上線後不會再被當成舊格式；新的列照查也驗過。
+4. **重新開工是 HEAD 的板上有這份入口**：直線歷史合理，跨 roadmap 也驗過（最上層收尾、Cards 重開再收尾，同一天通過）；經過合併就不成立（M1）。
+5. **工具寫的列以「（已合併，入口）」結尾**：合理；比 html 帶出 M3。
+6. **連到 backlog 的「→」一定帶錨點**：合理，和規範「backlog 的一站是檔＋最近的標題」一致。從 backlog 出發時，「來自」沒帶錨點也會被回鏈的核對擋下，兩邊對稱。
+7. **收尾不超過開頭加三格、tab 算到 4 的倍數**：頂格開頭的都對；殘留見 M4。
+8. **N12 報在〈現在在哪裡〉的標題、讀不到狀態行的不看**：合理。
+
+和規格的衝突：沒有發現程式和規範互相矛盾。M1 是規格本身的漏洞：任務說明把新的列定義成「暫存區有、HEAD 沒有」，沒考慮合併。
+
+#### 第二輪 N1～N13
+
+| 項目 | 結果 | 說明 |
+|---|---|---|
+| N1 | 部分 | 真的 pre-merge-commit 認得出合併，跨日的單純合併通過；但只放寬日期，其餘規則見 M1 |
+| N2 | 部分 | 上線那次合併與上線前開的分支都通過（clone 實測）；同名放行太寬（M2），換入口再收尾經過合併仍擋（M1） |
+| N3 | 修到了 | 刪列、解衝突丟掉自己那一列都擋；只改連結目標、換順序放行；舊格式的 HEAD 放行 |
+| N4 | 修到了 | squash、有衝突的 cherry-pick 與 rebase 通過；殘留是 M5 |
+| N5 | 部分 | 直線歷史同一天第二筆放行；重開與再收尾經過合併時仍擋（M1） |
+| N6 | 修到了 | `2026-1-5`、`2026-02-30`、空的都擋 |
+| N7 | 修到了 | 名稱有「：」認得、工具列的「升正式版」不算；帶出 M3 |
+| N8 | 修到了 | 外部連結（含大寫 scheme、`//`、`mailto:`）與不存在的 D-ID 都擋 |
+| N9 | 修到了 | 大寫錨點對得上（決定與 backlog 都是）；兩個標題 `AI`、`ai` 時 `#AI` 對到第一個，和連結檢查一致；沒帶錨點擋下 |
+| N10 | 部分 | 頂格開頭的修到了，repo 392 份一致；清單那一種記成已知的限制合理；殘留見 M4 |
+| N11 | 分類合理 | 機率極低、多半被連結檢查擋下；backlog 那一列的觸發點與影響寫得對 |
+| N12 | 修到了（第一條） | 沒結束的列被刪會擋；第二條記成已知的限制合理；同名時繞得過（M2） |
+| N13 | 分類合理 | 觸發點與完成條件具體。順帶：沒衝突的 `git revert` 也不跑 hook（實測，收尾的 commit 與合併都能 revert 掉完成列），屬於同一類 |
+
+#### 沒驗的項目與原因
+
+- 完整的 `npm run self-check`、`hooks.test.ts`、`quality.test.ts`、`section`、`decisions-index` 的測試：照指示不跑整包；只跑了上面五個檔。
+- 真的 `.githooks` 加 `tools/hooks.ts` 的 `preMergeCommit` 整條（含合併進 main 前查 CI）：clone 沒裝相依，改用等價的 shell hook。`hooks.ts` 這一輪只把 `mergeHeads` 搬到共用檔，讀過差異，沒有實跑。
+- `node tools/decisions-index.ts D-117 --deep` 和舊工具逐位元組比對：沒重跑；改以 392 份 Markdown 的圍欄行和 markdown-it 全部一致代替。
+- GitHub Actions 的 Ubuntu 實跑、Pages 與驗收第 11 項：要 push、合併後才有。
+- M1 裡 cherry-pick、rebase 方向的同類組合，M5 的 `git checkout <分支> -- <檔>`：靜態推斷，沒有實跑。
+- 白板的版面：這一輪的差異沒動，沒重看。
+
+### Claude 回應
+
+逐項核對：M1 的第一種先寫成掛真的 hook 的測試，修之前同樣擋在「和入口 docs/tasks/x.md 的『完成』那一句不一樣」（真的合併、pre-merge-commit）；M2、M3 照回報的觸發條件寫成測試，修之前都先失敗。分類照 code-quality `review.md`〈修正後收尾〉與 [D-207](../decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制)。M1 不選「重播時新的列只查格式與日期」：解〈已完成〉的衝突在兩邊各收尾一件時每次都會遇到，那個做法會讓丟掉另一邊那一列不再擋；讀另一邊的 roadmap 用的是 Git 已經給的 ref，沒有新的狀態要維護。
+
+| 發現 | 分類 | 修法 | 動到什麼 |
+|---|---|---|---|
+| M1 合併帶進來的完成列被重驗 | 一定修（把 `main` 併進分支的正常路線會被擋，沒有出口） | 重播時讀另一邊那個 commit 的同一份 roadmap（`git-state.ts` 新的 `replaySides`：真的合併是 `GITHEAD_*`／`MERGE_HEAD`，cherry-pick 與 rebase 是正在套用的那一個，squash 是 `SQUASH_MSG` 列出的分支頂端）。另一邊已有的完成列不照這邊的入口重驗，只查格式與日期（第一版連格式都不查，既有的 R3 測試擋下：上線前開的分支手寫的列，先併進新的 `main` 再併回來就不擋了），入口算有完成列；真的合併時另一邊的列也要都在；新的列和另一邊帶進來的列同一份入口就擋；上線前格式的另一邊不算。測試掛真的 hook 跑「另一邊做了兩步以上」六種，每種都跑合併、squash 與反方向，另加解衝突丟掉另一邊那一列 | `git-state.ts`、`roadmap-sync.ts` 的 `Source` 與 `checkDone`；規範〈roadmap〉、任務說明各一句 |
+| M2 同名放行太寬 | 修（收窄；M1 的「換入口再收尾」也靠它） | 換入口只認舊入口自己寫的「已結案 → <新入口>」，新入口在狀態板或〈等觸發點〉、或有完成列（新的或另一邊帶進來的）；不再看別處有沒有同名的列。換入口時舊入口沒結束就擋（N12 的訊息）；「沒有新的一列」的訊息加一句換入口的寫法 | `checkDone`；規範〈roadmap〉一句 |
+| M3 發版列的版本號帶標記 | 修 | 「正式 vault 升到」後面、版本號前容許任何標籤（連結、粗體、行內程式碼） | `roadmap-board.ts` 的 `GENERATED_RELEASE` |
+| M4 圍欄的兩個殘留 | 記成已知的限制（機率極低；要修得追蹤清單與引用框，和 N10 第二種同一個原因） | backlog N10 那一列改寫，納入這兩種 | backlog〈已知的限制〉 |
+| M5 沒有狀態檔的搬法 | 記成已知的限制（機率低，新列的核對會擋下） | 寫明用會留狀態的 `git cherry-pick`、`git merge` | backlog〈已知的限制〉 |
+| N13 的補充：沒衝突的 `git revert` | 併進技術債那一列 | — | backlog〈技術債〉 |
+
+修 M1 時另外記一條已知的限制：squash 不要求另一邊的列都留著（留下的 `SQUASH_MSG` 可能是放棄的 squash），解衝突時丟掉另一邊那一列、那件工作又不在這邊的板上時會漏記。
+
+## 第四輪的請求
+
+只審第三輪 M1～M5 的修正與受影響的路徑；〈規格與優先順序〉〈回報與權限〉照上面。
+
+審查者：照第三輪，由 Claude 開新的 Fable 5.2（high）子代理審，不給實作者的結論。使用者 2026-11-21：Fable 審通過就不再請 Codex。
+
+- 審查對象：第三輪審的 `f9023bf` 之後、到這份請求所在的 commit。一項發現一個 commit（由舊到新；M2 在 M1 前面，M1 的「換入口再收尾」要靠它）：M2 `cc15f41`、M1 `fe4081a`、M3 `d44c2cc`；文件（規範、任務說明、backlog 的限制與技術債、這份請求）在最後一個 commit。看全部：`git diff f9023bf <這份請求的 commit>`；看一項：`git show <commit>`。
+- 每一項對照〈Claude 回應〉（第三輪）的修法：修到了沒有、有沒有帶進新問題。共用的路徑也請看呼叫端：
+  - M1：`tools/git-state.ts` 的 `replaySides`，只有 `roadmap-sync.ts` 的 `gitSource` 用；`checkDone` 在 pre-commit 與 pre-merge-commit 的 `roadmap-sync --check --staged` 跑，`npm run check` 與 CI 的 `--check` 也跑（那時沒有重播，另一邊是空的）。
+  - M2：`checkDone` 最後一段（HEAD 板上有、現在不見的列）。
+  - M3：`roadmap-board.ts` 的 `releaseOf`。
+- 請找新的組合，例如：octopus 合併；兩邊都改了同一列舊列的連結目標再合併；另一邊是上線前的格式、這邊是新的（或反過來）；squash 的分支頂端是合併 commit；一串 cherry-pick 中途衝突；「已結案 →」的下一站在另一份 roadmap，或下一站自己也換了入口；放棄的 squash 留下 `SQUASH_MSG` 之後的 commit。
+
+實作者自己選的做法（規格沒寫的）：
+
+1. M1：另一邊的列照 `doneKey`（日期＋拿掉連結目標的文字）對；同一列兩邊都有時，對到一次兩邊各扣一次。
+2. M1：只有真的合併（`GITHEAD_*`、`MERGE_HEAD`）要求另一邊的列都在；cherry-pick、rebase、squash 只拿來認出另一邊帶進來的列（squash 的缺口記成已知的限制）。
+3. M1：squash 的另一邊是 `SQUASH_MSG` 列出的 commit 經 `git merge-base --independent` 剩下的。
+4. M1：另一邊帶進來的列照查格式與日期（工具的格式、真實日期、不晚於今天），入口的狀態、完成那一句、工作名稱、一份入口一筆、同一天都不查。代價：另一邊經過 GitHub 網頁進了手寫的列，把它併進來會被擋（N13 那一類）。
+5. M1：新的列和另一邊帶進來的列是同一份入口就擋。
+6. M1：上線前格式（沒有〈等觸發點〉）的另一邊不算：不認它的列，也不要求它的列。
+7. M2：下一站只認連到 Markdown 檔的連結（D-ID 不算換入口）；新入口在任何一份 roadmap 的板上都算。
+
+驗證方式：
+
+- 每一項先寫會失敗的測試，測試名以「L2 M…」開頭。M1 的測試在暫存 repo 掛 shell 寫的 pre-commit 與 pre-merge-commit，修之前擋在第一種（「和入口 docs/tasks/x.md 的『完成』那一句不一樣」，真的合併）；M2、M3 照回報的觸發條件，修之前都失敗。
+- 每個 commit 的 pre-commit 都通過：M2、M3 跑共用檢查與 tools 的完整檢查；M1 改到 hook 用的 `git-state.ts`，另外跑 Cards、Capture、Mindboard 的完整檢查（第一次在 Cards 的檢查記憶體用完，騰出記憶體後重跑通過）。
+- `roadmap-sync` 的 17 個測試在 M1 的版本都通過（M1 的第一版讓既有的 R3 測試失敗，見〈Claude 回應〉）；`roadmap-board` 的 22 個測試通過。
+- clone 模擬（工具是 `fe4081a` 的 `roadmap-sync.ts`，併的是 `cc15f41`）：上線那次合併通過；上線前開的分支在舊格式的 Cards roadmap 手寫一列，把新的 main 併進來通過（HEAD 是舊格式、那一列在 HEAD 裡），再併回新的 main 擋在「格式不是」。
+- 真的 repo：`node tools/roadmap-sync.ts --check`、`node tools/roadmap-board.ts --check`、文件檢查通過。
+- 沒驗：真的 `.githooks` 在 clone 裡跑完整的 pre-merge-commit（改用上面的 shell hook）；M1 的 octopus 合併、一串 cherry-pick 中途衝突、rebase 方向沒有實跑；GitHub Actions 的 Ubuntu 實跑要 push 後才有；Pages 與驗收第 11 項要合併後才有。

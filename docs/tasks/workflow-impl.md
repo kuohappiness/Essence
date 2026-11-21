@@ -1,6 +1,6 @@
 # 工作流程上線：D-214、D-215、D-217 的工具、檢查與文件（給 Claude，本機執行）
 
-狀態：待審｜下一步：L2 第二輪的 13 項已處理，第三輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
+狀態：待審｜下一步：L2 第三輪的 5 項已處理，第四輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
 
 來自：[plans/workflow.md〈搬完之後要做的事〉](../plans/workflow.md#搬完之後要做的事)
 
@@ -96,7 +96,7 @@
   - 手寫的列：入口只有 D-ID、連到沒有狀態行的紀錄（例如 `card-rules/trials.md`），或沒有連結；工具不動。
 - **〈已完成〉**（表：`日期｜工作`）：入口的狀態是已合併或已結案的列，工具從狀態板或〈等觸發點〉移到〈已完成〉表的最上面（同一次好幾列照原本的順序），寫成 `**<工作>**：<完成>（<已合併或已結案>，[入口](<路徑>)）`。
   - 日期是收尾的 commit：入口檔在工作樹或暫存區有沒 commit 的修改，就是今天（台北時間）；否則往回找入口的歷史，取狀態第一次變成結束的那個 commit 的日期（台北時間）。hook 擋在同一個 commit 搬列，所以通常就是今天；之後 rebase、squash 不回頭改。
-  - 已有的列不動。暫存區新加的〈已完成〉列（暫存區有、HEAD 沒有）要是工具的格式、入口在暫存區已結束、「完成」那一句一致：手寫的完成列擋下。重開已結束的工作：照舊在開工時手寫一列。
+  - 已有的列不動。暫存區新加的〈已完成〉列（暫存區有、HEAD 沒有；合併時另一邊也沒有，L2 第三輪 M1）要是工具的格式、入口在暫存區已結束、「完成」那一句一致：手寫的完成列擋下。重開已結束的工作：照舊在開工時手寫一列。
 - **連結改寫**：下一步、觸發點、完成三處都可能有連結，搬進 roadmap 時共用同一個改寫：相對路徑改成以 roadmap 為基準，只有錨點的（`#結果`）改成連到入口檔的那個錨點，有空白的路徑用 `<…>` 包起來；參照式連結（`[文字][名稱]`）報錯；格子裡的直線跳脫成 `\|`。工具寫出的 roadmap 要過得了文件檢查與白板（測試）。
 - **同一個入口**在狀態板與〈等觸發點〉出現兩次報錯。
 - **執行**：`node tools/roadmap-sync.ts` 改寫工作樹的 roadmap；`--check` 只比對、不寫，不一致就印「檔案:行號  原因」與「執行 node tools/roadmap-sync.ts，再 git add <roadmap>」並 exit 1；`--staged` 只能和 `--check` 一起用，roadmap、入口與 HEAD 的比較都讀暫存區，不混讀工作樹；`--root` 給測試。冪等：跑兩次第二次不改任何字。
@@ -222,6 +222,7 @@
 - **commit**（分支 `claude/workflow-impl-68afda`）：`6b16b47` `section`；`6a1b2b6` 決策查詢工具；`4a3cfc2` 文件分區與現有狀態板整理；`9e2b6d6` 狀態行解析、`roadmap-sync`、文件檢查與白板，接進 hook 與 `npm run check`；之後是規範的連結、skill 與 L2 請求。每個 commit 的 pre-commit 都通過；`9e2b6d6` 跑了共用檢查（`npm run check` 的各項，讀暫存區）與 tools 的 `npm run self-check`、Cards、Capture、Mindboard 的完整檢查。
 - **L2 第一輪**（[審查請求](workflow-impl-review.md)，Codex 審 `64896c0`）：12 項都在合併前修，一項一個 commit，先寫會失敗的測試：R11 `918e387`、R10 `c4c0c38`、R8 `b24ebd0`、R9 `b093894`、R4 `286e4bb`、R7 `54f83ae`、R6 `5c36adb`、R2／R3／R5 `398e1a8`（拿掉 `ROLLOUT`）、R1 `83eb796`、R12 `7731f42`；每個 commit 的 pre-commit 都通過。第二輪只審這些差異。
 - **L2 第二輪**（[審查請求〈第二輪的回報〉](workflow-impl-review.md#第二輪的回報)，Fable 5.2（high）子代理審 `3cd78c1`）：13 項。修的一項一個 commit，先寫會失敗的測試：N1／N4 `173e7cc`、N6 `e3722ef`、N2 `4d65a07`、N3 `4965810`、N5 `509c3c1`、N12 `2119e02`、N7 `24554ff`、N8 `41203a0`、N9 `e517fb8`、N10 `4f73393`；每個 commit 的 pre-commit 都通過。N10 的第二種、N11、N12 的第二條路記進 backlog〈已知的限制〉；N13 記進上面的〈技術債〉。第三輪只審這些差異。
+- **L2 第三輪**（[審查請求〈第三輪的回報〉](workflow-impl-review.md#第三輪的回報)，Fable 5.2（high）子代理審 `f9023bf`）：5 項。M2 `cc15f41`、M1 `fe4081a`（合併帶進來的完成列不重驗，只查格式與日期）、M3 `d44c2cc`，先寫會失敗的測試，每個 commit 的 pre-commit 都通過；M4、M5 與 squash 的缺口記進 backlog〈已知的限制〉，`git revert` 併進 N13 那一列技術債。第四輪只審這些差異。
 - **驗收 1～6、8、9**：各自的測試在 `tools/tests/`（`status-line`、`check-docs`、`roadmap-sync`、`roadmap-board`、`decisions-index`、`section`）；`node tools/roadmap-sync.ts --check` 在真的 repo 通過，不帶 `--check` 再跑一次不改任何字；文件檢查在真的 repo 通過；`check-skill-mirror` 通過。
 - **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,100 字（JavaScript 字元數，2026-11-21 的決策紀錄），和舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）的輸出逐位元組相同（L2 R11 之前開頭多「（--deep）」，已拿掉）。
 - **驗收 10**：白板在瀏覽器以 375×812 開，`document.documentElement.scrollWidth` 是 375，沒有元素超出右緣；「最近完成」與「最近定案」是兩個區塊。
