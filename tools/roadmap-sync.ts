@@ -336,8 +336,8 @@ const isDate = (text: string) => {
  * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時另一邊的列只要不晚於今天）；
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
  * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外）；
- * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；同名的工作還在（換入口）、
- *   HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不要。
+ * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；沒結束的列也不能刪；
+ *   同名的工作還在（換入口）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
  * - HEAD 的〈已完成〉每一列都還在。
  * HEAD 沒有的 roadmap 不看。
  */
@@ -415,9 +415,13 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
     const text = source.read(path);
     const line = text === undefined ? undefined : statusLineOf(text);
     const parsed = line ? parseStatus(line) : undefined;
-    if (!parsed || 'error' in parsed || !parsed.status.done) continue;
-    const at = sectionsOf(lf(roadmaps.find(r => r.file === file)!.text)).find(s => s.title === DONE.section);
-    problems.push({ file, line: at ? at.start + 1 : 0, reason: `入口 ${path} 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts` });
+    if (!parsed || 'error' in parsed) continue;
+    const sections = sectionsOf(lf(roadmaps.find(r => r.file === file)!.text));
+    const at = sections.find(s => s.title === (parsed.status.done ? DONE.section : BOARD.section));
+    problems.push({ file, line: at ? at.start + 1 : 0, reason: parsed.status.done
+      ? `入口 ${path} 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts`
+      // 還沒結束的列被刪掉：下一個 commit 再結束就沒有完成列（L2 第二輪 N12）。
+      : `入口 ${path} 還沒結束（${parsed.status.label}），HEAD 的狀態板或〈等觸發點〉有它，現在卻沒有：狀態板的列不手動刪（不做了就把入口改成已結案，再執行 node tools/roadmap-sync.ts）` });
   }
   return problems;
 }

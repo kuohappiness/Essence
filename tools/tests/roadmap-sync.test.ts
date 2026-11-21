@@ -198,10 +198,11 @@ void test('暫存區：入口轉態後沒同步就擋、同步並 stage 後通�
   assert.equal(sync('--check').status, 1);
   commit('2026-11-25T10:00:00+08:00');
   await put('docs/tasks/b.md', entry('狀態：實作中｜下一步：y｜等誰：Claude'));
-  // 手動刪掉乙那一列：入口沒有列就不在板上，檢查通過（要加回就在開工時手寫一列）；加回時舊的格子對不上就擋，同步後通過。
+  // 手動刪掉乙那一列：入口還沒結束，擋（L2 第二輪 N12：先刪列、下一個 commit 再結束會漏記）；加回時舊的格子對不上就擋，同步後通過。
   const synced = await read('docs/roadmap.md');
   await add('docs/roadmap.md', synced.replace('| 乙 | 實作中 | y | Claude | [任務](tasks/b.md) |\n', ''));
-  assert.equal(sync('--check', '--staged').status, 0);
+  assert.equal(sync('--check', '--staged').stderr.split('\n').find(line => line.startsWith('docs/')),
+    'docs/roadmap.md:3  入口 docs/tasks/b.md 還沒結束（實作中），HEAD 的狀態板或〈等觸發點〉有它，現在卻沒有：狀態板的列不手動刪（不做了就把入口改成已結案，再執行 node tools/roadmap-sync.ts）');
   await add('docs/roadmap.md', synced.replace('| 乙 | 實作中 | y | Claude |', '| 乙 | 舊 | 舊 | 舊 |'));
   assert.equal(sync('--check', '--staged').status, 1);
   assert.equal(sync().status, 0);
