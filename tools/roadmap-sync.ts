@@ -336,7 +336,8 @@ const isDate = (text: string) => {
  * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時另一邊的列只要不晚於今天）；
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
  * - 一份入口只有一筆新的列，也不和舊的列同一天；
- * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）。
+ * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；同名的工作還在（換入口）、
+ *   HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不要。
  * HEAD 沒有的 roadmap 不看。
  */
 export function checkDone(roadmaps: readonly { file: string; text: string }[], source: Source, today: string): Problem[] {
@@ -351,6 +352,8 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
   const fresh = new Map<string, string>();
   const old: { path: string; date: string; at: string }[] = [];
   const checks: (() => void)[] = [];
+  // 上線前的 roadmap（HEAD 沒有〈等觸發點〉）：上線那次改了格式、換了入口，HEAD 的列不能照新規則比（L2 第二輪 N2）。
+  const legacy = new Set([...headOf].filter(([, head]) => head !== undefined && !sectionsOf(lf(head)).some(s => s.title === WAITING.section)).map(([file]) => file));
   for (const { file, text } of roadmaps) {
     const head = headOf.get(file);
     if (head === undefined) continue;
@@ -394,8 +397,10 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
   }
   for (const check of checks) check();
 
-  for (const [path, { file }] of before) {
-    if (placed.has(path) || fresh.has(path)) continue;
+  // 同名的工作還在狀態板或〈等觸發點〉：只是換了入口（例如討論稿結案、交給任務），工作沒有結束。
+  const works = new Set(roadmaps.flatMap(({ file, text }) => placedRows(file, lf(text)).map(row => stripBold(row.work))));
+  for (const [path, { file, work }] of before) {
+    if (placed.has(path) || fresh.has(path) || legacy.has(file) || works.has(stripBold(work))) continue;
     const text = source.read(path);
     const line = text === undefined ? undefined : statusLineOf(text);
     const parsed = line ? parseStatus(line) : undefined;

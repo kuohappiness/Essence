@@ -362,6 +362,32 @@ void test('L2 N6 重播時新的完成列的日期也要是 YYYY-MM-DD 的真實
   }
 });
 
+void test('L2 N2 入口結束但同名的工作還在（換入口）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）：不要求新的完成列', async t => {
+  const { add, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  const closed = entry('狀態：已結案 → [任務](../tasks/t.md)｜完成：談定｜等誰：—');
+  // 換入口：討論稿結案、狀態板同一列的入口換成任務。
+  await add('docs/plans/p.md', entry('狀態：討論中｜下一步：談｜等誰：使用者'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 討論中 | 談 | 使用者 | [主文](plans/p.md) |']));
+  commit();
+  await add('docs/plans/p.md', closed);
+  await add('docs/tasks/t.md', entry('狀態：實作中｜下一步：做｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | 做 | Claude | [任務](tasks/t.md) |']));
+  assert.equal(check().status, 0, check().stderr);
+  // 對照：那一列整個不見了，照樣擋。
+  await add('docs/roadmap.md', roadmap([]));
+  assert.match(check().stderr, /入口 docs\/plans\/p\.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列/);
+  // 上線前的 roadmap（8a03736 的樣子）：工作改名又換入口、舊的完成列搬去封存，都照上線那次的轉換放行。
+  const legacy = ['# 路線圖', '', '## 現在在哪裡', '', '| 工作 | 狀態 | 下一步 | 等誰 | 入口 |', '|---|---|---|---|---|',
+    '| 舊名 | 討論中 | 談 | 使用者 | [主文](plans/p.md) |', '', '## 已完成', '', '| 日期 | 工作 |', '|---|---|', '| 2026-11-20 | 舊的一列 |', '| 2026-11-19 | 搬去封存的一列 |', ''].join('\n');
+  await add('docs/plans/p.md', entry('狀態：討論中｜下一步：談｜等誰：使用者'));
+  await add('docs/roadmap.md', legacy);
+  commit();
+  await add('docs/plans/p.md', closed);
+  await add('docs/roadmap.md', roadmap(['| 新名 | 實作中 | 做 | Claude | [任務](tasks/t.md) |']));
+  assert.equal(check().status, 0, check().stderr);
+});
+
 void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
