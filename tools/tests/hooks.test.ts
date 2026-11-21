@@ -13,6 +13,7 @@ import { access, appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, sy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FOLDERS } from '../apps.ts';
 import { CARDS } from '../dispatch.ts';
 
 const run = promisify(execFile);
@@ -30,12 +31,13 @@ const SYNTAX = 'docs/' + 'transcript.md';
 const PRODUCT = 'docs/' + 'product.md';
 const SKILL = 'code-quality/' + 'SKILL.md';
 const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
-/** 從工作樹複製進 clone 的：hook 與共用檢查的工具（這次要驗的版本）。 */
-const COPIED = [
-  '.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json', 'tools/package.json',
-  'tools/hooks.ts', 'tools/dispatch.ts', 'tools/check-docs.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts',
-  'tools/check-skill-mirror.ts', 'tools/check-plugin-imports.ts', 'tools/roadmap-board.ts', 'tools/progress-board-data.ts',
-];
+/**
+ * 從工作樹複製進 clone 的：hook 與共用工具（這次要驗的版本）。工具是追蹤的 tools/*.ts、*.mjs、*.json 全部，不手列：
+ * 手列時新增的相依（例如 tools/apps.ts）在 clone 裡會是 HEAD 的舊版或缺檔（D-218 開工前查核 R3）。
+ */
+const HOOK_FILES = ['.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json'];
+const copied = (tracked: Iterable<string>): string[] =>
+  [...HOOK_FILES, ...[...tracked].filter(path => /^tools\/[^/]+\.(ts|mjs|json)$/.test(path))];
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
 // 外掛的資料夾裡有 flag.txt 時連內容一起記，內容是 bad 就失敗：看得出檢查讀的是暫存區還是工作樹（§10）。
@@ -86,7 +88,7 @@ async function clone(t: test.TestContext) {
     await copyFile(join(SOURCE, path), join(repo, path));
   }
   // 要驗的 hook 與工具、替身，在 clone 裡 commit 成一個基準。
-  for (const path of COPIED) {
+  for (const path of copied(wanted)) {
     await mkdir(dirname(join(repo, path)), { recursive: true });
     await copyFile(join(SOURCE, path), join(repo, path));
   }
@@ -96,9 +98,9 @@ async function clone(t: test.TestContext) {
   pkg.scripts.check = `node ${UP}mark.mjs cards`;
   await mkdir(join(repo, C), { recursive: true });
   await writeFile(join(repo, C, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-  for (const plugin of ['capture', 'mindboard']) {
-    await mkdir(join(repo, 'plugins', plugin), { recursive: true });
-    await writeFile(join(repo, 'plugins', plugin, 'package.json'), JSON.stringify({ name: `essence-${plugin}`, private: true, scripts: { check: `node ../../mark.mjs ${plugin}` } }, null, 2) + '\n');
+  for (const plugin of ['capture', 'mindboard'] as const) {
+    await mkdir(join(repo, FOLDERS[plugin]), { recursive: true });
+    await writeFile(join(repo, FOLDERS[plugin], 'package.json'), JSON.stringify({ name: `essence-${plugin}`, private: true, scripts: { check: `node ../../mark.mjs ${plugin}` } }, null, 2) + '\n');
   }
   // 共用工具的完整檢查（第二步 §A2）也換成記號。
   const toolsPkg = JSON.parse(await readFile(join(repo, 'tools/package.json'), 'utf8')) as { scripts: Record<string, string> };

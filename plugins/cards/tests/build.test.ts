@@ -230,6 +230,19 @@ void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相�
   assert.equal(map.sourcesContent.length, map.sources.length);
 });
 
+// D-218 §3 第 6 點：Windows 上打錯大小寫的 Cards 資料夾（npm --prefix apps/cards）照樣找得到，對照表的 sources 仍要是 git 追蹤的寫法。
+void test('D-218 root 的大小寫打錯（只在 Windows）：對照表的 sources 照磁碟上的真實大小寫', { skip: process.platform !== 'win32' && '只有 Windows 的檔案系統不分大小寫' }, async t => {
+  const mapped = await mkdtemp(join(tmpdir(), 'essence-map-'));
+  t.after(() => rm(mapped, { recursive: true, force: true }));
+  const { buildPlugin } = await import('../tools/build.mjs');
+  const target = join(mapped, 'main.js.map');
+  const wrong = root.toUpperCase();
+  assert.notEqual(wrong, root);
+  await buildPlugin({ root: wrong, outdir: mapped, sourcemap: target, version: '9.9.9+case' });
+  const map = JSON.parse(await readFile(target, 'utf8')) as { sources: string[] };
+  assert.ok(map.sources.includes(repoPath('src/main.ts')), map.sources.slice(0, 5).join(', '));
+});
+
 // D-208 第二步驗收第 A3 項：搬家前後的建置要逐位元組比，建置版本（第一行與程式本體的 BUILD）由驗收填成同一個。
 void test('D-208 buildPlugin 的 version 選項：第一行與程式本體都用給定的版本，其餘和預設建置相同', async t => {
   const fixed = await mkdtemp(join(tmpdir(), 'essence-fixed-'));

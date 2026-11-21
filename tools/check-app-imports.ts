@@ -1,5 +1,5 @@
 // 外掛之間不 import（D-208 第 10 點，tasks/one-repo-step-1.md §6）：三個外掛各自安裝、各自可用（D-006），程式不跨出自己的資料夾。
-// 用法：node tools/check-plugin-imports.ts [--staged]
+// 用法：node tools/check-app-imports.ts [--staged]
 //   預設：Git 追蹤的檔，內容讀工作樹（npm run check 與 CI 用）。--staged：清單與內容都讀暫存區（pre-commit 用）。
 // 擋：plugins/<外掛>/ 的程式用相對路徑跑出自己的資料夾；根目錄 src/、tests/、tools/ 的程式用相對路徑進到 plugins/；
 //     plugins/<外掛>/ 追蹤的 symlink 指到外掛外；plugins/<外掛>/package.json 的本機相依（file:、link:、沒有協定的路徑等）

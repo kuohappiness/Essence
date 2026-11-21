@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,7 +105,12 @@ export async function embedRules(rulesRoot = resolve(defaultRoot, RULES_FROM_ROO
  * rulesRoot：規則檔的基準，預設是 root 往上 RULES_FROM_ROOT（測試的暫存專案可以另外指定）。
  * version：只給測試與驗收用，固定建置版本（D-208 第二步驗收第 A3 項：搬家前後逐位元組比）；安裝與發布的流程不傳。
  */
-export async function buildPlugin({ root = defaultRoot, rulesRoot = resolve(root, RULES_FROM_ROOT), dev = false, outdir = root, sourcemap, version: fixed } = {}) {
+export async function buildPlugin({ root: given = defaultRoot, rulesRoot, dev = false, outdir, sourcemap, version: fixed } = {}) {
+  // 磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上打 npm --prefix apps/cards 時，import.meta.url 與 cwd 照打的字，
+  // 對照表的 sources 會跟著變成 apps/cards/…；path.relative 在 Windows 比對不分大小寫、尾段取自第二個參數，只轉基準沒用。
+  const root = realpathSync.native(given);
+  rulesRoot ??= resolve(root, RULES_FROM_ROOT);
+  outdir ??= root;
   const version = fixed ?? await buildVersion(root);
   const rules = await embedRules(rulesRoot);
   await mkdir(outdir, { recursive: true });

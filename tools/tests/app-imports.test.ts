@@ -7,10 +7,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkPackage, checkSource } from '../check-plugin-imports.ts';
+import { checkPackage, checkSource } from '../check-app-imports.ts';
 
 const run = promisify(execFile);
-const CHECK = fileURLToPath(new URL('../check-plugin-imports.ts', import.meta.url));
+const CHECK = fileURLToPath(new URL('../check-app-imports.ts', import.meta.url));
 
 const blocked = (path: string, code: string) => assert.equal(checkSource(path, code).length, 1, `${path}: ${code}`);
 const allowed = (path: string, code: string) => assert.deepEqual(checkSource(path, code), [], `${path}: ${code}`);
@@ -48,7 +48,7 @@ void test('§6 放行：註解與字串裡的、外掛裡互相引用、套件�
 });
 
 async function repo(t: test.TestContext, files: Record<string, string>) {
-  const root = await mkdtemp(join(tmpdir(), 'essence-plugin-imports-'));
+  const root = await mkdtemp(join(tmpdir(), 'essence-app-imports-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];

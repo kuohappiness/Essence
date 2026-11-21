@@ -14,7 +14,7 @@ export const SHARED_CHECKS: [string, ...string[]][] = [
   ['secretlint.mjs', '--staged'],
   ['check-local-paths.ts', '--staged'],
   ['check-skill-mirror.ts', '--staged'],
-  ['check-plugin-imports.ts', '--staged'],
+  ['check-app-imports.ts', '--staged'],
   // 每一份 roadmap 讀得出來（§8）：外掛的 roadmap 寫壞時 commit 就擋，不會等到 Pages 才失敗。
   ['roadmap-board.ts', '--check', '--staged'],
 ];

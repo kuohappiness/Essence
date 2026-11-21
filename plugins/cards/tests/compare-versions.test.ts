@@ -777,7 +777,7 @@ void test('D-208 第二步 §A5 發布前比較跨過搬家：舊版在根目錄
   git(repo, 'add', 'manifest.json');
   git(repo, 'commit', '-q', '-m', 'both');
   const both = git(repo, 'rev-parse', 'HEAD');
-  await assert.rejects(compareVersions({ backup, old, new: both, root: repo, install, now: () => NOW + 1000 }), new RegExp('判不出 ' + both + ' 的外掛根：根目錄與 plugins/cards/ 都有 manifest\\.json'));
+  await assert.rejects(compareVersions({ backup, old, new: both, root: repo, install, now: () => NOW + 1000 }), new RegExp('判不出 ' + both + ' 的外掛根：manifest\\.json、plugins/cards/manifest\\.json 都有'));
   assert.equal(git(repo, 'worktree', 'list').split('\n').length, 1);
 });
 

@@ -1,12 +1,18 @@
 // 測試自己組的暫存 repo，照真的 repo 的版面放 Cards 與 AI 製卡的規則檔（D-208 第二步 §A5、§A6）：
 // 搬家前 Cards 在根目錄，搬家後在 plugins/cards/；規則檔照舊在 repo 的根（tools/build.mjs 的 RULES_FROM_ROOT）。
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULES_FROM_ROOT } from '../../tools/build.mjs';
 import { gitEnv } from '../../tools/git.ts';
 
-const cards = fileURLToPath(new URL('../../', import.meta.url));
+/**
+ * 這個 repo 裡 Cards 的根，磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上打 npm --prefix apps/cards 時 import.meta.url
+ * 照打的字，拿它去比 git 回的 apps/Cards 會假失敗；path.relative 在 Windows 不分大小寫、尾段取自第二個參數。
+ */
+export const CARDS_ROOT = realpathSync.native(fileURLToPath(new URL('../../', import.meta.url)));
+const cards = CARDS_ROOT;
 const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: cards, env: gitEnv(), encoding: 'utf8' }).trim();
 
 /** Cards 在 repo 裡的資料夾（repo 相對，用 /）：搬家前是 '.'。 */

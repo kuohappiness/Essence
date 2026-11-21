@@ -70,7 +70,7 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../secretlint.mjs', import.meta.url), 'utf8'));
   await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../../.secretlintrc.json', import.meta.url), 'utf8'));
   // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製；兩份 skill 與 roadmap 的檢查換成替身（這裡沒有）。
-  for (const name of ['check-local-paths.ts', 'hooks.ts', 'dispatch.ts', 'check-plugin-imports.ts']) {
+  for (const name of ['check-local-paths.ts', 'hooks.ts', 'dispatch.ts', 'apps.ts', 'check-app-imports.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(root, 'tools', name), 'export {};\n');
@@ -252,7 +252,7 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
   await chmod(hook, 0o755);
   const checker = await readFile(new URL('../check-docs.ts', import.meta.url), 'utf8');
   await writeFile(join(repo, 'tools/check-docs.ts'), checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];'));
-  for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-plugin-imports.ts', '.secretlintrc.json']) {
+  for (const path of ['tools/hooks.ts', 'tools/dispatch.ts', 'tools/apps.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-app-imports.ts', '.secretlintrc.json']) {
     await writeFile(join(repo, path), await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts']) await writeFile(join(repo, 'tools', name), 'export {};\n');
@@ -326,10 +326,10 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   // hook 只看 tools/ 與 Cards 資料夾的 node_modules 在不在；邏輯（tools/hooks.ts）與分派表照真的複製，共用檢查換成什麼都不做的替身，不 stage。
   await mkdir(join(root, C, 'node_modules'), { recursive: true });
   await mkdir(join(root, 'tools/node_modules'), { recursive: true });
-  for (const name of ['hooks.ts', 'dispatch.ts']) {
+  for (const name of ['hooks.ts', 'dispatch.ts', 'apps.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   }
-  for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-plugin-imports.ts', 'roadmap-board.ts']) {
+  for (const name of ['check-docs.ts', 'secretlint.mjs', 'check-local-paths.ts', 'check-skill-mirror.ts', 'check-app-imports.ts', 'roadmap-board.ts']) {
     await writeFile(join(root, 'tools', name), 'export {};\n');
   }
   await mkdir(join(root, '.githooks'));

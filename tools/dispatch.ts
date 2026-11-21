@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { APPS_ROOT, FOLDERS } from './apps.ts';
 
 export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
 export type Plugin = (typeof PLUGINS)[number];
@@ -20,9 +21,9 @@ export type Run = 'full' | 'related' | 'skip';
 export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
 
 /** Cards 的資料夾（D-208 第二步 §A6 搬進來）。 */
-export const CARDS: string = 'plugins/cards';
-/** 對象的資料夾（相對 repo 的根）。 */
-export const folder = (target: Target) => (target === 'tools' ? 'tools' : target === 'cards' ? CARDS : `plugins/${target}`);
+export const CARDS: string = FOLDERS.cards;
+/** 對象的資料夾（相對 repo 的根）：外掛查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
+export const folder = (target: Target): string => (target === 'tools' ? 'tools' : FOLDERS[target]);
 /** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
 const prefix = (target: Target) => (folder(target) === '.' ? '' : folder(target) + '/');
 
@@ -67,10 +68,10 @@ export const RULES: Rule[] = [
   },
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
-    id: 4, name: 'Capture、Mindboard 的資料夾', matches: under('plugins/capture/', 'plugins/mindboard/'),
-    effect: path => ({ [path.startsWith('plugins/capture/') ? 'capture' : 'mindboard']: 'full' }),
+    id: 4, name: 'Capture、Mindboard 的資料夾', matches: under(prefix('capture'), prefix('mindboard')),
+    effect: path => ({ [path.startsWith(prefix('capture')) ? 'capture' : 'mindboard']: 'full' }),
   },
-  { id: 5, name: 'plugins/ 底下不認得的路徑', matches: under('plugins/'), effect: () => 'all' },
+  { id: 5, name: 'plugins/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
