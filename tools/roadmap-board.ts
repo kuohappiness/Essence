@@ -132,12 +132,16 @@ function need(tables: Map<string, Table>, section: string): Table {
 
 const EMPTY: Cell = { html: '', text: '' };
 /**
- * 升版的那一列：舊的手寫列寫「升正式版 `x`」；發版任務收尾的「完成」以「正式 vault 升到 `x`」開頭（docs/agents/workflow.md〈任務說明〉），
- * 只在那一格開頭或工具寫的「工作：」後面才算，句中提到計畫中的版本不算（L2 R8）。
+ * 升版的那一列：發版任務收尾的「完成」以「正式 vault 升到 `x`」開頭（docs/agents/workflow.md〈任務說明〉）；舊的手寫列寫「升正式版 `x`」。
+ * 工具寫的列照「**工作**：」的結構找完成那一句（工作名稱可以有「：」），只認那一句開頭，「升正式版」也不認；
+ * 手寫的列照舊。句中提到計畫中的版本不算（L2 R8、第二輪 N7）。
  */
-const RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?|^(?:[^：]*：)?正式 vault 升到\s*`?v?(\d+\.\d+\.\d+)`?/;
-const releaseOf = (text: string) => {
-  const match = RELEASE.exec(text);
+const GENERATED = /（(?:已合併|已結案)，入口）$/;
+const GENERATED_RELEASE = /^<strong>[\s\S]*?<\/strong>：正式 vault 升到\s*(?:<code>)?v?(\d+\.\d+\.\d+)/;
+const HANDWRITTEN_RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?|^(?:[^：]*：)?正式 vault 升到\s*`?v?(\d+\.\d+\.\d+)`?/;
+const releaseOf = (cell: Cell) => {
+  if (GENERATED.test(cell.text)) return GENERATED_RELEASE.exec(cell.html)?.[1];
+  const match = HANDWRITTEN_RELEASE.exec(cell.text);
   return match ? match[1] ?? match[2] : undefined;
 };
 /** roadmap-sync 寫的已合併列（純文字）：「工作：完成（已合併，入口）」。 */
@@ -191,8 +195,8 @@ export function parseRelease(source: string, file = RELEASE_ROADMAP): Omit<Roadm
 
   // 正式 vault 的版本：「正式使用的 vault 現在是 `x`（日期」與已完成裡最新一列升版，取日期較新的（同一天以那句為準）。
   const stated = /正式使用的 vault 現在是\s*`?v?(\d+\.\d+\.\d+)`?\s*[（(](\d{4}-\d{2}-\d{2})/.exec(source);
-  const releaseAt = done.findIndex(d => releaseOf(d.work.text) !== undefined);
-  const fromDone = releaseAt >= 0 ? { version: releaseOf(done[releaseAt].work.text)!, date: done[releaseAt].date } : null;
+  const releaseAt = done.findIndex(d => releaseOf(d.work) !== undefined);
+  const fromDone = releaseAt >= 0 ? { version: releaseOf(done[releaseAt].work)!, date: done[releaseAt].date } : null;
   const fromStated = stated ? { version: stated[1], date: stated[2] } : null;
   const vault = fromStated && fromDone ? (fromDone.date > fromStated.date ? fromDone : fromStated) : fromStated ?? fromDone;
 
