@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`，資料夾首字大寫（D-218，給 Claude，本機執行）
 
-狀態：規劃中｜下一步：開工前查核第 2 輪（[請求與報告](rename-plugins-to-apps-plan-review.md)）｜等誰：Claude
+狀態：規劃中｜下一步：使用者定順序與停手時段後施工（開工前查核兩輪已一致，[請求與報告](rename-plugins-to-apps-plan-review.md)）｜等誰：使用者
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**；寫規格、改完後的一致性檢查（〈驗收〉第 6～9 項）用 xhigh。這件改到 pre-commit、CI、分派表、跨版本比較的工具與雲端的開場 hook，合併前做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。
 
@@ -20,7 +20,7 @@
 
 ## 停手時段
 
-開工前和使用者約：從搬家的 commit 到合併，別的分支與 `main` 不改 `plugins/`、`tools/`、`.githooks/`、`.github/workflows/`、`.claude/`、`.agents/skills/`、`.gitignore`；也不在主資料夾的 `plugins/` 底下開終端機、跑檢查或 commit（有程序的工作目錄在裡面，`git mv` 會整個失敗，見〈平台事實〉）。開工時先列出還沒合併、而且分岔點已經有 `plugins/cards/` 的分支（第二步 A 之後開的），有的話先問使用者順序。最後一次 rebase 之後重跑改連結的腳本與〈驗收〉第 2～5、7 項。
+開工前和使用者約：從搬家的 commit 到合併，別的分支與 `main` 不改 `plugins/`、`tools/`、`.githooks/`、`.github/workflows/`、`.claude/`、`.agents/skills/`、`.gitignore`；施工的 worktree 在搬家的 commit 前不在 `plugins/` 底下開終端機或跑檢查（有程序的工作目錄在裡面，`git mv` 會整個失敗，見〈平台事實〉）；主資料夾同樣的限制在〈合併後〉第 1 步。開工時先列出還沒合併、而且分岔點已經有 `plugins/cards/` 的分支（第二步 A 之後開的），有的話先問使用者順序。最後一次 rebase 之後重跑改連結的腳本與〈驗收〉第 2～5、7 項。
 
 2026-11-21 開工時列出的：`claude/workflow-impl-68afda`（D-214／D-215／D-217 的工作流程，L2 中）。它大改 `tools/check-docs.ts`、`hooks.ts`、`roadmap-board.ts`，新增 `tools/roadmap-sync.ts`、`decisions.ts`、`legacy-status-docs.json`（都有 `plugins/` 的寫法），也改 `plugins/*/docs/`。Claude 建議它先合併、搬家的 commit 在它之後：改名靠腳本、可以重跑，反過來它要 rebase 過整個改名，L2 也要重審（已問使用者）。它合併後，用〈驗收〉第 5 項的寬 pattern 重列 §2 的表。
 
@@ -32,7 +32,7 @@
 
 | 在哪裡 | 做什麼 |
 |---|---|
-| 本機（一定） | 施工、開工前查核與 L2、§5 的演練、Windows 的檢查、〈合併後〉的整理。施工在 repo 外的新 worktree（`D:\程式開發\Essence-apps`），主資料夾留在 `main` 給其他 session |
+| 本機（一定） | 施工、開工前查核與 L2、§5 的演練、Windows 的檢查、〈合併後〉的整理。施工在 repo 外的新 worktree（`D:\程式開發\Essence-apps`，開好先在 `tools/`、`plugins/cards/` `npm ci`），主資料夾留在 `main` 給其他 session；由主資料夾的 session 對那個路徑操作（在那裡開的 session 讀不讀得到專案記憶與核准的指令沒驗過） |
 | 雲端（一定） | 合併前在這個分支、合併後在 `main` 各開一個**新的**雲端 session，看 `cloud-setup.mjs` 的開場訊息（〈驗收〉第 10 項），只讀不改 |
 | GitHub | CI（含探針 PR）、PR 上的 Codex 自動審查（不取代 L2） |
 
@@ -46,7 +46,7 @@ D-208 第 8 點：路徑搬動與工具調整分開 commit。每個 commit 都�
    - 表是工具的新相依：`tools/tests/hooks.test.ts` 的 `COPIED` 改成「追蹤的 `tools/*.ts`、`*.mjs`、`*.json` 全部」（不再手列，之後新增的工具也照樣換成要驗的版本），`tools/tests/quality.test.ts` 三處複製工具的地方也帶上表。
    - `tools/check-plugin-imports.ts` 改名 `check-app-imports.ts`（測試、`SHARED_CHECKS`、`package.json` 的 script 跟著改），規則照舊。
    - Cards 的資料夾一律取磁碟上的真實大小寫（§3 第 6 點）。
-2. **搬家**（一個 commit）：先 `mkdir apps`（沒有這個資料夾時 `git mv` 會失敗），確認沒有程序的工作目錄在 `plugins/` 底下，再 `git mv plugins/cards apps/Cards`、`git mv plugins/capture apps/Capture`、`git mv plugins/mindboard apps/Mindboard`，加上讓這個 commit 的 hook 過得了的最少修改：§2 的路徑常數、§3 的表、`.gitignore`、`check.yml`、`progress-board.yml`、`cloud-setup.mjs` 與它們的測試、`experiments/` 的程式與設定裡的路徑、§4 的連結（腳本）。commit 之前在新位置 `npm ci`（`apps/Cards/`；`tools/` 若改了相依也重裝），hook 的副本借得到 `node_modules`。這個 commit 單獨推一個探針分支，看 Linux 的 CI 七個 job（同第二步驗收第 13 項）。
+2. **搬家**（一個 commit）：先 `mkdir apps`（沒有這個資料夾時 `git mv` 會失敗），確認沒有程序的工作目錄在 `plugins/` 底下，再 `git mv plugins/cards apps/Cards`、`git mv plugins/capture apps/Capture`、`git mv plugins/mindboard apps/Mindboard`，加上讓這個 commit 的 hook 過得了的最少修改：§2 的路徑常數、§3 的表、`.gitignore`、`check.yml`、`progress-board.yml`、`cloud-setup.mjs` 與它們的測試、`experiments/` 的程式與設定裡的路徑、§4 的連結（腳本）。搬完刪掉留在磁碟上的空 `plugins/` 資料夾（git 不追蹤空資料夾，`git mv` 之後它還在）。commit 之前在新位置 `npm ci`（`apps/Cards/`；`tools/` 若改了相依也重裝），hook 的副本借得到 `node_modules`。表上 Portal 那一列（`portal → apps/Portal`，只有文件）在這個 commit 加。這個 commit 單獨推一個探針分支，看 Linux 的 CI 七個 job（同第二步驗收第 13 項）。
 3. **防線**：§3 第 1 點的兩個測試、Portal 只有文件的規則、第 2～4 點的機械檢查、例外表與它們的測試。
 4. **現行文件**：§4 的文字。
 
@@ -64,12 +64,12 @@ D-208 第 8 點：路徑搬動與工具調整分開 commit。每個 commit 都�
 | `tools/ci-gate.ts`、`tools/eslint.config.js` | 註解 |
 | `tools/tests/` | `check-docs`、`dispatch`、`hooks`、`plugin-imports`（改名 `app-imports`）、`ci-gate`、`roadmap-board`、`quality` 的路徑與預期訊息，含跳脫過的 `plugins\/…`；暫存 repo 建資料夾的地方（例如 `hooks.test.ts` 的 `join(repo, 'plugins', plugin)`）用 §3 的表，不用小寫代號組；`hooks.test.ts` 的 `COPIED`、`quality.test.ts` 複製工具的三處見 §1 第 1 點 |
 | `.github/workflows/check.yml` | `working-directory`、`cache-dependency-path`（job 的 id 照舊小寫） |
-| `.github/workflows/progress-board.yml` | `paths` 的 `plugins/*/docs/…` |
+| `.github/workflows/progress-board.yml` | `paths` 的 `plugins/*/docs/…`；加上表所在的檔（只改表時白板也重產） |
 | `.claude/hooks/cloud-setup.mjs` | `DIRS`；清單測試 |
 | `.gitignore` | `/plugins/cards/main.js`、`/plugins/cards/styles.css` |
 | `apps/Cards/src/core/ai/rules.ts` | 5 個規則檔路徑（`apps/Cards/docs/card-rules/…`）。路徑不進嵌入內容與雜湊（`tools/build.mjs` 的 `embedRules` 只讀檔），`embedRules()` 的結果要和改名前 `deepEqual`（〈驗收〉第 4 項）。但 `RULE_SUBJECTS` 是執行時的資料表（`src/obsidian/ai-cards.ts`、`deepen.ts` import），路徑字串會進 `main.js`；它在執行時只用在 `ruleText` 的錯誤訊息（`rules.ts:54-59`，建置時才呼叫），所以 §5 第 1 項換回舊字串再比 |
-| `apps/Cards/tools/` | `git.ts`（§1 第 1 點）、`build.mjs`（`sources` 的基準取真實大小寫，§3 第 6 點）、`cli-path.ts` 的註解與說明；`npm --prefix plugins/cards` 的用法說明 |
-| `apps/Cards/tests/` | `plugin-root`、`compare-versions`、`cli-path`、`build`、`pick-old-version`、`ai-rules`、`ai-add-old-version`、`helpers/layout.ts` 的路徑與註解（`layout.ts` 的 `CARDS_DIR` 取真實大小寫，§3 第 6 點）。註解寫現況的改；寫歷史的（「搬家前在根目錄」這類）留著，那個檔進 §3 第 3 點的例外表 |
+| `apps/Cards/tools/` | `git.ts`（§1 第 1 點）、`build.mjs`（`root` 取真實大小寫，§3 第 6 點）、`cli-path.ts` 的註解與說明；`npm --prefix plugins/cards` 的用法說明 |
+| `apps/Cards/tests/` | `plugin-root`、`compare-versions`、`cli-path`、`build`、`pick-old-version`、`ai-rules`、`ai-add-old-version`、`helpers/layout.ts` 的路徑與註解（`layout.ts`、`plugin-root.test.ts` 的 Cards 根取真實大小寫，§3 第 6 點）。註解寫現況的改；寫歷史的（「搬家前在根目錄」這類）留著，那個檔進 §3 第 3 點的例外表 |
 | `experiments/` | `t4/` 的設定 JSON 與腳本（含 `screen.mjs` 給 git 的 pathspec）、`source-reading/`、`tools/deepen-threshold.ts` 裡寫到 Cards 規則檔或程式的路徑；`tools/move-links.test.mjs` 的範例照舊（它測的是第二步的搬法）。`experiments/plugin/` 的程式只有 vault 路徑，不改 |
 
 建置的對照表（`main.js.map`）的 `sources` 從 `plugins/cards/…` 變成 `apps/Cards/…`；舊版的對照表照它當時的路徑，定位錯誤時用的是對照表裡的 `sourcesContent`，不受影響（開工時讀 D-155 的定位工具確認，結果寫進〈平台事實〉）。
@@ -84,15 +84,17 @@ Windows 不分大小寫、Linux 分：在 Windows 寫成 `apps/cards` 本機照�
    - **`cloud-setup.mjs` 的清單**是表上有程式的列（不含 Portal），和 `check.yml` 每個 job 安裝的資料夾相同（`cloud-setup.test.ts` 照舊比這兩份），另加一個測試比它和表上有程式的列相同。
 2. **擋 `plugins/` 再出現**：追蹤的檔路徑第一段不分大小寫是 `plugins` 或 `apps`、卻不是恰好 `apps` 就報錯（`plugins/…`、`Apps/…`、`APPS/…` 都擋），`plugins/` 的訊息寫「改名後放 `apps/<軟體>/`（D-218）」。
 3. **擋大小寫不符的寫死路徑**：掃**追蹤的文字檔全部**，扣掉逐一列出的紀錄（`docs/decisions.md`、`docs/tasks/`、`docs/Claude Codex Discussion/`、`docs/archive/`、`apps/*/docs/tasks/`、`apps/*/docs/Claude Codex Discussion/`、`apps/*/docs/archive/`）與下面的例外檔：
-   - `apps` 這一段與後面的名稱都不分大小寫地找（`apps/cards`、`Apps/Cards`、`apps\Cards`、`blob/main/apps/cards` 都找得到），找到的整段不恰好等於表上的寫法就報錯；
+   - 比對前先把 `\/`、`\\`、`\` 都當成 `/`、`\.` 當成 `.`（正規式跳脫與 Windows 路徑一起處理，下面兩條也用同一個正規化）；再不分大小寫地找 `apps/<表上的名稱>`（`apps/cards`、`Apps/Cards`、`apps\Cards`、`apps\/cards`、`blob/main/apps/cards` 都找得到），`apps` 與名稱兩段不恰好等於表上的寫法就報錯。只認表上的名稱：`apps/` 後面接的不是表上名稱的（`apps/<軟體>/`、`apps/*/docs/`、`apps\/([^/]+)`、測試的 `apps/Other/a.ts`）不歸這條管，由第 1 點「每個追蹤的資料夾都在表上」管；
    - Markdown 以外的檔寫死 `plugins/(cards|capture|mindboard)` 或 `plugins\/`（不分大小寫）報錯；`plugins/essence-`、`.obsidian/plugins`、`community-plugins` 不算。Markdown 不查這條：已完成的 plans 與 backlog 舊列的反引號是紀錄（D-218 第 5 點），連結由 check-docs 擋（舊路徑找不到檔），現行文件的文字由〈驗收〉第 5 項在合併前查；
-   - 表所在的檔以外，用字串組資料夾的（`` `apps/${ ``、`'apps'`、`"apps"` 當成路徑的一段）報錯，要改成查表。
-   - **例外表**分兩類，逐檔列在檢查裡（不用資料夾萬用字元），每列寫理由；表上的檔不存在或已經沒有它被允許的寫法就報錯，例外才不會越積越多：
+   - 表所在的檔以外，用字串組資料夾的（`` `apps/${ ``、`'apps'`、`"apps"`、`'apps/'`）報錯。`'apps/'` 這個前綴由表所在的檔匯出，分派表第 5 條與檢查都用它。改法分三種：從代號找資料夾的改成查表；資料夾名本來就是從追蹤的路徑抓出來的（`check-app-imports.ts` 的 `` `plugins/${plugin}` ``、`inside(target, 'plugins')`，`check-docs.ts:38` 的 backlog 路徑）改成整段抓前綴（例如 `/^(apps\/[^/]+)\//`），不拆開再組；`apps/<軟體>/` 自己的程式不能 import `tools/` 的表（軟體邊界），寫整段字面（例如 `cli-path.test.ts:32` 的 `join(top, 'plugins', 'cards')` 改成 `join(top, 'apps/Cards')`）。
+   - **例外表**分三類，逐檔列在檢查裡（不用資料夾萬用字元），每列寫理由；表上的檔不存在或已經沒有它被允許的寫法就報錯，例外才不會越積越多：
      - **歷史路徑**（跨版本的工具要認得改名前的外掛根，D-218〈代價〉）：`apps/Cards/tools/git.ts`（`MANIFESTS`）、`apps/Cards/tests/plugin-root.test.ts`、`compare-versions.test.ts`、`ai-add-old-version.test.ts`、`pick-old-version.test.ts`、`build.test.ts`、`helpers/layout.ts`（後四個只在寫歷史的註解）、`tools/tests/ci-gate.test.ts`（第二步「搬家前開的分支」的情境）、`experiments/tools/move-links.mjs` 與 `move-links.test.mjs`（第二步搬家的範例）。施工時用〈驗收〉第 5 項的寬 pattern 確認，多的或少的照實改這張表。
-     - **故意寫錯的樣本**（防線自己的測試）：`apps/Cards/tests/plugin-root.test.ts`（`apps/cards/`）、`tools/tests/check-app-imports.test.ts`、`tools/tests/dispatch.test.ts`（驗收第 7 項的 `plugins/cards/a.ts`）、`tools/tests/check-docs.test.ts`（驗收第 8 項的 Markdown 樣本）。
+     - **故意寫錯的樣本**（防線自己的測試）：`apps/Cards/tests/plugin-root.test.ts`（`apps/cards/`）、`tools/tests/app-imports.test.ts`（驗收第 7、17 項的 `plugins/cards/a.ts`、`Apps/Cards/x.md` 等）、`tools/tests/check-docs.test.ts`（驗收第 8 項的 Markdown 樣本）。樣本在 Windows 用 `git add` 做不出來（索引裡已有的資料夾會被對齊大小寫），用 `git update-index --add --cacheinfo` 放，或直接把路徑清單餵給檢查的函式，測試旁寫這個理由。`dispatch.test.ts` 不在表上：它的 `plugins` 全部換成新路徑。
+     - **檢查本身**：`tools/check-app-imports.ts`（它要寫出 `plugins\/`、`plugins/(cards|capture|mindboard)` 這些 pattern）。
+   - 現行文件（`architecture.md` §9、`quality.md`）說明這條防線時不舉寫錯的例子；要舉就進例外表。
 4. **TypeScript 的 import**：`apps/Cards/tsconfig.json`、`tools/tsconfig.json` 明寫 `"forceConsistentCasingInFileNames": true`（TypeScript 5.0 起預設就是 true，現在裝的是 5.9.3，明寫是為了不靠預設）；Windows 上的探針見〈平台事實〉。沒被型別檢查的 `.mjs` 在 Windows 用 Node 直接跑照樣成功，只靠 Linux 的 CI 與第 3 點。
 5. **Markdown 連結**：`check-docs` 照 `git ls-files` 比對，大小寫不同算找不到（Windows 上成立，見〈平台事實〉）；行內程式碼裡的指令（`npm --prefix apps/cards`）與指到這個 repo 的網址由第 3 點擋。改連結的腳本會把 14 個只差大小寫的連結改對（例如 `apps/Cards/docs/card-rules/trials.md` 裡的 `../../../capture/docs/backlog.md` 改成 `../../../Capture/…`），驗收時看到它們。
-6. **工作目錄的大小寫**：Windows 上打 `npm --prefix apps/cards …` 或 `cd apps/cards`，`process.cwd()`、`import.meta.url` 都照打的字，git 卻回 `apps/Cards/`。`apps/Cards/tests/helpers/layout.ts` 的 `CARDS_DIR` 與 `tools/build.mjs` 寫 `main.js.map` 的 `sources` 時，Cards 的資料夾先過 `realpathSync.native`（回磁碟上的真實大小寫）；測試從小寫的工作目錄跑一次，結果和正確大小寫相同（只在 Windows，Linux 那個資料夾不存在）。
+6. **工作目錄的大小寫**：Windows 上打 `npm --prefix apps/cards …` 或 `cd apps/cards`，`process.cwd()`、`import.meta.url` 都照打的字，git 卻回 `apps/Cards/`。Cards 的資料夾一進來就過 `realpathSync.native`（回磁碟上的真實大小寫；非 native 的 `realpathSync` 照舊回打的字）：`tools/build.mjs` 的 `root`、`tests/helpers/layout.ts` 的 `cards`（匯出一個真實大小寫的 Cards 根）、`tests/plugin-root.test.ts:66` 的 `cards`（改用 `layout.ts` 匯出的那個）。只轉 `path.relative` 的基準沒用：Windows 上它比對不分大小寫，回傳的尾段取自第二個參數。測試從小寫的工作目錄跑一次，結果和正確大小寫相同（只在 Windows，Linux 那個資料夾不存在）。
 7. **`.gitignore`**：Windows 上 `/apps/cards/main.js` 也會命中 `apps/Cards/main.js`，Linux 不會；第 3 點掃得到 `.gitignore`，〈驗收〉第 16 項在 Linux 建置後看 `git status`。
 
 ## §4 連結與文件
@@ -122,10 +124,12 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 ## 合併後（本機，D-218〈代價〉）
 
 1. **主資料夾**：先確認沒有 session 在 `plugins/` 底下跑東西，`git pull` 到合併後的 `main`。留下的未追蹤物（`plugins/cards/node_modules/`，以及改名後不再被忽略的 `plugins/cards/main.js`、`styles.css`）照第二步的做法搬到 `D:\程式開發\Essence Cards Backup` 底下一個註明日期的資料夾（先問使用者），之後 `git status` 是空的；`apps/Cards/`、`tools/` 各 `npm ci`。
-2. **其他 worktree**：還開著的 worktree 合進新的 `main` 後，在 `apps/Cards/` `npm ci`；`plugins/` 底下剩的未追蹤物同上。
-3. **本機記憶與設定**：記憶裡的 `plugins/…` 改成 `apps/<軟體>/…`；核准的指令（`npm --prefix plugins/cards …`）與 Codex 的設定裡的路徑，列出來請使用者改（是使用者的設定，Claude 不自己改）。
-4. **通知**：告訴使用者可以請「網頁版同步 2」討論串開始寫 `apps/Portal/docs/`；提醒第一份文件要照 `apps/Portal` 的大小寫 `git add`（§3 第 1 點）。
-5. 〈驗收〉第 10 項合併後的那一次、第 11 項的 Pages。
+   未追蹤物搬走後，刪掉空的 `plugins/` 資料夾（D-218 的理由就是不讓 AI 看到 `plugins/` 照外掛的規矩做）。
+2. **其他 worktree**：還開著的 worktree 合進新的 `main` 後，在 `apps/Cards/` `npm ci`；`plugins/` 底下剩的未追蹤物與空資料夾同上。施工用的 `D:\程式開發\Essence-apps`：先唯讀掃有沒有 junction 與連結，沒有就用不加 `--force` 的 `git worktree remove`。
+3. **探針**：§1 第 2 點與驗收第 11 項的探針分支、draft PR 關掉、刪掉。
+4. **本機記憶與設定**：記憶裡的 `plugins/…` 改成 `apps/<軟體>/…`；核准的指令（`npm --prefix plugins/cards …`）與 Codex 的設定裡的路徑，列出來請使用者改（是使用者的設定，Claude 不自己改）。
+5. **通知**：告訴使用者可以請「網頁版同步 2」討論串開始寫 `apps/Portal/docs/`；提醒第一份文件要照 `apps/Portal` 的大小寫 `git add`（§3 第 1 點）。
+6. 〈驗收〉第 10 項合併後的那一次、第 11 項的 Pages。
 
 ## 驗收
 
@@ -135,9 +139,9 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 2. **都是改名**：`git diff -M --name-status <搬家>^ <搬家>` 裡 `plugins/` 底下的每個檔都是一行 `R`，沒有 D 加 A；`git diff -M <搬家>^ <head> -- plugins/cards/src apps/Cards/src` 除了改名沒有內容差異（產品程式一行都沒改，§2 的 `rules.ts` 例外：只有路徑字串）。在有完整歷史的 checkout，抽每個資料夾至少 20 個檔跑 `git log --follow`，接得到 `plugins/` 的舊路徑與第二步之前的根目錄路徑。
 3. **檢查都過、不是空跑**：`apps/Cards/` 的 `npm run check`、`npm run build`，`tools/` 的 `npm run check` 與 `npm run self-check` 都通過，測試數和 `<基準>` 相同或多（多的是這次加的，列出名字）。
 4. **送出的規則不變**：`embedRules()` 在 `<基準>` 與 `<head>` 的結果 `deepEqual`；`ai-rules.test.ts` 挑到的規則檔數大於 0。
-5. **沒有殘留**：改連結的腳本 `--check` 是 0；`git grep -n -i "plugins"`（寬 pattern，跳脫過的正規式、`join(…, 'plugins')`、萬用字元都會出現）扣掉 vault 與 Obsidian 的寫法（`plugins/essence-`、`.obsidian/plugins`、`community-plugins`、esbuild 的 `plugins:`、`app.plugins`、Obsidian 社群外掛的網址）、§4 列為紀錄的檔（決定、`docs/tasks/`、討論稿、archive、已完成的 plans）與 §3 第 3 點的例外檔，剩下是 0；扣掉的每一類各數幾行附在〈結果〉。`node tools/check-docs.ts` 通過。
+5. **沒有殘留**：改連結的腳本 `--check` 是 0；`git grep -n -i -E` 找 `plugins` 後面接 `/`、`\/`、引號或 `*` 的（路徑的寫法：跳脫過的正規式、`join(…, 'plugins')`、萬用字元都會出現；`PluginSettingTab`、變數 `plugins` 這類識別字不進來）先用 §3 第 3 點的正規化，再扣掉 vault 與 Obsidian 的寫法（`plugins/essence-`、`.obsidian/plugins`、`community-plugins`、esbuild 的 `plugins:`、`app.plugins`、Obsidian 社群外掛的網址）、§4 列為紀錄的檔（決定、`docs/tasks/`、討論稿、archive、已完成的 plans）、§3 第 3 點的例外檔，以及現行文件裡寫歷史的列（roadmap、backlog 的已完成與這件自己的列、`token-usage.md`、`architecture.md` 寫第二步經過的句子，逐列附在〈結果〉），剩下是 0；扣掉的每一類各數幾行附在〈結果〉。`tools/dispatch.ts` 的識別字 `PLUGINS` 改成 `APPS`。`node tools/check-docs.ts` 通過。
 6. **跨版本的外掛根**：§1 第 1 點的測試通過；讀 `v0.2.0`～`v0.5.0` 的舊版測試照常通過；§5 第 3 項跑完。
-7. **分派表**：`tools/tests/dispatch.test.ts` 把第一步、第二步的每一例換成新路徑照樣通過，另加：只改 `apps/Capture/a.ts` → 只有 Capture；新增 `apps/Portal/docs/backlog.md` → 只有共用檢查；新增 `apps/Other/a.ts`（表上沒有）→ 全部。`check-app-imports.test.ts`：新增 `apps/Portal/package.json`（表上還標只有文件）→ 報錯；新增 `apps/Other/a.ts` → 報「不在表上」；新增 `plugins/cards/a.ts` → §3 第 2 點擋下；索引裡是 `apps/portal/…` → 報錯、訊息有兩段式的改法。
+7. **分派表**：`tools/tests/dispatch.test.ts` 把第一步、第二步的每一例換成新路徑照樣通過，另加：只改 `apps/Capture/a.ts` → 只有 Capture；新增 `apps/Portal/docs/backlog.md` → 只有共用檢查；新增 `apps/Other/a.ts`（表上沒有）→ 全部。`tools/tests/app-imports.test.ts`：新增 `apps/Portal/package.json`（表上還標只有文件）→ 報錯；新增 `apps/Other/a.ts` → 報「不在表上」；新增 `plugins/cards/a.ts` → §3 第 2 點擋下；索引裡是 `apps/portal/…` → 報錯、訊息有兩段式的改法。
 8. **大小寫的防線**（在暫存 repo 或 stage 後再拿掉，樣本不 commit）：`tools/` 裡寫 `'apps/cards/manifest.json'`、`check.yml` 寫 `working-directory: apps/cards`、Markdown 連到 `../apps/cards/AGENTS.md`、`apps/Cards/src/` 裡 import 大小寫不對的檔，四種各自被擋下（前兩種是 §3 第 3 點、第三種是 check-docs、第四種是 TypeScript）；在 **Windows** 本機也都擋下。
 9. **外掛邊界**：第二步驗收 A7 的兩例換成新路徑照樣擋下，再加 `apps/Capture/` 的程式 import `../Cards/src/core/files.ts`。
 10. **雲端**：合併前在這個分支、合併後在 `main` 各開一個新的雲端 session（只讀），開場訊息：`tools`、`apps/Cards` 是「`npm ci` 完成」，`apps/Capture`、`apps/Mindboard` 是「沒有相依，跳過」，Node 24、`core.hooksPath` 是 `.githooks`。兩次的訊息寫進〈結果〉。
@@ -146,7 +150,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 13. **兩個平台**：Windows 本機跑第 3、8、9 項；Linux 由 CI 跑第 3 項。只在一邊跑的測試寫明。
 14. §5 的三項都做了，結果寫進〈結果〉。
 15. 合併前 L2：新的 Fable 5.2 high 子代理（見〈本機或雲端〉的審查者），請求照 code-quality 的 `review.md` 寫在 `docs/tasks/rename-plugins-to-apps-review.md`。
-16. **Linux 建置後沒有多出的檔**：CI 的 cards job（或雲端 session）在 `apps/Cards/` `npm run build` 之後 `git status --porcelain` 是空的（`.gitignore` 的大小寫在 Linux 才分得出來，§3 第 7 點）。
+16. **建置產物照 Linux 的規則被忽略**：常駐測試（兩個平台都跑）對真的 `.gitignore` 跑 `git -c core.ignorecase=false check-ignore -q apps/Cards/main.js`（`styles.css` 同），之後 `.gitignore` 寫錯大小寫 Windows 本機就會紅；CI 的 cards job 在 `apps/Cards/` `npm run build` 之後 `git status --porcelain` 是空的（§3 第 7 點）。
 17. **大小寫的防線也擋父資料夾與組字串**（暫存 repo）：追蹤 `Apps/Cards/x.md`、`plugins/cards/a.ts` 各被 §3 第 2 點擋下；`tools/` 的程式寫 `` `apps/${code}` ``、文件的行內程式碼寫 `npm --prefix apps/cards run check` 各被 §3 第 3 點擋下；`apps/Portal/src/a.ts`（表上只有文件）被 §3 第 1 點擋下；例外表上的檔拿掉允許的寫法、或被刪 → 報錯。
 
 ## 平台事實

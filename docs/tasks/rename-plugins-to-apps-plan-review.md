@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`：開工前查核（給 Fable 5.2 high）
 
-狀態：第 2 輪待審（第 1 輪的發現都改進任務說明）
+狀態：已查核（兩輪後雙方一致，第 2 輪沒有擋開工的發現；兩輪的發現都改進任務說明）
 
 遵守 repo 根目錄的 `AGENTS.md`。Codex 額度用完（約 2026-11-23 重置），使用者 2026-11-21 指定這件的查核由 **Fable 5.2 high** 做：本機 session 每一輪開一個沒參與實作的新子代理，報告原文附在這份檔案的那一輪底下，Claude 核對後改任務說明（[任務說明〈本機或雲端〉](rename-plugins-to-apps.md#本機或雲端qualitymd本機或雲端)）。
 
@@ -214,4 +214,114 @@
 2. 修改帶出的新問題，特別是 §3 第 3 點新的掃描範圍：會不會誤擋現行的合法寫法（請在暫存 clone 用寬 pattern 估一下，搬家並跑完改連結的腳本之後，扣掉紀錄與例外檔，剩下會被報的有哪些）、例外表的兩類是否列齊；§3 第 1 點「只有文件」的判斷與 `check-app-imports` 的分工；〈合併後〉有沒有漏。
 3. 不重審第 1 輪已同意、沒改的部分。
 
-（報告與 Claude 的回應寫在這裡）
+### 報告原文
+
+- 待審 commit：`dbd1632878acd8a95358e1a82e76aeb6dccaa0ac`（和第 1 輪的 `4dff0bd` 比，改了任務說明、`docs/decisions.md` 的 D-218 第 5 點與審查請求檔）。審查者：Fable 5.2 high 子代理（2026-11-21），沒參與實作，也沒看過第 1 輪的過程。
+- 審查範圍：只做〈第 2 輪〉列的三件事。讀了任務說明全文、`git diff 4dff0bd dbd1632`、D-218 與 D-208，以及修正會動到的程式（`tools/check-plugin-imports.ts`、`dispatch.ts`、`hooks.ts`、`tests/hooks.test.ts`、`tests/quality.test.ts`、`roadmap-board.ts`、`check-docs.ts`、`check.yml`、`progress-board.yml`、`cloud-setup.mjs`、Cards 的 `tools/build.mjs`、`tests/helpers/layout.ts`、`tests/plugin-root.test.ts`、`src/core/ai/rules.ts`）。
+- 主資料夾沒有改任何檔（結束時 `git status --short` 0 行、HEAD 仍是 `dbd1632`）。重現都在 session 暫存資料夾的 `review2\` 底下：暫存 clone `c1`（`core.autocrlf=false`，`tools/` 用 `npm ci --ignore-scripts`）、探針 repo `p1`，以及三支只讀的估算腳本 `scan.mjs`、`wide.mjs`、`sim.mjs`。
+- 結論：沒有擋開工的項目。5 項應該改（R15～R19，都是把規格再寫清楚一兩句，不改做法），4 項可以不改。第 1 輪回應表的 14 項，任務說明都照改了；其中 R10 少一處、R2 與 R5 的新寫法各帶出一個照字面做不到或沒定義的地方。
+
+#### 跑了什麼
+
+- 暫存 clone 上 `mkdir apps`、三次 `git mv`、跑改連結的腳本：614 個追蹤檔都到 `apps/`、改 715 個連結、再跑 `--check` 是 0；只差大小寫的連結 14 個（和 §3 第 5 點相符）。搬完之後空的 `plugins/` 資料夾還留在磁碟上。
+- `scan.mjs`：照 §3 第 3 點的字面掃搬家後、還沒改程式的樹。`sim.mjs`：在記憶體裡把非紀錄、非例外檔的 `plugins/<軟體>` 機械式換成 `apps/<軟體>`，再掃一次，估「施工完還會被報的」。`wide.mjs`：驗收第 5 項的寬 pattern 扣掉各類之後剩什麼。
+- Windows 探針：小寫工作目錄的 `realpathSync.native`、`path.relative`、`git rev-parse`；索引裡已有 `apps/Cards/` 時 `git add -- Apps/Cards/x.md` 與 `git update-index --add --cacheinfo`。
+
+#### 第 1 件：回應表逐項核對
+
+| 項目 | 任務說明有沒有照改 | 改得對不對 |
+|---|---|---|
+| R1 | 有 | 對。`RuleFile.path` 只出現在 `rules.ts:54-59` 的錯誤訊息，`ruleText` 只有 `build.mjs:91` 呼叫，`src/` 其他地方沒有 `card-rules` 或 `plugins/cards` 字串，`buildPlugin` 的對照表一律外部檔，所以 dev 版也是恰好 5 個 |
+| R2 | 有 | 方向對；「剩下是 0」照字面做不到，見 R17 |
+| R3 | 有 | 對。`COPIED` 改成追蹤的 `tools/*.ts`、`*.mjs`、`*.json` 之後新相依都會換成要驗的版本；`quality.test.ts:73,255,332` 三處是手列，帶上表即可 |
+| R4 | 有 | 對。現況：`claude/workflow-impl-68afda` 領先 `main` 24 個 commit（第 1 輪時 20 個），還在動 |
+| R5 | 有 | 大方向對；新的掃描有三處沒定義或會報到自己，見 R15、R16 |
+| R6 | 有 | 「歷史路徑」那一類對照程式是齊的；「故意寫錯的樣本」少檢查本身，另有兩處文字對不上，見 R16、R21 |
+| R7 | 有 | 對。分派表只決定「Portal 只跑共用檢查」，擋法由每次都跑的 `check-app-imports.ts` 報；它用 `git ls-files -s` 與一次 `git cat-file --batch` 讀索引，掃全部 936 個追蹤檔不會慢 |
+| R8 | 有 | 對，漏三件小事，見 R19 |
+| R9 | 有 | 對。`roadmap-board.ts:170-171` 的前綴取資料夾名首字大寫，改名後仍是「Cards｜」 |
+| R10 | 有 | `realpathSync.native` 在 Windows 回真實大小寫，已重現；但第 1 輪點名會假失敗的那一處沒列進去，見 R18 |
+| R11 | 有 | 對。`check.yml` 是七個 job |
+| R12 | 有 | 對 |
+| R13 | 有 | 對 |
+| R14 | 不改 | 同意；§3 第 3 點新的規則已經會找到 `blob/main/apps/cards` |
+
+#### 第 2 件：新的掃描範圍估出來的數字（已重現）
+
+- 搬家並跑完腳本、還沒改程式時，「Markdown 以外寫死 `plugins/<軟體>` 或 `plugins\/`」命中 46 檔 311 行。13 個例外檔占 204 行；其餘 33 檔 107 行全部是 §2 已經列要改的，沒有一行是必須留下的。
+- 例外表的「歷史路徑」一類對照現況是齊的；後四個的註解確實在寫歷史（例如 `ai-add-old-version.test.ts:39`）。
+- 機械式改名之後照字面再掃：Markdown 0 行被報；大小寫那條，分隔符號讀成「恰好一個」是 0 行，讀成「一個以上」會報 2 檔 5 行（12 處）大小寫正確的跳脫正規式（R15）；`plugins\/` 那條：2 檔 2 行 vault 路徑的跳脫正規式被誤報（R17 第 3 點）；字串組那條：6 檔 10 行，4 行照規格改成查表（`dispatch.ts:25`、`roadmap-board.ts:327`、`hooks.test.ts:100-101`），另外 3 檔 6 行「查表」不是對的改法（R16）。
+
+#### 應該改
+
+**R15（R5 修正引入）　§3 第 3 點第 1 條的分隔符號與「名稱」的範圍沒有定義**
+
+- 軸：規格。觸發條件：測試與工具裡的正規式把斜線跳脫，改名後是 `apps\/Mindboard`、`apps\/Cards`。
+- 預期／實際：大小寫正確的要放行、大小寫錯的要擋。照字面有兩種讀法，都不對：分隔符號是「一個以上的 `/` 或 `\`」時，`apps\/Mindboard` 不恰好等於 `apps/Mindboard`，被報（`tools/tests/hooks.test.ts:172`、`tools/tests/roadmap-board.test.ts:133,134,160,167`，都不在例外表）；分隔符號是「恰好一個」時，`/^apps\/cards\//` 這種大小寫錯的跳脫正規式整個溜過。
+- 另一個沒寫的：「名稱」是只認表上的四個，還是 `apps/` 後面任何字。讀成後者，`apps/<軟體>/`、`apps/*/docs/…`、`apps\/([^/]+)`、測試的 `apps/Other/a.ts` 都會被報（約 40 處）。
+- 影響：第 3 個 commit 一加檢查就要臨場決定；選錯讀法會留下安靜的洞。發生機率：一定碰到。證據：已重現（`sim.mjs` 兩種讀法各跑一次）。
+- 建議處理：比對前先把 `\/`、`\\`、`\` 都當成 `/`，再只比 `apps` 與名稱兩段的大小寫；明寫只認表上的名稱，`apps/` 後面不是表上名稱的由第 1 點管。
+
+**R16（R5、R6 修正引入）　檢查會報到自己；「要改成查表」對三個檔不適用；字串組的寫法漏一種**
+
+1. 檢查自己（靜態推斷）：`tools/check-app-imports.ts` 要寫出 `plugins\/`、`plugins/(cards|capture|mindboard)` 這些 pattern，自己就是被擋的檔；例外表只列了它的測試。
+2. 通用規則不是「代號對資料夾」（已重現）：`check-plugin-imports.ts:46,48,60,103` 的 `` `plugins/${plugin}` `` 與 `inside(target, 'plugins')`、`check-docs.ts:38` 的 `` `plugins/${plugin}/docs/backlog.md` ``，`plugin` 是從追蹤的路徑抓出來的實際資料夾名，大小寫本來就對；改成查表不對，該直接抓整段前綴，例如 `/^(apps\/[^/]+)\//`。`plugins/cards/tests/cli-path.test.ts:32` 的 `join(top, 'plugins', 'cards')`：Cards 的程式不能 import `tools/` 的表，只能寫整段字面 `'apps/Cards'`。
+3. 漏一種組法（靜態推斷）：`'apps/' + code` 不在列；但 `'apps/'` 又是分派表第 5 條 `under('apps/')` 的合法寫法。
+- 影響：第 1、2 件在第 3 個 commit 大聲失敗；第 3 件是安靜的洞。發生機率：第 1、2 件一定碰到；第 3 件低。
+- 建議處理：例外表加第三類「檢查本身」；第 3 條補「資料夾名來自追蹤的路徑時，抓整段前綴、不重組；`apps/<軟體>/` 自己的程式寫整段字面」；`'apps/'` 前綴只准出現在表所在的檔，由它匯出。
+
+**R17（R2 修正引入）　驗收第 5 項「剩下是 0」照字面做不到**
+
+- 實際（已重現，`wide.mjs`，搬家後的樹）：紀錄 891 行、已完成的 plans 3 行、例外檔 218 行、整行只有 vault 寫法的 75 行、§2 與 §4 要改的路徑寫法 55 檔 191 行。之後還剩三種清單沒列、也不該改的：
+  1. 不是路徑的識別字，10 檔 18 行：`PluginSettingTab`（`src/obsidian/settings.ts:1,124`、`tests/helpers/obsidian.ts:363,368`、`experiments/plugin/src/main.ts:3,88` 等）；變數 `plugins`（`dev-ids.ts:502,508,509`、`dev.ts:200,202`、`roadmap-board.ts:328`）；`tools/dispatch.ts:13,14,16` 的 `PLUGINS`；`experiments/tools/rename-local-folder.test.mjs:44` 的 Codex 設定樣本 `[plugins."x"]`。
+  2. 現行文件裡寫歷史的列，至少 8 行、5 個檔：`docs/roadmap.md:20` 與 `docs/backlog.md:53`（這件自己）、`docs/backlog.md:51,55`、Cards 的 `docs/roadmap.md:56,57`（〈已完成〉的第二步 A、B）、`docs/agents/token-usage.md:13`、`docs/architecture.md:83`。
+  3. 跳脫過的 vault 寫法，2 行：`plugins/cards/tests/backup-take.test.ts:90`、`backup.test.ts:150` 的 `\.obsidian\/plugins\/essence-cards`；排除字樣都是沒跳脫的，§3 第 3 點第 2 條的排除字樣同樣對不到。
+- 發生機率：一定發生。
+- 建議處理：pattern 收成路徑的寫法（`plugins` 後面接 `/`、`\/`、引號、`*`）；扣除清單加「現行文件裡寫歷史的列，逐列附在〈結果〉」；vault 的排除字樣比對前先把 `\/` 當成 `/`、`\.` 當成 `.`；`PLUGINS` 要不要改名，順手寫一句。
+
+**R18（延續 R10）　第 1 輪點名會假失敗的那一處沒列進修法；§2 的「sources 的基準」照字面改不到**
+
+1. `plugin-root.test.ts:66-70` 自己用 `fileURLToPath(new URL('..', import.meta.url))` 算 Cards 的資料夾，不經過 `helpers/layout.ts`；修法只列 `layout.ts` 與 `build.mjs`，這一處照舊會拿 `apps/cards` 比 `apps/Cards`（靜態推斷）。
+2. Windows 上 `path.relative` 比對時不分大小寫，回傳的尾段取自第二個參數，只把基準轉成真實大小寫沒用。已重現：在 `…\c1\apps\cards` 執行，`relative(realpathSync.native(top), <照打的字>\src\main.ts)` 回 `apps\cards\src\main.ts`；`relative(top, realpathSync.native(cwd))` 才回 `apps\Cards`。`fs.realpathSync`（非 native）仍回小寫，git 的 `--show-prefix` 回 `apps/Cards/`。
+- 發生機率：中，只在 Windows。
+- 建議處理：§3 第 6 點改成「Cards 的資料夾（`build.mjs` 的 `root`、`layout.ts` 與 `plugin-root.test.ts:66` 的 `cards`）一進來就過 `realpathSync.native`」；最好只在 `layout.ts` 匯出一個真實大小寫的 Cards 根；§2 的「`sources` 的基準」改成「`root`」。
+
+**R19（R8 修正引入）　〈合併後〉漏三件；〈停手時段〉對主資料夾的理由不再成立**
+
+1. 空的 `plugins/` 資料夾（已重現）：施工的 worktree 搬完就有；主資料夾與其他 worktree 拉下來、搬走 `node_modules` 之後也會剩。應該列一步刪掉。
+2. 施工用的 worktree `D:\程式開發\Essence-apps` 怎麼收：合併後移除，先唯讀掃有沒有連結，用不加 `--force` 的 `git worktree remove`。
+3. 探針分支與 draft PR 合併後關掉、刪掉。
+- 〈停手時段〉：施工移到 repo 外的 worktree 後，「不在主資料夾的 `plugins/` 底下開終端機」這個理由只對施工的 worktree 成立；主資料夾要到〈合併後〉第 1 步才需要沒有程序占著。
+- 建議處理：〈合併後〉補這三步，§1 第 2 點補「搬完刪掉空的 `plugins/`」；〈停手時段〉那句改成對施工的 worktree 說。
+
+#### 可以不改
+
+- **R20（R5 修正引入，和 R13 同類）驗收第 17、7 項的樣本在 Windows 用 `git add` 做不出來**：索引裡已有 `apps/Cards/a.md` 時，`git add -- Apps/Cards/x.md` 記成 `apps/Cards/x.md`（已重現）；`git update-index --add --cacheinfo` 可以照字放進去。測試旁寫一句即可。Windows 上平常的 `git add` 不會產生 `Apps/…`，這條防線實際擋的是 Linux。
+- **R21（R2、R6 修正引入）文字對不上**：§2 寫測試改名 `app-imports`，例外表與驗收第 7 項寫 `check-app-imports.test.ts`；例外表說 `dispatch.test.ts` 是為了驗收第 7 項的 `plugins/cards/a.ts`，但那個樣本在 `check-app-imports.test.ts`，`dispatch.test.ts` 的 `plugins` 全是要換的，這一列施工時會被自己的規則報出來；Portal 那一列哪個 commit 加沒寫。
+- **R22　驗收第 16 項是一次性的人工查**：可以改成常駐、兩個平台都跑的測試：對真的 `.gitignore` 跑 `git -c core.ignorecase=false check-ignore -q apps/Cards/main.js`。
+- **R23　其他**：`progress-board.yml` 的 `paths` 沒有表所在的檔；現行文件說明這條防線時不能舉寫錯的例子，要舉就進例外表；待驗證：Portal 的網址如果用 `/apps/cards` 這種小寫路由會被擋；待驗證：在 `D:\程式開發\Essence-apps` 開的 session 讀不讀得到專案記憶與核准的指令，讀不到就從主資料夾的 session 對那個路徑操作；新 worktree 開工前先 `npm ci`。
+
+#### 沒驗的項目與原因
+
+- `tools/` 與 Cards 的 `npm run check`、`self-check`：沒跑，這一輪只查規格。
+- R15、R17 的數字來自照規格字面寫的估算腳本，不是之後真的檢查；實作選的 pattern 不同，行數會有出入，命中的檔不會變。
+- R16 第 1、3 件、R18 第 1 件、R19 第 2、3 件、R21：靜態推斷。R18 第 2 件只重現了 `path.relative` 與 `realpathSync.native` 的行為，沒有實際從小寫工作目錄建置。
+- Linux、GitHub 的 CI 與 Pages、雲端 session、Obsidian 與 vault：沒有環境或照指示不動。`claude/workflow-impl-68afda` 合併後 §2 要重列的內容沒試合併。
+
+雙方一致可以開工：沒有擋開工的項目；R15～R19 建議開工前先補進任務說明。
+
+### Claude 的回應
+
+全部照改（R15～R23），不再送第 3 輪：第 2 輪沒有擋開工的發現，這些修改只把做法寫清楚，施工時由 L1 與合併前的 L2 涵蓋。
+
+| 項目 | 改法 |
+|---|---|
+| R15 | §3 第 3 點：比對前把 `\/`、`\\`、`\` 當成 `/`、`\.` 當成 `.`；只認表上的名稱，其他交給第 1 點 |
+| R16 | 例外表加第三類「檢查本身」（`check-app-imports.ts`）；改法分三種（查表、抓整段前綴、軟體自己的程式寫整段字面）；`'apps/'` 前綴由表所在的檔匯出，其他檔出現就報 |
+| R17 | 驗收第 5 項的 pattern 收成路徑寫法、先正規化；扣除清單加現行文件寫歷史的列（逐列附在〈結果〉）；`PLUGINS` 改成 `APPS` |
+| R18 | §3 第 6 點改成 `build.mjs` 的 `root`、`layout.ts` 匯出的 Cards 根（`plugin-root.test.ts` 也用它）一進來就過 `realpathSync.native`，寫明只轉 `path.relative` 的基準沒用；§2 改成 `root` |
+| R19 | §1 第 2 點與〈合併後〉第 1、2 步刪空的 `plugins/`；〈合併後〉加施工 worktree 的移除與探針的收尾；〈停手時段〉那句改成對施工的 worktree |
+| R20 | 例外表的樣本一類寫明用 `--cacheinfo` 或直接餵路徑清單 |
+| R21 | 測試檔名統一成 `tools/tests/app-imports.test.ts`；`dispatch.test.ts` 從例外表拿掉；Portal 那一列在搬家的 commit 加 |
+| R22 | 驗收第 16 項改成常駐測試，加上 CI 建置後的 `git status` |
+| R23 | `progress-board.yml` 的 `paths` 加表所在的檔；現行文件不舉寫錯的例子；施工 worktree 先 `npm ci`、由主資料夾的 session 操作；Portal 的路由等它的設計出來再看 |
