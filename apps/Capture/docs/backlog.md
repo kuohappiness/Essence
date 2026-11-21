@@ -14,7 +14,7 @@ Capture 的定位見 [D-076](../../../docs/decisions.md#d-076-capture-是知識�
 |---|---|
 | PDF 與圖片忠實轉錄成教材庫 | v1 範圍（[D-076](../../../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；雛形是試作場的 `experiments/t4/`（D-076 補充 2026-10-13） |
 | Capture 開工前先找現成專案（使用者 2026-10-14 提出；2026-10-28 決定放 v1，[D-130](../../../docs/decisions.md#d-130-任務分成-v1-與第二階段) 補充） | Capture 照 D-111 開工時先做：到 GitHub 搜尋現成、可以參考的專案（例如 PDF、影片、網頁轉 Markdown 的工具或 Obsidian 外掛），評估它們的做法與缺點，再優化成最好的版本；不從零開始，也不直接照搬 |
-| 在同一個 repo 的 `plugins/capture/` 開發（使用者 2026-11-17） | 寫第一行程式前照 [D-208](../../../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點建 `plugins/capture/`，這份規畫搬進 `plugins/capture/docs/`；第一個需要共同規格的任務把轉錄稿格式搬到最上層 `docs/`（第 6 點）；現有的 `Essence-Capture` repo 之後當公開 repo |
+| 在同一個 repo 的 `apps/Capture/` 開發（使用者 2026-11-17） | 寫第一行程式前照 [D-208](../../../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點建 `apps/Capture/`，這份規畫搬進 `apps/Capture/docs/`；第一個需要共同規格的任務把轉錄稿格式搬到最上層 `docs/`（第 6 點）；現有的 `Essence-Capture` repo 之後當公開 repo |
 
 ### 待決問題
 

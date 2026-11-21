@@ -18,10 +18,10 @@
 
 | 模組 | 責任 | 狀態 |
 |---|---|---|
-| Essence Cards（在本 repo 的 `plugins/cards/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 製卡、複習、檢核、排程、選用的 AI 輔助 | ✅ |
-| Essence Capture（在本 repo 的 `plugins/capture/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)；原本的 [repo](https://github.com/kuohappiness/Essence-Capture) 之後當公開 repo） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；PDF 與圖片的忠實轉錄移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上後成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
+| Essence Cards（在本 repo 的 `apps/Cards/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 製卡、複習、檢核、排程、選用的 AI 輔助 | ✅ |
+| Essence Capture（在本 repo 的 `apps/Capture/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)；原本的 [repo](https://github.com/kuohappiness/Essence-Capture) 之後當公開 repo） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；PDF 與圖片的忠實轉錄移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上後成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
 | 題庫（Cards 內的獨立模組，第二階段討論） | 計算與應用題、選擇題、考古題模擬考；題目寫在題庫筆記，和閃卡共用今日佇列、排程與複習紀錄（[D-090](decisions.md#d-090-題庫併入-cards變式題以題型排程)） | ✅ 方向；細節見[第二階段規畫](../apps/Cards/docs/plans/practice.md) |
-| Essence Mindboard（未來，尚未建立；在本 repo 的 `plugins/mindboard/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
+| Essence Mindboard（未來，尚未建立；在本 repo 的 `apps/Mindboard/` 開發，[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
 
 已確認 ✅（[D-006](decisions.md#d-006-兩個獨立外掛)、[D-008](decisions.md#d-008-學習紀錄與來源修改)、[D-009](decisions.md#d-009-一般筆記可直接使用)）：
 
@@ -78,9 +78,9 @@ v1 的材料來源 ✅（[D-032](decisions.md#d-032-v1-的材料來源)）：
 
 ## 9. repo 結構 ✅（D-208）
 
-三個外掛（Cards、Capture、Mindboard）在同一個 repo 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。最上層放三個外掛共用的東西，每個外掛在 `plugins/<外掛>/` 有自己的規則、文件與程式。各自安裝、各自可用（[D-006](decisions.md#d-006-兩個獨立外掛)），程式不互相 import（`tools/check-plugin-imports.ts` 擋）。
+三個外掛（Cards、Capture、Mindboard）在同一個 repo 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。最上層放三個外掛共用的東西，每個軟體在 `apps/<軟體>/` 有自己的規則、文件與程式（入口網站 Portal 也在這裡，D-218）。各自安裝、各自可用（[D-006](decisions.md#d-006-兩個獨立外掛)），程式不互相 import（`tools/check-app-imports.ts` 擋）。
 
-分兩步做完：第一步（2026-11，新外掛寫程式前）建好 Capture、Mindboard 的資料夾與分開檢查；第二步把 Cards 也搬進 `plugins/cards/`，分 A（程式）與 B（文件）兩次合併。
+分兩步做完：第一步（2026-11，新外掛寫程式前）建好 Capture、Mindboard 的資料夾與分開檢查；第二步把 Cards 也搬進 `plugins/cards/`，分 A（程式）與 B（文件）兩次合併。之後 `plugins/` 改名 `apps/`、每個軟體的資料夾首字大寫（[D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)）：資料夾這一層叫「軟體」，講外掛才有的事（manifest、vault 裡的安裝）照舊叫外掛。軟體代號對資料夾只寫在 `tools/apps.ts` 一張表，路徑一律照 git 追蹤的大小寫，共用檢查擋不在表上、大小寫不符的資料夾與寫死的路徑。
 
 ```text
 Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18 都改名，D-211）
@@ -94,49 +94,50 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
 ├─ experiments/                  試作場
 ├─ tools/                        共用的檢查、分派表、hook 與 CI gate 的邏輯、進度網頁，與它們的測試（tools/tests/）；
 │                                有自己的 package.json
-└─ plugins/
-   ├─ cards/                     AGENTS.md、CLAUDE.md、README.md、src/、tests/、tools/（建置、安裝、備份還原等）、
+└─ apps/
+   ├─ Cards/                     AGENTS.md、CLAUDE.md、README.md、src/、tests/、tools/（建置、安裝、備份還原等）、
    │                             manifest.json、package.json 與鎖檔、設定檔；
    │                             docs/（product、architecture、roadmap、backlog、syntax、question-types、
    │                             card-rules/、plans/、research/、tasks/、Claude Codex Discussion/）
-   ├─ capture/                   AGENTS.md、CLAUDE.md、package.json 與鎖檔、.gitignore、docs/backlog.md
-   └─ mindboard/                 同上（沒有 .gitignore）
+   ├─ Capture/                   AGENTS.md、CLAUDE.md、package.json 與鎖檔、.gitignore、docs/backlog.md
+   ├─ Mindboard/                 同上（沒有 .gitignore）
+   └─ Portal/                    入口網站；文件第一份出現時建、程式與檢查寫第一行程式前才建（D-218）
 ```
 
-Capture、Mindboard 的 `docs/` 與裡面的資料夾，第一份文件出現才建，結構照 Cards。
+Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件出現才建，結構照 Cards。
 
 ### 每一類放哪裡
 
-原本在 `AGENTS.md`〈文件分工〉的表搬到這裡。「外掛」指 `plugins/<外掛>/`。這裡只寫放在哪個資料夾；每類文件的用途、什麼時候進來、狀態行與終點，以及「來自」「→」怎麼連，見[工作流程規範](agents/workflow.md)（[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 1 點）。
+原本在 `AGENTS.md`〈文件分工〉的表搬到這裡。「軟體」指 `apps/<軟體>/`（D-218）。這裡只寫放在哪個資料夾；每類文件的用途、什麼時候進來、狀態行與終點，以及「來自」「→」怎麼連，見[工作流程規範](agents/workflow.md)（[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 1 點）。
 
 | 內容 | 位置 |
 |---|---|
-| 底線與協作規則 | `AGENTS.md`（`CLAUDE.md` 只有一行 `@AGENTS.md`）；外掛特有的在外掛的 `AGENTS.md` |
-| 為什麼做、為誰做、原則、範圍（v1／第二階段／不做） | 最上層 `docs/product.md` 放北極星、三個外掛的目標使用者與全專案的原則；其餘在外掛的 `docs/product.md` |
+| 底線與協作規則 | `AGENTS.md`（`CLAUDE.md` 只有一行 `@AGENTS.md`）；軟體特有的在軟體的 `AGENTS.md` |
+| 為什麼做、為誰做、原則、範圍（v1／第二階段／不做） | 最上層 `docs/product.md` 放北極星、三個外掛的目標使用者與全專案的原則；其餘在軟體的 `docs/product.md` |
 | 三個外掛的定位、關係與接點；repo 結構 | 本檔 |
-| 術語、概念模型、平台、資料存放、AI 的位置、製卡規則、整條鏈的分工 | 外掛的 `docs/architecture.md`（Cards 有） |
-| 轉錄稿格式：Capture 寫、Cards 讀的接點 | 最上層 `docs/transcript.md`；讀它的外掛登錄在分派表 |
-| 出題語法與資料格式：卡組筆記、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 | 外掛的 `docs/syntax.md`（Cards 有） |
-| 題型專區：有哪些題型、各自適合練什麼、怎麼接上 | 外掛的 `docs/question-types.md`（Cards 有） |
-| 交給 AI 的製卡規則（未來外掛的內建預設） | 外掛的 `docs/card-rules/`（Cards 有） |
+| 術語、概念模型、平台、資料存放、AI 的位置、製卡規則、整條鏈的分工 | 軟體的 `docs/architecture.md`（Cards 有） |
+| 轉錄稿格式：Capture 寫、Cards 讀的接點 | 最上層 `docs/transcript.md`；讀它的軟體登錄在分派表 |
+| 出題語法與資料格式：卡組筆記、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 | 軟體的 `docs/syntax.md`（Cards 有） |
+| 題型專區：有哪些題型、各自適合練什麼、怎麼接上 | 軟體的 `docs/question-types.md`（Cards 有） |
+| 交給 AI 的製卡規則（未來外掛的內建預設） | 軟體的 `docs/card-rules/`（Cards 有） |
 | 已確認的決定與理由（D-ID）；開頭有索引 | 最上層 `docs/decisions.md`，一份、編號接續；狀態行下一行寫適用的外掛 |
-| 開發現況、下一步、路線圖、最近完成的事 | 最上層 `docs/roadmap.md` 是入口，只放跨外掛的列；外掛的 `docs/roadmap.md`，建了就要從入口的〈現在在哪裡〉連過去（文件檢查會擋） |
-| 任務與第二階段候選的統一入口、待決問題、技術債與已知的限制 | 最上層 `docs/backlog.md` 只放跨外掛的（共用工具、repo 結構）；其餘在外掛的 `docs/backlog.md` |
-| 展開的主題細項規畫：一主題一份，從 backlog 引用，命名與維護見[該目錄 README](plans/README.md) | 跨外掛的在最上層 `docs/plans/`，其餘在外掛的 `docs/plans/` |
-| 參考軟體研究 | 外掛的 `docs/research/` |
+| 開發現況、下一步、路線圖、最近完成的事 | 最上層 `docs/roadmap.md` 是入口，只放跨軟體的列；軟體的 `docs/roadmap.md`，建了就要從入口的〈現在在哪裡〉連過去（文件檢查會擋） |
+| 任務與第二階段候選的統一入口、待決問題、技術債與已知的限制 | 最上層 `docs/backlog.md` 只放跨軟體的（共用工具、repo 結構）；其餘在軟體的 `docs/backlog.md` |
+| 展開的主題細項規畫：一主題一份，從 backlog 引用，命名與維護見[該目錄 README](plans/README.md) | 跨軟體的在最上層 `docs/plans/`，其餘在軟體的 `docs/plans/` |
+| 參考軟體研究 | 軟體的 `docs/research/` |
 | 現在推薦的 AI 服務與模型；新模型推出時更新 | 最上層 `docs/ai-models.md` |
 | 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts` |
 | 功能地圖 | 最上層 `docs/progress-map.md` |
 | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 | 最上層 `docs/archive/` |
-| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態行（[寫法](agents/workflow.md#入口的狀態行)） | 跨外掛的在最上層 `docs/tasks/`，其餘在外掛的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
-| Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | 跨外掛的在最上層 `docs/Claude Codex Discussion/`，其餘在外掛的 `docs/Claude Codex Discussion/`（D-213） |
+| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態行（[寫法](agents/workflow.md#入口的狀態行)） | 跨軟體的在最上層 `docs/tasks/`，其餘在軟體的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
+| Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | 跨軟體的在最上層 `docs/Claude Codex Discussion/`，其餘在軟體的 `docs/Claude Codex Discussion/`（D-213） |
 | 試作場：樣式稿、試作外掛與測試結果 | 最上層 `experiments/` |
-| 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | 外掛的 `src/`、`tests/`、`tools/`；共用的檢查與它們的測試在最上層 `tools/`（自己的 `package.json`） |
+| 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | 軟體的 `src/`、`tests/`、`tools/`；共用的檢查與它們的測試在最上層 `tools/`（自己的 `package.json`） |
 
 ### 新文件放哪裡
 
-- 只和一個外掛有關，放那個外掛的資料夾；兩個以上或全專案的，放最上層。兩邊都有或判不出的，留最上層。同一類資訊只放一處，其他地方用連結（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
-- 外掛的 `docs/` 與裡面的資料夾，第一份文件出現才建。任務與討論稿一律在 `docs/` 底下；最上層或外掛根目錄的 `tasks/`、`Claude Codex Discussion/` 文件檢查會擋（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)）。
+- 只和一個軟體有關，放那個軟體的資料夾；兩個以上或全專案的，放最上層。兩邊都有或判不出的，留最上層。同一類資訊只放一處，其他地方用連結（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
+- 軟體的 `docs/` 與裡面的資料夾，第一份文件出現才建。任務與討論稿一律在 `docs/` 底下；最上層或軟體根目錄的 `tasks/`、`Claude Codex Discussion/` 文件檢查會擋（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)）。
 - 決定一律寫進最上層的 `decisions.md`。
 - 已完成的任務、討論稿與規畫不搬（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；D-208 第 9 點的例外只限遷移任務列出的路徑。
 
@@ -146,10 +147,10 @@ Capture、Mindboard 的 `docs/` 與裡面的資料夾，第一份文件出現才
 
 檢查的對象是共用工具（`tools/` 自己的型別、lint、knip 與 `tools/tests/`）與三個外掛：
 
-- 只改 `plugins/<外掛>/`，就只裝、只檢查那個外掛。
-- 改到兩個外掛都讀的規格（登錄在分派表，現在是轉錄稿格式 `docs/transcript.md`），讀它的外掛都檢查。
+- 只改 `apps/<軟體>/`，就只裝、只檢查那個軟體；只有文件的軟體（現在是 Portal）只跑共用檢查。
+- 改到兩個軟體都讀的規格（登錄在分派表，現在是轉錄稿格式 `docs/transcript.md`），讀它的軟體都檢查。
 - 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查；寫到那個檔的共用工具測試也跑。
 - 改到其他共用工具（文件檢查、進度白板、Codex 包裝、雲端的 hook 等），只跑共用工具的完整檢查。
 - 改到決定檢查怎麼啟動、怎麼跑的檔（hook、CI、分派表與它們用到的工具），或判斷不了的路徑，共用工具與三個外掛都檢查。
 
-文件、金鑰、本機路徑、skill 一致、外掛之間不 import 與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。commit 時外掛的檢查在只有暫存內容的副本跑，讀到的就是要 commit 的內容。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。
+文件、金鑰、本機路徑、skill 一致、軟體之間不 import、`apps/` 的資料夾與寫死的路徑對得上表（大小寫照 git 追蹤的寫法，D-218），與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。commit 時外掛的檢查在只有暫存內容的副本跑，讀到的就是要 commit 的內容。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。
