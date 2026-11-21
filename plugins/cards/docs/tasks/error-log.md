@@ -1,6 +1,16 @@
 # 正式版的錯誤紀錄（給 Claude，本機執行）
 
-狀態：已合併進 `main`（`87a0d2c`）；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）。iPhone 的部分在下一次 iPhone 實機測試，說明書的句子跟說明書一起寫
+狀態：等觸發點｜下一步：說明書開工時一起寫那幾句｜等誰：—
+
+原狀態行（2026-11-21 前）：已合併進 `main`（`87a0d2c`）；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）。iPhone 的部分在下一次 iPhone 實機測試，說明書的句子跟說明書一起寫
+
+原狀態板（2026-11-21 前）：
+
+- 工作：正式版的錯誤紀錄與回報
+- 狀態：已合併進 `main`（`87a0d2c`，[D-155](../../../../docs/decisions.md#d-155-正式版的錯誤紀錄)、[D-160](../../../../docs/decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)，[Codex L2](exam-scope-review.md) 五輪後通過）；隨 `0.2.0` 裝到正式使用的 vault（2026-10-31，見已完成）
+- 下一步：iPhone 實測（[結果](iphone-test-2026-11.md)）：旗子、重開、傳回電腦都通過；stack 沒有位置，改成全收（[D-173](../../../../docs/decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)），L2 四輪後結案（[報告](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)），已合併進 `main`（`25deec7`），隨 `0.3.0` 裝到正式使用的 vault（2026-11-04，見已完成）；iPhone 確認過（2026-11-11 上線前 [A12](release-0.4.0.md)）；說明書的句子跟說明書一起寫
+- 等誰：說明書開工
+- 入口：[任務說明](error-log.md)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../../../../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-155 與討論稿做完，這份是照做）。
 

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { NAMES, TARGETS, dispatch, folder, readChanges, shown, type Dispatch, type Target } from './dispatch.ts';
+import { mergeHeads } from './git-state.ts';
 
 /** 共用檢查：每次都跑，在 hook 原本的環境讀暫存區（git commit <路徑>、-a 用的是暫時的索引）。 */
 export const SHARED_CHECKS: [string, ...string[]][] = [
@@ -15,6 +16,8 @@ export const SHARED_CHECKS: [string, ...string[]][] = [
   ['check-local-paths.ts', '--staged'],
   ['check-skill-mirror.ts', '--staged'],
   ['check-app-imports.ts', '--staged'],
+  // 狀態板、〈等觸發點〉、〈已完成〉和入口的狀態行對得上（D-217 第 3 點）：入口的狀態改了沒同步就擋。
+  ['roadmap-sync.ts', '--check', '--staged'],
   // 每一份 roadmap 讀得出來（§8）：外掛的 roadmap 寫壞時 commit 就擋，不會等到 Pages 才失敗。
   ['roadmap-board.ts', '--check', '--staged'],
 ];
@@ -166,13 +169,6 @@ export function preCommit(root: string): number {
   }
   console.log(`分派表：${parts.join('；')}`);
   return 0;
-}
-
-/** 合併的 commit：Git 把要合併的放在 GITHEAD_<sha> 環境變數（這個 hook 執行時還沒有 MERGE_HEAD；2026-11-12 在 Git for Windows 實測）。 */
-function mergeHeads(root: string): string[] {
-  const heads = Object.keys(process.env).flatMap(key => /^GITHEAD_([0-9a-f]{40,64})$/i.exec(key)?.[1].toLowerCase() ?? []);
-  if (heads.length) return heads;
-  try { return [git(root, ['rev-parse', '--quiet', '--verify', 'MERGE_HEAD'])]; } catch { return []; }
 }
 
 /** gh 在 Windows 也可能是 .cmd，經過 shell 找；參數是固定的字與 SHA。 */

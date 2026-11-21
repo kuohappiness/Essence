@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`，資料夾首字大寫（D-218，給 Claude，本機執行）
 
-狀態：規劃中｜下一步：使用者定順序與停手時段後施工（開工前查核兩輪已一致，[請求與報告](rename-plugins-to-apps-plan-review.md)）｜等誰：使用者
+狀態：實作中｜下一步：搬家的 commit（§1 第 2 點），停手時段從這裡開始｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**；寫規格、改完後的一致性檢查（〈驗收〉第 6～9 項）用 xhigh。這件改到 pre-commit、CI、分派表、跨版本比較的工具與雲端的開場 hook，合併前做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。
 
