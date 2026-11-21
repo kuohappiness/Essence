@@ -11,6 +11,9 @@ import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt, { type Token } from 'markdown-it';
 import { LIST_PAGE as PROGRESS_MAP, TOKENS, escape } from './progress-board-data.ts';
+import { downstreamOf, headingTitle, markdownTexts } from './check-docs.ts';
+import { DecisionsError, linksOf, parseDecisions, summariesOf } from './decisions.ts';
+import { parseStatus } from './status-line.ts';
 
 export const ROADMAP = 'docs/roadmap.md';
 /** 外掛的 roadmap：存在的才讀（由外掛的第一個任務建，建了就自動出現在白板上）。 */
@@ -31,7 +34,9 @@ export interface Cell { html: string; text: string }
 export interface Work { name: Cell; status: Cell; next: Cell; waiting: Cell; entry: Cell }
 export interface Done { date: string; work: Cell }
 export interface Vault { version: string; date: string }
-export interface Roadmap { works: Work[]; done: Done[]; vault: Vault | null; unreleased: Done[] }
+/** 最近定案的一條（D-214 第 6 點）：now 是新寫法的決定沿著「→」與「來自」走到的最下游與它的狀態。 */
+export interface Decided { date: string; id: string; name: string; url: string; summary: Cell; now: { label: string; url: string; status: string }[] }
+export interface Roadmap { works: Work[]; done: Done[]; vault: Vault | null; unreleased: Done[]; decided: Decided[] }
 
 export class RoadmapError extends Error {
   readonly line: number;
@@ -59,6 +64,11 @@ function fixLinks(tokens: Token[], base: Base): Token[] {
     kept.push(token);
   }
   return kept;
+}
+
+/** 決策索引的一句話：表格儲存格的原文（`\|` 是字），連結以決策紀錄的位置為準。 */
+function inlineCell(source: string, file: string): Cell {
+  return cell(markdown.parseInline(source.replace(/\\\|/g, '|'), {})[0], baseOf(file));
 }
 
 function cell(token: Token | undefined, base: Base): Cell {
@@ -121,7 +131,24 @@ function need(tables: Map<string, Table>, section: string): Table {
 }
 
 const EMPTY: Cell = { html: '', text: '' };
-const RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?/;
+/**
+ * 升版的那一列：發版任務收尾的「完成」以「正式 vault 升到 `x`」開頭（docs/agents/workflow.md〈任務說明〉）；舊的手寫列寫「升正式版 `x`」。
+ * 工具寫的列照「**工作**：」的結構找完成那一句（工作名稱可以有「：」），只認那一句開頭，「升正式版」也不認；
+ * 手寫的列照舊。句中提到計畫中的版本不算（L2 R8、第二輪 N7）。
+ */
+const GENERATED = /（(?:已合併|已結案)，入口）$/;
+// 版本號前可以有任何標籤：反引號、連結、粗體（L2 第三輪 M3）。
+const GENERATED_RELEASE = /^<strong>[\s\S]*?<\/strong>：正式 vault 升到\s*(?:<[^>]+>\s*)*v?(\d+\.\d+\.\d+)/;
+const HANDWRITTEN_RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?|^(?:[^：]*：)?正式 vault 升到\s*`?v?(\d+\.\d+\.\d+)`?/;
+const releaseOf = (cell: Cell) => {
+  if (GENERATED.test(cell.text)) return GENERATED_RELEASE.exec(cell.html)?.[1];
+  const match = HANDWRITTEN_RELEASE.exec(cell.text);
+  return match ? match[1] ?? match[2] : undefined;
+};
+/** roadmap-sync 寫的已合併列（純文字）：「工作：完成（已合併，入口）」。 */
+const GENERATED_MERGED = /（已合併，入口）$/;
+/** 「最近完成」「最近定案」先列幾條。 */
+const RECENT = 5;
 
 const tablesOf = (source: string, file: string) => tablesByHeading(markdown.parse(source, {}), source.split(/\r?\n/), baseOf(file));
 
@@ -142,27 +169,84 @@ export function parseTopWorks(source: string, file = ROADMAP): Work[] {
 
 /** 讀一份完整的 roadmap（「現在在哪裡」與「已完成」）。file 是它在 repo 裡的路徑（相對連結的基準）。 */
 export function parseRoadmap(source: string, file = ROADMAP): Roadmap {
-  return { works: worksOf(tablesOf(source, file)), ...parseRelease(source, file) };
+  return { works: worksOf(tablesOf(source, file)), ...parseRelease(source, file), decided: [] };
+}
+
+function doneOf(table: Table): Done[] {
+  const [date, work] = ['日期', '工作'].map(n => column(table, '已完成', n));
+  return table.rows.map(row => ({ date: row[date]?.text ?? '', work: row[work] ?? EMPTY })).filter(d => d.work.text);
+}
+
+/** 一份 roadmap 的「已完成」；沒有這一節或底下還沒有表時是空的（最上層一開始沒有列）。 */
+export function parseDone(source: string, file: string): Done[] {
+  const table = tablesOf(source, file).get('已完成');
+  return table ? doneOf(table) : [];
+}
+
+/** 每份 roadmap 的「已完成」合在一起：照日期新到舊，同一天照 roadmap 的順序（最上層先）與原本的順序。 */
+export function mergeDone(lists: readonly Done[][]): Done[] {
+  return lists.flatMap((done, file) => done.map((d, row) => ({ d, file, row })))
+    .sort((a, b) => (a.d.date < b.d.date ? 1 : a.d.date > b.d.date ? -1 : a.file - b.file || a.row - b.row))
+    .map(({ d }) => d);
 }
 
 /** 發布那份 roadmap 的「已完成」、正式 vault 的版本與已合併還沒發布的列。 */
-export function parseRelease(source: string, file = RELEASE_ROADMAP): Omit<Roadmap, 'works'> {
-  const tables = tablesOf(source, file);
-  const finished = need(tables, '已完成');
-  const [date, work] = ['日期', '工作'].map(n => column(finished, '已完成', n));
-  const done = finished.rows.map(row => ({ date: row[date]?.text ?? '', work: row[work] ?? EMPTY })).filter(d => d.work.text);
+export function parseRelease(source: string, file = RELEASE_ROADMAP): Omit<Roadmap, 'works' | 'decided'> {
+  const done = doneOf(need(tablesOf(source, file), '已完成'));
 
-  // 正式 vault 的版本：先找「正式使用的 vault 現在是 `x`（日期」，沒有就用已完成裡最新一列「升正式版 `x`」。
+  // 正式 vault 的版本：「正式使用的 vault 現在是 `x`（日期」與已完成裡最新一列升版，取日期較新的（同一天以那句為準）。
   const stated = /正式使用的 vault 現在是\s*`?v?(\d+\.\d+\.\d+)`?\s*[（(](\d{4}-\d{2}-\d{2})/.exec(source);
-  const releaseAt = done.findIndex(d => RELEASE.test(d.work.text));
-  const fromDone = releaseAt >= 0 ? { version: RELEASE.exec(done[releaseAt].work.text)![1], date: done[releaseAt].date } : null;
-  const vault = stated ? { version: stated[1], date: stated[2] } : fromDone;
+  const releaseAt = done.findIndex(d => releaseOf(d.work) !== undefined);
+  const fromDone = releaseAt >= 0 ? { version: releaseOf(done[releaseAt].work)!, date: done[releaseAt].date } : null;
+  const fromStated = stated ? { version: stated[1], date: stated[2] } : null;
+  const vault = fromStated && fromDone ? (fromDone.date > fromStated.date ? fromDone : fromStated) : fromStated ?? fromDone;
 
-  // 已合併、還沒發布：已完成裡比最新一次升版新、而且寫到合併進 main 的列。找不到升版的列時，用版本的日期切。
-  const newer = releaseAt >= 0 ? done.slice(0, releaseAt) : done.filter(d => vault && d.date > vault.date);
-  const unreleased = newer.filter(d => /\bmain\b/.test(d.work.text));
+  // 已合併、還沒發布：已完成裡比選中的那一次升版新、而且寫到合併進 main（舊的手寫列）或是工具寫的已合併列（L2 R8）。
+  // 選中的是升版的列（或同一天、同一版的那句）：照列的位置切（同一天也分得出先後）；選中的是那句：用那句的日期切。
+  const byRow = fromDone !== null && (vault === fromDone || (fromStated?.date === fromDone.date && fromStated.version === fromDone.version));
+  const newer = byRow ? done.slice(0, releaseAt) : done.filter(d => vault && d.date > vault.date);
+  const unreleased = newer.filter(d => /\bmain\b/.test(d.work.text) || GENERATED_MERGED.test(d.work.text));
 
   return { done, vault, unreleased };
+}
+
+/** 一份文件的狀態值（標題下第一行照新格式解析得出來時）；讀不出來是「—」。 */
+function statusLabel(text: string | undefined): string {
+  const lines = (text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const h1 = lines.findIndex(line => /^# /.test(line));
+  const line = h1 < 0 ? undefined : lines.slice(h1 + 1).find(l => l.trim());
+  const parsed = line ? parseStatus(line) : undefined;
+  return parsed && 'status' in parsed ? parsed.status.state : '—';
+}
+
+/**
+ * 最近定案（D-214 第 6 點）：決策紀錄裡狀態是 ✅、沒被取代的最新 n 條，照日期再照編號新到舊。
+ * 新寫法的決定加「現在在哪」：沿著「→」與「來自」走到的最下游（texts 是 repo 裡的 Markdown，沒給就不算）。
+ */
+export function recentDecisions(decisions: string, texts: ReadonlyMap<string, string> = new Map(), n = RECENT): Decided[] {
+  const parsed = parseDecisions(decisions);
+  const links = linksOf(parsed);
+  const summaries = summariesOf(parsed);
+  const day = (d: { date?: string }) => (d.date ?? '').slice(0, 10);
+  return parsed.decisions
+    .filter(d => d.symbol === '✅' && !links.get(d.id)!.supersededBy)
+    .sort((a, b) => (day(a) < day(b) ? 1 : day(a) > day(b) ? -1 : b.num - a.num))
+    .slice(0, n)
+    .map(d => ({
+      date: day(d), id: d.id, name: d.name, url: `${BLOB}docs/decisions.md#${encodeURIComponent(d.anchor)}`, summary: inlineCell(summaries.get(d.id) ?? '', 'docs/decisions.md'),
+      now: d.legacy ? [] : downstreamOf(texts, `docs/decisions.md#${d.anchor}`).map(node => {
+        const hash = node.indexOf('#');
+        const file = hash < 0 ? node : node.slice(0, hash);
+        const anchor = hash < 0 ? undefined : node.slice(hash + 1);
+        const decision = file === 'docs/decisions.md' ? parsed.decisions.find(x => x.anchor === anchor) : undefined;
+        if (decision) return { label: decision.id, url: `${BLOB}docs/decisions.md#${encodeURIComponent(decision.anchor)}`, status: '決定' };
+        const url = `${BLOB}${file.split('/').map(encodeURIComponent).join('/')}`;
+        if (!anchor) return { label: file, url, status: statusLabel(texts.get(file)) };
+        // backlog 的一項：連到那一項的錨點，顯示標題（L2 R6）。
+        const title = headingTitle(file, texts.get(file) ?? '', anchor);
+        return { label: `${file}〈${title ?? anchor}〉`, url: `${url}#${encodeURIComponent(anchor)}`, status: '—' };
+      }),
+    }));
 }
 
 /** 外掛的 roadmap 只讀「現在在哪裡」，名稱前加外掛名（「Mindboard｜」）；連結以它自己所在的資料夾為準。 */
@@ -203,7 +287,10 @@ function renderDone(done: Done): string {
   return `<details class="done"><summary><time>${escape(done.date.slice(5))}</time><span>${escape(headline(done.work.text))}</span></summary><p>${done.work.html}</p></details>`;
 }
 
-const RECENT = 5;
+function renderDecided(d: Decided): string {
+  const now = d.now.length ? `<br>現在在：${d.now.map(x => `<a href="${escape(x.url)}" target="_blank" rel="noopener">${escape(x.label)}</a>（${escape(x.status)}）`).join('、')}` : '';
+  return `<details class="done"><summary><time>${escape(d.date.slice(5))}</time><span>${escape(`${d.id} ${d.name}`)}</span></summary><p>${d.summary.html}（<a href="${escape(d.url)}" target="_blank" rel="noopener">全文</a>）${now}</p></details>`;
+}
 
 /** generated：產生的時間；commit：GitHub Actions 的 GITHUB_SHA，本機預覽沒有；sources：讀了哪幾份 roadmap（頁尾的來源）。 */
 export function renderBoard(roadmap: Roadmap, generated: string, commit?: string, sources: readonly string[] = [ROADMAP]): string {
@@ -220,6 +307,8 @@ export function renderBoard(roadmap: Roadmap, generated: string, commit?: string
   const recent = roadmap.done.slice(0, RECENT).map(renderDone).join('');
   const older = roadmap.done.slice(RECENT);
   const more = older.length ? `<details class="more"><summary>再早的 ${older.length} 列</summary>${older.map(renderDone).join('')}</details>` : '';
+  // 最近定案和最近完成分兩塊（D-214 第 6 點）：決定不列進〈已完成〉。
+  const decided = roadmap.decided.length ? `<section class="list" id="decided"><h2>最近定案</h2>${roadmap.decided.map(renderDecided).join('')}</section>` : '';
   const source = commit ? ` · <a href="${REPO}/commit/${escape(commit)}" target="_blank" rel="noopener">${escape(commit.slice(0, 7))}</a>` : '';
   const from = sources.map(file => `<a href="${baseOf(file).page}" target="_blank" rel="noopener">${escape(file)}</a>`).join('、');
   return `<!doctype html>
@@ -242,6 +331,7 @@ export function renderBoard(roadmap: Roadmap, generated: string, commit?: string
 ${sections}
 ${unreleased}
 <section class="list" id="done"><h2>最近完成</h2>${recent}${more}</section>
+${decided}
 </main>
 <footer>來源：${from}${source} · <a href="${PROGRESS_MAP}">功能地圖</a></footer>
 </body>
@@ -338,7 +428,8 @@ function main(): void {
   const rootAt = args.indexOf('--root');
   const root = rootAt >= 0 ? resolve(args[rootAt + 1]) : resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const check = args.includes('--check');
-  const roadmaps = readRoadmaps(root, args.includes('--staged'));
+  const staged = args.includes('--staged');
+  const roadmaps = readRoadmaps(root, staged);
   if (roadmaps[0]?.file !== ROADMAP) {
     console.error(`${ROADMAP}  找不到這份檔`);
     process.exit(1);
@@ -347,13 +438,15 @@ function main(): void {
     console.error(`${RELEASE_ROADMAP}  找不到這份檔（正式 vault 的版本與「已完成」從這裡讀）`);
     process.exit(1);
   }
-  let release: Omit<Roadmap, 'works'> | undefined;
+  let release: Omit<Roadmap, 'works' | 'decided'> | undefined;
   const works: Work[] = [];
+  const doneLists: Done[][] = [];
   let failed = false;
   for (const { file, text } of roadmaps) {
     try {
       if (file === ROADMAP) works.push(...parseTopWorks(text, file));
       else works.push(...parsePluginWorks(text, file));
+      doneLists.push(parseDone(text, file));
       if (file === RELEASE_ROADMAP) release = parseRelease(text, file);
     } catch (error) {
       if (!(error instanceof RoadmapError)) throw error;
@@ -361,9 +454,22 @@ function main(): void {
       failed = true;
     }
   }
+  // 最近定案：決策紀錄與 repo 裡的 Markdown（現在在哪）；不是 Git repo 或沒有決策紀錄時沒有這一塊。
+  let decided: Decided[] = [];
+  const texts = markdownTexts(root, staged);
+  const decisions = texts.get('docs/decisions.md');
+  if (decisions) {
+    try {
+      decided = recentDecisions(decisions, texts);
+    } catch (error) {
+      if (!(error instanceof DecisionsError)) throw error;
+      console.error(`docs/decisions.md  ${error.message}`);
+      failed = true;
+    }
+  }
   if (failed || !release) process.exit(1);
   const files = roadmaps.map(r => r.file);
-  const roadmap: Roadmap = { ...release, works };
+  const roadmap: Roadmap = { ...release, done: mergeDone(doneLists), works, decided };
   const generated = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
   const html = renderBoard(roadmap, generated, process.env.GITHUB_SHA, files);
   // --check 也查：會帶出私人資訊時 Pages 一樣產生不了，commit 就擋。

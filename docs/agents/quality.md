@@ -33,10 +33,10 @@
 
 - 安裝：每個資料夾有自己的 `package.json`，根目錄沒有。每個 clone 與 worktree 先在 `tools/` 跑 `npm ci`（共用檢查與 hook 的相依；`prepare` 順便設 `core.hooksPath`）；要跑 Cards 的檢查、建置或安裝時再在 `plugins/cards/` `npm ci`；Capture、Mindboard 有相依之後在各自的資料夾 `npm ci`（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第一步、第二步）。
 - Cards 的 `npm run check`（在 `plugins/cards/` 跑，或從根目錄 `npm --prefix plugins/cards run check`）：型別、ESLint（含模組邊界）、knip，最後測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。共用檢查不在裡面，另外跑。
-- `tools/` 的 `npm run check` 是共用檢查：文件檢查、金鑰（secretlint）、本機路徑、skill 副本一致性、外掛之間不 import（`tools/check-plugin-imports.ts`）、進度白板讀得出每一份 roadmap（`roadmap-board --check`）。`tools/` 的 `npm run self-check` 是共用工具本身的完整檢查：型別、ESLint、knip（`tools/knip.jsonc`）與 `tools/tests/` 的測試（含 hook、分派表、CI 的 gate）；hook 照分派表決定什麼時候跑它。Capture、Mindboard 的 `npm run check` 在各自的資料夾，現在只印一行，寫程式的第一個任務換成型別、lint 與測試。
+- `tools/` 的 `npm run check` 是共用檢查：文件檢查、金鑰（secretlint）、本機路徑、skill 副本一致性、外掛之間不 import（`tools/check-plugin-imports.ts`）、狀態板與〈已完成〉和入口的狀態行一致（`roadmap-sync --check`，[D-217](../decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）、進度白板讀得出每一份 roadmap（`roadmap-board --check`）。`tools/` 的 `npm run self-check` 是共用工具本身的完整檢查：型別、ESLint、knip（`tools/knip.jsonc`）與 `tools/tests/` 的測試（含 hook、分派表、CI 的 gate）；hook 照分派表決定什麼時候跑它。Capture、Mindboard 的 `npm run check` 在各自的資料夾，現在只印一行，寫程式的第一個任務換成型別、lint 與測試。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；`plugins/<外掛>/` 底下的狀態目錄、roadmap 與任務照同樣的規則查。它只認 git 追蹤的檔：連到還沒 `git add` 的新檔會報找不到，`npm run check` 停在這一步；pre-commit 又在暫存區與工作樹各查一次，所以新文件和連到它的舊文件要一起 stage，要分開 commit 時先 commit 文件。
 - 測試的時間上限：`npm test` 每個測試最多 10 分鐘（`--test-timeout`）；自己另外跑 `node --test` 時也加上限。用 Node 的 mock timers 時，呼叫被測的非同步函式後先 `await tick(t, 0)` 再推時間，不然假時鐘不再前進，`await` 永遠等不到（2026-11-04 一個測試因此無聲掛了近三小時）。背景指令超過預期又沒有輸出，先查進程與輸出，不要說成跑得比較久。
-- pre-commit（`.githooks/pre-commit` 只確認 `tools/` 裝過，邏輯在 `tools/hooks.ts`）：先在 Git 給的環境讀暫存區（`git commit <路徑>`、`-a` 用的是另一份索引），每次都跑共用檢查的暫存區版本：文件、暫存檔的金鑰（repo 公開，只改文件的 commit 也直接推上 main，[第二次里程碑檢查](<../../plugins/cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R4）、本機路徑（R5：帳號名、iCloud 雲碟、vault 名稱；通用規則不含真實的值，本機規則在執行時從這台電腦取；commit 訊息由 `.githooks/commit-msg` 掃）、兩份 skill、外掛之間不 import、roadmap。接著照**分派表**（`tools/dispatch.ts`，規則見 [architecture.md〈repo 結構〉](../architecture.md#9-repo-結構-d-208)，這裡不抄第二份）決定共用工具與每個外掛跑完整檢查、只跑相關測試或照表跳過，最後印一行每個對象跑了什麼、跳過的理由。要看某次改動怎麼分派：`node tools/dispatch.ts --staged --explain`（或 `--range <base> <head>`）。
+- pre-commit（`.githooks/pre-commit` 只確認 `tools/` 裝過，邏輯在 `tools/hooks.ts`）：先在 Git 給的環境讀暫存區（`git commit <路徑>`、`-a` 用的是另一份索引），每次都跑共用檢查的暫存區版本：文件、暫存檔的金鑰（repo 公開，只改文件的 commit 也直接推上 main，[第二次里程碑檢查](<../../plugins/cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R4）、本機路徑（R5：帳號名、iCloud 雲碟、vault 名稱；通用規則不含真實的值，本機規則在執行時從這台電腦取；commit 訊息由 `.githooks/commit-msg` 掃）、兩份 skill、外掛之間不 import、狀態板和入口一致、roadmap 讀得出來。接著照**分派表**（`tools/dispatch.ts`，規則見 [architecture.md〈repo 結構〉](../architecture.md#9-repo-結構-d-208)，這裡不抄第二份）決定共用工具與每個外掛跑完整檢查、只跑相關測試或照表跳過，最後印一行每個對象跑了什麼、跳過的理由。要看某次改動怎麼分派：`node tools/dispatch.ts --staged --explain`（或 `--range <base> <head>`）。
   - 測試用 dot reporter（`NODE_OPTIONS` 加 `--test-reporter=dot`）：通過的測試只印一個點，失敗的照常印出，exit code 照常傳回；AI 讀 commit 的輸出要花 token，原本約 4.2 萬字（[外掛架構檢查](<../../plugins/cards/docs/Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 Q2）。代價是通過的測試印的訊息看不到，需要時自己跑 `npm run check`；手動跑與 CI 不變。
   - Cards 的「相關測試」：只改 Cards 的文件時，跑寫到那個路徑的測試檔，通過時只印一行（2026-10-29：`b63c1bb` 只改 `syntax.md` 的範例就讓 CI 紅了）。新的測試要讀文件時，在測試裡寫出它的路徑（例如 `plugins/cards/tests/` 裡的 `new URL('../../../docs/syntax.md', import.meta.url)`），分派表才找得到；兩個以上外掛都讀的最上層檔案，登錄在分派表的 `SHARED_SPECS`。
   - 外掛的檢查（完整與相關測試）在只有暫存內容的副本跑：`git checkout-index` 取出到系統的暫存資料夾（LF，和 CI 一樣），`.git` 檔指向這個工作樹的 git 資料夾，`node_modules` 用連結借工作樹的，跑完先拆連結再刪副本。工作樹裡沒 stage 的改動不影響結果，檢查跑的時候可以繼續改檔。`git commit <路徑>`、`-a` 時，測試裡的 git 讀的是預設的索引，可能和副本不同（[one-repo-step-1 §10](../tasks/one-repo-step-1.md#10-技術債)）。
@@ -81,9 +81,9 @@ GitHub 上的 Codex 審查（[D-212](../decisions.md#d-212-claude-直接呼叫�
 - **第 2 類**：其餘少數例外狀況的測試、為很少見的情況多做的功能；延後，寫成那個外掛的[技術債表](../../plugins/cards/docs/backlog.md#技術債)（共用工具的記在[最上層](../backlog.md#技術債)）開頭「補測：」或「補做：」的一列。延後功能時，開放的入口要能走完一條安全的路徑，否則合併前先關住入口或做完那條路徑。
 - **L2 的發現不在這裡分**：L2 找到的真實缺陷照 [D-207](../decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制) 分成一定修、可記成已知的限制、交使用者選三種，第四輪還擋合併時交使用者決定，不由實作者自己改列第 2 類。
 - **任務說明**：規劃者在「和不做比較」或範圍裡寫哪些是第 2 類，每一項寫中斷或出錯時怎麼恢復；`## 結果`（標題以「結果」開頭的二級標題，底下可以有三級小節）的段落或清單項目開頭有恰好一行「延後的測試：」，寫「無」或用「」括住技術債表的列名（例如「補測：存到一半中斷」），開工時先寫「延後的測試：（實作後填）」。
-- **狀態行**：任務結束時寫「狀態：已結案」「已完成」或「已合併」，後面接括號、冒號、逗號或「｜」再寫備註；部分完成寫在備註，不寫「已完成第一部分」以外的結束詞（例如「驗收通過」，文件檢查認不出來）。文件檢查看到結束的狀態就檢查〈結果〉；commit 時列名要對得到技術債表的列。
+- **狀態行**：照[工作流程規範〈入口的狀態行〉](workflow.md#入口的狀態行)，任務結束時寫「狀態：已合併｜完成：<一句>｜等誰：—」或已結案；部分完成寫在完成那一句。文件檢查看到結束的狀態就檢查〈結果〉；commit 時列名要對得到技術債表的列。2026-11-21 以前的檔（凍結清單 `tools/legacy-status-docs.json`）照舊格式：「狀態：已結案」「已完成」或「已合併」後面接括號、冒號、逗號或「｜」再寫備註，不寫「驗收通過」這類文件檢查認不出來的結束詞。
 - **沒有任務說明的改動**：小修、試作場、L2 時才決定延後的項目，整合者在交回或合併前看有沒有延後的測試，有就在同一批改動加進技術債表。
-- **補完與留到第二階段**：補完照技術債的做法刪掉那一列、roadmap 的已完成寫一句；使用者同意留到第二階段時，先在 [backlog 的第二階段清單](../../plugins/cards/docs/backlog.md#第二階段想做的事)寫下來源、完成條件與使用者同意的日期，再從技術債表刪掉。
+- **補完與留到第二階段**：補完照技術債的做法刪掉那一列，經過寫在那件工作的入口（roadmap 的〈已完成〉由工具從入口產生）；使用者同意留到第二階段時，先在 [backlog 的第二階段清單](../../plugins/cards/docs/backlog.md#第二階段想做的事)寫下來源、完成條件與使用者同意的日期，再從技術債表刪掉。
 
 ## 開工前的格式查核
 
@@ -137,7 +137,7 @@ L2 的發現機率極低或真實路徑走不到、這次不修的，記在那�
   1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `plugins/cards/package.json` 的開發相依改成一樣，在 `plugins/cards/` 跑 `npm run check`。npm 常比 app 晚：還沒有新版時，先讀 `%APPDATA%\obsidian\obsidian-<版本>.asar` 裡的 `app.js`（只讀不執行），查用到的匯出還在、用 CodeMirror 新舊版的差異推定版本，型別檔的比對記進技術債；安裝資料夾的 `resources\obsidian.asar` 是安裝當時的舊版，不能當上一版比。
   2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（在 `plugins/cards/` 跑 `npm run install-vault -- <測試 vault> --dev`），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../plugins/cards/docs/Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
   3. 讀改版說明裡和這幾點有關的條目：編輯器與 CodeMirror、Markdown 解析與閱讀模式（清單、區塊 ID）、檔案與 vault 的事件、iOS 與同步；每一點寫一句結論。
-- **結果**：寫進 roadmap 的已完成，通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。
+- **結果**：寫在相容性檢查的任務說明〈結果〉，收尾時 roadmap 的〈已完成〉由工具從它的狀態行產生；通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。
 
 ## 里程碑
 

@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../check-docs.ts';
+import { BACKLOG, checkDocs, downstreamOf, formatProblem, LEGACY_STATUS, ROADMAP } from '../check-docs.ts';
 
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
 for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith('GIT_')) delete process.env[key];
@@ -25,7 +25,8 @@ async function repo(t: { after: (fn: () => Promise<void>) => void }) {
     await put(path, text);
     git(root, 'add', '--', path);
   };
-  const run = (staged = false) => checkDocs(root, { staged, exceptions: [] }).problems.map(formatProblem);
+  // 舊測試的狀態檔都當凍結清單裡的（'all'）；新格式的測試另外給清單或讀 repo 裡的。
+  const run = (staged = false) => checkDocs(root, { staged, exceptions: [], legacy: 'all' }).problems.map(formatProblem);
   return { root, put, add, run };
 }
 
@@ -148,6 +149,8 @@ const roadmap = (rows: string[]) => [
   '',
   '## 現在在哪裡',
   '',
+  '## 等觸發點',
+  '',
   '## 已完成',
   '',
   '| 日期 | 工作 |',
@@ -156,13 +159,147 @@ const roadmap = (rows: string[]) => [
   '',
 ].join('\n');
 
-void test('已完成：10 列通過、11 列要報', async t => {
+void test('roadmap 依序有〈現在在哪裡〉〈等觸發點〉〈已完成〉，中間可以有別的節；〈已完成〉不設列數上限（D-214 第 4、5 點）', async t => {
   const { add, run } = await repo(t);
   const rows = (n: number) => Array.from({ length: n }, (_, i) => `第 ${i + 1} 件`);
-  await add(ROADMAP, roadmap(rows(DONE_ROWS)));
+  await add(ROADMAP, roadmap(rows(30)));
   assert.deepEqual(run(), []);
-  await add(ROADMAP, roadmap(rows(DONE_ROWS + 1)));
-  assert.deepEqual(run(), [`${ROADMAP}:19  ## 已完成  11 列，上限 10`]);
+  await add(ROADMAP, '# 路線圖\n\n## 現在在哪裡\n\n## 路線圖\n\n## 等觸發點\n\n## 未來\n\n## 已完成\n');
+  assert.deepEqual(run(), []);
+  await add(ROADMAP, '# 路線圖\n\n## 現在在哪裡\n\n## 已完成\n');
+  assert.deepEqual(run(), [`${ROADMAP}:1  ## 等觸發點  找不到這一節`]);
+  await add(ROADMAP, '# 路線圖\n\n## 現在在哪裡\n\n## 已完成\n\n## 等觸發點\n');
+  assert.deepEqual(run(), [`${ROADMAP}:3  ## 現在在哪裡  三節要依序是〈現在在哪裡〉、〈等觸發點〉、〈已完成〉`]);
+});
+
+void test('backlog 的二級標題只有〈待處理〉〈已轉出〉，依這個順序；外掛的也是，更深的資料夾不查', async t => {
+  const { add, run } = await repo(t);
+  await add(BACKLOG, '# B\n\n## 待處理\n\n### 技術債\n\n#### 更深\n\n## 已轉出\n\n### 已定案對照\n');
+  await add('plugins/capture/docs/backlog.md', '# C\n\n## 待處理\n\n## v1\n\n## 已轉出\n');
+  await add('plugins/mindboard/docs/backlog.md', '# M\n\n## 已轉出\n\n## 待處理\n');
+  await add('plugins/cards/docs/backlog.md', '# Cards\n\n## 待處理\n');
+  await add('plugins/cards/docs/x/backlog.md', '# 不查\n\n## 別的\n');
+  const reason = 'backlog 的二級標題只有〈待處理〉、〈已轉出〉，依這個順序；其他分類降成三級放進這兩節';
+  assert.deepEqual(run(), [
+    `plugins/capture/docs/backlog.md:5  ## v1  ${reason}`,
+    `plugins/cards/docs/backlog.md:1  ## 待處理  ${reason}`,
+    `plugins/mindboard/docs/backlog.md:1  ## 待處理  ${reason}`,
+  ]);
+});
+
+void test('狀態行：凍結清單外的狀態檔照新格式；清單裡的照舊，改成新格式就照新格式查；其他檔看起來是新格式也查；清單裡不在的要刪', async t => {
+  const { root, add } = await repo(t);
+  await add(LEGACY_STATUS, JSON.stringify(['docs/tasks/old.md', 'docs/tasks/old-new.md', 'docs/tasks/gone.md', 'docs/x.md']));
+  await add('docs/tasks/old.md', '# 舊\n\n狀態：進行中（舊寫法照舊）\n');
+  await add('docs/tasks/old-new.md', '# 舊改新\n\n狀態：進行中｜下一步：x｜等誰：Claude\n');
+  await add('docs/tasks/new.md', '# 新\n\n狀態：實作中｜下一步：寫測試｜等誰：Claude\n\n來自：無\n');
+  await add('docs/tasks/new-old.md', '# 新的用舊寫法\n\n狀態：進行中\n');
+  await add('docs/plans/quoted.md', '# 引用框\n\n> 狀態：規劃中｜下一步：x｜等誰：使用者\n');
+  await add('docs/Claude Codex Discussion/2026-11-21-x.md', '# 討論\n\n狀態：已結案 → D-218｜完成：談定｜等誰：—\n');
+  await add('plugins/cards/docs/card-rules/a.md', '# 規則\n\n狀態：實作中｜下一步：試一課｜等誰：新教材\n\n> 版本：第 2 版\n');
+  await add('plugins/cards/docs/card-rules/b.md', '# 規則\n\n> 狀態：第 2 版（舊寫法，不是狀態行）\n');
+  await add('docs/x.md', '# 不是狀態檔\n');
+  const problems = checkDocs(root, { exceptions: [] }).problems.map(formatProblem);
+  assert.deepEqual(problems, [
+    'docs/plans/quoted.md:3  狀態：  狀態行要是標題下的一般段落（不在引用框、清單或程式碼區塊裡）',
+    'docs/tasks/new-old.md:3  狀態：  要剛好三欄、用全形「｜」分，現在是 1 欄（欄裡的「｜」改用「，」）。寫法：狀態：<狀態值>｜下一步：<一句>｜等誰：<值>；結束時「狀態：已合併｜完成：<一句>｜等誰：—」',
+    'docs/tasks/old-new.md:3  狀態：  「進行中」不是狀態值；可用：規劃中、討論中、實作中、待審、待實機、等觸發點、已合併、已結案、已結案 → <下一站>、暫停（<原因>）',
+    'plugins/cards/docs/card-rules/a.md:3  狀態：  等誰只收使用者、Claude、Codex、實機、—（好幾個用「、」接）；「新教材」不是',
+    `${LEGACY_STATUS}  docs/tasks/gone.md  凍結清單的這一項不在了（或不是任務、討論稿、plans 第一層的檔），請刪掉這一列`,
+    `${LEGACY_STATUS}  docs/x.md  凍結清單的這一項不在了（或不是任務、討論稿、plans 第一層的檔），請刪掉這一列`,
+  ]);
+  // 清單不是 JSON 陣列要報；沒有清單時每份狀態檔都照新格式查。
+  await add(LEGACY_STATUS, '{}');
+  assert.ok(checkDocs(root, { exceptions: [] }).problems.map(formatProblem).includes(`${LEGACY_STATUS}  ${LEGACY_STATUS}  要是路徑字串的 JSON 陣列`));
+  git(root, 'rm', '-q', '--cached', '--', LEGACY_STATUS);
+  assert.ok(checkDocs(root, { staged: true, exceptions: [] }).problems.map(formatProblem).some(p => p.startsWith('docs/tasks/old.md:3  狀態：')));
+});
+
+void test('「→」與「來自」互相連回；日期要是真的；backlog〈待處理〉裡不能有「→」；「→」指到舊決定報錯；新決定的「來自」也要有「→」', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/decisions.md', [
+    '# 決策紀錄', '', '## D-217 舊', '', '✅ 2026-11-20', '',
+    '## D-218 新', '', '✅ 2026-11-22｜來自 [plans/a](plans/a.md)', '', '主題：協作與文件｜一句話：x。', '',
+    '## D-219 再新', '', '✅ 2026-11-22｜來自 [plans/b](plans/b.md)', '', '主題：協作與文件｜一句話：y。', '',
+  ].join('\n'));
+  await add(BACKLOG, [
+    '# B', '', '## 待處理', '', '### 還在等', '', '- 待辦', '  → [plans/c](plans/c.md)（2026-11-21）', '',
+    '## 已轉出', '', '### 點子甲', '', '- 甲', '  → [plans/a](plans/a.md)（2026-11-21）', '',
+  ].join('\n'));
+  const doc = (title: string, from = '') => `# ${title}\n\n狀態：實作中｜下一步：x｜等誰：Claude\n${from ? `\n來自：${from}\n` : ''}`;
+  await add('docs/plans/a.md', [
+    '# A', '', '狀態：已結案 → [D-218](../decisions.md#d-218-新)｜完成：談定｜等誰：—', '',
+    '來自：[backlog〈點子甲〉](../backlog.md#點子甲)', '', '## 一', '',
+    '→ [D-218](../decisions.md#d-218-新)（2026-11-22）',
+    '→ [tasks/t](../tasks/t.md)（2026-11-22）',
+    '→ [D-217](../decisions.md#d-217-舊)（2026-11-22）',
+    '→ [tasks/u](../tasks/u.md)（2026-02-30）',
+    '→ [tasks/t](../tasks/t.md) 2026-11-22',
+    '',
+    '> → [不算](../tasks/u.md)（引用框）',
+    '',
+    '```text', '→ [不算](../tasks/u.md)（程式碼）', '```', '',
+  ].join('\n'));
+  await add('docs/plans/b.md', doc('B'));
+  await add('docs/plans/c.md', doc('C', '[backlog](../backlog.md#還在等)'));
+  await add('docs/tasks/t.md', doc('T', '[plans/a](../plans/a.md)'));
+  await add('docs/tasks/u.md', doc('U'));
+  await add('docs/tasks/v.md', doc('V', '[plans/b](../plans/b.md)、[D-217](../decisions.md#d-217-舊)'));
+  await add('docs/tasks/w.md', doc('W', '[backlog〈點子甲〉](../backlog.md#點子甲)'));
+  await add('docs/tasks/twice.md', `${doc('Twice', '[plans/a](../plans/a.md)')}\n來自：[plans/b](../plans/b.md)\n`);
+  const noArrow = (from: string) => `${from} 沒有「→」連到這裡：在那一站加一行「→ [文字](連結)（YYYY-MM-DD）」`;
+  assert.deepEqual(run(), [
+    'docs/backlog.md:8  →  轉出的項目搬到〈已轉出〉：〈待處理〉裡不能有「→」（D-214 第 4 點）',
+    'docs/plans/a.md:12  →  2026-02-30 不是真的日期',
+    'docs/plans/a.md:13  →  「→」那一行寫成「→ [文字](連結)（YYYY-MM-DD）」，一行一個連結',
+    'docs/plans/a.md:11  →  D-217 是 D-218 以前的決定，沒有「來自」：不寫「→」，在內文提到就好',
+    'docs/plans/a.md:12  →  docs/tasks/u.md 沒有「來自」連回這裡：在它第一個二級標題之前寫「來自：[…](…)」',
+    'docs/tasks/twice.md:7  來自  「來自」只寫一段；好幾處用「、」接',
+    `docs/tasks/twice.md:5  來自  ${noArrow('docs/plans/a.md')}`,
+    `docs/tasks/twice.md:7  來自  ${noArrow('docs/plans/b.md')}`,
+    `docs/tasks/v.md:5  來自  ${noArrow('docs/plans/b.md')}`,
+    `docs/tasks/w.md:5  來自  ${noArrow('docs/backlog.md#點子甲')}`,
+    `docs/decisions.md:13  來自  ${noArrow('docs/plans/b.md')}`,
+  ]);
+});
+
+void test('L2 R6 backlog 的一站是「檔＋最近的標題」：子項的「來自」不能代替父項的', async t => {
+  const { add, run } = await repo(t);
+  await add(BACKLOG, [
+    '# B', '', '## 待處理', '', '### 父項', '', '- 父', '', '#### 子項', '', '來自：[任務](tasks/r.md)', '',
+    '### 詞（甲）、A+B', '', '來自：[任務](tasks/r.md)', '', '## 已轉出', '',
+  ].join('\n'));
+  await add('docs/tasks/r.md', [
+    '# R', '', '狀態：實作中｜下一步：x｜等誰：Claude', '', '## 一', '',
+    '→ [父項](../backlog.md#父項)（2026-11-22）', '', '→ [子項](../backlog.md#子項)（2026-11-22）', '', '→ [詞](../backlog.md#詞甲ab)（2026-11-22）', '',
+  ].join('\n'));
+  assert.deepEqual(run(), ['docs/tasks/r.md:7  →  docs/backlog.md#父項 沒有「來自」連回這裡：在那個標題底下、下一個標題之前寫「來自：[…](…)」']);
+});
+
+void test('L2 N9 連到 backlog 的「→」要帶標題的錨點；錨點的大小寫不影響回鏈的核對', async t => {
+  const { add, run } = await repo(t);
+  await add(BACKLOG, ['# B', '', '## 待處理', '', '## 已轉出', '', '### AI 製卡', '', '- 甲', '  來自：[plans/a](plans/a.md)', ''].join('\n'));
+  await add('docs/plans/a.md', ['# A', '', '狀態：討論中｜下一步：x｜等誰：使用者', '', '## 一', '',
+    '→ [backlog〈AI 製卡〉](../backlog.md#AI-製卡)（2026-11-22）', '→ [backlog](../backlog.md)（2026-11-22）', ''].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/a.md:8  →  連到 backlog 的「→」要帶標題的錨點（backlog 的一站是檔＋最近的標題）：寫成 [文字](…backlog.md#標題)']);
+});
+
+void test('L2 N8 狀態行「已結案 →」的純文字 D-ID 要在決策紀錄裡', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/decisions.md', ['# 決策紀錄', '', '## D-218 新', '', '✅ 2026-11-22｜來自 [plans/a](plans/a.md)', '', '主題：協作與文件｜一句話：x。', ''].join('\n'));
+  await add('docs/plans/a.md', ['# A', '', '狀態：已結案 → D-218、D-999｜完成：談定｜等誰：—', '', '## 一', '', '→ [D-218](../decisions.md#d-218-新)（2026-11-22）', ''].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/a.md:3  狀態：  D-999 不在決策紀錄裡：「已結案 →」的下一站要是存在的決定']);
+});
+
+void test('L2 R9「→」連到外部網址報錯：下一站要是 repo 裡的一站；引用框與程式碼裡的範例不看', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/plans/x.md', [
+    '# X', '', '狀態：討論中｜下一步：x｜等誰：使用者', '', '## 一', '',
+    '→ [外連](https://example.invalid/example)（2026-12-05）', '',
+    '> → [範例](https://example.invalid/quote)（2026-12-05）', '',
+    '```text', '→ [範例](https://example.invalid/code)（2026-12-05）', '```', '',
+  ].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/x.md:7  →  「→」要連到 repo 裡的一站（任務、討論稿、plans、backlog 的項目或決定），不連外部網址']);
 });
 
 void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一個非空行要有狀態；README、子資料夾與其他資料夾不查', async t => {
@@ -212,7 +349,7 @@ void test('D-195：結束的任務〈結果〉要有恰好一行填好的「延�
   await add('docs/tasks/x-review.md', task('已完成', '通過'));
   await add('docs/tasks/w4.md', task('已合併', '合併了。'));
   await add('docs/x.md', task('已完成', '合併了。'));
-  await add('docs/backlog.md', '# B\n\n## v1\n\n| 項目 | 觸發點 |\n|---|---|\n| 補測：不算 | 別節 |\n\n### 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n| **補測：存到一半中斷**，影響小 | 空檔 |\n| 補做：重貼 | 空檔 |\n| 其他 | 空檔 |\n\n### 待決問題\n\n| 補做：也不算 | x |\n|---|---|\n');
+  await add('docs/backlog.md', '# B\n\n## 待處理\n\n| 項目 | 觸發點 |\n|---|---|\n| 補測：不算 | 別節 |\n\n### 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n| **補測：存到一半中斷**，影響小 | 空檔 |\n| 補做：重貼 | 空檔 |\n| 其他 | 空檔 |\n\n### 待決問題\n\n| 補做：也不算 | x |\n|---|---|\n\n## 已轉出\n');
   const common = [
     'docs/tasks/empty-bold.md:11  延後的測試：  還沒填：寫「無」或技術債表的列名（D-195）',
     'docs/tasks/fenced.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
@@ -270,7 +407,7 @@ void test('§7 外掛的 tasks、討論稿與 docs/plans 第一層也要有狀�
   await add('plugins/capture/docs/plans/x.md', '# 主題\n\n規畫中\n');
   await add('plugins/mindboard/docs/tasks/README.md', '# 不查\n');
   await add('plugins/mindboard/docs/tasks/sub/deep.md', '# 不查\n');
-  await add('plugins/mindboard/docs/backlog.md', '# 不查\n');
+  await add('plugins/mindboard/docs/backlog.md', '# 不查狀態\n\n## 待處理\n\n## 已轉出\n');
   await add('plugins/mindboard/notes/x.md', '# 不查\n');
   assert.deepEqual(run(), [
     'plugins/capture/docs/Claude Codex Discussion/2026-11-17-x.md:3  狀態：  標題下第一個非空行沒有狀態',
@@ -279,24 +416,24 @@ void test('§7 外掛的 tasks、討論稿與 docs/plans 第一層也要有狀�
   ]);
 });
 
-void test('§7 外掛的 roadmap：要有〈現在在哪裡〉、已完成最多 10 列；最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉', async t => {
+void test('§7 外掛的 roadmap：三節都要有、已完成不設列數上限；最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉', async t => {
   const { add, run } = await repo(t);
   const rows = (n: number) => Array.from({ length: n }, (_, i) => `第 ${i + 1} 件`);
   const plugin = 'plugins/mindboard/docs/roadmap.md';
   const target = '../plugins/mindboard/docs/roadmap.md#現在在哪裡';
   const missing = (line: number) => `${ROADMAP}:${line}  ${target}  外掛有自己的 roadmap，最上層的〈現在在哪裡〉要連到它的〈現在在哪裡〉（D-208 第 4 點）`;
-  const top = (now: string, after = '') => ['# 路線圖', '', '## 現在在哪裡', '', now, '', '## 已完成', '', after, ''].join('\n');
+  const top = (now: string, after = '') => ['# 路線圖', '', '## 現在在哪裡', '', now, '', '## 等觸發點', '', '## 已完成', '', after, ''].join('\n');
   // 外掛沒有 roadmap：最上層不用連。
   await add(ROADMAP, top('Cards 的進度。'));
   assert.deepEqual(run(), []);
   // 外掛的 roadmap 本身照最上層的規則。
-  await add(plugin, '# Mindboard 路線圖\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n' + rows(DONE_ROWS + 1).map(work => `| 2026-11-17 | ${work} |`).join('\n') + '\n');
+  await add(plugin, '# Mindboard 路線圖\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n' + rows(11).map(work => `| 2026-11-17 | ${work} |`).join('\n') + '\n');
   assert.deepEqual(run(), [
     `${plugin}:1  ## 現在在哪裡  找不到這一節`,
-    `${plugin}:17  ## 已完成  11 列，上限 10`,
+    `${plugin}:1  ## 等觸發點  找不到這一節`,
     missing(3),
   ]);
-  await add(plugin, roadmap(rows(DONE_ROWS)));
+  await add(plugin, roadmap(rows(11)));
   // 最上層沒連、連到錯的錨點、連結在〈現在在哪裡〉以外都要報。
   assert.deepEqual(run(), [missing(3)]);
   await add(ROADMAP, top('Mindboard 見 [它的路線圖](../plugins/mindboard/docs/roadmap.md#已完成)。'));
@@ -310,10 +447,10 @@ void test('§7 外掛的 roadmap：要有〈現在在哪裡〉、已完成最多
 void test('§7 外掛的任務對外掛自己的 backlog；BEFORE_D195 只放過最上層與 Cards 的舊任務；檔名有空白與中文照樣查到', async t => {
   const { root, add, run } = await repo(t);
   const task = (result: string) => `# 任務\n\n狀態：已完成\n\n## 結果\n\n${result}\n`;
-  const debt = (...rows: string[]) => `# B\n\n## 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n${rows.map(row => `| ${row} | 空檔 |`).join('\n')}\n`;
+  const debt = (...rows: string[]) => `# B\n\n## 待處理\n\n### 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n${rows.map(row => `| ${row} | 空檔 |`).join('\n')}\n\n## 已轉出\n`;
   await add('docs/backlog.md', debt('補測：最上層才有'));
   await add('plugins/capture/docs/backlog.md', debt('補測：外掛的列'));
-  await add('plugins/mindboard/docs/backlog.md', '# Mindboard 的待做\n\n還沒有技術債表。\n');
+  await add('plugins/mindboard/docs/backlog.md', '# Mindboard 的待做\n\n## 待處理\n\n還沒有技術債表。\n\n## 已轉出\n');
   await add('plugins/capture/docs/tasks/ok.md', task('延後的測試：「補測：外掛的列」'));
   await add('plugins/capture/docs/tasks/轉錄 稿.md', task('延後的測試：「補測：最上層才有」'));
   await add('plugins/mindboard/docs/tasks/no-table.md', task('延後的測試：「補測：外掛的列」'));
@@ -368,7 +505,7 @@ void test('§B3 舊位置：最上層或外掛根目錄的 tasks/、Claude Codex
 void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記以下照搬家前的位置解得到也算；新的檔、表上沒有的路徑照常查；沒用到的要刪（L2 R3）', async t => {
   const { add, run } = await repo(t);
   await add('docs/decisions.md', '# D\n\n## d-1\n');
-  await add('plugins/cards/docs/backlog.md', '# B\n');
+  await add('plugins/cards/docs/backlog.md', '# B\n\n## 待處理\n\n## 已轉出\n');
   const rule = '# 規則\n\n[上](../decisions.md#d-1)\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[backlog](../backlog.md)、[沒有](../nowhere.md)\n';
   // english.md 在 FROZEN_RULES 的表上（只有 ../decisions.md）；review-probe.md 是搬家後新增的規則檔（Codex 的探針）。
   await add('plugins/cards/docs/card-rules/english.md', rule);
@@ -404,4 +541,46 @@ void test('§B3 製卡規則整個資料夾搬走：表上的三列都要刪（L
   await add('plugins/cards/docs/rules/english.md', '# 英文\n');
   const gone = (file: string) => `plugins/cards/docs/card-rules/${file}  plugins/cards/docs/card-rules/${file}  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列`;
   assert.deepEqual(run(), [gone('elementary-chinese.md'), gone('elementary-social.md'), gone('english.md')]);
+});
+
+// D-214 第 2、3 點：「→」與反過來的「來自」都是往下游的邊；拆分列出每一支，退回的循環停在退回到的那一站。
+void test('L2 R7 決定的狀態行有兩段「來自」：每一段的 D-ID 都是上游，鏈接得起來', () => {
+  const texts = new Map([
+    ['docs/tasks/other.md', ['# O', '', '狀態：已結案 → D-219｜完成：談定｜等誰：—', '', '→ [D-219](../decisions.md#d-219-新乙)（2026-11-03）', ''].join('\n')],
+    ['docs/tasks/next.md', ['# N', '', '狀態：實作中｜下一步：寫測試｜等誰：Claude', '', '來自：[D-219](../decisions.md#d-219-新乙)', ''].join('\n')],
+    ['docs/decisions.md', ['# 決策紀錄', '', '---', '',
+      '## D-218 新甲', '', '✅ 2026-11-02', '', '主題：協作與文件｜一句話：甲。', '',
+      '## D-219 新乙', '', '✅ 2026-11-03｜來自 [任務](tasks/other.md)｜來自 D-218', '', '主題：協作與文件｜一句話：乙。', ''].join('\n')],
+  ]);
+  assert.deepEqual(downstreamOf(texts, 'docs/decisions.md#d-218-新甲'), ['docs/tasks/next.md']);
+  assert.deepEqual(downstreamOf(texts, 'docs/tasks/other.md'), ['docs/tasks/next.md']);
+});
+
+void test('往下游的鏈：拆分、退回、backlog 的一站、決定來自決定', () => {
+  const status = (state: string) => state === '實作中' ? '狀態：實作中｜下一步：寫測試｜等誰：Claude' : `狀態：${state}｜完成：做完了｜等誰：—`;
+  const texts = new Map([
+    ['docs/backlog.md', ['# Backlog', '', '## 待處理', '', '### 點子丙', '', '## 已轉出', '',
+      '### 點子甲', '', '→ [plans](plans/p.md)（2026-11-01）', '', '### 點子乙', '', '→ [D-218](decisions.md#d-218-新甲)（2026-11-02）', ''].join('\n')],
+    ['docs/plans/p.md', ['# P', '', status('已結案'), '', '來自：[點子甲](../backlog.md#點子甲)', '',
+      '→ [任務 a](../tasks/a.md)（2026-11-02）', '', '→ [任務 b](../tasks/b.md)（2026-11-02）', '', '## 內容', ''].join('\n')],
+    ['docs/tasks/a.md', ['# A', '', status('實作中'), '', '來自：[P](../plans/p.md)', ''].join('\n')],
+    // b 送去討論、討論完退回 b：b ⇄ c 是一個循環，從 P 走進來的是 b。
+    ['docs/tasks/b.md', ['# B', '', status('實作中'), '', '來自：[P](../plans/p.md)、[討論 c](<../Claude Codex Discussion/c.md>)', '',
+      '→ [討論 c](<../Claude Codex Discussion/c.md>)（2026-11-03）', ''].join('\n')],
+    ['docs/Claude Codex Discussion/c.md', ['# C', '', status('已結案'), '', '來自：[B](../tasks/b.md)', '', '→ [退回 b](../tasks/b.md)（2026-11-04）', ''].join('\n')],
+    ['docs/decisions.md', ['# 決策紀錄', '', '---', '',
+      '## D-218 新甲', '', '✅ 2026-11-02｜來自 [點子乙](backlog.md#點子乙)', '', '主題：協作與文件｜一句話：甲。', '',
+      '## D-219 新乙', '', '✅ 2026-11-03｜來自 [D-218](#d-218-新甲)', '', '主題：協作與文件｜一句話：乙。', ''].join('\n')],
+    ['docs/notes.txt', '來自：[P](plans/p.md)'],
+  ]);
+  assert.deepEqual(downstreamOf(texts, 'docs/backlog.md#點子甲'), ['docs/tasks/a.md', 'docs/tasks/b.md']);
+  assert.deepEqual(downstreamOf(texts, 'docs/plans/p.md'), ['docs/tasks/a.md', 'docs/tasks/b.md']);
+  assert.deepEqual(downstreamOf(texts, 'docs/backlog.md#點子乙'), ['docs/decisions.md#d-219-新乙']);
+  assert.deepEqual(downstreamOf(texts, 'docs/decisions.md#d-218-新甲'), ['docs/decisions.md#d-219-新乙']);
+  // 走不出去的站：沒有下游。
+  assert.deepEqual(downstreamOf(texts, 'docs/tasks/a.md'), []);
+  assert.deepEqual(downstreamOf(texts, 'docs/backlog.md#點子丙'), []);
+  // b 之後往前走到 d：循環不再是最下游，d 才是。
+  texts.set('docs/tasks/d.md', ['# D', '', status('實作中'), '', '來自：[B](b.md)', ''].join('\n'));
+  assert.deepEqual(downstreamOf(texts, 'docs/plans/p.md'), ['docs/tasks/a.md', 'docs/tasks/d.md']);
 });

@@ -1,17 +1,18 @@
 # 開發進度畫板：docs/progress-map.md 或 backlog（最上層與外掛的，數補測列）改了就產生網頁、發布到 GitHub Pages（清單 progress-map-list.html、畫布 progress-map-board.html，在 https://kuohappiness.github.io/Essence/ 底下）。
-# 進度白板（roadmap.html）：docs/roadmap.md 或外掛的 roadmap 改了也重新產生，同一站一起發布（tools/roadmap-board.ts）。
+# 進度白板（roadmap.html）：roadmap、入口文件或決策紀錄（最上層與外掛的 docs/ 底下）改了也重新產生，同一站一起發布（tools/roadmap-board.ts）。
 # 網頁只在這裡產生、直接發布，不 commit 進 repo。第一次要在 repo 的 Settings → Pages 把 Source 設成 GitHub Actions。
 name: Progress board
 on:
   push:
     branches: [main]
     paths:
-      - docs/progress-map.md
-      - docs/backlog.md
-      - plugins/*/docs/backlog.md
-      - docs/roadmap.md
-      - plugins/*/docs/roadmap.md
+      # 白板的狀態板、〈已完成〉由入口的狀態行同步而來，「最近定案」讀決策紀錄與各站的「來自」「→」（D-214、D-217）：
+      # 最上層與外掛的 docs/ 底下任何一份改了都可能改變白板。
+      - docs/**
+      - plugins/*/docs/**
       - tools/check-docs.ts
+      - tools/decisions.ts
+      - tools/status-line.ts
       - tools/progress-board*.ts
       - tools/roadmap-board.ts
       - tools/package-lock.json

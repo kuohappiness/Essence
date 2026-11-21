@@ -107,7 +107,7 @@ Capture、Mindboard 的 `docs/` 與裡面的資料夾，第一份文件出現才
 
 ### 每一類放哪裡
 
-原本在 `AGENTS.md`〈文件分工〉的表搬到這裡。「外掛」指 `plugins/<外掛>/`。
+原本在 `AGENTS.md`〈文件分工〉的表搬到這裡。「外掛」指 `plugins/<外掛>/`。這裡只寫放在哪個資料夾；每類文件的用途、什麼時候進來、狀態行與終點，以及「來自」「→」怎麼連，見[工作流程規範](agents/workflow.md)（[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 1 點）。
 
 | 內容 | 位置 |
 |---|---|
@@ -128,7 +128,7 @@ Capture、Mindboard 的 `docs/` 與裡面的資料夾，第一份文件出現才
 | 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts` |
 | 功能地圖 | 最上層 `docs/progress-map.md` |
 | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 | 最上層 `docs/archive/` |
-| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態 | 跨外掛的在最上層 `docs/tasks/`，其餘在外掛的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
+| 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態行（[寫法](agents/workflow.md#入口的狀態行)） | 跨外掛的在最上層 `docs/tasks/`，其餘在外掛的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
 | Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | 跨外掛的在最上層 `docs/Claude Codex Discussion/`，其餘在外掛的 `docs/Claude Codex Discussion/`（D-213） |
 | 試作場：樣式稿、試作外掛與測試結果 | 最上層 `experiments/` |
 | 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | 外掛的 `src/`、`tests/`、`tools/`；共用的檢查與它們的測試在最上層 `tools/`（自己的 `package.json`） |
