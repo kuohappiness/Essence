@@ -205,7 +205,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 8. 四種在 Windows 都擋下：前兩種是 `app-imports.test.ts`「§3 第 3 點」的測試、第三種是 `check-docs.test.ts`「驗收第 8 項」、第四種在暫存 clone 的 `apps/Cards/src/core/` 寫 `import './Files.ts'` 跑 `tsc`，報 TS1149（只差大小寫）。
 9. `app-imports.test.ts` 的 §6 測試：第二步 A7 的兩例換成新路徑照樣擋，另加 `apps/Capture/src/a.ts` import `../../Cards/src/core/files.ts`。
 10. 合併前：2026-11-22 使用者在這個分支（`f681828`）開新的雲端 session（只讀），目視確認開場訊息和預期相同（沒有貼原文）：`tools`、`apps/Cards` 是「`npm ci` 完成」，`apps/Capture`、`apps/Mindboard` 是「沒有相依，跳過」，Node 24、`core.hooksPath` 是 `.githooks`。合併後在 `main` 的那一次：待合併。
-11. 分支 push 的 run 七個 job 都成功（第 3 項）。探針分支各對這個分支開 draft PR，看 `pull_request` 的 run：只改 `apps/Mindboard/AGENTS.md` 的 #31（run 44917630810）只有 mindboard 跑、成功，tools、cards、capture 跳過，gate 成功；只改 `apps/Cards/src/` 一個檔的 #32（run 44919385585）只有 cards 跑、成功（含建置後的 `git status --porcelain`），tools、capture、mindboard 跳過，gate 成功。兩個 PR 看完關掉、探針分支刪掉。（探針分支自己的 push run 和 `main` 比，帶著整個改名，所以是全部跑。）合併後的 Pages：待合併。
+11. 分支 push 的 run 七個 job 都成功（第 3 項）。探針分支各對這個分支開 draft PR，看 `pull_request` 的 run：只改 `apps/Mindboard/AGENTS.md` 的 #31（run 44917630810）只有 mindboard 跑、成功，tools、cards、capture 跳過，gate 成功；只改 `apps/Cards/src/` 一個檔的 #32（run 44919385585）只有 cards 跑、成功（含建置後的 `git status --porcelain`），tools、capture、mindboard 跳過，gate 成功。兩個 PR 看完關掉、探針分支刪掉。（探針分支自己的 push run 和 `main` 比，帶著整個改名，所以是全部跑。）合併後的 Pages：`ac39302` 的 Progress board run 44928491250 成功；`roadmap.html` 有最上層與 Cards 兩份 roadmap，Cards 的列前綴是「Cards｜」，連到 GitHub 的網址是 `blob/main/apps/Cards/…`，沒有 `blob/main/plugins/`。
 12. `apps/Cards/manifest.json` 的 `id` 是 `essence-cards`、`version` 是 `0.6.0`，和 `252d85d` 相同；這次沒有新增或移動 tag。
 13. Windows 跑第 3、8、9 項（上面）；Linux 由 CI 跑第 3 項。`plugin-root.test.ts`、`build.test.ts` 的大寫路徑測試只在 Windows 跑（Linux 那個資料夾不存在）。
 14. §5：
