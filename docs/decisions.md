@@ -6368,7 +6368,7 @@
 2. **用詞**：資料夾這一層叫「軟體」（`apps/<軟體>/`）；Cards、Capture、Mindboard 本身仍是 Obsidian 外掛，講外掛才有的事（manifest、vault 裡的安裝）照舊叫外掛。D-208 寫的 `plugins/<外掛>/` 讀作 `apps/<軟體>/`；第 10 點「不互相 import」適用 `apps/` 底下每個軟體，含之後的 Portal。
 3. **不改**：外掛 ID `essence-cards`、vault 裡的 `.obsidian/plugins/essence-cards/`、套件名稱、tag、任何寫進 vault 的格式。
 4. **大小寫**：路徑一律照 git 追蹤的寫法。程式裡的軟體代號（`cards`、`capture`、`mindboard`）對到資料夾只寫在一張表，不用字串組；機械檢查擋大小寫不符的路徑，也擋改名後又出現的 `plugins/` 追蹤檔。
-5. **做法**：一個任務、一個 PR，在本機做（[任務說明](tasks/rename-plugins-to-apps.md)）；開工前 Codex 查核，合併前 L2。已完成的任務與討論稿跟著資料夾搬、只改連結的路徑，內文不改（D-208 第 9 點的一次性例外，範圍限這個任務）。
+5. **做法**：一個任務、一個 PR，在本機做（[任務說明](tasks/rename-plugins-to-apps.md)）；開工前 Codex 查核，合併前 L2（使用者 2026-11-21：Codex 額度用完，這件的兩次審查改由 Fable 5.2 high 子代理做，Codex 重置後新的任務改回 Codex）。已完成的任務與討論稿跟著資料夾搬、只改連結的路徑，內文不改（D-208 第 9 點的一次性例外，範圍限這個任務）。
 6. **時機**：趁其他軟體還沒寫程式、沒有別的分支動 `plugins/` 時盡快做；開工到合併停手改 `plugins/`。
 
 **理由**：
