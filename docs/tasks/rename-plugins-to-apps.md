@@ -171,7 +171,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 | Windows 上索引裡還沒有的資料夾，`git add` 照打的大小寫記；已有的資料夾底下的新檔對齊索引的大小寫 | Windows、Git 2.52、暫存 clone | 成立（開工前查核）：`apps/portal/…` 記成小寫，改回要兩段式 `git mv`；`git status -- apps/cards/…`、`git ls-tree`、`git show <rev>:<path>` 在 Windows 也分大小寫 |
 | Windows 上 `.gitignore` 不分大小寫、Linux 分 | `git check-ignore` 與 `-c core.ignorecase=false` | 成立（開工前查核，模擬 Linux）；驗收第 16 項在 Linux 實測 |
 | 舊版的對照表定位錯誤不靠 repo 裡的現行路徑 | 讀 D-155 的定位工具 | 成立（開工前查核讀程式：`locate.ts:45-63` 只讀 `.local/releases/<版本>/` 的 `main.js.map` 與 `sourcesContent`） |
-| `cloud-setup.mjs` 在新的雲端 session 對 `apps/Cards` 跑得了 `npm ci` | 驗收第 10 項 | 待驗 |
+| `cloud-setup.mjs` 在新的雲端 session 對 `apps/Cards` 跑得了 `npm ci` | 驗收第 10 項 | 成立：合併前的新 session（`f681828`）是「`npm ci` 完成」；合併後的新 session 從前一個 session 的快照開機、`node_modules` 已在，改在 `main`（`491957d`）沒有 `node_modules` 的 worktree 跑 hook，也是「`npm ci` 完成」（2026-11-22，見〈結果〉第 10 項） |
 
 ## 技術債
 
@@ -204,7 +204,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 7. `dispatch.test.ts` 全部換成新路徑通過，另加 `apps/Capture/a.ts`、`apps/Portal/docs/backlog.md`、`apps/Other/a.ts` 三例；`app-imports.test.ts` 的「D-218 §3 第 1、2 點」「驗收第 7、17 項」兩個測試涵蓋 `apps/Portal/package.json`、`apps/Other/a.ts`、`plugins/cards/a.ts` 與 `apps/portal/…` 的兩段式改法。
 8. 四種在 Windows 都擋下：前兩種是 `app-imports.test.ts`「§3 第 3 點」的測試、第三種是 `check-docs.test.ts`「驗收第 8 項」、第四種在暫存 clone 的 `apps/Cards/src/core/` 寫 `import './Files.ts'` 跑 `tsc`，報 TS1149（只差大小寫）。
 9. `app-imports.test.ts` 的 §6 測試：第二步 A7 的兩例換成新路徑照樣擋，另加 `apps/Capture/src/a.ts` import `../../Cards/src/core/files.ts`。
-10. 合併前：2026-11-22 使用者在這個分支（`f681828`）開新的雲端 session（只讀），目視確認開場訊息和預期相同（沒有貼原文）：`tools`、`apps/Cards` 是「`npm ci` 完成」，`apps/Capture`、`apps/Mindboard` 是「沒有相依，跳過」，Node 24、`core.hooksPath` 是 `.githooks`。合併後在 `main` 的那一次：待合併。
+10. 合併前：2026-11-22 使用者在這個分支（`f681828`）開新的雲端 session（只讀），目視確認開場訊息和預期相同（沒有貼原文）：`tools`、`apps/Cards` 是「`npm ci` 完成」，`apps/Capture`、`apps/Mindboard` 是「沒有相依，跳過」，Node 24、`core.hooksPath` 是 `.githooks`。合併後：2026-11-22 使用者開新的雲端 session，停在 `e949119`（這個分支的最後一個 commit，已併進 `main`；和當時的 `main` `491957d` 只差文件，hook、鎖檔、CI 都沒變）。開場訊息原文：「雲端環境設定：PATH 上的 Node 是 22.23.5，之後的指令改用 /opt/node24/bin 的 v24.22.3；core.hooksPath 已設為 .githooks；tools：鎖檔沒變，跳過；apps/Cards：鎖檔沒變，跳過；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過」。`tools`、`apps/Cards` 跳過，是因為容器從合併前那次 session 的快照開機：reflog 留著 16:23 UTC 切到 `f681828` 的紀錄，兩個 `node_modules/.package-lock.json` 是 16:24 寫的，比鎖檔新。所以另外在 `491957d` 開沒有 `node_modules` 的 worktree，PATH 用 Node 22、設 `CLAUDE_CODE_REMOTE=true` 跑 hook，輸出原文：「雲端環境設定：PATH 上的 Node 是 22.23.5，之後的指令改用 /opt/node24/bin 的 v24.22.3；core.hooksPath 已設為 .githooks；tools：npm ci 完成；apps/Cards：npm ci 完成；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過」（exit 0）。使用者同意兩次合起來算通過。新的雲端 session 不保證乾淨，[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)的檢查方式跟著改。
 11. 分支 push 的 run 七個 job 都成功（第 3 項）。探針分支各對這個分支開 draft PR，看 `pull_request` 的 run：只改 `apps/Mindboard/AGENTS.md` 的 #31（run 44917630810）只有 mindboard 跑、成功，tools、cards、capture 跳過，gate 成功；只改 `apps/Cards/src/` 一個檔的 #32（run 44919385585）只有 cards 跑、成功（含建置後的 `git status --porcelain`），tools、capture、mindboard 跳過，gate 成功。兩個 PR 看完關掉、探針分支刪掉。（探針分支自己的 push run 和 `main` 比，帶著整個改名，所以是全部跑。）合併後的 Pages：`ac39302` 的 Progress board run 44928491250 成功；`roadmap.html` 有最上層與 Cards 兩份 roadmap，Cards 的列前綴是「Cards｜」，連到 GitHub 的網址是 `blob/main/apps/Cards/…`，沒有 `blob/main/plugins/`。
 12. `apps/Cards/manifest.json` 的 `id` 是 `essence-cards`、`version` 是 `0.6.0`，和 `252d85d` 相同；這次沒有新增或移動 tag。
 13. Windows 跑第 3、8、9 項（上面）；Linux 由 CI 跑第 3 項。`plugin-root.test.ts`、`build.test.ts` 的大寫路徑測試只在 Windows 跑（Linux 那個資料夾不存在）。
