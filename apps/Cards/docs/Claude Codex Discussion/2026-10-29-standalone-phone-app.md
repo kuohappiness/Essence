@@ -4,6 +4,9 @@
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../../../../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../../../../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../../../../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
+→ [入口網站討論稿](<../../../Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>)（2026-11-21）
+→ [Cards 網頁版討論稿](2026-11-20-cards-web.md)（2026-11-21）
+
 ## 先讀這裡
 
 - **2026-10-30 重點改了**：使用者看完兩輪與 Obsidian 難取代的清單，認為很難完全脫離 Obsidian，Obsidian 仍是首選的中介平台，卡點只在綁著 iCloud（文末〈使用者的看法〉）。所以請 Codex 把力氣放在第二輪（外掛自己同步）與〈補充〉；第一輪只回答第 8 節第 1、6 題，其餘各節降為之後要做獨立 App 時的參考，不必逐項回應。
