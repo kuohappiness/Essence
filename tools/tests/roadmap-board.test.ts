@@ -147,6 +147,15 @@ void test('L2 N7 工具寫的列照「**工作**：」的結構找完成那一�
   assert.deepEqual(planned.unreleased.map(d => d.date), ['2026-12-04', '2026-11-16']);
 });
 
+void test('L2 M3 工具寫的發版列，版本號帶連結或粗體也認得', () => {
+  const rows = (line: string) => SAMPLE.replace('| 2026-11-16 | 接句卡合併進 `main`：細節 |', [line, '| 2026-11-16 | 接句卡合併進 `main`：細節 |'].join('\n'));
+  for (const version of ['[`0.7.0`](https://example.invalid/releases/0.7.0)', '**0.7.0**', '[v0.7.0](../tags.md)']) {
+    const parsed = parseRoadmap(rows(`| 2026-12-05 | **發版**：正式 vault 升到 ${version}（已結案，[入口](tasks/r.md)） |`));
+    assert.deepEqual(parsed.vault, { version: '0.7.0', date: '2026-12-05' }, version);
+    assert.deepEqual(parsed.unreleased.map(d => d.date), [], version);
+  }
+});
+
 void test('最近完成合併每份 roadmap 的〈已完成〉：照日期新到舊，同一天照 roadmap 的順序與原本的順序；沒有表的那份是空的', () => {
   const table = (rows: string[]) => `# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n${rows.join('\n')}\n`;
   const top = parseDone(table(['| 2026-11-22 | 頂甲 |', '| 2026-11-20 | 頂乙 |']), ROADMAP);

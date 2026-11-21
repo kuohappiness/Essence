@@ -137,7 +137,8 @@ const EMPTY: Cell = { html: '', text: '' };
  * 手寫的列照舊。句中提到計畫中的版本不算（L2 R8、第二輪 N7）。
  */
 const GENERATED = /（(?:已合併|已結案)，入口）$/;
-const GENERATED_RELEASE = /^<strong>[\s\S]*?<\/strong>：正式 vault 升到\s*(?:<code>)?v?(\d+\.\d+\.\d+)/;
+// 版本號前可以有任何標籤：反引號、連結、粗體（L2 第三輪 M3）。
+const GENERATED_RELEASE = /^<strong>[\s\S]*?<\/strong>：正式 vault 升到\s*(?:<[^>]+>\s*)*v?(\d+\.\d+\.\d+)/;
 const HANDWRITTEN_RELEASE = /升正式版\s*`?v?(\d+\.\d+\.\d+)`?|^(?:[^：]*：)?正式 vault 升到\s*`?v?(\d+\.\d+\.\d+)`?/;
 const releaseOf = (cell: Cell) => {
   if (GENERATED.test(cell.text)) return GENERATED_RELEASE.exec(cell.html)?.[1];
