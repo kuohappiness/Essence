@@ -276,6 +276,14 @@ void test('L2 R6 backlog 的一站是「檔＋最近的標題」：子項的「�
   assert.deepEqual(run(), ['docs/tasks/r.md:7  →  docs/backlog.md#父項 沒有「來自」連回這裡：在那個標題底下、下一個標題之前寫「來自：[…](…)」']);
 });
 
+void test('L2 N9 連到 backlog 的「→」要帶標題的錨點；錨點的大小寫不影響回鏈的核對', async t => {
+  const { add, run } = await repo(t);
+  await add(BACKLOG, ['# B', '', '## 待處理', '', '## 已轉出', '', '### AI 製卡', '', '- 甲', '  來自：[plans/a](plans/a.md)', ''].join('\n'));
+  await add('docs/plans/a.md', ['# A', '', '狀態：討論中｜下一步：x｜等誰：使用者', '', '## 一', '',
+    '→ [backlog〈AI 製卡〉](../backlog.md#AI-製卡)（2026-11-22）', '→ [backlog](../backlog.md)（2026-11-22）', ''].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/a.md:8  →  連到 backlog 的「→」要帶標題的錨點（backlog 的一站是檔＋最近的標題）：寫成 [文字](…backlog.md#標題)']);
+});
+
 void test('L2 N8 狀態行「已結案 →」的純文字 D-ID 要在決策紀錄裡', async t => {
   const { add, run } = await repo(t);
   await add('docs/decisions.md', ['# 決策紀錄', '', '## D-218 新', '', '✅ 2026-11-22｜來自 [plans/a](plans/a.md)', '', '主題：協作與文件｜一句話：x。', ''].join('\n'));

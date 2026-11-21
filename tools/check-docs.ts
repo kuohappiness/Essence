@@ -361,7 +361,8 @@ function resolveHref(from: string, raw: string): Target | undefined {
   if (isExternal(href)) return undefined;
   const hash = href.indexOf('#');
   const path = decode((hash < 0 ? href : href.slice(0, hash)).split('?')[0]);
-  const anchor = hash < 0 ? '' : decode(href.slice(hash + 1));
+  // 錨點和標題的 slug 一樣比小寫（連結檢查也是；L2 第二輪 N9）。
+  const anchor = hash < 0 ? '' : decode(href.slice(hash + 1))?.toLowerCase();
   if (path === undefined || anchor === undefined) return undefined;
   const file = path ? posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join(posix.dirname(from), path)) : from;
   return file.startsWith('../') ? undefined : { file, anchor };
@@ -416,7 +417,9 @@ function arrowsOf(doc: Doc, problems: Problem[]): Arrow[] {
     if (isExternal(href.replace(/^<|>$/g, ''))) add('「→」要連到 repo 裡的一站（任務、討論稿、plans、backlog 的項目或決定），不連外部網址');
     if (!realDate(y, m, d)) add(`${y}-${m}-${d} 不是真的日期`);
     if (pendingLines && line > pendingLines[0] && line < pendingLines[1]) add('轉出的項目搬到〈已轉出〉：〈待處理〉裡不能有「→」（D-214 第 4 點）');
-    arrows.push({ file: doc.file, line, station: backlog ? stationAnchor(doc, line) : undefined, to: resolveHref(doc.file, href) });
+    const to = resolveHref(doc.file, href);
+    if (to && ANY_BACKLOG.test(to.file) && !to.anchor) add('連到 backlog 的「→」要帶標題的錨點（backlog 的一站是檔＋最近的標題）：寫成 [文字](…backlog.md#標題)');
+    arrows.push({ file: doc.file, line, station: backlog ? stationAnchor(doc, line) : undefined, to });
   }
   return arrows;
 }
