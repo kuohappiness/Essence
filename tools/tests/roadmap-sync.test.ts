@@ -234,7 +234,7 @@ void test('L2 R2〈已完成〉新的列照 HEAD 核對：漏搬、重複、日�
   await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
   await add('docs/roadmap.md', roadmap([board[1]]));
   assert.equal(check().stderr.split('\n').find(line => line.startsWith('docs/')),
-    'docs/roadmap.md:16  入口 docs/tasks/a.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts');
+    'docs/roadmap.md:16  入口 docs/tasks/a.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts（只是換了入口就在舊入口寫「已結案 → <新入口>」）');
   // 同步產生的列：通過。
   const row = `| ${TODAY} | **甲**：做完（已合併，[入口](tasks/a.md)） |`;
   const old = '| 2026-11-20 | 舊的一列 |';
@@ -386,6 +386,36 @@ void test('L2 N2 入口結束但同名的工作還在（換入口）、HEAD 是�
   commit();
   await add('docs/plans/p.md', closed);
   await add('docs/roadmap.md', roadmap(['| 新名 | 實作中 | 做 | Claude | [任務](tasks/t.md) |']));
+  assert.equal(check().status, 0, check().stderr);
+});
+
+void test('L2 M2 換入口只認舊入口的「已結案 → 新入口」：同名的列在別處、換入口時舊入口沒結束或沒寫箭頭，照擋', async t => {
+  const { add, git, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  // 同名的兩列在不同 roadmap：刪掉最上層那一列（入口沒結束）照擋。
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('plugins/cards/docs/tasks/b.md', entry('狀態：實作中｜下一步：y｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  await add('plugins/cards/docs/roadmap.md', roadmap(['| 甲 | 實作中 | y | Claude | [任務](tasks/b.md) |']));
+  commit();
+  await add('docs/roadmap.md', roadmap([]));
+  assert.match(check().stderr, /docs\/roadmap\.md:3  入口 docs\/tasks\/a\.md 還沒結束（實作中）/);
+  // 同一份 roadmap 兩列同名：其中一份入口結束、列刪掉、沒有完成列，照擋。
+  await add('docs/tasks/c.md', entry('狀態：實作中｜下一步：z｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |', '| 甲 | 實作中 | z | Claude | [任務](tasks/c.md) |']));
+  commit();
+  await add('docs/tasks/c.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  assert.match(check().stderr, /入口 docs\/tasks\/c\.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列/);
+  git(['reset', '-q', '--hard']);
+  // 換入口時舊入口還沒結束：舊入口沒人追，照擋。
+  await add('docs/tasks/t.md', entry('狀態：實作中｜下一步：做｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | 做 | Claude | [任務](tasks/t.md) |', '| 甲 | 實作中 | z | Claude | [任務](tasks/c.md) |']));
+  assert.match(check().stderr, /入口 docs\/tasks\/a\.md 還沒結束（實作中）/);
+  // 舊入口結案但沒寫「→ 新入口」：當成結束，要有完成列；寫了箭頭就放行。
+  await add('docs/tasks/a.md', entry('狀態：已結案｜完成：改做 t｜等誰：—'));
+  assert.match(check().stderr, /入口 docs\/tasks\/a\.md 已結束、.*只是換了入口就在舊入口寫「已結案 → <新入口>」/);
+  await add('docs/tasks/a.md', entry('狀態：已結案 → [任務](t.md)｜完成：改做 t｜等誰：—'));
   assert.equal(check().status, 0, check().stderr);
 });
 
