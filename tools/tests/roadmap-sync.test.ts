@@ -362,9 +362,33 @@ void test('L2 M1 合併、squash 帶進來的完成列是另一邊驗過的：�
   };
   const BOARD_RULE = '|---|---|---|---|---|\n';
   const DONE_HEAD = '| 日期 | 工作 |\n|---|---|\n';
-  const close = (text: string) => () => step(`收尾：${text}`, { 'docs/tasks/x.md': entry(`狀態：已合併｜完成：${text}｜等誰：—`) });
-  const reopen = () => step('重新開工', { 'docs/tasks/x.md': entry('狀態：實作中｜下一步：再做｜等誰：Claude') },
-    text => text.replace(BOARD_RULE, `${BOARD_RULE}| 甲 | 實作中 | 再做 | Claude | [任務](tasks/x.md) |\n`));
+  // 另一邊對同一件工作（甲）能做的每一步：from 是做之前、to 是做之後工作有沒有在進行（L2 第四輪 K2 改成類別測試）。
+  interface Work { name: string; file: string }
+  const at = (work: Work) => `docs/tasks/${work.file}`;
+  const moves: Record<string, { from: boolean; to: boolean; run: (work: Work) => Promise<Work> }> = {
+    收尾: { from: true, to: false, run: async work => { await step('收尾', { [at(work)]: entry('狀態：已合併｜完成：做完｜等誰：—') }); return work; } },
+    補一句: { from: false, to: false, run: async work => { await step('補一句', { [at(work)]: entry('狀態：已合併｜完成：做完，補一句｜等誰：—') }); return work; } },
+    改成已結案: { from: false, to: false, run: async work => { await step('改成已結案', { [at(work)]: entry('狀態：已結案｜完成：做完｜等誰：—') }); return work; } },
+    重新開工: { from: false, to: true, run: async work => {
+      await step('重新開工', { [at(work)]: entry('狀態：實作中｜下一步：再做｜等誰：Claude') },
+        text => text.replace(BOARD_RULE, `${BOARD_RULE}| ${work.name} | 實作中 | 再做 | Claude | [任務](tasks/${work.file}) |\n`));
+      return work;
+    } },
+    換入口: { from: true, to: true, run: async work => {
+      const next = work.file.replace(/\.md$/, '-2.md');
+      await step('換入口', { [at(work)]: entry(`狀態：已結案 → [任務](${next})｜完成：交給下一份｜等誰：—`), [`docs/tasks/${next}`]: entry('狀態：實作中｜下一步：做｜等誰：Claude') },
+        text => text.replace(`[任務](tasks/${work.file})`, `[任務](tasks/${next})`));
+      return { ...work, file: next };
+    } },
+    改名: { from: true, to: true, run: async work => {
+      await step('改名', {}, text => text.replace(`| ${work.name} |`, `| ${work.name}二 |`));
+      return { ...work, name: `${work.name}二` };
+    } },
+  };
+  // 從進行中開始的每一種兩步，加上兩個三步的：收尾、重新開工、再收尾；連換兩次入口再收尾。
+  const sequences = [['收尾', '重新開工', '收尾'], ['換入口', '換入口', '收尾']];
+  for (const [a, first] of Object.entries(moves)) if (first.from) for (const [b, second] of Object.entries(moves)) if (second.from === first.to) sequences.push([a, b]);
+  assert.equal(sequences.length, 11);
   await put('docs/tasks/x.md', entry('狀態：實作中｜下一步：做｜等誰：Claude'));
   await put('docs/plans/p.md', entry('狀態：討論中｜下一步：談｜等誰：使用者'));
   await put('docs/roadmap.md', roadmap(['| 甲 | 舊 | 舊 | 舊 | [任務](tasks/x.md) |', '| 乙 | 舊 | 舊 | 舊 | [主文](plans/p.md) |']));
@@ -373,21 +397,11 @@ void test('L2 M1 合併、squash 帶進來的完成列是另一邊驗過的：�
   // 功能分支在另一邊動手之前開，只改無關的檔。
   git(['checkout', '-q', '-b', 'feature']);
   await step('feature', { 'docs/other.md': '# 別的\n' });
-  const scenarios: [string, (() => Promise<void>)[]][] = [
-    ['收尾後補寫完成那一句', [close('做完'), close('做完，補一句')]],
-    ['收尾後改成已結案', [close('做完'), () => step('改成已結案', { 'docs/tasks/x.md': entry('狀態：已結案｜完成：做完｜等誰：—') })]],
-    ['收尾後重新開工', [close('做完'), reopen]],
-    ['收尾、重新開工、再收尾', [close('做完'), reopen, close('又做完')]],
-    ['換入口再收尾', [
-      () => step('換入口', { 'docs/plans/p.md': entry('狀態：已結案 → [任務](../tasks/q.md)｜完成：交給任務｜等誰：—'), 'docs/tasks/q.md': entry('狀態：實作中｜下一步：做｜等誰：Claude') },
-        text => text.replace('[主文](plans/p.md)', '[任務](tasks/q.md)')),
-      () => step('任務收尾', { 'docs/tasks/q.md': entry('狀態：已合併｜完成：做完｜等誰：—') }),
-    ]],
-    ['改工作名稱再收尾', [() => step('改名', {}, text => text.replace('| 甲 |', '| 甲二 |')), close('做完')]],
-  ];
-  for (const [k, [name, steps]] of scenarios.entries()) {
+  for (const [k, sequence] of sequences.entries()) {
+    const name = sequence.join('→');
     git(['checkout', '-q', '-B', `side${k}`, 'base']);
-    for (const s of steps) await s();
+    let work: Work = { name: '甲', file: 'x.md' };
+    for (const move of sequence) work = await moves[move].run(work);
     // 另一邊併進功能分支：真的合併（pre-merge-commit）與 squash（pre-commit）；再反過來把功能分支併回另一邊。
     git(['checkout', '-q', '-B', 'work', 'feature']);
     const merged = run(['merge', '-q', '--no-ff', '-m', 'merge', `side${k}`]);
@@ -406,7 +420,7 @@ void test('L2 M1 合併、squash 帶進來的完成列是另一邊驗過的：�
     text => text.replace(BOARD_RULE, `${BOARD_RULE}| 丙 | 舊 | 舊 | 舊 | [任務](tasks/z.md) |\n`));
   await step('丙收尾', { 'docs/tasks/z.md': entry('狀態：已合併｜完成：丙做完｜等誰：—') });
   git(['checkout', '-q', '-B', 'work', 'feature']);
-  await close('甲做完')();
+  await moves['收尾'].run({ name: '甲', file: 'x.md' });
   assert.notEqual(run(['merge', '-q', '--no-ff', '-m', 'merge', 'other']).status, 0);
   git(['checkout', '--ours', '--', 'docs/roadmap.md']);
   git(['add', '--', 'docs/roadmap.md']);

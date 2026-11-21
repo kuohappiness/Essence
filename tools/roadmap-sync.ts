@@ -364,7 +364,7 @@ const isDate = (text: string) => {
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
  * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外），不和另一邊帶進來的列重複；
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列或另一邊帶進來的列（手動刪掉的列會漏記）；沒結束的列也不能刪；
- *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有完成列）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
+ *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有完成列；可以接好幾站，K2）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
  * - HEAD 的〈已完成〉每一列都還在；真的合併時另一邊的也是（這邊是新格式時只要工具格式的列，K1）。
  * 另一邊已經 commit 的列只查格式與日期，不照這邊的入口重驗（L2 第三輪 M1）；這邊是上線前的格式時照收不查（K0）。
  * HEAD 沒有的 roadmap 不看。
@@ -460,21 +460,38 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
   for (const check of checks) check();
 
   const closed = (path: string) => fresh.has(path) || carried.has(path);
-  for (const [path, { file }] of before) {
-    if (placed.has(path) || closed(path) || legacy.has(file)) continue;
+  const statusOf = (path: string) => {
     const text = source.read(path);
     const line = text === undefined ? undefined : statusLineOf(text);
     const parsed = line ? parseStatus(line) : undefined;
-    if (!parsed || 'error' in parsed) continue;
-    // 換入口（例如討論稿結案、交給任務）：舊入口寫「已結案 → <新入口>」，新入口在狀態板或〈等觸發點〉、或有新的完成列，
-    // 工作沒有結束。只看舊入口自己寫的下一站，不看別處有沒有同名的列（L2 第二輪 N2、第三輪 M2）。
-    if (parsed.status.done && nextStations(parsed.status, path).some(next => placed.has(next) || closed(next))) continue;
+    return !parsed || 'error' in parsed ? undefined : parsed.status;
+  };
+  // 換入口（例如討論稿結案、交給任務）：舊入口寫「已結案 → <新入口>」，新入口在狀態板或〈等觸發點〉、或有新的完成列，
+  // 工作沒有結束。只看舊入口自己寫的下一站，不看別處有沒有同名的列（L2 第二輪 N2、第三輪 M2）；
+  // 合併時另一邊可能連換好幾次（p → t1 → t2），沿著已結束的下一站一路走（第四輪 K2）。
+  const handedOn = (status: Status, path: string) => {
+    const seen = new Set([path]);
+    const queue = nextStations(status, path);
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      if (placed.has(next) || closed(next)) return true;
+      const later = statusOf(next);
+      if (later?.done) queue.push(...nextStations(later, next));
+    }
+    return false;
+  };
+  for (const [path, { file }] of before) {
+    if (placed.has(path) || closed(path) || legacy.has(file)) continue;
+    const status = statusOf(path);
+    if (!status) continue;
+    if (status.done && handedOn(status, path)) continue;
     const sections = sectionsOf(lf(roadmaps.find(r => r.file === file)!.text));
-    const at = sections.find(s => s.title === (parsed.status.done ? DONE.section : BOARD.section));
-    problems.push({ file, line: at ? at.start + 1 : 0, reason: parsed.status.done
+    const at = sections.find(s => s.title === (status.done ? DONE.section : BOARD.section));
+    problems.push({ file, line: at ? at.start + 1 : 0, reason: status.done
       ? `入口 ${path} 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts（只是換了入口就在舊入口寫「已結案 → <新入口>」）`
       // 還沒結束的列被刪掉：下一個 commit 再結束就沒有完成列（L2 第二輪 N12）。
-      : `入口 ${path} 還沒結束（${parsed.status.label}），HEAD 的狀態板或〈等觸發點〉有它，現在卻沒有：狀態板的列不手動刪（不做了就把入口改成已結案，再執行 node tools/roadmap-sync.ts）` });
+      : `入口 ${path} 還沒結束（${status.label}），HEAD 的狀態板或〈等觸發點〉有它，現在卻沒有：狀態板的列不手動刪（不做了就把入口改成已結案，再執行 node tools/roadmap-sync.ts）` });
   }
   return problems;
 }
