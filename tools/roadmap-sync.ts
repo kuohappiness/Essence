@@ -364,7 +364,8 @@ const isDate = (text: string) => {
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列或另一邊帶進來的列（手動刪掉的列會漏記）；沒結束的列也不能刪；
  *   換入口（舊入口寫「已結案 → <新入口>」，新入口在板上或有完成列）、HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不看。
  * - HEAD 的〈已完成〉每一列都還在；真的合併時另一邊的也是。
- * 另一邊已經 commit 的列只查格式與日期，不照這邊的入口重驗（L2 第三輪 M1）。HEAD 沒有的 roadmap 不看。
+ * 另一邊已經 commit 的列只查格式與日期，不照這邊的入口重驗（L2 第三輪 M1）；這邊是上線前的格式時照收不查（K0）。
+ * HEAD 沒有的 roadmap 不看。
  */
 export function checkDone(roadmaps: readonly { file: string; text: string }[], source: Source, today: string): Problem[] {
   const problems: Problem[] = [];
@@ -397,6 +398,12 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
       const inSide = sides.map(side => take(side.left, key)).includes(true);
       if (inHead) {
         if (path) old.push({ path, date: row.date, at: `${file}:${row.line}` });
+        continue;
+      }
+      // 這邊是上線前的格式（上線前開的分支把新的 main 併進來）：另一邊帶進來的列來自 main 的歷史，
+      // 上線前的列本來就是手寫的，照收不查（L2 第四輪後 K0）。
+      if (inSide && legacy.has(file)) {
+        if (path && !carried.has(path)) carried.set(path, `${file}:${row.line}`);
         continue;
       }
       const add = (reason: string) => problems.push({ file, line: row.line, reason: `〈已完成〉新加的列要由工具產生（入口的狀態改成已合併或已結案，再跑 node tools/roadmap-sync.ts）：${reason}` });

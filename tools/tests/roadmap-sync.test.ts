@@ -420,6 +420,31 @@ void test('L2 M1 合併、squash 帶進來的完成列是另一邊驗過的：�
   assert.equal(kept.status, 0, kept.stderr);
 });
 
+void test('L2 K0 上線前、比上線早分岔的分支把新的 main 併進來：main 在分岔後手寫的舊列照收，丟掉照擋', async t => {
+  const { add, git, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  const legacy = (rows: string[]) => ['# 路線圖', '', '## 現在在哪裡', '', '| 工作 | 狀態 | 下一步 | 等誰 | 入口 |', '|---|---|---|---|---|', '',
+    '## 已完成', '', '| 日期 | 工作 |', '|---|---|', ...rows, ''].join('\n');
+  await add('docs/roadmap.md', legacy(['| 2026-11-19 | 舊的一列 |']));
+  commit();
+  git(['branch', '-M', 'main']);
+  git(['checkout', '-q', '-b', 'old']);
+  await add('docs/other.md', '# 別的\n');
+  commit();
+  // main 在分岔之後又手寫一列，接著上線：換成新的格式，舊的列照原文留著。
+  git(['checkout', '-q', 'main']);
+  await add('docs/roadmap.md', legacy(['| 2026-11-20 | 分岔後手寫的一列 |', '| 2026-11-19 | 舊的一列 |']));
+  commit();
+  await add('docs/roadmap.md', roadmap([], [], ['| 2026-11-20 | 分岔後手寫的一列 |', '| 2026-11-19 | 舊的一列 |']));
+  commit();
+  git(['checkout', '-q', 'old']);
+  git(['merge', '-q', '--no-ff', '--no-commit', 'main']);
+  assert.equal(check().status, 0, check().stderr);
+  // 解衝突時丟掉 main 那一列照擋。
+  await add('docs/roadmap.md', roadmap([], [], ['| 2026-11-19 | 舊的一列 |']));
+  assert.match(check().stderr, /docs\/roadmap\.md:\d+  合併進來的 [0-9a-f]{7} 的〈已完成〉有「\| 2026-11-20 \| 分岔後手寫的一列 \|」這一列，現在不見了/);
+});
+
 void test('L2 N6 重播時新的完成列的日期也要是 YYYY-MM-DD 的真實日期', async t => {
   const { add, git, sync, commit } = await repo(t);
   const check = () => sync('--check', '--staged');
