@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`：合併前 L2（給 Fable 5.2 high）
 
-狀態：待審｜下一步：第二輪，另一個 Fable 5.2 high 子代理只審第一輪的修正｜等誰：Claude
+狀態：待審｜下一步：兩輪的發現都處理完，等使用者同意合併｜等誰：使用者
 
 遵守 repo 根目錄的 `AGENTS.md`。Codex 額度用完（約 2026-11-23 重置），使用者 2026-11-21 指定這件的審查由 **Fable 5.2 high** 做（[D-218](../decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫) 第 5 點）：本機 session 每一輪開一個沒參與實作的新子代理，報告原文附在這份檔案的那一輪底下。審查照 code-quality 的 `review.md`〈L2〉與〈兩軸〉〈回報格式〉。
 
@@ -269,3 +269,180 @@
 報告原文只把 scratchpad 的完整路徑縮成 `<scratchpad>`（含帳號名稱），其餘照錄。
 
 **第二輪**：R3、R4、R5 改了防線的邏輯（逐條放行、範圍收窄、pattern 放寬），照 `review.md`〈L2〉交給另一個沒參與的 Fable 5.2 high 子代理，只審這一輪的修正。
+
+## 第二輪
+
+待審：`f681828c1b58e21c16cf1bba9589f5f1c6ae4079`（`git diff 244da44 f681828`，第一輪的修正），另一個沒參與的 Fable 5.2 high 子代理審。
+
+### 報告原文：`plugins/` 改名 `apps/`：合併前 L2 第二輪報告（Fable 5.2，獨立審查）
+
+**結論：沒有擋合併的問題。** 第一輪 R1、R2、R3、R4、R5、R7、R8、R9 的修正都和〈Claude 核對與處理〉寫的一致，實跑成立。共 7 項發現，全部低嚴重度：S1、S3 建議合併前順手修（各一行，修法我實跑過），S2 是紀錄放錯地方（規範），其餘記著即可。
+
+- 待審 commit：`f681828c1b58e21c16cf1bba9589f5f1c6ae4079`（`origin` 同一個 SHA）；範圍 `git diff 244da44 f681828`。
+- 我沒有改 repo 的檔、沒有 commit、push，也沒碰任何 vault。
+- 審查結束時 worktree 多了一個不是我做的未提交修改：`docs/tasks/rename-plugins-to-apps.md` 驗收第 10 項（雲端 session 的結果），應該是別的 session 正在寫，不在這輪範圍。
+
+#### 發現（依嚴重程度）
+
+##### S1（R5 修正引入）組字串的 pattern 放寬後多了三類誤報
+- **軸**：規範與設計。
+- **觸發條件**：程式或 workflow（`CODE_FILE`）裡出現下面任一種。
+  - `apps/${` 左邊沒有界線：`` `myapps/${x}` ``、`` `webapps/${x}` ``、`` `${base}/installed-apps/${id}` ``、`` `x_apps/${a}` ``。
+  - 引號後容許 `/`：路由與連結 `router.get('/apps', h)`、`fetch('/apps')`、`<a href="/apps">`。
+  - `i` 旗標：介面文字 `t('Apps')`、`title: "Apps"`、`label: 'APPS'`。
+- **預期／實際**：預期只擋組 repo 路徑的寫法。實際這些都報「用字串組資料夾：…改成查 tools/apps.ts」。第一輪的 pattern 下，前兩類不會報。
+- **影響**：擋下引入那一行的 commit，要改寫法或進例外表；訊息對這些情況沒意義。
+- **位置**：`tools/check-app-imports.ts:201`。
+- **證據**：已重現（探針逐例跑 `checkText`）。現況 0 個誤報（工作樹與暫存區都過）。
+- **真實路徑與機率**：現在不會。Portal（入口網頁）開始寫程式時，`'/apps'` 路由或 `'Apps'` 標籤有機會碰到一次；`xxxapps/${` 很低。
+- **建議**：
+  - 合併前修第一類：`apps\/\$\{` 前面加 `(?<![\w-])`，和另外兩條規則的界線一致。我實跑過：「§3 第 3 點」兩個測試通過，整個 repo 0 個問題，上面四個前綴例子變 0，`` `apps/${code}` ``、`` `${root}/apps/${code}` ``、`` `Apps/${code}` ``、`working-directory: apps/${{ … }}` 仍擋。
+  - 後兩類是 R5 放寬的代價，收不窄，寫進已知的限制（見 S2）。網址模板 `` `https://api.github.com/apps/${slug}` `` 加界線後仍會報，一起記。
+
+##### S2（延續 R4、R5、R9）已知的限制只寫在任務的〈結果〉，沒進 backlog
+- **軸**：規範（`docs/agents/quality.md:128`：L2 這次不修的發現，共用工具的記在最上層 backlog 的〈已知的限制〉）。
+- **預期／實際**：預期 `docs/backlog.md`〈已知的限制〉有對應的列（那一節已經有 `check-app-imports.ts` 的另一列）。實際 `f681828` 沒動 `docs/backlog.md`，限制只在 `docs/tasks/rename-plugins-to-apps.md:194-199`；`docs/tasks/` 是紀錄，開工不會讀。
+- **同一段另外兩個問題**：
+  - 第 199 行「`build.test.ts` 的 sourcemap 測試在 worktree 和 `%TEMP%` 同一顆磁碟時失敗」不是共用檢查的限制，也不是第一輪的發現（那段標題寫「L2 第一輪 R4、R5、R9」）。它是 Cards 測試的環境限制，repo 放在 C: 的 Windows 機器會讓 Cards 的 `npm run check` 失敗，該記在 Cards 的 backlog（技術債或已知的限制）。這一項我沒驗（見〈沒驗的項目〉）。
+  - 第 197 行「程式裡…碰到 `apps/<軟體名>` 也會報」不準確：大小寫那條查全部文字檔（含 Markdown），而且只有大小寫不符才報。
+- **影響**：之後碰到誤報或漏報的人查不到這是已知的。
+- **證據**：靜態推斷（讀檔、`git diff --stat`）。
+- **真實路徑與機率**：會發生（下一個碰到的 session 不會讀任務紀錄）。
+- **建議**：合併前或收尾時把這幾項寫成 `docs/backlog.md`〈已知的限制〉的列（發生條件、影響與避開、來源），連同 S1、S4、S5、S6 要記的；sourcemap 那一項移到 Cards 的 backlog 並附重現。
+
+##### S3（R3、R4 修正的測試缺口）三個行為把修正拿掉測試不會紅
+- **軸**：規範與設計（回歸測試沒涵蓋到修正的全部）。
+- **做法**：把 `HEAD` 的檢查與測試複製到 `<scratchpad>`，一次拿掉一項修正，跑「§3 第 3 點」兩個測試。
+
+| 變異 | 結果 |
+|---|---|
+| R1 行號改回在原文上數 | 紅 |
+| R3 例外檔沒放行的不報 | 紅 |
+| R3 過期改回「整檔沒有任何問題才報」（第一輪的行為） | **綠** |
+| R3 過期改成「放行的任一條有命中就不報」 | **綠** |
+| R4 組字串查全部的檔 | 紅 |
+| R4 `CODE_FILE` 拿掉 `yml` | 紅 |
+| R4 `CODE_FILE` 拿掉 `.githooks/` | **綠** |
+| R5 pattern 改回第一輪的、只拿掉 `i`、只拿掉引號後的 `./`、`apps/${` 要緊貼反引號 | 四種都紅 |
+| `plugins\/`（原文那條）標成別的規則 | **綠** |
+
+- **影響**：「放行的某一條用不到就報」是 R3 修正的重點（多條放行的列有 3 列），現在的測試只測到「整檔沒有任何命中」（`app-imports.test.ts:190`，用的是只放行一條的第一列）。真 repo 的檢查也測不到，因為每一列現在都有命中。
+- **位置**：`tools/tests/app-imports.test.ts:181-199`；`tools/check-app-imports.ts:236-238`。
+- **證據**：已重現。
+- **真實路徑與機率**：之後有人改 `checkPaths` 才會碰到；低。
+- **建議**：合併前補一個斷言：取 `allow` 超過一條的列，內容只留其中一條的樣本，期望恰好報出其餘各條「放行的「…」」。我實跑過：不改時通過，上面兩個綠的 R3 變異都變紅。`.githooks/` 與規則標籤那兩個可以順手各補一行，不補也行。
+
+##### S4（延續 R5）仍漏的寫法有幾種沒列進已知的限制
+- **軸**：規格（限制的清單不完整），實作照 R5 的建議。
+- **觸發條件**（都是 0 個問題）：
+  - `'../apps/' + code`、`new URL('../apps/', import.meta.url)`、`'../../apps/' + code`：引號後只容許一個 `./` 或 `/`。
+  - `` `${root}/apps/` + code ``、`'x/apps/' + code`：`apps/` 後面緊接引號、前面不是引號。
+  - `cd apps/$APP`、`cd "apps/$APP"`、`apps/$(…)`：workflow 與 hook 裡不加大括號的 shell 變數。
+  - `'apps/%s'`、`` `apps${sep}${code}` ``。
+- **影響**：本機照過，Linux CI 才紅；和 R5 同性質。
+- **位置**：`tools/check-app-imports.ts:201`；`docs/tasks/rename-plugins-to-apps.md:196` 的清單。
+- **證據**：已重現。
+- **真實路徑與機率**：低。最可能的是 `tools/` 的程式寫 `'../apps/'`。現在的 workflow 與 hook 沒有 `apps/$`（已 grep）。
+- **建議**：
+  - 便宜的收窄可以做：引號後改成容許任意個 `./`、`../`、`/`（`(?:\.{0,2}\/)*`）。我實跑過：整個 repo 的程式與設定檔新增 0 個命中，前三個例子擋得到。
+  - 其餘寫進已知的限制。不修也不擋合併。
+
+##### S5（延續 R9）Linux 的補充大致正確，少一個情況
+- **軸**：規範與設計。
+- **核對結果**：「Linux 上正確的資料夾已經存在時，逐檔 `git mv` 到正確的路徑」方向正確。
+- **缺的情況**：目的子資料夾不存在時（例如 `apps/Portal/` 只有 `README.md`，要搬 `apps/portal/guide/c.md`），`git mv` 不會自己建資料夾，回 `fatal: renaming … failed: No such file or directory`，要先 `mkdir -p`，或整個子資料夾一次搬。
+- **位置**：`tools/check-app-imports.ts:129`。
+- **證據**：
+  - 缺的情況已重現（暫存 repo；這個行為和平台無關）。
+  - Windows 上索引同時有 `apps/Portal/…` 與 `apps/portal/…`（模擬從 Linux 拉下來的 commit）時，逐檔 `git mv` 與訊息的兩段式都成功，索引都變成正確大小寫（已重現）。
+  - Linux 上逐檔搬的成功情況是靜態推斷：這台機器沒有 WSL 發行版，也沒有 Docker。
+- **真實路徑與機率**：很低（Linux、打錯大小寫、正確資料夾已存在、子資料夾還沒有，四個條件）。
+- **建議**：記著，或訊息補「（目的資料夾不存在先建）」。測試（`app-imports.test.ts:133`）沒比對 Linux 那半句，可以不補。
+
+##### S6（延續 R4）`CODE_FILE` 是白名單，之後新增的腳本類型不會查組字串
+- **軸**：規範與設計。
+- **觸發條件**：之後追蹤 `.sh`、`.ps1`、`.cmd`、`.py`、`.json`／`.jsonc`（`package.json` 的 scripts、`.claude/settings.json` 的 hook 指令）裡組路徑。
+- **預期／實際**：實際 `cd "apps/${APP}"` 寫在 `.sh`、`"apps/"` 寫在 `package.json` 的 scripts 都是 0 個問題。大小寫與 `plugins` 兩條仍查全部檔案（已確認 `package.json` 裡的 `apps/cards`、`plugins/cards` 照擋）。
+- **影響**：現在沒有漏。追蹤的檔沒有 `.sh`、`.ps1`、`.cmd`；`.py` 都在 `docs/archive/`（紀錄，本來就不查）；JSON、`.gitignore`、workflow 裡的 `apps` 全是完整字面路徑，由大小寫那條看住（已 grep）。
+- **位置**：`tools/check-app-imports.ts:173`。
+- **證據**：已重現（逐副檔名跑）。
+- **真實路徑與機率**：要等有人新增 shell 或 PowerShell 腳本並在裡面組路徑；低。
+- **建議**：寫進已知的限制一句（哪些副檔名查組字串）。不必改成黑名單：JSON 的誤報是 R4 收窄的原因。
+
+##### S7 文字沒跟上的小地方（不必再送審）
+- `tools/tests/hooks.test.ts:103` 的註解與 `app-imports.test.ts:181` 的測試名還寫「已經沒有被允許的寫法」，訊息已改成「放行的「…」這個檔已經用不到」。
+- `tools/check-app-imports.ts:11-13` 的檔頭仍寫「表所在的檔以外用字串組資料夾」，沒寫只查程式與設定。
+- `docs/tasks/rename-plugins-to-apps.md:184`「都寫進〈實作者自己選的做法〉」：新加的三點（逐條放行、R6、R10）在〈第一輪〉的處理表，不在那一節。
+- 審查紀錄的〈審查對象〉「待審：`244da44`」是第一輪的；第二輪待審的完整 SHA（`f681828…`）還沒寫進檔案，附這份報告時補上。
+- 處理表只有「處理」一欄，`review.md`〈修正後收尾〉要的四欄（條件與機率、影響、修法類型、會動到什麼）沒寫；這輪的修法都是收窄，影響不大。
+
+#### 核對過、沒有問題的
+
+- **R1 行號**：
+  - 正規化只吃反斜線，不動 `\n`、`\r`：反斜線接換行、CRLF、連續反斜線的樣本，加 20000 個隨機字串，換行數都不變。
+  - 40 行跳脫之後的命中，三條規則（`flat` 上的大小寫、`plugins/<軟體>`、組字串，與原文上的 `plugins\/`）都回報第 41 行；CRLF 與行尾反斜線的例子也對。
+- **R3 逐條放行**：
+  - 12 列的 `allow` 和各檔實際命中的規則完全一致，工作樹與 `HEAD` 都是（逐檔跑 `checkText` 統計）。`git.ts`、`build.test.ts`、`helpers/layout.ts` 現在只命中 `plugins`。
+  - 沒放行的規則照報、放行的某條沒命中就報「用不到」，邏輯正確。
+  - 過期偵測剩下的洞是做法本身的：放行的規則只要有一處命中（含註解）就算還在用，例如 `git.ts` 的 `MANIFESTS` 拿掉 `plugins/cards` 而註解還在；同一條規則內新增的命中不會被看見。第一輪 R3 已知，可接受。
+- **R4**：`CODE_FILE` 對 `ts`、`tsx`、`mts`、`cts`、`js`、`jsx`、`mjs`、`cjs`、`yml`、`yaml`、`.d.ts`、大寫副檔名、`.githooks/` 底下都成立；`md`、`json`、`jsonc`、`html`、`css` 不查。`plugins\/` 的訊息和正規式的兩個放行條件一致。
+- **R5**：`` `${root}/apps/${code}` ``、`'./apps/'`、`root + '/apps/'`、`join(root, 'Apps', 'Cards')`、`` `Apps/${code}` ``、`'apps\\' + code` 都擋得到；`'webapps'`、`'apps.ts'`、`'tools/apps.ts'`、`"apps/**"`、`'apps/*/docs/**'` 不誤報。
+- **`hooks.test.ts`**：
+  - `.githooks/` 三個檔與 `.secretlintrc.json` 都是追蹤的檔，`tools/*` 本來就取自追蹤清單，所以刪掉第二個迴圈後仍全部從工作樹複製。
+  - `existsSync` 過濾後，工作樹已刪的追蹤檔不在 `wanted`，clone 裡的那一份被第 81 行刪掉，之後 `git add` 把刪除記進基準；替身的清單也用過濾後的 `wanted`，不會替已刪的測試檔寫替身。邏輯正確（靜態推斷）。
+  - 替身保留註解：7 個會被換成替身的例外檔，替身再掃一次命中的規則與 `allow` 完全相同，`checkPaths` 0 個問題（實跑，含 `plugins\/`、`apps/${`、`'Apps'` 這些 target）。其餘 5 個例外檔不是替身，原檔照抄。
+- **`progress-board.yml`**：`tools/apps.ts` 在 `on.push.paths` 裡，位置正確。順帶：`tools/decisions.ts` import 的 `tools/fences.ts` 不在清單，這是這次改動之前就有的，不在本輪範圍。
+- **〈結果〉第 2 項**：Capture 6 個、Mindboard 5 個追蹤檔，和「全部抽了」相符；十二列正確。
+- **〈結果〉第 11 項**（`gh run view`、`gh pr view`）：
+  - run 44917630810（PR #31，只改 `apps/Mindboard/AGENTS.md`）：plan、shared、mindboard、gate 成功，cards、tools、capture 跳過。
+  - run 44919385585（PR #32，只改 `apps/Cards/src/core/files.ts`）：plan、shared、cards、gate 成功，cards 的 `npm run build` 與 `git status --porcelain` 兩步成功，tools、capture、mindboard 跳過。
+  - 兩個 PR 都是 draft、已關閉，基準是這個分支；遠端沒有 `claude/probe-d218-*`。
+  - 探針是在 `244da44` 上做的；`f681828` 沒改 `tools/dispatch.ts` 與 `check.yml`，結論仍適用。
+- **狀態行與 roadmap**：任務說明與審查紀錄的狀態行都是 D-217 的三欄，值在允許的範圍；`docs/roadmap.md` 那一列和任務說明的狀態、下一步、等誰相同，`roadmap-sync --check` 通過。
+- **測試數**：這次沒有新增或刪除測試（`tools/tests` 兩個 commit 都是 171 個 `test(`），〈結果〉第 3 項的 238 不用改。
+- **CI**：`f681828` 的 push（run 44924018613）與 pull_request（run 44924022145）七個 job 都成功，tools job 含 `hooks.test.ts`。
+
+#### 跑過的指令與結果
+
+| 指令 | 結果 |
+|---|---|
+| `node tools/check-app-imports.ts`、`--staged`（repo 根） | 都通過 |
+| `node --test --test-concurrency=1 --test-timeout=600000 tests/app-imports.test.ts` | 12 個全過 |
+| 同上 `tests/dispatch.test.ts` | 75 個：74 過、1 跳過 |
+| `node tools/check-docs.ts` | 通過（395 檔、8114 個連結） |
+| `node roadmap-sync.ts --check` | 狀態板和入口一致 |
+| 探針：例外表各檔命中的規則與替身模擬 | 12 列一致，7 個替身 0 個問題 |
+| 探針：R1 行號、R4 副檔名、R5 誤報與漏報樣本 | 如各項 |
+| 變異測試 13 種（`<scratchpad>` 的副本） | 9 紅、4 綠（S3） |
+| 建議的修法實跑（S1 界線、S3 斷言、S4 前綴） | 都成立，repo 0 個新問題 |
+| 暫存 repo：混合大小寫的索引逐檔與兩段式 `git mv`、目的資料夾不存在 | 如 S5 |
+| `gh run view` 四個 run、`gh pr view 31`／`32`、`git ls-remote --heads` | 如上 |
+
+沒有遇到記憶體錯誤。我建的 `<scratchpad>\l2r2`（探針、變異副本、三個暫存 repo）已刪；scratchpad 裡原有的檔沒動。
+
+#### 沒驗的項目與原因
+
+- **`tools/tests/hooks.test.ts` 在 Windows 沒跑**：機器記憶體偏緊；這次的改動和平台無關，Linux CI 在 `f681828` 兩次都過，替身的部分另用探針驗過。「工作樹已刪的追蹤檔」那條路徑一般的執行走不到，只做靜態推斷。
+- **`build.test.ts` 同一顆磁碟會失敗**（〈結果〉第 199 行）：要在 C: 放一份裝好相依的 Cards 才能重現，沒做；`build.mjs:131-134` 讀起來兩種磁碟配置都有處理，看不出失敗點，所以這句的原因（junction 的相對路徑）待驗證。
+- **Linux 上的 `git mv`**（S5 成功的情況）：沒有 Linux 環境。
+- **`tools/` 的 `npm run self-check` 全套、Cards 的 `npm run check`**：照指示不跑。
+- **驗收第 10 項**：別的 session 正在寫，未提交，不在這輪範圍。
+- **合併後的 Pages**：要合併後才有。
+
+### Claude 核對與處理
+
+逐項核對，全部同意。S1、S4 的 pattern 照審查者實跑過的寫法改，修完重跑「§3 第 3 點」兩個測試與整個 repo 的 `check-app-imports.ts`，都通過、0 個問題。
+
+| 項目 | 條件與機率 | 影響 | 修法類型 | 會動到什麼 |
+|---|---|---|---|---|
+| S1 `apps/${` 沒有左界線 | 程式裡 `` `myapps/${x}` `` 這類前綴；低 | 誤報擋 commit | 修：前面加 `(?<![\w-])`；路由 `'/apps'`、介面文字 `'Apps'`、網址模板是 R5 放寬的代價，記成已知的限制 | `check-app-imports.ts` 一個 pattern；測試加四個不報的樣本與 `` `Apps/${code}` `` |
+| S2 限制只寫在任務紀錄 | 下一個碰到的 session 不讀紀錄；會發生 | 查不到是已知的 | 修：共用檢查的四列寫進[最上層 backlog〈已知的限制〉](../backlog.md#已知的限制)（含 S1、S4、S6 與第一輪 R4、R5、R9；大小寫那條查全部文字檔的說法改正）；sourcemap 那一項移到 [Cards 的 backlog](../../apps/Cards/docs/backlog.md#已知的限制)，原因寫「沒查」，不寫沒驗證的 junction 推測；〈結果〉那一段換成連結 | 兩份 backlog、任務〈結果〉 |
+| S3 過期偵測的測試缺口 | 之後有人改 `checkPaths`；低 | 改壞不會紅 | 修：補「放行好幾條的列只剩一條命中，其餘每條都報用不到」的斷言 | `app-imports.test.ts` |
+| S4 引號後只容許一個 `./` 或 `/` | 程式寫 `'../apps/'`；低 | 漏報，Linux CI 才紅 | 修：引號後容許任意個 `./`、`../`、`/`（`(?:\.{0,2}\/)*`）；其餘（`'x/apps/' + code`、不加大括號的 shell 變數、`'apps/%s'`）記成已知的限制 | `check-app-imports.ts` 同一個 pattern；測試加兩個樣本與 hook 裡的 `cd "apps/${APP}"` |
+| S5 Linux 目的資料夾不存在 | 四個條件同時成立；很低 | `git mv` 失敗，訊息看得到 | 修：訊息補「目的資料夾不存在就先建」 | `TWO_STEP` 一句 |
+| S6 `CODE_FILE` 是白名單 | 新增 `.sh`、`.ps1` 等並在裡面組路徑；低 | 漏報 | 記成已知的限制 | backlog 一列 |
+| S7 文字 | — | — | 修：hooks 測試註解、測試名、檔頭註解、〈和規格不同的地方〉的說明；這張表補成四欄 | 註解與文件 |
+
+報告原文照錄（審查者已經把 scratchpad 的路徑寫成 `<scratchpad>`）。
+
+**不送第三輪**：這輪改的兩處 pattern（S1、S4）是審查者提出、並在整個 repo 實跑過的寫法，其餘是測試、訊息與文件；沒有新的判斷邏輯。合併前的 commit 照常跑 pre-commit 與 CI。

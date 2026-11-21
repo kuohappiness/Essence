@@ -9,8 +9,8 @@
 // import x = require() 與沒有代換的模板字面值都取得到；import('../../src/' + name) 取到字面的前段，照前段判斷（偏嚴）。
 // 套件名稱、node:、網址照常。執行時才組出來的路徑、tsconfig 的 paths、打包工具的 alias 這裡看不到（backlog〈已知的限制〉）。
 // 也擋（D-218 §3 第 1～3 點）：apps/ 底下不在 tools/apps.ts 表上或大小寫不符的資料夾、plugins/ 與 Apps/ 這類第一段、表上只有文件的軟體
-//     出現程式；追蹤的文字檔裡大小寫不符的 apps/<軟體>、Markdown 以外寫死的 plugins/<軟體>、表所在的檔以外用字串組資料夾
-//     （紀錄與例外表除外）。
+//     出現程式；追蹤的文字檔裡大小寫不符的 apps/<軟體>、Markdown 以外寫死的 plugins/<軟體>、程式與 workflow 裡
+//     （表所在的檔除外）用字串組資料夾（紀錄除外；例外表上的檔只放行列上的規則）。
 // 有問題時每個一行「檔案:行  目標  原因」，結束碼 1。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -126,7 +126,7 @@ const NAMES = new Map<string, { name: string; docsOnly: boolean }>([
 ]);
 /** 只有文件的軟體可以有的檔。 */
 const DOC_FILE = /\.(?:md|png|jpe?g|gif|svg|webp)$/i;
-const TWO_STEP = (from: string, to: string) => `Windows 上分兩步改：git mv ${from} ${to}.tmp，再 git mv ${to}.tmp ${to}；Linux 上正確的資料夾已經存在時，逐檔 git mv 到正確的路徑`;
+const TWO_STEP = (from: string, to: string) => `Windows 上分兩步改：git mv ${from} ${to}.tmp，再 git mv ${to}.tmp ${to}；Linux 上正確的資料夾已經存在時，逐檔 git mv 到正確的路徑（目的資料夾不存在就先建）`;
 
 /**
  * 追蹤的路徑（§3 第 1、2 點）：第一段不分大小寫是 plugins 或 apps、卻不是恰好 apps 的擋；apps/ 底下的資料夾要在表上、大小寫相同；
@@ -197,8 +197,8 @@ export function checkText(path: string, text: string): TextProblem[] {
     }
   }
   if (path !== TABLE_FILE && CODE_FILE.test(path)) {
-    // 引號後可以先有 ./ 或 /；apps/${ 不必緊貼反引號；不分大小寫（L2 R5）。
-    for (const m of flat.matchAll(/[`'"](?:\.?\/)?apps\/?[`'"]|apps\/\$\{/gi)) add('組字串', flat, m.index, m[0], `用字串組資料夾：從代號找資料夾改成查 ${TABLE_FILE}，從路徑抓的整段抓前綴（D-218 §3 第 3 點）`);
+    // 引號後可以先有任意個 ./、../、/；apps/${ 不必緊貼反引號，但前面要是界線；不分大小寫（L2 R5、第二輪 S1、S4）。
+    for (const m of flat.matchAll(/[`'"](?:\.{0,2}\/)*apps\/?[`'"]|(?<![\w-])apps\/\$\{/gi)) add('組字串', flat, m.index, m[0], `用字串組資料夾：從代號找資料夾改成查 ${TABLE_FILE}，從路徑抓的整段抓前綴（D-218 §3 第 3 點）`);
   }
   return problems;
 }

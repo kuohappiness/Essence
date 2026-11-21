@@ -16,7 +16,7 @@
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| `plugins/` 改名 `apps/`、首字大寫 | 待審 | 合併前 L2 第二輪（只審第一輪的修正），之後請使用者開雲端 session | Claude | [任務說明](tasks/rename-plugins-to-apps.md) |
+| `plugins/` 改名 `apps/`、首字大寫 | 待審 | L2 兩輪的發現都處理完，請使用者同意合併 PR #29 | 使用者 | [任務說明](tasks/rename-plugins-to-apps.md) |
 
 ## 等觸發點
 

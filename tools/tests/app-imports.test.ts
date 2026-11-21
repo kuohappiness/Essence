@@ -166,8 +166,12 @@ void test('D-218 §3 第 3 點：寫死的路徑大小寫不符、Markdown 以�
   // 組字串：程式與 workflow 裡、表所在的檔以外都擋（L2 第一輪 R4、R5）。
   for (const text of [
     '`apps/${code}`', '`${root}/apps/${code}`', "join(root, 'apps')", 'join(root, "apps")', "const p = 'apps/';", "const p = './apps/';", "join(root, 'Apps')",
+    "'../apps/' + code", "'../../apps/' + code", '`Apps/${code}`',
   ]) assert.equal(count('tools/x.ts', text), 1, text);
   assert.equal(count('.github/workflows/x.yml', "dir: 'apps/'"), 1);
+  assert.equal(count('.githooks/pre-commit', 'cd "apps/${APP}"'), 1);
+  // apps/${ 前面要是界線（第二輪 S1）。
+  for (const text of ['`myapps/${x}`', '`webapps/${x}`', '`${base}/installed-apps/${id}`', '`x_apps/${a}`']) assert.equal(count('tools/x.ts', text), 0, text);
   assert.equal(count('tools/apps.ts', "export const APPS_ROOT = 'apps/';"), 0);
   for (const [path, text] of [['docs/x.md', '資料夾叫 "apps"'], ['tools/x.json', '{ "files": ["apps"] }'], ['docs/x.md', "'apps/'"]]) {
     assert.equal(count(path, text), 0, `${path} ${text}`);
@@ -178,7 +182,7 @@ void test('D-218 §3 第 3 點：寫死的路徑大小寫不符、Markdown 以�
   assert.deepEqual(checkText('tools/x.ts', "'a\\\\\\n'\napps/cards\n").map(p => p.line), [2]);
 });
 
-void test('D-218 §3 第 3 點：紀錄不查；例外表上的檔沒有被允許的寫法或不在了就報', () => {
+void test('D-218 §3 第 3 點：紀錄不查；例外表上的檔沒放行的寫法照擋，放行的用不到或檔不在了就報', () => {
   const SAMPLE: Record<string, string> = { plugins: "'plugins/cards/a.ts'", 大小寫: 'apps/cards', 組字串: "'apps/'" };
   const all = new Map([['tools/apps.ts', ''], ...EXCEPTIONS.map(e => [e.file, e.allow.map(rule => SAMPLE[rule]).join('\n')] as [string, string])]);
   assert.deepEqual(checkPaths(all), []);
@@ -193,6 +197,12 @@ void test('D-218 §3 第 3 點：紀錄不查；例外表上的檔沒有被允�
   const extra = reasons(checkPaths(new Map([...all, [first.file, `${SAMPLE.plugins}\napps/cards`]])));
   assert.equal(extra.length, 1);
   assert.match(extra[0], new RegExp(`^${first.file}  `));
+  // 放行好幾條的列，只剩其中一條有命中時，其餘每一條都報用不到（第二輪 S3）。
+  const multi = EXCEPTIONS.find(e => e.allow.length > 1);
+  assert.ok(multi);
+  const [kept, ...unused] = multi.allow;
+  const stale = reasons(checkPaths(new Map([...all, [multi.file, SAMPLE[kept]]])));
+  assert.deepEqual(stale.map(r => /放行的「(.+?)」/.exec(r)?.[1]).sort(), [...unused].sort());
   const gone = new Map(all);
   gone.delete(first.file);
   assert.match(reasons(checkPaths(gone)).join('\n'), new RegExp(`^${first.file}  例外表（.+）上的檔不在了`));

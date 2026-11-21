@@ -100,7 +100,7 @@ async function clone(t: test.TestContext) {
   await writeFile(join(repo, 'tools/package.json'), JSON.stringify(toolsPkg, null, 2) + '\n');
   // 照本 repo 的清單找：搬家的 commit 時新位置的檔在 clone 裡還沒追蹤，用 clone 的 ls-files 會漏掉。
   for (const path of [...wanted].filter(path => path.endsWith('.test.ts') && ['tests/', `${C}tests/`, 'tools/tests/'].some(dir => path.startsWith(dir)))) {
-    // 例外表上的檔留下被允許的寫法（註解），共用檢查才不會報「已經沒有被允許的寫法」（D-218 §3 第 3 點）。
+    // 例外表上的檔留下被允許的寫法（註解），共用檢查才不會報放行的規則「已經用不到」（D-218 §3 第 3 點）。
     const kept = EXCEPTED.has(path) ? checkText(path, await readFile(join(SOURCE, path), 'utf8')).map(p => `// ${p.target}\n`).join('') : '';
     await writeFile(join(repo, path), 'export {};\n' + kept);
   }
