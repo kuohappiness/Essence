@@ -15,6 +15,7 @@ on:
       - tools/status-line.ts
       - tools/progress-board*.ts
       - tools/roadmap-board.ts
+      - tools/apps.ts
       - tools/package-lock.json
       - .github/workflows/progress-board.yml
   workflow_dispatch:

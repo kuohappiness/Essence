@@ -126,7 +126,7 @@ const NAMES = new Map<string, { name: string; docsOnly: boolean }>([
 ]);
 /** 只有文件的軟體可以有的檔。 */
 const DOC_FILE = /\.(?:md|png|jpe?g|gif|svg|webp)$/i;
-const TWO_STEP = (from: string, to: string) => `Windows 上分兩步改：git mv ${from} ${to}.tmp，再 git mv ${to}.tmp ${to}`;
+const TWO_STEP = (from: string, to: string) => `Windows 上分兩步改：git mv ${from} ${to}.tmp，再 git mv ${to}.tmp ${to}；Linux 上正確的資料夾已經存在時，逐檔 git mv 到正確的路徑`;
 
 /**
  * 追蹤的路徑（§3 第 1、2 點）：第一段不分大小寫是 plugins 或 apps、卻不是恰好 apps 的擋；apps/ 底下的資料夾要在表上、大小寫相同；
@@ -158,7 +158,7 @@ export function checkLayout(paths: Iterable<string>): Problem[] {
 const RECORD = /^(?:apps\/[^/]+\/)?docs\/(?:tasks|Claude Codex Discussion|archive)\//;
 export const isRecord = (path: string) => path === 'docs/decisions.md' || RECORD.test(path);
 
-/** 比對前的正規化：正規式的跳脫 \. 當成 .，\/、\\、\ 都當成 /（換行不動，行號照舊）。 */
+/** 比對前的正規化：正規式的跳脫 \. 當成 .，\/、\\、\ 都當成 /。換行不動：在正規化後的文字上數行號，和原文相同。 */
 export const normalize = (text: string) => text.replace(/\\\./g, '.').replace(/\\\\|\\\//g, '/').replace(/\\/g, '/');
 
 function lineAt(text: string, index: number): number {
@@ -169,47 +169,57 @@ function lineAt(text: string, index: number): number {
 
 /** 表所在的檔：只有它可以用字串組資料夾。 */
 const TABLE_FILE = 'tools/apps.ts';
+/** 組字串那條只查程式與設定（L2 R4）：文件與資料檔裡加引號的 "apps" 是敘述或鍵名，不是在組路徑。 */
+const CODE_FILE = /\.(?:[cm]?[jt]sx?|ya?ml)$|^\.githooks\//i;
+
+/** 三條規則（例外表逐列寫放行哪幾條，L2 R3）。 */
+export type TextRule = '大小寫' | 'plugins' | '組字串';
+export interface TextProblem extends Problem { rule: TextRule }
 
 /**
  * 一個追蹤的文字檔裡寫死的路徑（§3 第 3 點）：apps/<表上的名稱> 大小寫不符、Markdown 以外寫死 plugins/<軟體> 或 plugins\/、
- * 表所在的檔以外用字串組資料夾。
+ * 表所在的檔以外的程式與設定用字串組資料夾。
  */
-export function checkText(path: string, text: string): Problem[] {
-  const problems: Problem[] = [];
+export function checkText(path: string, text: string): TextProblem[] {
+  const problems: TextProblem[] = [];
   const flat = normalize(text);
-  const add = (index: number, target: string, reason: string) => problems.push({ file: path, line: lineAt(text, index), target, reason });
+  // 行號：正規化後的比對在 flat 上數，原文的比對在原文上數（L2 R1）。
+  const add = (rule: TextRule, on: string, index: number, target: string, reason: string) => problems.push({ file: path, line: lineAt(on, index), target, reason, rule });
   const names = [...NAMES.keys()].join('|');
   for (const m of flat.matchAll(new RegExp(`(?<![\\w-])(apps)/(${names})(?![\\w-])`, 'gi'))) {
     const entry = NAMES.get(m[2].toLowerCase())!;
-    if (m[1] !== 'apps' || m[2] !== entry.name) add(m.index, m[0], `大小寫要和表上的 apps/${entry.name} 相同（Linux 分大小寫，D-218 §3 第 3 點）`);
+    if (m[1] !== 'apps' || m[2] !== entry.name) add('大小寫', flat, m.index, m[0], `大小寫要和表上的 apps/${entry.name} 相同（Linux 分大小寫，D-218 §3 第 3 點）`);
   }
   if (!path.toLowerCase().endsWith('.md')) {
-    for (const m of flat.matchAll(/(?<![\w-])plugins\/(?:cards|capture|mindboard)(?![\w-])/gi)) add(m.index, m[0], `改名後是 ${APPS_ROOT}<軟體>（D-218）`);
-    for (const m of text.matchAll(/(?<!obsidian\\\/)(?<![\w-])plugins\\\/(?!essence-)/gi)) add(m.index, m[0], `改名後是 ${APPS_ROOT}（D-218）`);
+    for (const m of flat.matchAll(/(?<![\w-])plugins\/(?:cards|capture|mindboard)(?![\w-])/gi)) add('plugins', flat, m.index, m[0], `改名後是 ${APPS_ROOT}<軟體>（D-218）`);
+    for (const m of text.matchAll(/(?<!obsidian\\\/)(?<![\w-])plugins\\\/(?!essence-)/gi)) {
+      add('plugins', text, m.index, m[0], `改名後是 ${APPS_ROOT}（D-218）；vault 裡的外掛資料夾從 .obsidian\\/plugins\\/ 寫起或接外掛 ID（essence-…）才放行`);
+    }
   }
-  if (path !== TABLE_FILE) {
-    for (const m of flat.matchAll(/`apps\/\$\{|'apps\/?'|"apps\/?"/g)) add(m.index, m[0], `用字串組資料夾：從代號找資料夾改成查 ${TABLE_FILE}，從路徑抓的整段抓前綴（D-218 §3 第 3 點）`);
+  if (path !== TABLE_FILE && CODE_FILE.test(path)) {
+    // 引號後可以先有 ./ 或 /；apps/${ 不必緊貼反引號；不分大小寫（L2 R5）。
+    for (const m of flat.matchAll(/[`'"](?:\.?\/)?apps\/?[`'"]|apps\/\$\{/gi)) add('組字串', flat, m.index, m[0], `用字串組資料夾：從代號找資料夾改成查 ${TABLE_FILE}，從路徑抓的整段抓前綴（D-218 §3 第 3 點）`);
   }
   return problems;
 }
 
 /**
- * 例外表（§3 第 3 點）：逐檔列出，每列寫理由。表上的檔照樣跑 checkText，有問題才算「還有被允許的寫法」；
- * 檔不在了或已經沒有問題就報錯，請把那一列刪掉。
+ * 例外表（§3 第 3 點）：逐檔列出，每列寫放行哪幾條規則與理由。表上的檔照樣跑 checkText，只放行列出的規則；
+ * 檔不在了、或列出的規則已經沒有命中就報錯。
  */
-export const EXCEPTIONS: { file: string; kind: '歷史路徑' | '故意寫錯的樣本' | '檢查本身'; reason: string }[] = [
-  { file: 'apps/Cards/tools/git.ts', kind: '歷史路徑', reason: 'MANIFESTS 要認得改名前的外掛根（plugins/cards），跨版本的工具讀舊版用（D-218〈代價〉）' },
-  { file: 'apps/Cards/tests/plugin-root.test.ts', kind: '歷史路徑', reason: '跨版本找外掛根的測試：舊版在 plugins/cards，另有打錯大小寫的 apps/cards 樣本' },
-  { file: 'apps/Cards/tests/compare-versions.test.ts', kind: '歷史路徑', reason: '發布前比較跨過第二步的搬家：新版在 plugins/cards 的情境' },
-  { file: 'apps/Cards/tests/ai-add-old-version.test.ts', kind: '歷史路徑', reason: '註解寫第二步搬進 plugins/cards 之後為什麼從 repo 的根 clone' },
-  { file: 'apps/Cards/tests/pick-old-version.test.ts', kind: '歷史路徑', reason: '註解寫第二步搬進 plugins/cards 之後為什麼從 repo 的根 clone' },
-  { file: 'apps/Cards/tests/build.test.ts', kind: '歷史路徑', reason: '註解寫第二步 L2 R5（搬家後 Cards 在 plugins/cards）；另有打錯大小寫的 apps/cards 說明' },
-  { file: 'apps/Cards/tests/helpers/layout.ts', kind: '歷史路徑', reason: '註解寫搬家前後 Cards 的位置與打錯大小寫的 apps/cards' },
-  { file: 'experiments/tools/move-links.mjs', kind: '歷史路徑', reason: '第二步搬家用的改連結腳本，範例是 plugins/cards' },
-  { file: 'experiments/tools/move-links.test.mjs', kind: '歷史路徑', reason: '改連結腳本的測試，樣本是第二步的 plugins/cards' },
-  { file: 'tools/tests/app-imports.test.ts', kind: '故意寫錯的樣本', reason: '這條防線自己的測試（驗收第 7、17 項的 plugins/cards/a.ts、Apps/Cards/x.md 等）' },
-  { file: 'tools/tests/check-docs.test.ts', kind: '故意寫錯的樣本', reason: 'check-docs 的測試，Markdown 樣本連到打錯大小寫的軟體資料夾（驗收第 8 項）' },
-  { file: 'tools/check-app-imports.ts', kind: '檢查本身', reason: '要寫出 plugins\\/、plugins/(cards|capture|mindboard) 與組字串的 pattern' },
+export const EXCEPTIONS: { file: string; kind: '歷史路徑' | '故意寫錯的樣本' | '檢查本身'; allow: TextRule[]; reason: string }[] = [
+  { file: 'apps/Cards/tools/git.ts', kind: '歷史路徑', allow: ['plugins'], reason: 'MANIFESTS 要認得改名前的外掛根（plugins/cards），跨版本的工具讀舊版用（D-218〈代價〉）' },
+  { file: 'apps/Cards/tests/plugin-root.test.ts', kind: '歷史路徑', allow: ['plugins', '大小寫'], reason: '跨版本找外掛根的測試：舊版在 plugins/cards，另有大小寫打錯的樣本' },
+  { file: 'apps/Cards/tests/compare-versions.test.ts', kind: '歷史路徑', allow: ['plugins'], reason: '發布前比較跨過第二步的搬家：新版在 plugins/cards 的情境' },
+  { file: 'apps/Cards/tests/ai-add-old-version.test.ts', kind: '歷史路徑', allow: ['plugins'], reason: '註解寫第二步搬進 plugins/cards 之後為什麼從 repo 的根 clone' },
+  { file: 'apps/Cards/tests/pick-old-version.test.ts', kind: '歷史路徑', allow: ['plugins'], reason: '註解寫第二步搬進 plugins/cards 之後為什麼從 repo 的根 clone' },
+  { file: 'apps/Cards/tests/build.test.ts', kind: '歷史路徑', allow: ['plugins'], reason: '註解寫第二步 L2 R5（搬家後 Cards 在 plugins/cards）' },
+  { file: 'apps/Cards/tests/helpers/layout.ts', kind: '歷史路徑', allow: ['plugins'], reason: '註解寫搬家前後 Cards 的位置' },
+  { file: 'experiments/tools/move-links.mjs', kind: '歷史路徑', allow: ['plugins'], reason: '第二步搬家用的改連結腳本，範例是 plugins/cards' },
+  { file: 'experiments/tools/move-links.test.mjs', kind: '歷史路徑', allow: ['plugins'], reason: '改連結腳本的測試，樣本是第二步的 plugins/cards' },
+  { file: 'tools/tests/app-imports.test.ts', kind: '故意寫錯的樣本', allow: ['大小寫', 'plugins', '組字串'], reason: '這條防線自己的測試（驗收第 7、17 項的 plugins/cards/a.ts 與大小寫打錯的樣本）' },
+  { file: 'tools/tests/check-docs.test.ts', kind: '故意寫錯的樣本', allow: ['大小寫'], reason: 'check-docs 的測試，Markdown 樣本連到打錯大小寫的軟體資料夾（驗收第 8 項）' },
+  { file: 'tools/check-app-imports.ts', kind: '檢查本身', allow: ['plugins', '組字串'], reason: '要寫出 plugins\\/、plugins/(cards|capture|mindboard) 與組字串的 pattern' },
 ];
 
 /** 追蹤的文字檔全部掃一次，套用紀錄與例外表。texts 是 path → 內容（讀不到或二進位的不在裡面）。 */
@@ -219,8 +229,13 @@ export function checkPaths(texts: Map<string, string>): Problem[] {
   for (const [path, text] of texts) {
     if (isRecord(path)) continue;
     const found = checkText(path, text);
-    if (!excepted.has(path)) problems.push(...found);
-    else if (!found.length) problems.push({ file: path, line: 1, target: 'EXCEPTIONS', reason: `例外表（${excepted.get(path)!.kind}）上的檔已經沒有被允許的寫法，請從 tools/check-app-imports.ts 的例外表刪掉這一列` });
+    const e = excepted.get(path);
+    if (!e) { problems.push(...found); continue; }
+    // 只放行這一列寫的規則，其他規則照擋；放行的規則一條都沒命中，例外就過期了（L2 R3）。
+    problems.push(...found.filter(p => !e.allow.includes(p.rule)));
+    for (const rule of e.allow) {
+      if (!found.some(p => p.rule === rule)) problems.push({ file: path, line: 1, target: 'EXCEPTIONS', reason: `例外表（${e.kind}）放行的「${rule}」這個檔已經用不到，請從 tools/check-app-imports.ts 的例外表拿掉（整列都用不到就刪掉這一列）` });
+    }
   }
   // 檔不在了只在有表的 repo 查（測試的暫存 repo 沒有這些檔）。
   if (texts.has(TABLE_FILE)) for (const e of EXCEPTIONS) {

@@ -230,7 +230,7 @@ void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相�
   assert.equal(map.sourcesContent.length, map.sources.length);
 });
 
-// D-218 §3 第 6 點：Windows 上打錯大小寫的 Cards 資料夾（npm --prefix apps/cards）照樣找得到，對照表的 sources 仍要是 git 追蹤的寫法。
+// D-218 §3 第 6 點：Windows 上 npm --prefix 打錯 Cards 資料夾的大小寫照樣找得到，對照表的 sources 仍要是 git 追蹤的寫法。
 void test('D-218 root 的大小寫打錯（只在 Windows）：對照表的 sources 照磁碟上的真實大小寫', { skip: process.platform !== 'win32' && '只有 Windows 的檔案系統不分大小寫' }, async t => {
   const mapped = await mkdtemp(join(tmpdir(), 'essence-map-'));
   t.after(() => rm(mapped, { recursive: true, force: true }));

@@ -8,7 +8,7 @@ import { RULES_FROM_ROOT } from '../../tools/build.mjs';
 import { gitEnv } from '../../tools/git.ts';
 
 /**
- * 這個 repo 裡 Cards 的根，磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上打 npm --prefix apps/cards 時 import.meta.url
+ * 這個 repo 裡 Cards 的根，磁碟上的真實大小寫（D-218 §3 第 6 點）：Windows 上 npm --prefix 打錯大小寫時 import.meta.url
  * 照打的字，拿它去比 git 回的 apps/Cards 會假失敗；path.relative 在 Windows 不分大小寫、尾段取自第二個參數。
  */
 export const CARDS_ROOT = realpathSync.native(fileURLToPath(new URL('../../', import.meta.url)));

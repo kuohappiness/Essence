@@ -29,7 +29,7 @@ const PLACES = Object.values(MANIFESTS).map(at => at === '.' ? '根目錄' : at 
  * 都沒有、id 不對、不是 JSON 一律丟錯，不猜（D-208 第二步 §A5）。
  * ls-tree 要加 --full-tree：不加時路徑照執行的資料夾算，從 tools/ 或 plugins/cards/ 跑會回 0 筆。
  * 不用 cat-file -e 判斷：路徑不在與 commit 不在都回 128，分不出來。
- * 路徑分大小寫（ls-tree 在 Windows 也是）：apps/cards/manifest.json 不算 apps/Cards/ 的。
+ * 路徑分大小寫（ls-tree 在 Windows 也是）：大小寫打錯的 manifest.json 不算 apps/Cards/ 的。
  */
 export function pluginRoot(root: string, ref: string): PluginRoot {
   const fail = (why: string): Error => Error(`判不出 ${ref} 的外掛根：${why}`);

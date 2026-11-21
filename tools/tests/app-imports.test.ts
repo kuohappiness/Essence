@@ -163,22 +163,36 @@ void test('D-218 §3 第 3 點：寫死的路徑大小寫不符、Markdown 以�
     "'.obsidian/community-plugins.json'", 'plugins: [desktopOnly(root)]', 'app.plugins.enablePlugin(id)',
   ]) assert.equal(count('tools/x.ts', text), 0, text);
   assert.equal(count('docs/backlog.md', '舊的 `plugins/cards/` 是紀錄'), 0);
-  // 組字串：表所在的檔以外都擋。
-  for (const text of ['`apps/${code}`', "join(root, 'apps')", 'join(root, "apps")', "const p = 'apps/';"]) assert.equal(count('tools/x.ts', text), 1, text);
+  // 組字串：程式與 workflow 裡、表所在的檔以外都擋（L2 第一輪 R4、R5）。
+  for (const text of [
+    '`apps/${code}`', '`${root}/apps/${code}`', "join(root, 'apps')", 'join(root, "apps")', "const p = 'apps/';", "const p = './apps/';", "join(root, 'Apps')",
+  ]) assert.equal(count('tools/x.ts', text), 1, text);
+  assert.equal(count('.github/workflows/x.yml', "dir: 'apps/'"), 1);
   assert.equal(count('tools/apps.ts', "export const APPS_ROOT = 'apps/';"), 0);
-  // 行號照原文。
+  for (const [path, text] of [['docs/x.md', '資料夾叫 "apps"'], ['tools/x.json', '{ "files": ["apps"] }'], ['docs/x.md', "'apps/'"]]) {
+    assert.equal(count(path, text), 0, `${path} ${text}`);
+  }
+  // 行號照原文，前面有跳脫也一樣（L2 第一輪 R1）。
   assert.deepEqual(checkText('tools/x.ts', 'a\nb\n  apps/cards').map(p => p.line), [3]);
+  assert.deepEqual(checkText('tools/x.ts', 'const r = /a\\.b\\\\c/;\nx\napps/cards').map(p => p.line), [3]);
+  assert.deepEqual(checkText('tools/x.ts', "'a\\\\\\n'\napps/cards\n").map(p => p.line), [2]);
 });
 
 void test('D-218 §3 第 3 點：紀錄不查；例外表上的檔沒有被允許的寫法或不在了就報', () => {
-  const all = new Map([['tools/apps.ts', ''], ...EXCEPTIONS.map(e => [e.file, "'plugins/cards/a.ts'"] as [string, string])]);
+  const SAMPLE: Record<string, string> = { plugins: "'plugins/cards/a.ts'", 大小寫: 'apps/cards', 組字串: "'apps/'" };
+  const all = new Map([['tools/apps.ts', ''], ...EXCEPTIONS.map(e => [e.file, e.allow.map(rule => SAMPLE[rule]).join('\n')] as [string, string])]);
   assert.deepEqual(checkPaths(all), []);
   for (const path of ['docs/decisions.md', 'docs/tasks/x.md', 'docs/Claude Codex Discussion/x.md', 'docs/archive/x.md', 'apps/Cards/docs/tasks/x.md', 'apps/Cards/docs/archive/x.md']) {
     assert.deepEqual(checkPaths(new Map([...all, [path, 'apps/cards']])), [], path);
   }
   assert.equal(checkPaths(new Map([...all, ['docs/roadmap.md', 'apps/cards']])).length, 1);
   const [first] = EXCEPTIONS;
-  assert.match(reasons(checkPaths(new Map([...all, [first.file, 'apps/Cards']]))).join('\n'), /已經沒有被允許的寫法/);
+  assert.match(reasons(checkPaths(new Map([...all, [first.file, 'apps/Cards']]))).join('\n'), /放行的「plugins」這個檔已經用不到/);
+  // 例外檔只放行列上的那幾種，其他寫法照擋（L2 第一輪 R3）。
+  assert.ok(!first.allow.includes('大小寫'));
+  const extra = reasons(checkPaths(new Map([...all, [first.file, `${SAMPLE.plugins}\napps/cards`]])));
+  assert.equal(extra.length, 1);
+  assert.match(extra[0], new RegExp(`^${first.file}  `));
   const gone = new Map(all);
   gone.delete(first.file);
   assert.match(reasons(checkPaths(gone)).join('\n'), new RegExp(`^${first.file}  例外表（.+）上的檔不在了`));

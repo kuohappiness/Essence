@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
 import { access, appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -32,13 +33,6 @@ const SYNTAX = 'docs/' + 'transcript.md';
 const PRODUCT = 'docs/' + 'product.md';
 const SKILL = 'code-quality/' + 'SKILL.md';
 const SKILL_COPIES = ['.claude/skills', '.agents/skills'];
-/**
- * 從工作樹複製進 clone 的：hook 與共用工具（這次要驗的版本）。工具是追蹤的 tools/*.ts、*.mjs、*.json 全部，不手列：
- * 手列時新增的相依（例如 tools/apps.ts）在 clone 裡會是 HEAD 的舊版或缺檔（D-218 開工前查核 R3）。
- */
-const HOOK_FILES = ['.githooks/pre-commit', '.githooks/pre-merge-commit', '.githooks/commit-msg', '.secretlintrc.json'];
-const copied = (tracked: Iterable<string>): string[] =>
-  [...HOOK_FILES, ...[...tracked].filter(path => /^tools\/[^/]+\.(ts|mjs|json)$/.test(path))];
 const EXCEPTED = new Set(EXCEPTIONS.map(e => e.file));
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
@@ -79,20 +73,17 @@ async function clone(t: test.TestContext) {
   // 已經存在的 linked worktree：在還沒換上新的 hook 之前就建好，之後切到新的分支。
   await git(repo, 'worktree', 'add', '-q', '-b', 'old', linked);
 
-  // 每個檔都用這次要驗的版本：照本 repo 的檔案清單，clone 多的刪掉、其餘從工作樹複製（D-208 第二步 B：搬檔的 commit 時
-  // clone 的 HEAD 還是舊位置；D-218：共用檢查掃全部的文字檔，HEAD 的舊內容會被擋）。
+  // 每個檔都用這次要驗的版本，hook 與共用工具也在內（不手列：手列時新增的相依在 clone 裡會是 HEAD 的舊版或缺檔，D-218
+  // 開工前查核 R3）：照本 repo 的檔案清單，clone 多的刪掉、其餘從工作樹複製（D-208 第二步 B：搬檔的 commit 時 clone 的
+  // HEAD 還是舊位置；D-218：共用檢查掃全部的文字檔，HEAD 的舊內容會被擋）。工作樹刪掉、還沒暫存的檔照樣刪掉。
   const listed = async (cwd: string) => (await git(cwd, '-c', 'core.quotepath=false', 'ls-files', '-z')).split('\0').filter(Boolean);
-  const wanted = new Set(await listed(SOURCE));
+  const wanted = new Set((await listed(SOURCE)).filter(path => existsSync(join(SOURCE, path))));
   for (const path of await listed(repo)) if (!wanted.has(path)) await rm(join(repo, path), { force: true });
   for (const path of wanted) {
     await mkdir(dirname(join(repo, path)), { recursive: true });
     await copyFile(join(SOURCE, path), join(repo, path));
   }
-  // 要驗的 hook 與工具、替身，在 clone 裡 commit 成一個基準。
-  for (const path of copied(wanted)) {
-    await mkdir(dirname(join(repo, path)), { recursive: true });
-    await copyFile(join(SOURCE, path), join(repo, path));
-  }
+  // 替身與記號，之後在 clone 裡 commit 成一個基準。
   await writeFile(join(repo, 'mark.mjs'), MARK);
   // Cards 的 package.json 用這次要驗的那份（有相依，沒裝時 hook 要擋），check 換成記號。
   const pkg = JSON.parse(await readFile(join(SOURCE, C, 'package.json'), 'utf8')) as { scripts: Record<string, string> };

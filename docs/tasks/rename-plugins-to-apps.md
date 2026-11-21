@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`，資料夾首字大寫（D-218，給 Claude，本機執行）
 
-狀態：待審｜下一步：合併前 L2（Fable 5.2 high，見審查紀錄），之後請使用者開雲端 session｜等誰：Claude
+狀態：待審｜下一步：合併前 L2 第二輪（只審第一輪的修正），之後請使用者開雲端 session｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**；寫規格、改完後的一致性檢查（〈驗收〉第 6～9 項）用 xhigh。這件改到 pre-commit、CI、分派表、跨版本比較的工具與雲端的開場 hook，合併前做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。
 
@@ -184,14 +184,24 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 **和規格不同的地方**（都寫進[合併前 L2 請求](rename-plugins-to-apps-review.md)〈實作者自己選的做法〉）：
 
 - 搬家的 commit 沒另開探針分支，直接推到這個分支（push 的 CI 一樣跑七個 job）。
-- `tools/tests/ci-gate.test.ts` 不在例外表：它的情境要照現在的分派表才成立，整份換成 `apps/`。例外表是十一列：歷史路徑九列（規格列的十個扣掉 `ci-gate.test.ts`）、故意寫錯的樣本兩列（`app-imports.test.ts`、`check-docs.test.ts`；`plugin-root.test.ts` 已經在歷史路徑那一列）、檢查本身一列。
+- `tools/tests/ci-gate.test.ts` 不在例外表：它的情境要照現在的分派表才成立，整份換成 `apps/`。例外表是十二列：歷史路徑九列（規格列的十個扣掉 `ci-gate.test.ts`）、故意寫錯的樣本兩列（`app-imports.test.ts`、`check-docs.test.ts`；`plugin-root.test.ts` 已經在歷史路徑那一列）、檢查本身一列。
 - Portal 放在 `tools/apps.ts` 另一張 `DOCS_ONLY` 表；分派表第 4 條帶上它、效果是空的（只跑共用檢查），不加新條目。
 - hook 的乾淨 clone 測試改成從工作樹複製每一個追蹤的檔：共用檢查現在掃全部文字檔。
+- 例外表每列寫明放行哪幾條規則（`plugins`、`大小寫`、`組字串`），沒放行的照擋；組字串只查程式與設定，不查 Markdown、JSON（L2 第一輪 R3、R4）。
+- §3 第 1 點要共用工具「都從表取」只做到 `dispatch.ts`、`check-app-imports.ts`、`roadmap-board.ts` 讀資料夾的地方；`check-docs.ts` 的幾張表、`roadmap-board.ts` 的 `RELEASE_ROADMAP`、`progress-board-data.ts` 的網址還是寫死的 `apps/Cards`。大小寫都對，也由共用檢查看住；之後動到這幾處時再改成 `FOLDERS.cards`（L2 第一輪 R6）。
+- `e565135` 順帶把 `tools/tests/quality.test.ts` 整檔從 CRLF 換成 LF（`-w` 之後只有 4 行真的改動）；之後別的分支改這個檔，合併會整檔衝突（L2 第一輪 R10）。
+
+**共用檢查已知的限制**（L2 第一輪 R4、R5、R9；都是本機照過、Linux CI 或下一次 commit 才看得到，不是沒人擋）：
+
+- 漏報：`APPS_ROOT + 代號`、字串裡雙重跳脫的正規式、大括號與群組（`apps/{cards,capture}`）、`cd apps && cd cards`；紀錄（`docs/tasks/` 等）不查，新任務說明寫錯的路徑要到照做時才發現。
+- 誤報：程式裡別的 repo 的網址、英文句子、`node_modules` 路徑碰到 `apps/<軟體名>` 也會報；vault 路徑的正規式從 `configDir` 組（前面不是字面 `obsidian\/`）會被 `plugins\/` 那條擋；任務標題寫了打錯的樣本，同步到 `docs/roadmap.md` 那一列會被擋，要回頭改任務標題。
+- 訊息：`apps/` 正下方的檔報「不在表上」；Portal 底下的 `.gitkeep`、PDF、CSV、txt 算程式被擋，同一個資料夾只報第一個。等 Portal 的第一個任務碰到再調。
+- 只在 Windows：`apps/Cards/tests/build.test.ts` 的 sourcemap 測試在 worktree 和 `%TEMP%` 同一顆磁碟時失敗（junction 的相對路徑），和這次改名無關；主資料夾與這個 worktree 在 D:，`%TEMP%` 在 C:，照常通過。
 
 **驗收**（Windows 11、Node 24.13、Git 2.52；Linux 是 CI）：
 
 1. `git ls-files plugins` 是 0 行；`apps/` 底下是 `Capture`、`Cards`、`Mindboard`。
-2. `9b7486b` 的 `plugins/` 底下 615 個檔都是 `R`，沒有 D 加 A；`252d85d..555f814` 在 `src/` 的內容差異只有 `rules.ts` 的 5 個路徑字串與一行註解。`git log --follow` 待 L2 抽查。
+2. `9b7486b` 的 `plugins/` 底下 615 個檔都是 `R`，沒有 D 加 A；`252d85d..555f814` 在 `src/` 的內容差異只有 `rules.ts` 的 5 個路徑字串與一行註解。`git log --follow`（L2 抽查）：Cards 20 檔、Capture 6 檔、Mindboard 5 檔都接得到 `plugins/` 的舊路徑，Cards 20 檔都接到第二步之前的根目錄路徑（Capture、Mindboard 整個資料夾只有 6、5 個檔，全部抽了）。
 3. `tools/`：`npm run check` 通過，`npm run self-check` 238 個測試（237 通過、1 個 Windows 跳過），`<基準>` 228 個；多的 10 個是 8 個「D-218 …」開頭的測試與分派表的「只改 apps/Capture/a.ts」「新增 apps/Portal/docs/backlog.md」。`apps/Cards/`：`npm run check` 2906 個測試全過，`<基準>` 2904 個；多的 2 個是準備 commit 加的「D-218 Cards 根的大小寫打錯（只在 Windows）…」「D-218 root 的大小寫打錯（只在 Windows）…」；`npm run build` 通過。Linux CI 在 `9b7486b` 七個 job 都成功，`555f814` 見 PR。
 4. `embedRules()` 在 `252d85d` 與 `555f814` 的結果 `deepEqual`（五科，路徑不在內容裡，不用換回）；`ai-rules.test.ts` 照常通過。
 5. 改連結的腳本 `--check` 是「要改 0 個連結」。寬 pattern（`plugins` 接 `/`、`\/`、引號或 `*`，正規化後）：vault 與 Obsidian 的寫法 101 行、紀錄 883 行、例外表上的檔 118 行、現行文件寫歷史的列 8 行（`apps/Cards/docs/roadmap.md` 64、65 行〈已完成〉、`docs/agents/token-usage.md` 13 行（同一行另寫了 D-218 之後的路徑）、`docs/architecture.md` 83 行（第二步的經過）、`docs/backlog.md` 55、59 行（D-208 第一、二步的經過）與 57 行、`docs/roadmap.md` 19 行（這件自己的列）），剩 3 行都是 Obsidian 的 `plugins` 資料夾（`experiments/plugin/` 兩行、`rename-local-folder.test.mjs` 一行 Codex 設定的 `[plugins`），實際殘留 0。`PLUGINS` 已改 `APPS`。`node tools/check-docs.ts` 通過。
@@ -200,7 +210,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 8. 四種在 Windows 都擋下：前兩種是 `app-imports.test.ts`「§3 第 3 點」的測試、第三種是 `check-docs.test.ts`「驗收第 8 項」、第四種在暫存 clone 的 `apps/Cards/src/core/` 寫 `import './Files.ts'` 跑 `tsc`，報 TS1149（只差大小寫）。
 9. `app-imports.test.ts` 的 §6 測試：第二步 A7 的兩例換成新路徑照樣擋，另加 `apps/Capture/src/a.ts` import `../../Cards/src/core/files.ts`。
 10. （合併前的雲端 session：待使用者開）
-11. （探針 draft PR 與合併後的 Pages：待做）
+11. 分支 push 的 run 七個 job 都成功（第 3 項）。探針分支各對這個分支開 draft PR，看 `pull_request` 的 run：只改 `apps/Mindboard/AGENTS.md` 的 #31（run 44917630810）只有 mindboard 跑、成功，tools、cards、capture 跳過，gate 成功；只改 `apps/Cards/src/` 一個檔的 #32（run 44919385585）只有 cards 跑、成功（含建置後的 `git status --porcelain`），tools、capture、mindboard 跳過，gate 成功。兩個 PR 看完關掉、探針分支刪掉。（探針分支自己的 push run 和 `main` 比，帶著整個改名，所以是全部跑。）合併後的 Pages：待合併。
 12. `apps/Cards/manifest.json` 的 `id` 是 `essence-cards`、`version` 是 `0.6.0`，和 `252d85d` 相同；這次沒有新增或移動 tag。
 13. Windows 跑第 3、8、9 項（上面）；Linux 由 CI 跑第 3 項。`plugin-root.test.ts`、`build.test.ts` 的大寫路徑測試只在 Windows 跑（Linux 那個資料夾不存在）。
 14. §5：
