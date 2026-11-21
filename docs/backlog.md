@@ -45,12 +45,13 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 ### Essence Capture 與 Essence Mindboard
 
-另外兩個外掛的工作各自一份，不和 Cards 的混在一起（使用者 2026-10-31）；和 Cards 共用的部分用連結。
+另外兩個外掛的工作各自一份，不和 Cards 的混在一起（使用者 2026-10-31）；和 Cards 共用的部分用連結。入口網站（Portal）也各自一份（2026-11-21）。
 
 | 外掛 | 目前狀態 | 清單 |
 |---|---|---|
 | Essence Capture | 第二階段（使用者 2026-11-16，[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）：v1 的教材由家長在自己的 AI 對話附課本；開工前先找現成專案 | [查看](../apps/Capture/docs/backlog.md) |
 | Essence Mindboard | 未來的第三個外掛，還沒開工；在同一個 repo 的 `apps/Mindboard/` 開發（[D-208](decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)） | [查看](../apps/Mindboard/docs/backlog.md) |
+| Essence Portal | 孩子每天打開的入口網站，不是 Obsidian 外掛；還沒寫程式，方向在討論（使用者 2026-11-20～21，進度見 [roadmap](roadmap.md#現在在哪裡)）；在 `apps/Portal/`（[D-218](decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)） | [查看](../apps/Portal/docs/backlog.md) |
 
 #### 三個外掛併進同一個 repo
 

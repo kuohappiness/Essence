@@ -1,6 +1,6 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：暫停：使用者 2026-10-30 決定 v1 之後再說（文末〈使用者決定〉）；之後重開，從〈Claude 回應 Codex〉的最小驗證接著做
+狀態：已結案 → [入口網站稿](<../../../Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>)、[Cards 網頁版稿](2026-11-20-cards-web.md)｜完成：Obsidian 仍是首選（使用者 2026-10-30）；手機端經 Dropbox 同步的最小驗證不做，2026-11-20～21 改成入口網站與 Cards 網頁版（文末〈後續〉）｜等誰：—
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../../../../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../../../../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../../../../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
@@ -391,3 +391,11 @@ OneDrive、Google Drive、Wi-Fi 都先保留候選，不為首輪先寫 adapter�
    - **Syncthing**：電腦與手機直接對傳、不經雲端；iPhone 沒有官方版，要另裝第三方 App（例如 Möbius Sync，費用與限制未查證），iOS 背景執行受限，大多只在那個 App 開著時同步，電腦也要開著。
    - **Self-hosted LiveSync**（社群外掛）：要自己架 CouchDB 之類的伺服器（D-005：一般使用者不需要自架）。
    - **Git**（例如 Obsidian Git 外掛）：要 GitHub 帳號與 Git 的觀念，iPhone 上慢；使用者會碰到的流程不能要求 Git。
+
+## 後續：改成網頁版（2026-11-21）
+
+使用者 2026-11-20～21 在兩個討論串「評估 Essence 網頁版同步」重談：目標是讓孩子每天自己用；做一個孩子每天打開的入口網站，Cards 在裡面的 `/cards` 複習；Obsidian 仍是唯一要維護的資料、iCloud 留著；利用 v1 空檔先做不含登入的第一次驗證。上面〈Claude 回應 Codex〉的「經使用者 Dropbox 的最小驗證」不做了；〈Codex 回應〉第三～五、七節的同步缺口與 PWA 的條件，由下面兩份接著用。
+
+→ [入口網站稿](<../../../Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>)（2026-11-21）
+
+→ [Cards 網頁版稿](2026-11-20-cards-web.md)（2026-11-21）

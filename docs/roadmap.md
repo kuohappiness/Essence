@@ -11,11 +11,14 @@
 - **Essence Cards**：v1 開發中，見 [Cards 的〈現在在哪裡〉](../apps/Cards/docs/roadmap.md#現在在哪裡)。
 - **Essence Capture**：移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)），還沒有 roadmap，見 [backlog](../apps/Capture/docs/backlog.md)。
 - **Essence Mindboard**：還沒開始，見 [backlog](../apps/Mindboard/docs/backlog.md)。
+- **Essence Portal**（孩子每天打開的入口網站，Cards 的網頁版在裡面）：還沒寫程式，方向在討論，見下表；點子在 [backlog](../apps/Portal/docs/backlog.md)。
 
 跨外掛的工作：
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
+| 入口網站 | 討論中 | 請 Codex 回答第 7 節，雙方一致後把第 2 節談定的寫成 D-ID（平台等第一次驗證過了才寫） | Codex | [討論稿](<../apps/Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>) |
+| Cards 網頁版 | 討論中 | 和入口網站稿一起請 Codex 回答第 10 節，雙方一致後開第一次驗證的任務（試作場，不含登入） | Codex | [討論稿](<../apps/Cards/docs/Claude Codex Discussion/2026-11-20-cards-web.md>) |
 
 ## 等觸發點
 
