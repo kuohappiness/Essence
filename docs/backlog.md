@@ -16,6 +16,7 @@
 |---|---|---|---|
 | 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `plugins/<外掛>/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
 | 補做：查詢工具的現行寫在只算有連結的引用：`node tools/decisions-index.ts D-xxx` 的「現行寫在」只比對字串 `D-xxx`，沒分辨是依據還是只是提到，可能多列和規則無關的出處；多列的人看了跳過，查無引用時照實印「沒有規範文件引用」 | 查詢時列出的出處有一半以上和規則無關 | 只算有連結的引用，或排除〈曾考慮的做法〉這類段落；測試加一份只提到、沒有連結的規範文件 | [工作流程上線〈技術債〉](tasks/workflow-impl.md#技術債) |
+| 〈已完成〉的核對只在本機的 hook：GitHub 上合併 PR、快轉、沒衝突的 cherry-pick 與 rebase 都不經過 pre-commit／pre-merge-commit；CI 的 `roadmap-sync --check` 是 HEAD 比自己，手寫或刪掉的〈已完成〉列可以進 `main`（狀態板和入口對不上，CI 照擋） | 第一次在 GitHub 網頁上解〈已完成〉的衝突，或合併工作流程上線前開、帶手寫〈已完成〉列的分支 | CI 在分支 push 與 PR 時，拿和 `main` 的合併基點當比較對象跑完成列的核對（日期只查不晚於今天）；測試加一個分支手寫完成列、CI 擋下的案例 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N13 |
 
 ### 已知的限制
 
@@ -28,6 +29,9 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 金鑰掃描的預設模式（`npm run check`、CI）讀工作樹：Git 取出檔案時的轉換會改到掃的內容 | `.gitattributes` 對含金鑰的文字檔設了 `working-tree-encoding`（例如 UTF-16）或 `filter`，而且這個 commit 沒經過 pre-commit（在 GitHub 網頁上直接改、沒裝 hook 的 clone）；這個 repo 現在只有 hook 的換行規則 | CI 讀 checkout 出來的檔，轉成 UTF-16 或被 filter 改過的金鑰對不上規則，CI 不擋。經過 pre-commit 的 commit 照常擋（`--staged` 讀索引的 blob，L2 R7）。避開：不對可能含金鑰的文字檔設編碼或 filter | [三個外掛併進同一個 repo 第一步的 L2](<Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>) R7 的同一類、這次不改的（機制和 R7 相同，推斷，沒在 CI 實測） |
 | 分派表找入口相依時，區塊註解夾在 `require`／`import` 與括號或路徑之間，或區塊註解裡有不成對引號的 `from '…`，會少認那個相依 | 入口（hook、`check.yml`、外掛 scripts 叫的 `tools/` 檔）或 Cards 的測試檔這樣寫（`require /* … */ ('./x')`），之後只改它載入的下游工具或經 helper 讀的文件；現在的入口與測試都沒有這種寫法 | 該跑的外掛檢查被跳過（入口那一種 pre-commit 與 CI 都跳過；Cards 測試那一種 CI 照跑 Cards 的完整檢查）。入口那一種，`tools/tests/dispatch.test.ts` 的語法樹驗收在加入這種接線的 commit 會失敗。避開：註解不要夾在 `require(` 與路徑中間 | [三個外掛併進同一個 repo 第二步 A 的 L2](<Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R11（R9 修正引入；再補一條判斷就是同一類的第四代，照 D-200 不加） |
 | 分派表把結尾有斜線的資料夾路徑（`require('./x/')`）旁邊同名的 `x.js` 也算成入口 | 入口這樣寫，同時有 `x/index.js` 與 `x.js`，只改 `x.js`；現在沒有這種接線 | 多跑三個外掛的檢查，不會少跑。不用避開 | [三個外掛併進同一個 repo 第二步 A 的 L2](<Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R12（R10 修正引入） |
+| 圍欄的判斷（`tools/fences.ts`，決策查詢與 `section.ts` 用）不追蹤清單：清單裡沒收尾的圍欄，清單結束後仍算到檔尾 | 清單項目裡開了圍欄、沒寫收尾 | 後面的標題與 D-ID 當成程式碼：`section.ts` 找不到那些標題、決策查詢少列（markdown-it 在清單結束時就關掉）。避開：圍欄都寫收尾 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N10 |
+| 入口的狀態行搬進 roadmap 時（`moveText`），帶標題的連結 `[t](x.md "t")`、`/` 開頭的路徑、路徑裡有括號的連結不改基準；白板「最近定案」的 backlog 站，檔名有 `#` 時切錯 | 入口的狀態行這樣寫連結，或 backlog 的檔名有 `#`；現在都沒有 | roadmap 或白板的連結指錯，多半由文件檢查報成壞連結，不會默默寫壞。避開：狀態行的連結寫一般的相對路徑 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N11 |
+| 入口改名、改成結束、刪掉狀態板那一列在同一個 commit，沒有完成列也通過 | 同一個 commit 裡 `git mv` 入口、狀態改成已合併或已結案、手動刪列 | 少一筆完成紀錄。避開：照規範不手動刪列，改了狀態就跑 `node tools/roadmap-sync.ts`（工具會寫完成列） | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N12 |
 | 外掛之間不 import 的檢查（`tools/check-plugin-imports.ts`）只看寫死的相對路徑：執行時才組出來的路徑、`tsconfig` 的 `paths`、打包工具的 alias、自訂 resolver 讓套件名稱指到別的外掛，都看不到 | 程式用字串組路徑再 import（`import('../../src/' + name)` 只取得到前段），或外掛設了 paths、alias、resolver | 這類跨外掛的引用不會被擋。避開：import 寫成固定的相對路徑；第一個用到 paths、alias 或 resolver 的外掛任務，把解析後不出外掛的邊界加進測試（外掛的 AGENTS.md 有寫） | [三個外掛併進同一個 repo 第一步 §6](tasks/one-repo-step-1.md#6-外掛之間不-importtoolscheck-plugin-importsts)（設計時就知道的限制，不是 L2 找到的） |
 
 ### Essence Capture 與 Essence Mindboard

@@ -1,6 +1,6 @@
 # 工作流程上線：D-214、D-215、D-217 的工具、檢查與文件（給 Claude，本機執行）
 
-狀態：待審｜下一步：L2 第一輪的 12 項已修，第二輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
+狀態：待審｜下一步：L2 第二輪的 13 項已處理，第三輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
 
 來自：[plans/workflow.md〈搬完之後要做的事〉](../plans/workflow.md#搬完之後要做的事)
 
@@ -213,6 +213,7 @@
 ## 技術債
 
 - 補做：「現行寫在」只比對字串 `D-xxx`，沒分辨「依據」還是只是提到。觸發點：查詢時列出的出處有一半以上和規則無關。完成條件：只算有連結的引用，或排除〈曾考慮的做法〉這類段落。恢復：多列的出處人看了就跳過；查無引用時照實印「沒有規範文件引用」。
+- 〈已完成〉的核對只在本機的 hook（L2 第二輪 N13）：GitHub 上合併 PR、快轉、沒衝突的 cherry-pick 與 rebase 不經過 hook。觸發點：第一次在 GitHub 網頁上解〈已完成〉的衝突，或合併上線前開、帶手寫完成列的分支。完成條件：CI 拿和 `main` 的合併基點跑完成列的核對。已記進 [backlog〈技術債〉](../backlog.md#技術債)。
 
 ## 結果
 
@@ -220,8 +221,8 @@
 
 - **commit**（分支 `claude/workflow-impl-68afda`）：`6b16b47` `section`；`6a1b2b6` 決策查詢工具；`4a3cfc2` 文件分區與現有狀態板整理；`9e2b6d6` 狀態行解析、`roadmap-sync`、文件檢查與白板，接進 hook 與 `npm run check`；之後是規範的連結、skill 與 L2 請求。每個 commit 的 pre-commit 都通過；`9e2b6d6` 跑了共用檢查（`npm run check` 的各項，讀暫存區）與 tools 的 `npm run self-check`、Cards、Capture、Mindboard 的完整檢查。
 - **L2 第一輪**（[審查請求](workflow-impl-review.md)，Codex 審 `64896c0`）：12 項都在合併前修，一項一個 commit，先寫會失敗的測試：R11 `918e387`、R10 `c4c0c38`、R8 `b24ebd0`、R9 `b093894`、R4 `286e4bb`、R7 `54f83ae`、R6 `5c36adb`、R2／R3／R5 `398e1a8`（拿掉 `ROLLOUT`）、R1 `83eb796`、R12 `7731f42`；每個 commit 的 pre-commit 都通過。第二輪只審這些差異。
+- **L2 第二輪**（[審查請求〈第二輪的回報〉](workflow-impl-review.md#第二輪的回報)，Fable 5.2（high）子代理審 `3cd78c1`）：13 項。修的一項一個 commit，先寫會失敗的測試：N1／N4 `173e7cc`、N6 `e3722ef`、N2 `4d65a07`、N3 `4965810`、N5 `509c3c1`、N12 `2119e02`、N7 `24554ff`、N8 `41203a0`、N9 `e517fb8`、N10 `4f73393`；每個 commit 的 pre-commit 都通過。N10 的第二種、N11、N12 的第二條路記進 backlog〈已知的限制〉；N13 記進上面的〈技術債〉。第三輪只審這些差異。
 - **驗收 1～6、8、9**：各自的測試在 `tools/tests/`（`status-line`、`check-docs`、`roadmap-sync`、`roadmap-board`、`decisions-index`、`section`）；`node tools/roadmap-sync.ts --check` 在真的 repo 通過，不帶 `--check` 再跑一次不改任何字；文件檢查在真的 repo 通過；`check-skill-mirror` 通過。
-
 - **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,100 字（JavaScript 字元數，2026-11-21 的決策紀錄），和舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）的輸出逐位元組相同（L2 R11 之前開頭多「（--deep）」，已拿掉）。
 - **驗收 10**：白板在瀏覽器以 375×812 開，`document.documentElement.scrollWidth` 是 375，沒有元素超出右緣；「最近完成」與「最近定案」是兩個區塊。
 - **一次性搬移**（`4a3cfc2`）：四份 backlog 只剩〈待處理〉〈已轉出〉兩個二級標題，舊標題降一級，舊錨點都還對到同一個標題（一次性腳本比對）；技術債表的列沒動。三份 card-rules 的 AI 標記以下逐字相同。凍結清單收 224 份還是舊格式的狀態檔。封存的〈已完成〉補進五列只有決定的（D-213～D-217），另把放錯表的九列照日期搬進〈已完成〉。
