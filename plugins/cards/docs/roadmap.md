@@ -32,7 +32,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 正式版的錯誤紀錄與回報 | 說明書開工時一起寫那幾句 | [任務說明](tasks/error-log.md) |
 | 第二次里程碑的品質檢查 | R8 剩下的「只刪自己建的」入口，照技術債表的觸發點 | [報告](<Claude Codex Discussion/2026-11-10-milestone-2-review.md>) |
 | 更新與相容 | 下一版發布時 | [規畫](plans/updates.md) |
-| AI 製卡最小版 | Claude 網頁額度夠時再試 §8 第 3 點 | [任務說明](tasks/ai-cards-mvp.md) |
+| AI 製卡最小版：Claude 網頁補試 | Claude 網頁額度夠時再試 §8 第 3 點 | [任務說明](tasks/ai-cards-mvp.md) |
 
 ## 路線圖
 
