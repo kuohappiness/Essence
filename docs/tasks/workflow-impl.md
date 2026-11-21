@@ -1,6 +1,6 @@
 # 工作流程上線：D-214、D-215、D-217 的工具、檢查與文件（給 Claude，本機執行）
 
-狀態：實作中｜下一步：照規格實作，合併前 Codex L2｜等誰：Claude
+狀態：待審｜下一步：L2 第一輪的 12 項已修，第二輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
 
 來自：[plans/workflow.md〈搬完之後要做的事〉](../plans/workflow.md#搬完之後要做的事)
 
@@ -219,6 +219,7 @@
 延後的測試：「補做：查詢工具的現行寫在只算有連結的引用」
 
 - **commit**（分支 `claude/workflow-impl-68afda`）：`6b16b47` `section`；`6a1b2b6` 決策查詢工具；`4a3cfc2` 文件分區與現有狀態板整理；`9e2b6d6` 狀態行解析、`roadmap-sync`、文件檢查與白板，接進 hook 與 `npm run check`；之後是規範的連結、skill 與 L2 請求。每個 commit 的 pre-commit 都通過；`9e2b6d6` 跑了共用檢查（`npm run check` 的各項，讀暫存區）與 tools 的 `npm run self-check`、Cards、Capture、Mindboard 的完整檢查。
+- **L2 第一輪**（[審查請求](workflow-impl-review.md)，Codex 審 `64896c0`）：12 項都在合併前修，一項一個 commit，先寫會失敗的測試：R11 `918e387`、R10 `c4c0c38`、R8 `b24ebd0`、R9 `b093894`、R4 `286e4bb`、R7 `54f83ae`、R6 `5c36adb`、R2／R3／R5 `398e1a8`（拿掉 `ROLLOUT`）、R1 `83eb796`、R12 `7731f42`；每個 commit 的 pre-commit 都通過。第二輪只審這些差異。
 - **驗收 1～6、8、9**：各自的測試在 `tools/tests/`（`status-line`、`check-docs`、`roadmap-sync`、`roadmap-board`、`decisions-index`、`section`）；`node tools/roadmap-sync.ts --check` 在真的 repo 通過，不帶 `--check` 再跑一次不改任何字；文件檢查在真的 repo 通過；`check-skill-mirror` 通過。
 
 - **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,100 字（JavaScript 字元數，2026-11-21 的決策紀錄），和舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）的輸出逐位元組相同（L2 R11 之前開頭多「（--deep）」，已拿掉）。

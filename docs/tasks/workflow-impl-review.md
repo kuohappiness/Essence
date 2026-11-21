@@ -1,6 +1,6 @@
 # 工作流程上線：L2 獨立審查（給 Codex）
 
-狀態：實作中｜下一步：修第一輪的 12 項，再送第二輪｜等誰：Claude
+狀態：待審｜下一步：第二輪由 Fable 5.2（high）子代理審，通過就不再請 Codex｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。由 Claude 用 `node tools/codex.ts l2` 送出，新的 session。
 
@@ -201,3 +201,29 @@ Codex（gpt-6.2-sol、high）2026-11-21 交回，審 `64896c0`；235,150 token�
 | R12 三處文件 | 修 | 列名改成「AI 製卡最小版：Claude 網頁補試」；backlog 那句改連錨點；工作流程規範改寫封存那句 | 三份文件 |
 
 修正放進下一次 L2，只查這些差異與受影響的路徑（R2、R4、R10 改到解析邊界或共用路徑）。Codex 週額度剩 3%（11/23 週一 08:37 重置），下一輪送出前先看額度。
+
+## 第二輪的請求
+
+只審第一輪 12 項的修正與受影響的路徑；〈規格與優先順序〉〈回報與權限〉照上面。
+
+審查者：Codex 週額度剩 3%（11/23 08:37 重置），這一輪改由 Claude 開的 Fable 5.2（high）子代理審：新的上下文、只讀這份請求與 repo，不給實作者的結論。它是整合者開的子代理，照 [quality.md](../agents/quality.md) 算 L3。使用者 2026-11-21：Fable 審通過就不再請 Codex；沒通過時修完再審。
+
+- 審查對象：第一輪審的 `64896c0` 之後、到這份請求所在的 commit。一項發現一個 commit（由舊到新）：R11 `918e387`、R10 `c4c0c38`、R8 `b24ebd0`、R9 `b093894`、R4 `286e4bb`、R7 `54f83ae`、R6 `5c36adb`、R2／R3／R5 `398e1a8`、R1 `83eb796`、R12 `7731f42`。看全部：`git diff 64896c0 <這份請求的 commit>`；看一項：`git show <commit>`。
+- 每一項對照〈Claude 回應〉的修法：修到了沒有、有沒有帶進新問題。R2、R4、R10 改到解析邊界或共用路徑，也請看呼叫端：
+  - R2、R3、R5：`roadmap-sync.ts` 的 `checkDone`（取代 `checkNewDone`，各份 roadmap 一起看），在 pre-commit 與 pre-merge-commit 的 `roadmap-sync --check --staged` 跑；`Source` 多了 `merging()`（有沒有 `MERGE_HEAD`）。
+  - R4：`moveText`、入口一格的解析、工具寫的〈已完成〉列。
+  - R10：`tools/fences.ts` 給 `decisions.ts`（解析、索引、`currentRefs`）與 `section.ts` 用；`check-docs.ts` 照舊用 markdown-it。
+- 請找新的組合，例如：合併時兩邊各加一筆完成列；解衝突時把列的順序換掉；重新開工又結束（同一個入口第二筆完成列）；入口改名同時結束；同一天升兩次版；清單裡、引用框裡巢狀的圍欄；檔名有 `%`、`#`、`?` 的入口。
+
+實作者自己選的做法（規格沒寫的）：
+
+1. R2：舊列的比對鍵是「日期＋拿掉連結目標的文字」；舊的列改了文字就是新的列，照新列查（〈已完成〉整個由工具產生，手改擋下）。
+2. R2：合併時（有 `MERGE_HEAD`）新列的日期只要不晚於今天；不是合併時要等於工具算的收尾日。
+3. R2：「HEAD 的狀態板或〈等觸發點〉有列、現在每份都沒有、入口已結束」才要新列；入口檔已經不在（改名）不要。同一個入口、和舊列同一天的新列算重複。
+4. R5：同一份入口跨 roadmap 有兩列時，報在順序後面的那份（最上層先，外掛照路徑）。
+5. R6：連到 backlog、沒有錨點的「→」照舊看整份；白板的 backlog 站顯示 `檔〈標題〉`，狀態寫「—」。
+6. R8：同一天時，同一版照列的位置切；不同版以那句為準，照那句的日期切。
+7. R10：清單裡縮排四格以上的圍欄也算，所以不在清單裡、縮排四格以上的「```」也當成圍欄（寧可少列標題）；縮排程式碼區塊本身不認。和 markdown-it 比對 11 個樣本。
+8. R4：入口路徑本身要編碼的字只有 `%`、`#`、`?`；入口連結的百分比編碼壞掉時報錯。
+
+驗證方式：每個修正的 commit 都過了 pre-commit（共用檢查讀暫存區；tools 的 self-check：typecheck、lint、knip 與全部測試）。每項先寫會失敗的測試（R12 是文件，直接核對），測試名稱以「L2 R<編號>」開頭。真的 repo：`node tools/roadmap-sync.ts --check`、`node tools/check-docs.ts`、`node tools/roadmap-board.ts --check` 通過；白板照真的 roadmap 重新產生，最上層 5 件進行中、待發布 2 列、正式 vault 0.6.0。沒驗的：GitHub Pages 的 run（驗收第 11 項，合併後）。
