@@ -388,6 +388,26 @@ void test('L2 N2 入口結束但同名的工作還在（換入口）、HEAD 是�
   assert.equal(check().status, 0, check().stderr);
 });
 
+void test('L2 N3 HEAD 的完成列不見了就擋（刪掉、解衝突時丟掉自己那一列）；只改連結目標、換順序放行', async t => {
+  const { add, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  const tool = '| 2026-11-21 | **甲**：做完（已合併，[入口](tasks/a.md)） |';
+  const hand = '| 2026-11-20 | 舊的一列 |';
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap([], [], [tool, hand]));
+  commit();
+  const gone = (row: string) => `docs/roadmap.md:15  HEAD 的〈已完成〉有「${row}」這一列，現在不見了：舊的列不刪也不搬（只能改連結的目標），把它加回來`;
+  await add('docs/roadmap.md', roadmap([], [], []));
+  assert.deepEqual(check().stderr.split('\n').filter(line => line.startsWith('docs/')), [gone(tool), gone(hand)]);
+  // 解衝突時留下對方的列、丟掉自己的：對方的列照新列查，自己的照樣報不見。
+  await add('docs/tasks/b.md', entry('狀態：已合併｜完成：也做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap([], [], [`| ${TODAY} | **乙**：也做完（已合併，[入口](tasks/b.md)） |`, hand]));
+  assert.deepEqual(check().stderr.split('\n').filter(line => line.startsWith('docs/')), [gone(tool)]);
+  // 換順序、只改連結的目標：都還是舊的列。
+  await add('docs/roadmap.md', roadmap([], [], [hand, tool.replace('tasks/a.md', 'tasks/a.md#結果')]));
+  assert.equal(check().status, 0, check().stderr);
+});
+
 void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));

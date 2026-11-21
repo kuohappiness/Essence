@@ -338,6 +338,7 @@ const isDate = (text: string) => {
  * - 一份入口只有一筆新的列，也不和舊的列同一天；
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；同名的工作還在（換入口）、
  *   HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不要。
+ * - HEAD 的〈已完成〉每一列都還在。
  * HEAD 沒有的 roadmap 不看。
  */
 export function checkDone(roadmaps: readonly { file: string; text: string }[], source: Source, today: string): Problem[] {
@@ -352,20 +353,23 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
   const fresh = new Map<string, string>();
   const old: { path: string; date: string; at: string }[] = [];
   const checks: (() => void)[] = [];
-  // 上線前的 roadmap（HEAD 沒有〈等觸發點〉）：上線那次改了格式、換了入口，HEAD 的列不能照新規則比（L2 第二輪 N2）。
+  // 上線前的 roadmap（HEAD 沒有〈等觸發點〉）：上線那次改了格式、換了入口、舊列搬去封存，HEAD 的列不能照新規則比（L2 第二輪 N2、N3）。
   const legacy = new Set([...headOf].filter(([, head]) => head !== undefined && !sectionsOf(lf(head)).some(s => s.title === WAITING.section)).map(([file]) => file));
   for (const { file, text } of roadmaps) {
     const head = headOf.get(file);
     if (head === undefined) continue;
-    const left = new Map<string, number>();
-    for (const row of doneRowsOf(lf(head))) left.set(doneKey(row), (left.get(doneKey(row)) ?? 0) + 1);
+    const left = new Map<string, { row: string; count: number }>();
+    for (const row of doneRowsOf(lf(head))) {
+      const key = doneKey(row);
+      left.set(key, { row: rowOf([row.date, row.work]), count: (left.get(key)?.count ?? 0) + 1 });
+    }
     for (const row of doneRowsOf(lf(text))) {
       const match = DONE_CELL.exec(row.work);
       const found = match ? entryOf(`[入口](${match[4]})`, file) : undefined;
       const path = found && 'path' in found ? found.path : undefined;
-      const key = doneKey(row);
-      if (left.get(key)) {
-        left.set(key, left.get(key)! - 1);
+      const kept = left.get(doneKey(row));
+      if (kept?.count) {
+        kept.count--;
         if (path) old.push({ path, date: row.date, at: `${file}:${row.line}` });
         continue;
       }
@@ -393,6 +397,12 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
         const same = old.find(o => o.path === entry && o.date === row.date);
         if (same) add(`入口 ${entry} 在 ${same.at} 已經有同一天的完成列`);
       });
+    }
+    // HEAD 的列沒有對到的：被刪掉或搬走了（解衝突時丟掉一邊也是），L2 第二輪 N3。
+    if (legacy.has(file)) continue;
+    const at = sectionsOf(lf(text)).find(s => s.title === DONE.section);
+    for (const { row, count } of left.values()) {
+      for (let k = 0; k < count; k++) problems.push({ file, line: at ? at.start + 1 : 0, reason: `HEAD 的〈已完成〉有「${row}」這一列，現在不見了：舊的列不刪也不搬（只能改連結的目標），把它加回來` });
     }
   }
   for (const check of checks) check();
