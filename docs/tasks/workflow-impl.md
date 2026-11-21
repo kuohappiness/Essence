@@ -1,6 +1,6 @@
 # 工作流程上線：D-214、D-215、D-217 的工具、檢查與文件（給 Claude，本機執行）
 
-狀態：待審｜下一步：L2 第三輪的 5 項已處理，第四輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
+狀態：待審｜下一步：L2 第四輪通過；K0～K2 已修，第五輪由 Fable 5.2（high）審，合併前看白板｜等誰：Claude
 
 來自：[plans/workflow.md〈搬完之後要做的事〉](../plans/workflow.md#搬完之後要做的事)
 
@@ -223,6 +223,7 @@
 - **L2 第一輪**（[審查請求](workflow-impl-review.md)，Codex 審 `64896c0`）：12 項都在合併前修，一項一個 commit，先寫會失敗的測試：R11 `918e387`、R10 `c4c0c38`、R8 `b24ebd0`、R9 `b093894`、R4 `286e4bb`、R7 `54f83ae`、R6 `5c36adb`、R2／R3／R5 `398e1a8`（拿掉 `ROLLOUT`）、R1 `83eb796`、R12 `7731f42`；每個 commit 的 pre-commit 都通過。第二輪只審這些差異。
 - **L2 第二輪**（[審查請求〈第二輪的回報〉](workflow-impl-review.md#第二輪的回報)，Fable 5.2（high）子代理審 `3cd78c1`）：13 項。修的一項一個 commit，先寫會失敗的測試：N1／N4 `173e7cc`、N6 `e3722ef`、N2 `4d65a07`、N3 `4965810`、N5 `509c3c1`、N12 `2119e02`、N7 `24554ff`、N8 `41203a0`、N9 `e517fb8`、N10 `4f73393`；每個 commit 的 pre-commit 都通過。N10 的第二種、N11、N12 的第二條路記進 backlog〈已知的限制〉；N13 記進上面的〈技術債〉。第三輪只審這些差異。
 - **L2 第三輪**（[審查請求〈第三輪的回報〉](workflow-impl-review.md#第三輪的回報)，Fable 5.2（high）子代理審 `f9023bf`）：5 項。M2 `cc15f41`、M1 `fe4081a`（合併帶進來的完成列不重驗，只查格式與日期）、M3 `d44c2cc`，先寫會失敗的測試，每個 commit 的 pre-commit 都通過；M4、M5 與 squash 的缺口記進 backlog〈已知的限制〉，`git revert` 併進 N13 那一列技術債。第四輪只審這些差異。
+- **L2 第四輪**（[審查請求〈第四輪的回報〉](workflow-impl-review.md#第四輪的回報)，Fable 5.2（high）子代理審 `0e84459`）：通過，3 項 P3；送審後 Claude 另找到 K0（比上線早分岔的分支併進新的 `main` 被擋）。K0 `64353c9`、K1 `e8ed4d7`（另一邊手寫的列不要求留著）、K2 `8eaadb3`（換入口沿著下一站一路走，M1 的測試改成整類的），先寫會失敗的測試，每個 commit 的 pre-commit 都通過；K3 記進 backlog〈已知的限制〉。使用者同意修完再審一輪，第五輪只審這些差異。
 - **驗收 1～6、8、9**：各自的測試在 `tools/tests/`（`status-line`、`check-docs`、`roadmap-sync`、`roadmap-board`、`decisions-index`、`section`）；`node tools/roadmap-sync.ts --check` 在真的 repo 通過，不帶 `--check` 再跑一次不改任何字；文件檢查在真的 repo 通過；`check-skill-mirror` 通過。
 - **驗收 7**：`node tools/decisions-index.ts D-117` 預設印 6,505 字，`--deep` 印 50,100 字（JavaScript 字元數，2026-11-21 的決策紀錄），和舊工具（`6b16b47` 的 `experiments/tools/decisions-index.mjs`）的輸出逐位元組相同（L2 R11 之前開頭多「（--deep）」，已拿掉）。
 - **驗收 10**：白板在瀏覽器以 375×812 開，`document.documentElement.scrollWidth` 是 375，沒有元素超出右緣；「最近完成」與「最近定案」是兩個區塊。

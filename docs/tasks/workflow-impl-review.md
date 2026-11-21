@@ -1,6 +1,6 @@
 # 工作流程上線：L2 獨立審查（給 Codex）
 
-狀態：待審｜下一步：第四輪由 Fable 5.2（high）子代理審，通過就不再請 Codex｜等誰：Claude
+狀態：待審｜下一步：第五輪由 Fable 5.2（high）子代理審 K0～K2 的修正，通過就不再請 Codex｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。由 Claude 用 `node tools/codex.ts l2` 送出，新的 session。
 
@@ -638,3 +638,160 @@ Fable 5.2（high）子代理，2026-11-21，審 `f9023bf`；約 20 分鐘、53 �
 - clone 模擬（工具是 `fe4081a` 的 `roadmap-sync.ts`，併的是 `cc15f41`）：上線那次合併通過；上線前開的分支在舊格式的 Cards roadmap 手寫一列，把新的 main 併進來通過（HEAD 是舊格式、那一列在 HEAD 裡），再併回新的 main 擋在「格式不是」。
 - 真的 repo：`node tools/roadmap-sync.ts --check`、`node tools/roadmap-board.ts --check`、文件檢查通過。
 - 沒驗：真的 `.githooks` 在 clone 裡跑完整的 pre-merge-commit（改用上面的 shell hook）；M1 的 octopus 合併、一串 cherry-pick 中途衝突、rebase 方向沒有實跑；GitHub Actions 的 Ubuntu 實跑要 push 後才有；Pages 與驗收第 11 項要合併後才有。
+
+## 第四輪的回報
+
+Fable 5.2（high）子代理，2026-11-21，審 `0e84459`。下面是回報原文，標題降兩級；一處格式說明包成行內程式碼（裡面的 `[入口](…)` 會被文件檢查當成連結）。
+
+### Fable 回報（原文）
+
+狀態：通過
+
+第三輪的 M1～M3 都修到了，M4、M5 記成已知的限制合理；沒有 P1、P2。這一輪找到三項 P3（K1～K3），都用真的合併加 hook 重現。K1 是 M1 修正帶出的：規範寫的遷移步驟在一種順序下會被擋，修法很小，建議合併前順手修或在規範補一句，但不擋合併。
+
+- **待審 commit**：`0e84459c3225a7951241ff37cb66c498fe188f88`，分支 `claude/workflow-impl-68afda`。
+- **審查範圍**：`git diff f9023bf 0e84459`（`cc15f41` M2、`fe4081a` M1、`d44c2cc` M3 與文件）與受影響的路徑：`tools/git-state.ts` 的 `replaySides`、`tools/roadmap-sync.ts` 的 `Source.sides`／`checkDone`／`nextStations`、`tools/roadmap-board.ts` 的 `GENERATED_RELEASE`，以及 `docs/agents/workflow.md`〈roadmap〉、任務說明、backlog 的限制與技術債。
+- **環境**：Windows 11、Git for Windows 2.52、Node 24.13.0。重現都在系統暫存資料夾的 `mkdtemp` 小 repo（掛 shell 寫的 pre-commit／pre-merge-commit，呼叫這個 worktree 的 `roadmap-sync.ts --check --staged --root <暫存 repo> --today 2026-11-25`）與一份 `git clone -s` 的 clone，結束前都刪了。worktree 的 `git status` 乾淨、HEAD 仍是 `0e84459`、分支沒換。
+- **操作上的說明**：暫存小 repo 裡模擬「上線前、還沒有工具的分支」的 commit 是不經 hook 進去的（腳本內）；在 clone 裡有一次指令帶了跳過 hook 的旗標，被這個專案的 hook 擋下，改成先把 clone 的 hooks 資料夾暫時移開再 commit。都只在暫存 repo，沒有動到真的 repo。
+
+#### 跑了什麼
+
+| 指令 | 結果 |
+|---|---|
+| `tools/` 裡一次一個檔：`tests/roadmap-board.test.ts`、`tests/roadmap-sync.test.ts` | 22、17 個測試全過，0 失敗、0 跳過 |
+| 真的 repo：`node tools/roadmap-sync.ts --check`、`node tools/roadmap-board.ts --check` | 都通過 |
+| clone：`8a03736` 加一個無關的 commit，掛 hook 跑真的 `git merge --no-ff 0e84459` | 通過 |
+| clone：真的進行中分支 `claude/project-thread-sdo9aa`（`a289fcf`，上線前的格式、狀態板多一列）把上面那個合併後的 main 併進來 | `docs/roadmap.md` 與 `experiments/tools/decisions-index.mjs` 衝突；兩個都取 main 那邊後 `git commit` 通過 |
+| 小 repo：上線前的分支手寫完成列，直接併進新的 main，照規範的遷移步驟做 | 先擋在「格式不是」，照步驟做完後通過 |
+| 小 repo：同上，但分支先把新的 main 併進來再併回 main；`f9023bf` 與 `0e84459` 的工具各跑一次 | 見 K1 |
+| 小 repo：另一邊連換兩次入口（p → t1 → t2），功能分支把它併進來 | 見 K2 |
+| 小 repo：octopus `git merge a b`（自動 commit）；`--no-commit` 後 `git commit` | 自動 commit 通過（兩種順序）；`--no-commit` 見 K3 |
+| 小 repo：兩邊各自把同一列舊列的連結目標改成不同的檔，合併、取一邊 | 通過 |
+| 小 repo：squash 的分支頂端是合併 commit（`SQUASH_MSG` 列 4 個 commit） | 通過 |
+| 小 repo：`git cherry-pick` 一串四個（收尾、重新開工、再收尾），第一個衝突後 `--continue` | 通過，四個都套上 |
+| 小 repo：rebase，另一邊做了三步（收尾、補一句、重新開工），〈已完成〉衝突兩次後 `--continue` | 通過 |
+| 小 repo：「已結案 →」的下一站在另一份 roadmap（最上層 → Cards），換入口後、再收尾後各合併一次 | 都通過 |
+| 小 repo：放棄的 squash（`git restore --staged --worktree .`，`SQUASH_MSG` 留著）之後的一般 commit | 見 K3 |
+
+#### 發現
+
+##### P3 K1　另一邊帶進來、不是工具格式的完成列：真的合併時既不能留、也不能刪；規範寫的遷移步驟在這個順序下被擋（M1 修正引入；延續第二輪 N13）
+
+**規格與設計｜已重現**（`f9023bf` 與 `0e84459` 的工具跑同一串操作對照）。
+
+- **觸發條件**：另一邊（新格式的 roadmap）有一列這邊 HEAD 沒有、又不是工具格式的完成列，用真的 `git merge` 併進來。兩條路會走到：
+  1. 上線前開的分支手寫了完成列，先把新的 main 併進分支（HEAD 是舊格式，通過），再用本機的 `git merge` 併回 main。
+  2. 手寫的列不經 hook 進了某個分支（GitHub 網頁、沒衝突的 cherry-pick／rebase／revert，N13 那一類），再把那個分支併進來。
+- **實際**（`0e84459`）：
+  - 合併先擋在「格式不是『`**工作**：完成（已合併，[入口](…)）`』」（`tools/roadmap-sync.ts:403-406`，預期內）。
+  - 照 `docs/agents/workflow.md:97` 的遷移步驟（刪掉那一列、入口改成已合併、狀態板加回那一列、跑同步）之後 `git commit`，擋在「合併進來的 47174b7 的〈已完成〉有『| 2026-11-24 | 甲做完了 |』這一列，現在不見了：解衝突時兩邊的完成列都留著，把它加回來」（`:447`）。加回來又回到「格式不是」，兩個訊息互相打架。
+  - 放棄合併、改在分支上做同樣的遷移：擋在「HEAD 的〈已完成〉有…現在不見了」（`:445`，第二輪 N3 的規則，這一輪之前就有）。
+  - 對照 `f9023bf`：同一串操作，在進行中的合併裡照步驟做完就通過。
+- **預期**：另一邊的列不是工具格式時，「要求留著」不該成立（它同時被要求刪掉）；或規範寫明這個順序要怎麼做。
+- **影響**：合併被擋，訊息指不出路，`AGENTS.md` 又不准跳過 hook。不會弄壞資料。走得通的出口（實測）：`git merge --squash` 那個分支再做遷移；或分支還沒把新的 main 併進來之前直接併進 main（另一邊是上線前的格式，不要求它的列，遷移步驟通過）；在 GitHub 上合併 PR 不經過 hook。
+- **真實路徑**：會發生，機率低。
+  - 第 1 條：現在沒合併的分支只有 `claude/project-thread-sdo9aa` 一條是上線前開、還在動的，它只在狀態板加了一列、沒有手寫完成列；要它在把新的 main 併進來之前先手寫完成列才會碰到。這個 repo 本機合併很常見（11 月以來 93 個合併 commit，兩個方向都有），所以碰到時多半就是本機合併。
+  - 第 2 條：要先有手寫的列繞過 hook 進了分支，已記在技術債 N13。
+- **位置**：`tools/roadmap-sync.ts:403-406`、`:445-447`；`docs/agents/workflow.md:97`；請求〈實作者自己選的做法〉第 4 點只寫了「會被擋」，沒寫沒有出口。
+- **建議**：不擋合併；修法是收窄，建議順手修。兩種擇一：
+  - `:447` 要求另一邊的列都在時，跳過不符合 `DONE_CELL` 的列（這種列本來就一定被 `:405` 擋，要求它留著沒有意義）；既有的 R3 測試（先併進新的 main 再併回來照擋）不受影響，另加「擋下後照遷移步驟做完會通過」的測試。
+  - 不改程式：`workflow.md:97` 那一句補上「分支已經把新的 main 併進來的，用 `git merge --squash`」，並把 N13 那一列技術債的觸發點補上這一條。
+
+##### P3 K2　另一邊連換兩次入口，合併時仍擋（延續 M1、M2；同一類的第 2 代）
+
+**規格｜已重現**（真的 `git merge --no-ff` 加 pre-merge-commit）。
+
+- **觸發條件**：另一邊分兩個 commit 換了兩次入口（p「已結案 → t1」、狀態板那一列改連 t1；之後 t1「已結案 → t2」、改連 t2），每一步自己的 hook 都通過。在第一步之前開的分支把它併進來。再接一步「t2 收尾」也一樣。
+- **實際**：「入口 docs/plans/p.md 已結束、HEAD 的狀態板或〈等觸發點〉有它，〈已完成〉卻沒有新的一列：把那一列加回來，再執行 node tools/roadmap-sync.ts（只是換了入口就在舊入口寫『已結案 → <新入口>』）」。舊入口已經照訊息寫了箭頭。
+- **原因**：`nextStations` 只看舊入口自己的下一站（`tools/roadmap-sync.ts:460`）；p 的下一站 t1 不在板上、也沒有完成列，t1 自己的下一站 t2 沒有接著看。
+- **影響**：和這件工作無關的分支沒辦法把 main 併進來。照訊息「把那一列加回來再同步」會在分支上多出一筆 p 的完成列，之後和 main 對不上；把 p 的箭頭直接改成 t2 會被文件檢查的「來自」回鏈擋。
+- **真實路徑**：會發生，機率低：要同一件工作在另一邊手動換兩次入口（討論稿 → plans → 任務，或任務拆成第二份），而且這邊在這段時間都沒併過 main。用同步工具收尾舊入口（寫一筆已結案的完成列、再手寫新的一列）的不受影響。
+- **建議**：可延後，或順手修：順著下一站一路看下去（記下看過的入口避免繞圈），其中一站在板上或有完成列就算。M1 的回歸測試是六個例子，這一項是同一類又漏一個，照 `review.md`〈修正後收尾〉改成整類的性質測試較穩（另一邊任意兩步以上的組合）。不修就記進 backlog〈已知的限制〉。
+
+##### P3 K3　另一邊的來源有兩個小缺口：octopus `--no-commit` 只認第一個；留下的 `SQUASH_MSG` 現在放寬的不只日期（M1 修正引入；前一個延續 N1）
+
+**已重現。**
+
+- **octopus**：`git merge --no-commit b a` 之後 `git commit`，`MERGE_HEAD` 有兩行，`git rev-parse MERGE_HEAD` 只回第一個（`tools/git-state.ts:18`）。第二個分支帶進來的列被當成新的列重驗，另一邊做過兩步就擋在「和入口 docs/tasks/x.md 的『完成』那一句不一樣」；順序換成 `a b` 就通過。自動 commit 的 octopus 有 `GITHEAD_*`，兩個都認得，通過。兩邊都動到〈已完成〉的 octopus 會衝突，Git 自己就不做。`hooks.ts` 合併進 main 前查 CI 也用同一個函式，同樣只查到第一個。
+- **留下的 `SQUASH_MSG`**：`git merge --squash b` 後用 `git restore --staged --worktree .` 放棄（`git reset` 會清掉，`restore` 不會），之後一般的 commit 手抄一列 b 的完成列，入口還是「實作中」、狀態板那一列也還在，exit 0。第二輪做法 1 寫的是「沒清掉的狀態只會把日期放寬」，M1 之後留下的 `SQUASH_MSG` 也讓抄自那個分支的列不照入口重驗（`tools/roadmap-sync.ts:409-414`）。
+- **真實路徑**：兩個都機率極低（octopus 加 `--no-commit`；放棄 squash 後還手抄它的列）。
+- **建議**：記進 backlog〈已知的限制〉即可；要修的話 octopus 改成讀 `MERGE_HEAD` 檔的每一行。backlog 新加的 squash 那一列可以順便補一句：cherry-pick、rebase 解衝突時丟掉那一列也不要求留著（程式是同一個 `whole: false`；靜態推斷）。
+
+#### 第三輪 M1～M5
+
+| 項目 | 結果 | 說明 |
+|---|---|---|
+| M1 | 修到了 | 第三輪的六種觸發，測試裡各跑合併、squash 與併回都通過；解衝突丟掉另一邊那一列照擋。另外實跑 cherry-pick 一串、rebase、squash 頂端是合併 commit、自動 commit 的 octopus、兩邊改同一列的連結目標都通過；上線那次合併與真的進行中分支在 clone 裡通過。帶出 K1，殘留 K2、K3 |
+| M2 | 修到了 | 同名的列在別處、同一份兩列同名、舊入口沒結束、沒寫箭頭都擋（測試）；下一站在另一份 roadmap 放行（實跑）。殘留是連換兩次（K2） |
+| M3 | 修到了 | 連結包反引號、粗體、連結裡帶 `v` 都認得（測試）；標籤整個吃掉後才比版本號，不會誤抓 href 裡的數字（靜態推斷） |
+| M4 | 分類合理 | `fences.ts` 這一輪沒改；backlog 那一列的三種觸發點與影響和第三輪的回報一致，機率極低 |
+| M5 | 分類合理 | 觸發點、影響與避開的寫法正確；M1 之後這類搬法擋下的原因不只日期，那一列寫的是「擋在新列的核對（例如…）」，涵蓋得到 |
+
+#### 實作者自己選的做法
+
+1. **另一邊的列照 `doneKey` 對、兩邊各扣一次**：合理。兩邊各改同一列的連結目標、同一列兩邊都有、同一個鍵有兩列的情形都對得上。
+2. **只有真的合併要求另一邊的列都在**：合理，squash 的缺口也記了。帶出 K1（要求留著的範圍包含一定會被格式擋下的列）；cherry-pick、rebase 也有和 squash 一樣的缺口，限制那一列只寫了 squash（K3 最後一句）。
+3. **squash 的另一邊用 `merge-base --independent`**：合理，頂端是合併 commit 時實測剩一個。`SQUASH_MSG` 列的 commit 很多時指令列可能超過 Windows 的長度上限（約 780 個以上，靜態推斷，沒實跑），失敗時退回「沒有另一邊」，只會多擋不會放行。
+4. **另一邊帶進來的列只查格式與日期**：合理，R3 的測試守住「先併進新的 main 再併回來照擋」。寫下的代價少一句：真的合併時這種列沒有出口（K1）。
+5. **新的列和另一邊帶進來的列同一份入口就擋**：合理，想不到正常流程會同時有這兩種列。
+6. **上線前格式的另一邊不算**：合理；上線前的分支直接併進新的 main，遷移步驟實測通過。
+7. **下一站只認 Markdown 檔的連結、任何一份 roadmap 的板上都算**：合理，和規範「談定寫已結案 → D-xxx」不衝突（那種收尾由工具寫一筆完成列）。提醒一點：這個 repo 自己的 `docs/plans/workflow.md` 箭頭只寫 D-ID、任務的連結寫在「完成」那一句，照新規則不算換入口；這次靠「HEAD 是上線前的格式」放行，上線後要把新入口寫進箭頭，擋下時的訊息有寫。
+
+和規格的衝突：程式和 `workflow.md`〈roadmap〉、任務說明、D-217 沒有互相矛盾；唯一對不上的是 `workflow.md:97` 的遷移步驟在 K1 的順序下做不完。
+
+#### 順帶看到、不在這一輪範圍
+
+真的進行中分支 `claude/project-thread-sdo9aa` 把上線後的 main 併進來時，`docs/roadmap.md` 會衝突；整份取 main 那邊，它自己加的那一列（`plugins/` 改名 `apps/`）會不見，檢查不擋（HEAD 是上線前的格式，不查沒結束的列被刪，第二輪 N2、N3 的設計）。建議上線後通知那個 session 解衝突時把那一列加回來。
+
+#### 沒驗的項目與原因
+
+- 完整的 `npm run self-check` 與 `hooks`、`check-docs`、`status-line`、`fences`、`section`、`decisions-index` 的測試：照指示不跑整包；這一輪的差異沒動到它們，只跑了 `roadmap-sync` 與 `roadmap-board` 兩個檔。
+- 真的 `.githooks/pre-merge-commit` 加 `tools/hooks.ts` 整條：clone 沒裝相依，改用等價的 shell hook。靜態讀過 `tools/hooks.ts:29`，共用檢查的子行程沒有另給 env，`GITHEAD_*` 會帶下去；沒有實跑。
+- K1 第 2 條路（GitHub 網頁進來的手寫列）用不經 hook 的 commit 模擬，沒有真的在 GitHub 上操作。
+- 只 cherry-pick「再收尾」那一個 commit：衝突後沒有解到底，只確認會衝突。
+- `merge-base --independent` 的指令列長度上限、cherry-pick／rebase 丟掉列的缺口：靜態推斷。
+- GitHub Actions 的 Ubuntu 實跑、Pages 與驗收第 11 項：要 push、合併後才有。
+- 白板的版面：這一輪的差異只動到版本號的比對，沒重看。
+
+### Claude 回應
+
+逐項核對：K1、K2 照回報的觸發條件寫成測試，修之前都先失敗（K1 擋在「合併進來的 … 的〈已完成〉有『| 2026-11-24 | 甲做完了 |』這一列，現在不見了」，和回報的訊息相同；K2 的類別測試擋在「換入口→換入口→收尾（合併）」）。分類照 code-quality `review.md`〈修正後收尾〉與 [D-207](../decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制)。使用者 2026-11-21 同意修 K0～K2、再審一輪。
+
+這一輪送審之後，Claude 自己另找到一項（K0）：比 `8a03736` 更早分岔、上線前開的分支把新的 `main` 併進來，`main` 在分岔之後手寫的〈已完成〉列對這個分支是另一邊帶進來的列，照 M1 只查格式與日期，就擋在「格式不是」。clone 模擬（工具 `0e84459`；`8a03736` 併入本分支當新的 `main`；分支從 `a0cd551` 開，衝突都取 `main` 那邊）重現；真的分支 `claude/poem-order-merged-docs`（從 `4ef9db3` 分岔）會碰到。那些列是 `main` 的歷史，不能照遷移步驟刪；本機合併沒有出口。
+
+| 發現 | 分類 | 修法 | 動到什麼 |
+|---|---|---|---|
+| K0 比上線早分岔的分支併進新的 `main`，`main` 手寫的舊列被擋 | 一定修（真的分支會碰到，本機合併沒有出口） | 這邊 HEAD 是上線前的格式時，另一邊帶進來的列照收，不查格式與日期；真的合併時仍要都留著（丟掉照擋） | `checkDone` |
+| K1 另一邊手寫的列既不能留、也不能刪 | 修（收窄；回報的第一種） | 這邊是新格式時，真的合併只要求另一邊工具格式的列留著：手寫的列留著一定擋在格式，照遷移步驟刪掉。這邊是上線前的格式時照舊全部要求 | `checkDone` 的 `Tally`、`missing` |
+| K2 連換兩次入口 | 修（同一類的第 2 代，改成類別測試） | 從舊入口沿著已結束的下一站一路走（看過的入口不再看），其中一站在板上、〈等觸發點〉或有完成列（新的或另一邊帶進來的）就算換入口。M1 的六個例子改成整類的測試：另一邊對同一件工作的六種步驟（收尾、補一句、改成已結案、重新開工、換入口、改名），從進行中開始的每一種兩步（9 種），加上兩個三步的（收尾、重新開工、再收尾；連換兩次入口再收尾），每種都跑合併、squash 與併回 | `checkDone` 最後一段；M1 的測試 |
+| K3 octopus 加 `--no-commit` 只認第一個；留下的 `SQUASH_MSG` | 記成已知的限制（機率極低；前一個只會多擋） | backlog 兩列；squash 那一列補上 cherry-pick、rebase | backlog〈已知的限制〉 |
+
+〈順帶看到〉的 `claude/project-thread-sdo9aa`：合併後通知那個 session，把上線後的 `main` 併進來、解 `docs/roadmap.md` 的衝突時，把它自己加的那一列加回來。
+
+## 第五輪的請求
+
+只審第四輪 K0～K2 的修正與受影響的路徑；〈規格與優先順序〉〈回報與權限〉照上面。
+
+審查者：照第四輪，由 Claude 開新的 Fable 5.2（high）子代理審，不給實作者的結論。第四輪之後還擋合併的發現，照 code-quality `review.md`〈修正後收尾〉交使用者決定。
+
+- 審查對象：第四輪審的 `0e84459` 之後、到這份請求所在的 commit。一項發現一個 commit：K0 `64353c9`、K1 `e8ed4d7`、K2 `8eaadb3`；文件（backlog 的限制、任務說明、這份請求）在最後一個 commit。看全部：`git diff 0e84459 <這份請求的 commit>`；看一項：`git show <commit>`。
+- 每一項對照〈Claude 回應〉（第四輪）的修法：修到了沒有、有沒有帶進新問題。這一輪沒有改 `tools/git-state.ts`；三項都在 `tools/roadmap-sync.ts` 的 `checkDone`：
+  - K0：`legacy`（這邊 HEAD 是上線前的格式）時另一邊帶進來的列。
+  - K1：`Tally` 的 `tool`、`missing` 的 `toolOnly`。
+  - K2：最後一段的 `handedOn`；M1 的測試改成的類別測試。
+- 請找新的組合，例如：上線前的分支把新的 `main` 併進來時丟掉自己手寫的列，或 `main` 的列在分岔後改過連結目標；另一邊有一列和 HEAD 的一列鍵相同、一邊是手寫的；下一站繞回舊入口、下一站是 D-ID 或不存在的檔、下一站在另一份 roadmap 又換了一次；類別測試沒涵蓋的步驟（兩邊都動了同一件工作、在〈等觸發點〉的工作）。
+
+實作者自己選的做法（規格沒寫的）：
+
+1. K0：這邊 HEAD 是上線前的格式時，另一邊帶進來的列不查格式與日期（那時 `main` 的列都是手寫的）；真的合併時仍要求另一邊的列都在，HEAD 的列照第二輪 N3 的設計不要求。
+2. K1：「工具格式」用和格式檢查同一個 `DONE_CELL` 判斷；只在這邊是新格式時放寬。
+3. K2：只沿著「已結束」的下一站走；下一站沒有狀態行、讀不到或還沒結束就停在那裡；看過的入口不再看。
+4. K2 的類別測試：一件工作、六種步驟，產生從進行中開始的每一種兩步；三步的只加兩個（各對應一個已知的同類：第二輪 N5、第四輪 K2）。
+
+驗證方式：
+
+- 先寫會失敗的測試：K0 的「L2 K0」修之前擋在「格式不是」；K1 的「L2 K1」修之前擋在「合併進來的 … 這一列，現在不見了」；K2 改寫後的「L2 M1」修之前擋在「換入口→換入口→收尾（合併）」。
+- 每個 commit 的 pre-commit 都通過（共用檢查與 tools 的完整檢查；沒改 hook 用的 `git-state.ts`，分派表跳過三個外掛）。
+- `roadmap-sync` 的 19 個測試在 K2 的版本都通過（M1 的類別測試約 80 秒）；ESLint、tsc 通過；真的 repo 的 `node tools/roadmap-sync.ts --check`、`node tools/roadmap-board.ts --check`、文件檢查通過。
+- clone 模擬（工具是 K2 版本的 `roadmap-sync.ts`；`8a03736` 併入 `e8ed4d7` 當新的 `main`，衝突都取 `main` 那邊）：從 `a0cd551`、`4ef9db3`（`claude/poem-order-merged-docs` 的分岔點）開的分支把新的 `main` 併進來都通過（工具 `0e84459` 在 `a0cd551` 擋在「格式不是」）；上線前開的分支在舊格式的 Cards roadmap 手寫一列，把新的 `main` 併進來通過，再併回新的 `main` 照舊擋在「格式不是」。
+- 沒驗：真的 `.githooks` 在 clone 裡跑完整的 pre-merge-commit（改用 shell hook）；GitHub Actions 的 Ubuntu 實跑要 push 後才有；Pages 與驗收第 11 項要合併後才有。
