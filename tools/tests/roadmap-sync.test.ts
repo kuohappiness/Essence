@@ -298,6 +298,47 @@ void test('L2 R3 合併時新的完成列的日期只要不晚於今天；不是
   assert.match(check().stderr, /docs\/roadmap\.md:19  〈已完成〉新加的列要由工具產生（入口的狀態改成已合併或已結案，再跑 node tools\/roadmap-sync\.ts）：格式不是/);
 });
 
+void test('L2 N1 N4 掛真的 hook：合併（pre-merge-commit 時還沒有 MERGE_HEAD）、squash、有衝突的 cherry-pick 重播另一邊的完成列，日期照它那邊', async t => {
+  const { root, add, put, git, commit } = await repo(t);
+  // 和 .githooks 一樣在 hook 原本的環境跑暫存區的檢查（GITHEAD_<sha>、GIT_INDEX_FILE 照 Git 給的）。
+  const hooks = git(['rev-parse', '--git-path', 'hooks']).trim();
+  const slash = (path: string) => path.replace(/\\/g, '/');
+  const hook = `#!/bin/sh\nexec "${slash(process.execPath)}" "${slash(script)}" --check --staged --root "${slash(root)}" --today ${TODAY}\n`;
+  await mkdir(join(root, hooks), { recursive: true });
+  for (const name of ['pre-commit', 'pre-merge-commit']) await writeFile(join(root, hooks, name), hook, { mode: 0o755 });
+  const run = (args: string[]) => spawnSync('git', ['-c', 'core.autocrlf=false', '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.editor=true', ...args], { cwd: root, encoding: 'utf8' });
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  await add('docs/note.md', '# 筆記\n\nbase\n');
+  commit();
+  git(['branch', '-M', 'main']);
+  git(['checkout', '-q', '-b', 'feature']);
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  await add('docs/roadmap.md', roadmap([], [], ['| 2026-11-23 | **甲**：做完（已合併，[入口](tasks/a.md)） |', '| 2026-11-20 | 舊的一列 |']));
+  await add('docs/note.md', '# 筆記\n\nfeature\n');
+  commit('2026-11-23T10:00:00+08:00');
+  git(['checkout', '-q', 'main']);
+  await add('docs/other.md', '# 別的\n');
+  commit('2026-11-24T10:00:00+08:00');
+  const merged = run(['merge', '-q', '--no-ff', '-m', 'merge', 'feature']);
+  assert.equal(merged.status, 0, merged.stderr);
+  git(['reset', '-q', '--hard', 'HEAD~1']);
+  // squash：git commit 走 pre-commit，SQUASH_MSG 還在。
+  assert.equal(run(['merge', '-q', '--squash', 'feature']).status, 0);
+  const squashed = run(['commit', '-q', '-m', 'squash']);
+  assert.equal(squashed.status, 0, squashed.stderr);
+  git(['reset', '-q', '--hard', 'HEAD~1']);
+  // 有衝突的 cherry-pick：解完衝突後 --continue 走 pre-commit，CHERRY_PICK_HEAD 還在。
+  await add('docs/note.md', '# 筆記\n\nmain\n');
+  commit('2026-11-24T11:00:00+08:00');
+  assert.notEqual(run(['cherry-pick', 'feature']).status, 0);
+  await put('docs/note.md', '# 筆記\n\nboth\n');
+  git(['add', 'docs/note.md']);
+  const picked = run(['cherry-pick', '--continue']);
+  assert.equal(picked.status, 0, picked.stderr);
+  assert.match(git(['show', '-s', '--format=%s', 'HEAD']), /^x$/m);
+});
+
 void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));

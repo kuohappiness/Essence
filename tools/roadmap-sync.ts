@@ -10,6 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt from 'markdown-it';
+import { replaying } from './git-state.ts';
 import { parseStatus, type Status } from './status-line.ts';
 
 const ROADMAP = /^(?:plugins\/[^/]+\/)?docs\/roadmap\.md$/;
@@ -33,8 +34,8 @@ export interface Source {
   history(path: string): { date: string; text: string }[];
   /** 追蹤的檔案清單。 */
   files(): string[];
-  /** 正在合併（有 MERGE_HEAD）：另一邊帶來的完成列，日期是它那邊收尾的那天。 */
-  merging(): boolean;
+  /** 正在重播別處已經 commit 的內容（合併、squash、cherry-pick、rebase）：另一邊帶來的完成列，日期是它那邊收尾的那天。 */
+  replaying(): boolean;
 }
 
 const markdown = new MarkdownIt();
@@ -323,7 +324,7 @@ const stripBold = (work: string) => work.replace(/^\*\*(.*)\*\*$/, '$1');
 /**
  * 〈已完成〉新加的列（照 doneKey 比，HEAD 沒有的）要是工具寫的，各份 roadmap 一起看（D-217 第 4 點；L2 R2、R3、R5）：
  * - 格式、入口已結束、「完成」那一句和入口一致；
- * - 日期是入口收尾那天（合併時另一邊的列只要不晚於今天）；
+ * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時另一邊的列只要不晚於今天）；
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
  * - 一份入口只有一筆新的列，也不和舊的列同一天；
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）。
@@ -331,7 +332,7 @@ const stripBold = (work: string) => work.replace(/^\*\*(.*)\*\*$/, '$1');
  */
 export function checkDone(roadmaps: readonly { file: string; text: string }[], source: Source, today: string): Problem[] {
   const problems: Problem[] = [];
-  const merging = source.merging();
+  const replay = source.replaying();
   const headOf = new Map(roadmaps.map(({ file }) => [file, source.head(file)]));
   const before = new Map<string, { work: string; file: string }>();
   for (const [file, head] of headOf) for (const row of head === undefined ? [] : placedRows(file, lf(head))) if (!before.has(row.path)) before.set(row.path, { work: row.work, file });
@@ -372,7 +373,7 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
         const moved = moveText(status.text, entry, file);
         if ('error' in moved || moved.text !== match[2]) add(`和入口 ${entry} 的「完成」那一句不一樣`);
         const expected = doneDate(entry, source, today);
-        if (merging ? row.date > today : row.date !== expected) add(merging ? `日期不能晚於今天（${today}）` : `日期要是 ${expected}（入口收尾的那天）`);
+        if (replay ? row.date > today : row.date !== expected) add(replay ? `日期不能晚於今天（${today}）` : `日期要是 ${expected}（入口收尾的那天）`);
         const name = before.get(entry);
         if (name && stripBold(name.work) !== match[1]) add(`工作名稱要和 HEAD 狀態板的「${stripBold(name.work)}」一樣`);
         if (first) add(`入口 ${entry} 在 ${first} 已經有一筆新的完成列`);
@@ -424,7 +425,7 @@ export function gitSource(root: string, staged: boolean): Source {
       return tryGit(root, args) === undefined;
     },
     head: path => (hasHead ? tryGit(root, ['show', `HEAD:${path}`]) : undefined),
-    merging: () => tryGit(root, ['rev-parse', '-q', '--verify', 'MERGE_HEAD']) !== undefined,
+    replaying: () => replaying(root),
     history: path => {
       if (!hasHead) return [];
       const log = tryGit(root, ['log', '--format=%H %cI', 'HEAD', '--', path]) ?? '';
