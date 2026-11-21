@@ -53,7 +53,7 @@ flowchart LR
 
 ## 未來準備開發：獨立 App
 
-已列入第二階段清單（D-129），尚未實作；不用 iCloud 的同步先做最小驗證，排在 v1 之後（使用者 2026-10-30）；[開工準備與未決選擇](plans/standalone-app.md)集中在同一主題文件，架構邊界見[架構文件](architecture.md#未來獨立-app規劃中)。
+已列入第二階段清單（D-129），尚未實作。2026-11-20～21 改成網頁版（使用者）：孩子每天打開的入口網站，Cards 在裡面的 `/cards` 複習；利用 v1 空檔先做不含登入的第一次驗證，不算進 v1 的完成條件。進度看最上層 roadmap 的[跨外掛的工作](../../../docs/roadmap.md#現在在哪裡)，主文是 [Cards 網頁版稿](<Claude Codex Discussion/2026-11-20-cards-web.md>)；[開工準備與未決選擇](plans/standalone-app.md)集中在同一主題文件，架構邊界見[架構文件](architecture.md#未來獨立-app規劃中)。
 
 ## 已完成
 

@@ -1,6 +1,6 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：暫停：使用者 2026-10-30 決定 v1 之後再說（文末〈使用者決定〉）；之後重開，從〈Claude 回應 Codex〉的最小驗證接著做
+狀態：已結案 → [入口網站討論稿](<../../../Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>)、[Cards 網頁版討論稿](2026-11-20-cards-web.md)｜完成：Obsidian 仍是首選（使用者 2026-10-30）；手機端經 Dropbox 同步的最小驗證不做，2026-11-20～21 改成入口網站與 Cards 網頁版（使用者）｜等誰：—
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../../../../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../../../../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../../../../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
