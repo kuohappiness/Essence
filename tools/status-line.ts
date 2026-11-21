@@ -45,6 +45,11 @@ export function parseStatus(line: string): { status: Status } | { error: string 
   } else if (arrow) {
     if (arrow[1] !== '已結案') return { error: `箭頭只能接在「已結案」後面，現在是「${arrow[1]}」` };
     if (!NEXT.test(arrow[2])) return { error: '「已結案 →」後面接下一站：D-ID 或連結，好幾站用「、」接，備註寫在「完成：」' };
+    // 下一站是 repo 裡的一站：外部連結報錯（L2 第二輪 N8）。
+    const hrefs = [...arrow[2].matchAll(/\]\((<[^>]+>|[^)\s]+)\)/g)].map(m => m[1].replace(/^<|>$/g, ''));
+    if (hrefs.some(href => /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//'))) {
+      return { error: '「已結案 →」的下一站要在 repo 裡：D-ID 或連到 repo 裡的文件，不連外部網址' };
+    }
     state = '已結案';
   } else if (STATES.includes(label)) {
     state = label;

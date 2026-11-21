@@ -458,6 +458,15 @@ function checkStations(docs: Map<string, Doc>): Problem[] {
     }
   }
   const byAnchor = new Map(decisions?.decisions.map(d => [d.anchor, d]));
+  // 狀態行「已結案 →」的純文字 D-ID 要存在（連結的目標由連結檢查查；L2 第二輪 N8）。
+  for (const doc of decisions ? docs.values() : []) {
+    const { index } = statusLine(doc);
+    const parsed = index === undefined ? undefined : parseStatus(doc.lines[index]);
+    if (!parsed || 'error' in parsed || parsed.status.state !== '已結案') continue;
+    for (const [id] of parsed.status.label.replace(/\[[^\]]*\]\([^)]*\)/g, '').matchAll(/D-\d+/g)) {
+      if (!decisions!.byId.has(id)) problems.push({ file: doc.file, line: index! + 1, target: '狀態：', reason: `${id} 不在決策紀錄裡：「已結案 →」的下一站要是存在的決定` });
+    }
+  }
   const sameStation = (to: Target, file: string, station: string | undefined) => to.file === file && (station === undefined || to.anchor === station);
 
   // 「→」指到的站要有「來自」連回。

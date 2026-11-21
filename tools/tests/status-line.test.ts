@@ -21,6 +21,11 @@ void test('L2 R9「已結案 →」後面要是下一站：D-ID 或連結，好�
   bad('狀態：已結案 → [D-218](x.md) 另外的備註｜完成：已停｜等誰：—', /「已結案 →」後面接下一站/);
 });
 
+void test('L2 N8「已結案 →」的下一站在 repo 裡：外部連結報錯', () => {
+  bad('狀態：已結案 → [外連](https://example.invalid/x)｜完成：交出去｜等誰：—', /「已結案 →」的下一站要在 repo 裡/);
+  bad('狀態：已結案 → D-218、[外連](<//example.invalid/x y>)｜完成：交出去｜等誰：—', /「已結案 →」的下一站要在 repo 裡/);
+});
+
 void test('正例：一般、好幾個等誰、暫停帶原因、已結案帶箭頭、結束', () => {
   assert.deepEqual(ok('狀態：實作中｜下一步：照規格實作，合併前 Codex L2｜等誰：Claude'),
     { label: '實作中', state: '實作中', done: false, text: '照規格實作，合併前 Codex L2', who: ['Claude'] });

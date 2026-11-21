@@ -276,6 +276,13 @@ void test('L2 R6 backlog 的一站是「檔＋最近的標題」：子項的「�
   assert.deepEqual(run(), ['docs/tasks/r.md:7  →  docs/backlog.md#父項 沒有「來自」連回這裡：在那個標題底下、下一個標題之前寫「來自：[…](…)」']);
 });
 
+void test('L2 N8 狀態行「已結案 →」的純文字 D-ID 要在決策紀錄裡', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/decisions.md', ['# 決策紀錄', '', '## D-218 新', '', '✅ 2026-11-22｜來自 [plans/a](plans/a.md)', '', '主題：協作與文件｜一句話：x。', ''].join('\n'));
+  await add('docs/plans/a.md', ['# A', '', '狀態：已結案 → D-218、D-999｜完成：談定｜等誰：—', '', '## 一', '', '→ [D-218](../decisions.md#d-218-新)（2026-11-22）', ''].join('\n'));
+  assert.deepEqual(run(), ['docs/plans/a.md:3  狀態：  D-999 不在決策紀錄裡：「已結案 →」的下一站要是存在的決定']);
+});
+
 void test('L2 R9「→」連到外部網址報錯：下一站要是 repo 裡的一站；引用框與程式碼裡的範例不看', async t => {
   const { add, run } = await repo(t);
   await add('docs/plans/x.md', [
