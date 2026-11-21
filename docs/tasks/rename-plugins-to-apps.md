@@ -1,6 +1,6 @@
 # `plugins/` 改名 `apps/`，資料夾首字大寫（D-218，給 Claude，本機執行）
 
-狀態：規劃中｜下一步：開工前請 Codex 查核這份說明｜等誰：Codex
+狀態：規劃中｜下一步：開工前請 Fable 5.2 high 查核這份說明｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**；寫規格、改完後的一致性檢查（〈驗收〉第 6～9 項）用 xhigh。這件改到 pre-commit、CI、分派表、跨版本比較的工具與雲端的開場 hook，合併前做 L2（[quality.md〈高風險範圍〉](../agents/quality.md#高風險範圍要做-l2)）。
 
@@ -24,7 +24,9 @@
 
 ## 本機或雲端（[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)）
 
-整件在本機做（要 Codex 查核與 L2、Windows 的大小寫與 junction、測試 vault）。
+整件在本機做（Windows 的大小寫與 junction、測試 vault）。
+
+**審查者（使用者 2026-11-21）**：Codex 的額度用完，約 2026-11-23 重置；這件的開工前查核與 L2 改由 **Fable 5.2 high** 做：由本機 session 開沒參與實作的新子代理（每一輪都新開，同 D-171 第 1 點），請求與報告照 code-quality 的 `review.md`，報告原文附進請求檔的那一輪再核對。Codex 重置後，新的任務照 [quality.md](../agents/quality.md) 改回 Codex；這件做到一半 Codex 重置了，也照舊用 Fable 做完，不換審查者。
 
 | 在哪裡 | 做什麼 |
 |---|---|
@@ -120,7 +122,7 @@ iPhone 不用測：外掛 ID、建置產物與 vault 格式都沒變（第 1 項
 12. **外掛 ID、版號與 tag**：`apps/Cards/manifest.json` 的 `id` 是 `essence-cards`、`version` 和 `<基準>` 相同；每個 tag 指的 commit 不變。
 13. **兩個平台**：Windows 本機跑第 3、8、9 項；Linux 由 CI 跑第 3 項。只在一邊跑的測試寫明。
 14. §5 的三項都做了，結果寫進〈結果〉。
-15. 合併前 L2：新的 Codex session，請求照 code-quality 的 `review.md` 寫在 `docs/tasks/rename-plugins-to-apps-review.md`。
+15. 合併前 L2：新的 Fable 5.2 high 子代理（見〈本機或雲端〉的審查者），請求照 code-quality 的 `review.md` 寫在 `docs/tasks/rename-plugins-to-apps-review.md`。
 
 ## 平台事實
 
