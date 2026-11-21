@@ -24,3 +24,4 @@ export interface Files {
   /** 新增、修改、刪除、改名通知；改名通知舊新路徑；回傳取消監看的函式。 */
   watch(onChange: (path: string) => void): () => void;
 }
+// 探針（D-218 驗收第 11 項），不合併。
