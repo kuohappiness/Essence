@@ -60,7 +60,7 @@
 
 ### A0 開工條件
 
-1. `0.6.0` 裝到正式 vault、iPhone 驗完，穩定基線寫進 [`0.6.0` 清單](../../plugins/cards/docs/tasks/release-0.6.0.md#第五項升正式版)的〈結果〉（第五項第 10 步：tag `v0.6.0`、開發 commit、`.local/releases/0.6.0/` 的產物雜湊、iPhone 的結果）。
+1. `0.6.0` 裝到正式 vault、iPhone 驗完，穩定基線寫進 [`0.6.0` 清單](../../apps/Cards/docs/tasks/release-0.6.0.md#第五項升正式版)的〈結果〉（第五項第 10 步：tag `v0.6.0`、開發 commit、`.local/releases/0.6.0/` 的產物雜湊、iPhone 的結果）。
 2. 和使用者約好〈停手時段〉；確認沒有別的 session 在用測試 vault（§A7 會換它的開發版）。
 3. 開 worktree 與分支（例如 `claude/one-repo-step-2a`），在 `tools/` 與根目錄各 `npm ci`；新 worktree 取出的 `docs/syntax.md` 若是 CRLF 先轉 LF（第一步〈結果〉的另外看到的）。
 4. 看[技術債表](../backlog.md#技術債)觸發點已到的列：「外掛只改文件也跑完整檢查」的觸發點是外掛的檢查超過 1 分鐘，Cards 搬進 `plugins/` 就到了（§A3 的第 2 條處理，B 結案時刪那一列）。
@@ -198,7 +198,7 @@ commit 之前先在新的位置裝好相依（`plugins/cards/` 的 `npm ci`；`t
    - 兩邊的計畫，拿掉目的 vault 的絕對路徑與建立時間之後，動作、順序與資料相同（計畫的 JSON 原樣一定不同，`tools/restore.ts:82`）；
    - 卡組 A 回來、內容和 ZIP 裡的逐位元組相同；B 和還原前逐位元組相同；
    - 紀錄 R 補回來了：兩邊 `--apply` 之後，整個 vault 的紀錄裡 R 那一行（照記下的欄位找）各恰好一筆、內容和記下的相同；
-   - 補回紀錄的還原檔，檔名符合 [syntax §5-3](../../plugins/cards/docs/syntax.md#5-3-還原檔) 的格式（裝置碼每次隨機，兩份檔名本來就不同，`tools/restore.ts:150`），照紀錄的來源比，內容與行數兩邊相同；
+   - 補回紀錄的還原檔，檔名符合 [syntax §5-3](../../apps/Cards/docs/syntax.md#5-3-還原檔) 的格式（裝置碼每次隨機，兩份檔名本來就不同，`tools/restore.ts:150`），照紀錄的來源比，內容與行數兩邊相同；
    - 其他檔兩份複本逐檔相同。
 3. **搬後的 Windows 更新**：`update-vault --check` 把演練 vault 從 `0.6.0`（根目錄的外掛根）比到 `0.6.1`（`plugins/cards` 的外掛根）：共用與 Cards 兩段檢查都跑了、備份做了、發布前比較是「可以比較」、差異只有建置版本；接著 `--install`：vault 裡 `main.js` 第一行的 `BUILD` 是 `0.6.1+<commit>`、三個檔的雜湊和 clone 的 `.local/releases/0.6.1/` 相同，卡組與複習紀錄和更新前逐檔相同（版本紀錄照 D-149 該加的那一行除外）。
 4. **開發版**：碰 iCloud 測試 vault 之前，先把它 `.obsidian/plugins/essence-cards/` 的三個檔（`main.js`、`manifest.json`、`styles.css`）複製到隔離的資料夾、記下雜湊與 `BUILD`（開發版沒有存在 `.local/releases/`，原本若是 `.dirty` 的建置，只記 `BUILD` 找不回原檔）。在 clone 用搬家後的程式（版號照舊 `0.6.0`）`install-vault -- <測試 vault> --dev`（測試 vault 的登錄複製進 clone），完全關掉再打開 Windows 版 Obsidian（`BUILD` 寫在程式本體，沒重新載入時「版本」命令回的還是舊的），跑「版本」命令，結果檔的 `BUILD` 是這次的建置；照 [quality.md〈Obsidian 相容性檢查〉](../agents/quality.md#obsidian-相容性檢查)第 2 層重跑 `files`、`today`、`a3check`，結果和搬家前那次相同。這次的 dev 產物也照驗收第 A3 項的方法和搬家前同一份程式的 dev 建置比過（iPhone 裝的就是它）。

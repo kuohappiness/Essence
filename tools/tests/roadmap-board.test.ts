@@ -160,7 +160,7 @@ void test('最近完成合併每份 roadmap 的〈已完成〉：照日期新到
   const table = (rows: string[]) => `# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n${rows.join('\n')}\n`;
   const top = parseDone(table(['| 2026-11-22 | 頂甲 |', '| 2026-11-20 | 頂乙 |']), ROADMAP);
   const cards = parseDone(table(['| 2026-11-22 | 卡甲 |', '| 2026-11-21 | 卡乙 |', '| 2026-11-20 | 卡丙 |']), RELEASE_ROADMAP);
-  const empty = parseDone('# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n還沒有。\n', 'plugins/mindboard/docs/roadmap.md');
+  const empty = parseDone('# R\n\n## 現在在哪裡\n\n## 等觸發點\n\n## 已完成\n\n還沒有。\n', 'apps/Mindboard/docs/roadmap.md');
   assert.deepEqual(empty, []);
   assert.deepEqual(mergeDone([top, cards, empty]).map(d => d.work.text), ['頂甲', '卡甲', '卡乙', '頂乙', '卡丙']);
   const html = renderBoard({ ...parseRoadmap(SAMPLE), done: mergeDone([top, cards]) }, '2026/11/22 10:00');
@@ -258,13 +258,13 @@ const PLUGIN_SAMPLE = `# Mindboard 路線圖
 |---|---|---|---|
 | 畫布 | 規畫中 | 看[任務](../tasks/canvas.md)、[本頁](#現在在哪裡) | 使用者 |
 `;
-const MINDBOARD = 'plugins/mindboard/docs/roadmap.md';
+const MINDBOARD = 'apps/Mindboard/docs/roadmap.md';
 
 void test('§8 外掛的 roadmap：只讀現在在哪裡，名稱前加外掛名，連結以它自己的資料夾為準', () => {
   const [work] = parsePluginWorks(PLUGIN_SAMPLE, MINDBOARD);
   assert.equal(work.name.text, 'Mindboard｜畫布');
-  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/plugins\/mindboard\/tasks\/canvas\.md"/);
-  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/plugins\/mindboard\/docs\/roadmap\.md#/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/apps\/Mindboard\/tasks\/canvas\.md"/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/apps\/Mindboard\/docs\/roadmap\.md#/);
   // 同樣的寫法在最上層指回最上層的位置。
   const [top] = parseRoadmap(SAMPLE.replace('../tasks/x.md', '../tasks/canvas.md')).works;
   assert.match(top.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/tasks\/canvas\.md"/);
@@ -286,18 +286,18 @@ void test('§8 命令列：白板帶上外掛的列與來源；--check 只解析
   const board = (...args: string[]) => execFileSync(process.execPath, [script, '--root', root, ...args], { encoding: 'utf8', stdio: 'pipe', env });
   await put(ROADMAP, SAMPLE.slice(0, SAMPLE.indexOf('## 已完成')));
   await put(MINDBOARD, PLUGIN_SAMPLE);
-  await put('plugins/capture/docs/backlog.md', '# 沒有 roadmap 的外掛不讀\n');
+  await put('apps/Capture/docs/backlog.md', '# 沒有 roadmap 的外掛不讀\n');
   // 沒有 Cards 的 roadmap：正式 vault 與已完成讀不到，報出那份檔。
   assert.throws(() => board('--check'), (error: { status: number; stderr: string }) => error.status === 1 && error.stderr.includes(`${RELEASE_ROADMAP}  找不到這份檔`));
   await put(RELEASE_ROADMAP, SAMPLE.replace('| 甲 \\| 乙 |', '| 卡片 |'));
-  assert.match(board('--check'), /進度白板讀得出來：docs\/roadmap\.md、plugins\/cards\/docs\/roadmap\.md、plugins\/mindboard\/docs\/roadmap\.md/);
+  assert.match(board('--check'), /進度白板讀得出來：docs\/roadmap\.md、apps\/Cards\/docs\/roadmap\.md、apps\/Mindboard\/docs\/roadmap\.md/);
   await assert.rejects(access(join(root, '_site')), { code: 'ENOENT' });
   board('--out', 'out/board.html');
   const html = await readFile(join(root, 'out/board.html'), 'utf8');
   assert.match(html, /<span class="wname">Mindboard｜畫布<\/span>/);
   assert.match(html, /<span class="wname">Cards｜卡片<\/span>/);
   assert.match(html, /<code>0\.5\.0<\/code>/);
-  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*plugins\/cards\/docs\/roadmap\.md"[^>]*>[^<]*<\/a>、<a href="[^"]*plugins\/mindboard\/docs\/roadmap\.md"/);
+  assert.match(html, /來源：<a href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/docs\/roadmap\.md"[^>]*>docs\/roadmap\.md<\/a>、<a href="[^"]*apps\/Cards\/docs\/roadmap\.md"[^>]*>[^<]*<\/a>、<a href="[^"]*apps\/Mindboard\/docs\/roadmap\.md"/);
   // 寫壞的外掛 roadmap：--check 報檔案與行號。
   const broken = PLUGIN_SAMPLE.replace('| 工作 | 狀態 | 下一步 | 等誰 |', '| 工作 | 狀態 | 下一步 | 卡在 |');
   await put(MINDBOARD, broken);

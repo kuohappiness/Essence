@@ -11,11 +11,12 @@ import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { CARDS, RULES, entryTools, relatedTests, relativeImports } from '../dispatch.ts';
+import { FOLDERS } from '../apps.ts';
 
 const run = promisify(execFile);
 const DISPATCH = fileURLToPath(new URL('../dispatch.ts', import.meta.url));
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
-/** Cards 資料夾的前綴：搬家前是空字串，搬家後是 plugins/cards/。 */
+/** Cards 資料夾的前綴：搬家前是空字串，搬家後是 apps/Cards/。 */
 const C = CARDS === '.' ? '' : CARDS + '/';
 const moved = C !== '';
 
@@ -25,9 +26,9 @@ interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'captu
 
 // 本 repo 的文件路徑用拼接寫：這份測試不讀那些文件，字面寫出來會被分派表當成它們的「相關測試」，改文件時白跑這份。
 const SPEC = 'docs/' + 'transcript.md';
-// 本 repo 裡 Cards 的文件（第二步 B 搬進 plugins/cards/docs/）；上面幾個是暫存 repo 的路徑。
-const CARDS_SYNTAX = 'plugins/cards/docs/' + 'syntax.md';
-const CARDS_ENGLISH = 'plugins/cards/docs/card-rules/' + 'english.md';
+// 本 repo 裡 Cards 的文件（第二步 B 搬進 apps/Cards/docs/）；上面幾個是暫存 repo 的路徑。
+const CARDS_SYNTAX = 'apps/Cards/docs/' + 'syntax.md';
+const CARDS_ENGLISH = 'apps/Cards/docs/card-rules/' + 'english.md';
 const DECISIONS = 'docs/' + 'decisions.md';
 const ENGLISH = 'docs/card-rules/' + 'english.md';
 const PRODUCT = 'docs/' + 'product.md';
@@ -67,12 +68,12 @@ const BASE: Record<string, string> = {
   'experiments/tools/decisions-index.mjs': '\n',
   [SPEC]: '# S\n', [DECISIONS]: '# D\n', [ENGLISH]: '# E\n', [PRODUCT]: '# P\n',
   'NOTES.MD': '# N\n', [SKILL]: '# Q\n', '.gitignore': 'node_modules/\n',
-  'plugins/capture/README.md': '# C\n', 'plugins/capture/package.json': '{ "scripts": { "check": "node -e 1" } }\n',
-  // git mv 不建目的資料夾：搬到 plugins/capture/docs/ 的例子要它已經在。
-  'plugins/capture/docs/backlog.md': '# B\n',
-  'plugins/mindboard/docs/backlog.md': '# B\n',
-  'plugins/mindboard/a.ts': 'export {};\n', 'plugins/mindboard/b.ts': 'export {};\n', 'plugins/mindboard/Case.ts': 'export {};\n',
-  'plugins/mindboard/src/old.ts': 'export {};\n',
+  'apps/Capture/README.md': '# C\n', 'apps/Capture/package.json': '{ "scripts": { "check": "node -e 1" } }\n',
+  // git mv 不建目的資料夾：搬到 apps/Capture/docs/ 的例子要它已經在。
+  'apps/Capture/docs/backlog.md': '# B\n',
+  'apps/Mindboard/docs/backlog.md': '# B\n',
+  'apps/Mindboard/a.ts': 'export {};\n', 'apps/Mindboard/b.ts': 'export {};\n', 'apps/Mindboard/Case.ts': 'export {};\n',
+  'apps/Mindboard/src/old.ts': 'export {};\n',
   ...(moved ? { [`${C}README.md`]: '# R\n', [`${C}NOTES.MD`]: '# N\n', [`${C}docs/x.md`]: '# X\n', [`${C}docs/${'syntax.md'}`]: '# S\n' } : {}),
 };
 
@@ -134,11 +135,11 @@ const wire = (path: string, text: string) => async (e: Env) => {
 const DOC_CI: Runs = { cards: 'full', tools: 'full' };
 
 const CASES: Case[] = [
-  { name: '新增 plugins/mindboard/src/a.ts', change: edit('plugins/mindboard/src/a.ts'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
-  { name: '改 plugins/mindboard/docs/backlog.md', change: edit('plugins/mindboard/docs/backlog.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
+  { name: '新增 apps/Mindboard/src/a.ts', change: edit('apps/Mindboard/src/a.ts'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
+  { name: '改 apps/Mindboard/docs/backlog.md', change: edit('apps/Mindboard/docs/backlog.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
   {
-    name: '改 plugins/capture/README.md，加新增 plugins/mindboard/src/a.ts',
-    change: async e => { await edit('plugins/capture/README.md')(e); await edit('plugins/mindboard/src/a.ts')(e); },
+    name: '改 apps/Capture/README.md，加新增 apps/Mindboard/src/a.ts',
+    change: async e => { await edit('apps/Capture/README.md')(e); await edit('apps/Mindboard/src/a.ts')(e); },
     preCommit: { capture: 'full', mindboard: 'full' }, ci: { capture: 'full', mindboard: 'full' },
   },
   { name: `改 ${C}src/core/files.ts`, change: edit(`${C}src/core/files.ts`), preCommit: { cards: 'full' }, ci: { cards: 'full' } },
@@ -219,12 +220,12 @@ const CASES: Case[] = [
   },
   {
     name: '兩用：check.yml 的 cards job 也直接跑共用檢查 tools/check-docs.ts，這次只改它',
-    prepare: wire('.github/workflows/check.yml', 'jobs:\n  cards:\n    defaults:\n      run:\n        working-directory: plugins/cards\n    steps:\n      - run: node ../../tools/check-docs.ts\n'),
+    prepare: wire('.github/workflows/check.yml', 'jobs:\n  cards:\n    defaults:\n      run:\n        working-directory: apps/Cards\n    steps:\n      - run: node ../../tools/check-docs.ts\n'),
     change: edit('tools/check-docs.ts'), preCommit: ALL, ci: ALL,
   },
   {
     name: '外掛的 scripts 直接跑 ../../tools/y.ts，這次只改 tools/y.ts',
-    prepare: wire('plugins/capture/package.json', '{ "scripts": { "check": "node ../../tools/y.ts" } }\n'),
+    prepare: wire('apps/Capture/package.json', '{ "scripts": { "check": "node ../../tools/y.ts" } }\n'),
     change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
   },
   {
@@ -253,17 +254,17 @@ const CASES: Case[] = [
   // 搬家前根目錄的 package.json 是 Cards 的；搬家後根目錄新出現的設定是「以上都不是」。
   { name: '改根目錄的 package.json', change: edit('package.json'), preCommit: moved ? ALL : { cards: 'full' }, ci: moved ? ALL : { cards: 'full' } },
   { name: '改根目錄的 tsconfig.json', change: edit('tsconfig.json'), preCommit: moved ? ALL : { cards: 'full' }, ci: moved ? ALL : { cards: 'full' } },
-  { name: '刪 plugins/mindboard/src/old.ts', change: async e => { await e.git('rm', '-q', '--', 'plugins/mindboard/src/old.ts'); }, preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
+  { name: '刪 apps/Mindboard/src/old.ts', change: async e => { await e.git('rm', '-q', '--', 'apps/Mindboard/src/old.ts'); }, preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
   {
-    name: 'git mv plugins/mindboard/a.ts plugins/capture/a.ts', change: async e => { await e.git('mv', 'plugins/mindboard/a.ts', 'plugins/capture/a.ts'); },
+    name: 'git mv apps/Mindboard/a.ts apps/Capture/a.ts', change: async e => { await e.git('mv', 'apps/Mindboard/a.ts', 'apps/Capture/a.ts'); },
     preCommit: { capture: 'full', mindboard: 'full' }, ci: { capture: 'full', mindboard: 'full' },
   },
   {
-    name: `git mv ${C}src/a.ts plugins/mindboard/moved.ts`, change: async e => { await e.git('mv', `${C}src/a.ts`, 'plugins/mindboard/moved.ts'); },
+    name: `git mv ${C}src/a.ts apps/Mindboard/moved.ts`, change: async e => { await e.git('mv', `${C}src/a.ts`, 'apps/Mindboard/moved.ts'); },
     preCommit: { cards: 'full', mindboard: 'full' }, ci: { cards: 'full', mindboard: 'full' },
   },
   {
-    name: '只差大小寫的改名 plugins/mindboard/Case.ts → case.ts', change: async e => { await e.git('mv', 'plugins/mindboard/Case.ts', 'plugins/mindboard/case.ts'); },
+    name: '只差大小寫的改名 apps/Mindboard/Case.ts → case.ts', change: async e => { await e.git('mv', 'apps/Mindboard/Case.ts', 'apps/Mindboard/case.ts'); },
     preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' },
   },
   {
@@ -272,17 +273,20 @@ const CASES: Case[] = [
     preCommit: { cards: 'full' }, ci: { cards: 'full' },
   },
   {
-    name: 'git rm --cached plugins/mindboard/b.ts 並改 .gitignore',
-    change: async e => { await e.git('rm', '-q', '--cached', '--', 'plugins/mindboard/b.ts'); await e.put('.gitignore', 'node_modules/\nplugins/mindboard/b.ts\n'); await e.git('add', '--', '.gitignore'); },
+    name: 'git rm --cached apps/Mindboard/b.ts 並改 .gitignore',
+    change: async e => { await e.git('rm', '-q', '--cached', '--', 'apps/Mindboard/b.ts'); await e.put('.gitignore', 'node_modules/\napps/Mindboard/b.ts\n'); await e.git('add', '--', '.gitignore'); },
     preCommit: ALL, ci: ALL,
   },
-  { name: '新增 plugins/whiteboard/a.ts', change: edit('plugins/whiteboard/a.ts'), preCommit: ALL, ci: ALL },
-  { name: '新增 plugins/a.ts', change: edit('plugins/a.ts'), preCommit: ALL, ci: ALL },
+  { name: '新增 apps/Other/a.ts', change: edit('apps/Other/a.ts'), preCommit: ALL, ci: ALL },
+  // 只有文件的軟體（D-218 §3 第 1 點）：只跑共用檢查。
+  { name: '新增 apps/Portal/docs/backlog.md', change: edit('apps/Portal/docs/backlog.md'), preCommit: {}, ci: {} },
+  { name: '只改 apps/Capture/a.ts', change: edit('apps/Capture/a.ts'), preCommit: { capture: 'full' }, ci: { capture: 'full' } },
+  { name: '新增 apps/a.ts', change: edit('apps/a.ts'), preCommit: ALL, ci: ALL },
   { name: '新增根目錄的 foo.config.js', change: edit('foo.config.js'), preCommit: ALL, ci: ALL },
   { name: '空 commit', change: async () => {}, preCommit: {}, ci: {} },
-  { name: '檔名有中文與空白（core.quotepath=true）', change: edit('plugins/mindboard/docs/規畫 草稿.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
-  { name: '檔名有換行', change: edit('plugins/mindboard/a\nb.ts'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' }, linuxOnly: true },
-  // 搬家後才有的路徑（§A3 的例子表；Cards 在 plugins/cards/ 才有意義）。
+  { name: '檔名有中文與空白（core.quotepath=true）', change: edit('apps/Mindboard/docs/規畫 草稿.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
+  { name: '檔名有換行', change: edit('apps/Mindboard/a\nb.ts'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' }, linuxOnly: true },
+  // 搬家後才有的路徑（§A3 的例子表；Cards 在 apps/Cards/ 才有意義）。
   ...(moved ? [
     {
       name: `改 ${C}docs/${'syntax.md'}（Cards 資料夾的文件，原路徑與去掉前綴的都比）`, change: edit(`${C}docs/${'syntax.md'}`),
@@ -300,7 +304,7 @@ const CASES: Case[] = [
       preCommit: { tools: 'full', cards: 'full' }, ci: { tools: 'full', cards: 'full' },
     },
     {
-      name: `git mv ${C}docs/x.md plugins/capture/docs/x.md`, change: async (e: Env) => { await e.git('mv', `${C}docs/x.md`, 'plugins/capture/docs/x.md'); },
+      name: `git mv ${C}docs/x.md apps/Capture/docs/x.md`, change: async (e: Env) => { await e.git('mv', `${C}docs/x.md`, 'apps/Capture/docs/x.md'); },
       preCommit: { capture: 'full' }, ci: { cards: 'full', capture: 'full' },
     },
   ] satisfies Case[] : []),
@@ -348,7 +352,7 @@ void test('§2 分派表：合併 commit 用兩棵樹比（第一個 parent 對�
   await edit(`${C}src/core/files.ts`)(e);
   await e.git('commit', '-q', '-m', 'feature');
   await e.git('checkout', '-q', 'main');
-  await edit('plugins/mindboard/docs/backlog.md')(e);
+  await edit('apps/Mindboard/docs/backlog.md')(e);
   await e.git('commit', '-q', '-m', 'main');
   await e.git('merge', '-q', '--no-ff', '-m', 'merge', 'feature');
   // 第一個 parent 已經有 Mindboard 的改動，合併帶進來的只有 Cards。
@@ -362,8 +366,8 @@ void test('§2 分派表：第一個 commit（還沒有 HEAD）的暫存區照�
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   await run('git', ['init', '-q'], { cwd: root, env });
-  await mkdir(join(root, 'plugins/mindboard'), { recursive: true });
-  await writeFile(join(root, 'plugins/mindboard/a.ts'), 'export {};\n');
+  await mkdir(join(root, 'apps/Mindboard'), { recursive: true });
+  await writeFile(join(root, 'apps/Mindboard/a.ts'), 'export {};\n');
   await run('git', ['add', '-A'], { cwd: root, env });
   const { stdout } = await run(process.execPath, [DISPATCH, '--staged'], { cwd: root, env, encoding: 'utf8' });
   assert.deepEqual(actual(JSON.parse(stdout) as Result), expected({ mindboard: 'full' }));
@@ -441,10 +445,10 @@ async function independentEntries(): Promise<Set<string>> {
   };
   for (const name of await readdir(join(ROOT, '.githooks'))) literal(await readFile(join(ROOT, '.githooks', name), 'utf8'), '.');
   literal(await readFile(join(ROOT, '.github/workflows/check.yml'), 'utf8'), undefined);
-  for (const plugin of await readdir(join(ROOT, 'plugins'))) {
+  for (const folder of Object.values(FOLDERS)) {
     let pkg: { scripts?: Record<string, string> };
-    try { pkg = JSON.parse(await readFile(join(ROOT, 'plugins', plugin, 'package.json'), 'utf8')) as typeof pkg; } catch { continue; }
-    for (const script of Object.values(pkg.scripts ?? {})) literal(script, `plugins/${plugin}`);
+    try { pkg = JSON.parse(await readFile(join(ROOT, folder, 'package.json'), 'utf8')) as typeof pkg; } catch { continue; }
+    for (const script of Object.values(pkg.scripts ?? {})) literal(script, folder);
   }
   const queue = [...found];
   while (queue.length) {

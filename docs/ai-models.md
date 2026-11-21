@@ -2,13 +2,13 @@
 
 更新：2026-10-24｜狀態：依試作場 T4 兩輪實測（[結果](../experiments/t4/README.md#模型選型結果紀錄)）；語音與 Mistral 還沒測
 
-這份文件回答「現在推薦用哪個 AI 服務與模型」。外掛設定頁的預設選單、[使用說明書](decisions.md#d-048-使用說明書)的「申請免費金鑰」都以這份為準（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。調查細節見[AI API 供應商調查](../plugins/cards/docs/research/api-providers.md)。
+這份文件回答「現在推薦用哪個 AI 服務與模型」。外掛設定頁的預設選單、[使用說明書](decisions.md#d-048-使用說明書)的「申請免費金鑰」都以這份為準（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。調查細節見[AI API 供應商調查](../apps/Cards/docs/research/api-providers.md)。
 
 推薦的原則（D-072）：
 
 - **一個帳號**：Essence Cards 和 Essence Capture 推薦同一家，家長申請一次，兩個外掛貼同一把金鑰；以後要付費，也只要買同一家。
 - 免費優先，其次是 CP 值高的（[D-055](decisions.md#d-055-ai-模型的選擇原則)）；同樣條件下，選家長和學生摩擦最小的。
-- 候選要先通過五條淘汰條件（[調查 §2](../plugins/cards/docs/research/api-providers.md#2-淘汰條件2026-10-11-使用者同意)），再用真實教材比品質。
+- 候選要先通過五條淘汰條件（[調查 §2](../apps/Cards/docs/research/api-providers.md#2-淘汰條件2026-10-11-使用者同意)），再用真實教材比品質。
 
 ## 推薦總表
 
@@ -45,7 +45,7 @@
 
 ### 語音：發音朗讀（增強版）
 
-發音朗讀在 v1 之後才做（[增強版](../plugins/cards/docs/backlog.md#增強版待討論)）。到時候先實測台灣口音與英文發音，再確認推薦。
+發音朗讀在 v1 之後才做（[增強版](../apps/Cards/docs/backlog.md#增強版待討論)）。到時候先實測台灣口音與英文發音，再確認推薦。
 
 **免費**：Google AI Studio 的 Gemini 3.8 Flash TTS
 
@@ -108,7 +108,7 @@
 
 步驟：
 
-1. 查官方頁面，更新[供應商調查](../plugins/cards/docs/research/api-providers.md)與查核日期。
+1. 查官方頁面，更新[供應商調查](../apps/Cards/docs/research/api-providers.md)與查核日期。
 2. 新的候選先過五條淘汰條件。
 3. 過了的，在試作場用同一份教材比較（T4 的做法）。
 4. 只有品質比較好，或品質差不多但更便宜、額度更多、更好申請，才換推薦。
@@ -125,4 +125,4 @@
 | 2026-10-14 | 首選改為 OpenAI GPT-5.6 Terra（資料分享額度），Gemini 3.8 Flash 改成完全免費的入門（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)） | T4 第二輪 |
 | 2026-10-13 | 刪除 OpenRouter 免費模型；免費備案改找 Mistral、OpenAI 的資料分享額度 | 使用者決定 |
 | 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/t4/README.md#模型選型結果紀錄) |
-| 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](../plugins/cards/docs/research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |
+| 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](../apps/Cards/docs/research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |

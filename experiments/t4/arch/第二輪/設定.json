@@ -12,13 +12,13 @@
       { "model": "sol-plan", "system": ["格式.md", "../短規則.md", "判斷邊界.md", "../單次.md"], "input": [], "output": ["架構", "卡組"] }
     ],
     "R2": [
-      { "model": "sol-plan", "system": ["格式.md", "../../../../plugins/cards/docs/card-rules/common.md", "../../../../plugins/cards/docs/card-rules/science.md", "詳細規則-單次.md"], "input": [], "output": ["架構", "卡組"] }
+      { "model": "sol-plan", "system": ["格式.md", "../../../../apps/Cards/docs/card-rules/common.md", "../../../../apps/Cards/docs/card-rules/science.md", "詳細規則-單次.md"], "input": [], "output": ["架構", "卡組"] }
     ],
     "R3": [
       { "model": "sol-plan", "system": ["格式.md", "../短規則.md", "判斷邊界.md", "五步.md"], "input": [], "output": ["全貌", "架構", "卡組"], "任務資料覆寫": { "允許 AI 補充": "是" } }
     ],
     "S0": [
-      { "model": "terra", "system": ["../../screen/格式.md", "../../../../plugins/cards/docs/card-rules/common.md", "../../../../plugins/cards/docs/card-rules/science.md", "../../screen/完整規則.md"], "input": [], "output": ["卡組"] }
+      { "model": "terra", "system": ["../../screen/格式.md", "../../../../apps/Cards/docs/card-rules/common.md", "../../../../apps/Cards/docs/card-rules/science.md", "../../screen/完整規則.md"], "input": [], "output": ["卡組"] }
     ]
   },
   "materials": {

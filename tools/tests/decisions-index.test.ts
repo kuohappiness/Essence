@@ -223,9 +223,9 @@ void test('現行寫在：規範文件與最近的標題，同一份檔的標題
   assert.deepEqual(refs.get('D-215'), ['docs/agents/workflow.md〈決定〉']);
   // 程式碼區塊裡的 D-ID 是範例，不算引用。
   assert.equal(refs.get('D-216'), undefined);
-  for (const path of ['AGENTS.md', 'plugins/cards/AGENTS.md', 'docs/product.md', 'plugins/cards/docs/syntax.md', 'plugins/cards/docs/card-rules/english.md',
+  for (const path of ['AGENTS.md', 'apps/Cards/AGENTS.md', 'docs/product.md', 'apps/Cards/docs/syntax.md', 'apps/Cards/docs/card-rules/english.md',
     'docs/agents/quality.md', 'docs/agents/workflow.md', '.claude/skills/essence-decision/SKILL.md', 'docs/transcript.md', 'docs/ai-models.md']) assert.ok(isNormative(path), path);
-  for (const path of ['docs/tasks/x.md', 'plugins/cards/docs/card-rules/trials.md', 'docs/agents/token-usage.md', 'docs/agents/token-usage/a.md',
+  for (const path of ['docs/tasks/x.md', 'apps/Cards/docs/card-rules/trials.md', 'docs/agents/token-usage.md', 'docs/agents/token-usage/a.md',
     '.agents/skills/essence-decision/SKILL.md', 'docs/decisions.md', 'docs/roadmap.md']) assert.ok(!isNormative(path), path);
 });
 

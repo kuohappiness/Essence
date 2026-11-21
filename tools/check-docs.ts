@@ -1,7 +1,7 @@
 // 文件檢查（D-141、D-143、D-195）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、任務、討論稿與 plans 的檔頭狀態行、結束的任務有「延後的測試：」一行。
-// 外掛的資料夾（D-208 第 4 點）：plugins/<外掛>/docs/ 底下的 tasks、討論稿、plans 與 roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
+// 外掛的資料夾（D-208 第 4 點）：apps/<軟體>/docs/ 底下的 tasks、討論稿、plans 與 roadmap.md 照同樣的規則查；外掛的任務對外掛自己的 backlog；
 // 外掛有 roadmap 時，最上層 roadmap 的〈現在在哪裡〉要連到它的〈現在在哪裡〉。
-// 任務與討論稿在 docs/ 底下（D-213）：最上層或 plugins/<外掛>/ 根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報錯。
+// 任務與討論稿在 docs/ 底下（D-213）：最上層或 apps/<軟體>/ 根目錄的 tasks/、Claude Codex Discussion/ 有追蹤的檔就報錯。
 // 工作流程（D-214、D-217，寫法見 docs/agents/workflow.md）：凍結清單外的狀態檔、與看起來是新格式的狀態行照新格式查；「來自」與「→ 下一站」要互相連回；
 // backlog 只有〈待處理〉〈已轉出〉兩節；roadmap 依序有〈現在在哪裡〉〈等觸發點〉〈已完成〉（〈已完成〉不設列數上限）。
 // 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
@@ -25,31 +25,31 @@ const DECISIONS = 'docs/decisions.md';
 
 export const BACKLOG = 'docs/backlog.md';
 /** 「待補測與補做」算哪幾份 backlog 的技術債表（進度畫板也用）：最上層與 Cards（D-208 第二步 §B3）。 */
-export const DEFERRED_BACKLOGS = [BACKLOG, 'plugins/cards/docs/backlog.md'];
+export const DEFERRED_BACKLOGS = [BACKLOG, 'apps/Cards/docs/backlog.md'];
 
-const PLUGIN_ROADMAP = /^plugins\/([^/]+)\/docs\/roadmap\.md$/;
-const ANY_BACKLOG = /^(?:plugins\/[^/]+\/)?docs\/backlog\.md$/;
+const PLUGIN_ROADMAP = /^apps\/([^/]+)\/docs\/roadmap\.md$/;
+const ANY_BACKLOG = /^(?:apps\/[^/]+\/)?docs\/backlog\.md$/;
 /** roadmap 的三節，依這個順序（D-214 第 4 點）。 */
 export const ROADMAP_SECTIONS = ['現在在哪裡', '等觸發點', '已完成'];
 const BACKLOG_SECTIONS = ['待處理', '已轉出'];
 
-/** docs/ 底下的 tasks、討論稿與 plans 第一層的檔（最上層與 plugins/<外掛>/ 底下都算），README 除外。 */
+/** docs/ 底下的 tasks、討論稿與 plans 第一層的檔（最上層與 apps/<軟體>/ 底下都算），README 除外。 */
 export function isStatusDoc(file: string): boolean {
   if (posix.basename(file) === 'README.md') return false;
   const dir = posix.dirname(file);
-  return STATUS_DIRS.includes(dir) || STATUS_DIRS.includes(/^plugins\/[^/]+\/(.+)$/.exec(dir)?.[1] ?? '');
+  return STATUS_DIRS.includes(dir) || STATUS_DIRS.includes(/^apps\/[^/]+\/(.+)$/.exec(dir)?.[1] ?? '');
 }
 
-/** 任務對到的 backlog：最上層的 docs/tasks/ 對最上層的 backlog，plugins/<外掛>/docs/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
+/** 任務對到的 backlog：最上層的 docs/tasks/ 對最上層的 backlog，apps/<軟體>/docs/tasks/ 對那個外掛的 backlog。不是任務時是 undefined。 */
 function taskBacklog(file: string): string | undefined {
   const dir = posix.dirname(file);
   if (dir === 'docs/tasks') return BACKLOG;
-  const plugin = /^plugins\/([^/]+)\/docs\/tasks$/.exec(dir)?.[1];
-  return plugin === undefined ? undefined : `plugins/${plugin}/docs/backlog.md`;
+  const app = /^(apps\/[^/]+)\/docs\/tasks$/.exec(dir)?.[1];
+  return app === undefined ? undefined : `${app}/docs/backlog.md`;
 }
 
 // D-195 之前就結束的任務，〈結果〉沒有「延後的測試：」，不回頭補。只放過這兩個資料夾裡的（那時的任務都在這裡），其他外掛的同名檔照查。
-const BEFORE_D195_DIRS = new Set(['docs/tasks', 'plugins/cards/docs/tasks']);
+const BEFORE_D195_DIRS = new Set(['docs/tasks', 'apps/Cards/docs/tasks']);
 export const BEFORE_D195 = new Set([
   'agents-md-rewrite.md', 'ai-quality-screen.md', 'archive-principles.md', 'docs-architecture.md', 'duplicate-ids.md',
   'elementary-social-sol-trial-2.md', 'elementary-social-sol-trial-3.md', 'elementary-social-sol-trial.md', 'error-log.md',
@@ -66,13 +66,13 @@ export interface Exception { file: string; target: string; reason: string }
 // 確實改不了的連結，逐項寫原因。target 是解碼後的連結目標，和輸出的「目標」一欄相同。
 export const EXCEPTIONS: Exception[] = [
   ...['decisions.md#d-066-作答方式', '#2-3-學習目標', 'decisions.md#d-116-打字卡的沒印象與自動朗讀', 'decisions.md#d-120-今天的佇列的細節', 'decisions.md#d-121-打字卡答錯時的三步流程']
-    .map(target => ({ file: 'plugins/cards/docs/tasks/w6-format-review-fixes.md', target, reason: '引用框與表格是貼進 syntax.md 的原文，以 docs/ 為基準' })),
+    .map(target => ({ file: 'apps/Cards/docs/tasks/w6-format-review-fixes.md', target, reason: '引用框與表格是貼進 syntax.md 的原文，以 docs/ 為基準' })),
   { file: 'docs/tasks/docs-architecture.md', target: 'docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: '要貼進 AGENTS.md 的原文，以根目錄為基準' },
   { file: 'docs/tasks/docs-architecture.md', target: '../../tasks/objective-architecture-r2-connection.md', reason: '要貼進 experiments/t4/README.md 的原文' },
   { file: 'docs/tasks/docs-architecture.md', target: 'decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: 'roadmap 已完成那一列的範例，以 docs/ 為基準' },
   {
-    file: 'plugins/cards/docs/card-rules/elementary-social.md', target: '../../Claude Codex Discussion/2026-11-02-elementary-social-trial-fixes.md',
-    reason: '送給 AI 的部分不改（FROZEN_RULES），這份討論稿第二步 B 搬到 plugins/cards/docs/，搬家前的位置也找不到；下次改版時改連結',
+    file: 'apps/Cards/docs/card-rules/elementary-social.md', target: '../../Claude Codex Discussion/2026-11-02-elementary-social-trial-fixes.md',
+    reason: '送給 AI 的部分不改（FROZEN_RULES），這份討論稿第二步 B 搬到 apps/Cards/docs/，搬家前的位置也找不到；下次改版時改連結',
   },
 ];
 
@@ -85,9 +85,9 @@ export const FROZEN_RULES = {
   before: 'docs/card-rules/',
   marker: '<!-- 以下送給 AI -->',
   links: {
-    'plugins/cards/docs/card-rules/elementary-chinese.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
-    'plugins/cards/docs/card-rules/elementary-social.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
-    'plugins/cards/docs/card-rules/english.md': ['../decisions.md'],
+    'apps/Cards/docs/card-rules/elementary-chinese.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'apps/Cards/docs/card-rules/elementary-social.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
+    'apps/Cards/docs/card-rules/english.md': ['../decisions.md'],
   } as Record<string, string[]>,
 };
 
@@ -655,7 +655,7 @@ export const countDeferred = (backlog: string) => debtRows(parse(BACKLOG, backlo
 // 寫「無」或技術債表的列名（「補測：…」「補做：…」）。debt 有給時（只對這次改到的檔）列名要對得到那個任務的 backlog
 // （最上層的任務對最上層的 backlog，外掛的任務對外掛的；rows 是 undefined 表示那份沒有技術債表）。
 /** 舊位置（D-213 第 4 點）：任務與討論稿搬進 docs/ 之後，最上層或外掛根目錄的 tasks/、Claude Codex Discussion/ 不再放檔。 */
-const OLD_PLACE = /^((?:plugins\/[^/]+\/)?)(tasks|Claude Codex Discussion)\//;
+const OLD_PLACE = /^((?:apps\/[^/]+\/)?)(tasks|Claude Codex Discussion)\//;
 function checkOldPlace(file: string): Problem[] {
   const match = OLD_PLACE.exec(file);
   if (!match) return [];
@@ -666,7 +666,7 @@ function checkOldPlace(file: string): Problem[] {
 function checkDeferred(doc: Doc, debt?: { file: string; rows: string[] | undefined }): Problem[] {
   const name = posix.basename(doc.file);
   const backlog = taskBacklog(doc.file);
-  // BEFORE_D195 只放過那時的資料夾裡的舊任務：其他外掛的同名檔（例如 plugins/mindboard/docs/tasks/w3.md）照查。
+  // BEFORE_D195 只放過那時的資料夾裡的舊任務：其他外掛的同名檔（例如 apps/Mindboard/docs/tasks/w3.md）照查。
   if (!backlog || name === 'README.md' || name.endsWith('review.md') || (BEFORE_D195_DIRS.has(posix.dirname(doc.file)) && BEFORE_D195.has(name))) return [];
   const { index } = statusLine(doc);
   if (index === undefined || !FINISHED.test(doc.lines[index])) return [];
@@ -756,7 +756,7 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
   // 規則檔整份拿掉或改名（連整個資料夾一起搬也算）也要刪那一列，不然之後同名的新檔會被放過（第二、三輪）。
   // 只看 Cards 外掛在的 repo（有 manifest）：測試的暫存 repo 沒有，不看。
-  const rulesHere = tree.paths.has('plugins/cards/manifest.json');
+  const rulesHere = tree.paths.has('apps/Cards/manifest.json');
   for (const [file, paths] of Object.entries(FROZEN_RULES.links)) {
     if (!docs.has(file)) {
       if (rulesHere) problems.push({ file, line: 0, target: file, reason: 'FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列' });

@@ -9,20 +9,21 @@
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
 
-export const PLUGINS = ['cards', 'capture', 'mindboard'] as const;
-export type Plugin = (typeof PLUGINS)[number];
+export const APPS = ['cards', 'capture', 'mindboard'] as const;
+export type App = (typeof APPS)[number];
 /** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）與三個外掛。 */
-export const TARGETS = ['tools', ...PLUGINS] as const;
+export const TARGETS = ['tools', ...APPS] as const;
 export type Target = (typeof TARGETS)[number];
 /** 完整：在對象的資料夾跑完整檢查；相關測試（Cards 與共用工具）：只跑寫到這些路徑的測試檔；跳過。 */
 export type Run = 'full' | 'related' | 'skip';
 export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
 
 /** Cards 的資料夾（D-208 第二步 §A6 搬進來）。 */
-export const CARDS: string = 'plugins/cards';
-/** 對象的資料夾（相對 repo 的根）。 */
-export const folder = (target: Target) => (target === 'tools' ? 'tools' : target === 'cards' ? CARDS : `plugins/${target}`);
+export const CARDS: string = FOLDERS.cards;
+/** 對象的資料夾（相對 repo 的根）：外掛查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
+export const folder = (target: Target): string => (target === 'tools' ? 'tools' : FOLDERS[target]);
 /** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
 const prefix = (target: Target) => (folder(target) === '.' ? '' : folder(target) + '/');
 
@@ -52,7 +53,7 @@ const SHARED_TOOL_FILES = new Set(['.claude/settings.json', 'experiments/tools/d
  * 共用規格的登錄表（第 8 條）：兩個以上外掛都讀的最上層檔案；外掛的測試要讀最上層的檔，也登錄在這裡，不靠搜尋字串。
  * 共用工具另外加相關測試（例如 tools/tests/ 讀真的 docs/transcript.md 時）。
  */
-export const SHARED_SPECS: Record<string, Partial<Record<Plugin, Run>>> = {
+export const SHARED_SPECS: Record<string, Partial<Record<App, Run>>> = {
   // 轉錄稿格式：Capture 寫、Cards 讀（D-208 第 6 點；第二步 B 從 syntax.md §1 搬出來）。
   'docs/transcript.md': { cards: 'related', capture: 'full' },
 };
@@ -67,10 +68,12 @@ export const RULES: Rule[] = [
   },
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
-    id: 4, name: 'Capture、Mindboard 的資料夾', matches: under('plugins/capture/', 'plugins/mindboard/'),
-    effect: path => ({ [path.startsWith('plugins/capture/') ? 'capture' : 'mindboard']: 'full' }),
+    // 只有文件的軟體（現在是 Portal，D-218）只跑共用檢查；寫第一行程式時移進 FOLDERS、加自己的檢查。
+    id: 4, name: 'Capture、Mindboard 與只有文件的軟體的資料夾',
+    matches: under(prefix('capture'), prefix('mindboard'), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
+    effect: path => (path.startsWith(prefix('capture')) ? { capture: 'full' } : path.startsWith(prefix('mindboard')) ? { mindboard: 'full' } : {}),
   },
-  { id: 5, name: 'plugins/ 底下不認得的路徑', matches: under('plugins/'), effect: () => 'all' },
+  { id: 5, name: 'apps/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
@@ -164,13 +167,13 @@ function toolPaths(text: string, base: string | undefined): string[] {
 
 /**
  * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
- * repo 底下，寫成 ../../tools/… 也解得開）與 plugins/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
+ * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
  */
 export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
-    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^plugins\/[^/]+\/package\.json$/.test(path) || isSource(path));
+    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^apps\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
   for (const [path, text] of texts) {
     if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);

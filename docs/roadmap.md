@@ -8,14 +8,15 @@
 
 開工只讀這一節與要做的外掛的〈現在在哪裡〉；要找決定看[決策索引](decisions.md#索引)（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
 
-- **Essence Cards**：v1 開發中，見 [Cards 的〈現在在哪裡〉](../plugins/cards/docs/roadmap.md#現在在哪裡)。
-- **Essence Capture**：移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)），還沒有 roadmap，見 [backlog](../plugins/capture/docs/backlog.md)。
-- **Essence Mindboard**：還沒開始，見 [backlog](../plugins/mindboard/docs/backlog.md)。
+- **Essence Cards**：v1 開發中，見 [Cards 的〈現在在哪裡〉](../apps/Cards/docs/roadmap.md#現在在哪裡)。
+- **Essence Capture**：移到第二階段（[D-206](decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)），還沒有 roadmap，見 [backlog](../apps/Capture/docs/backlog.md)。
+- **Essence Mindboard**：還沒開始，見 [backlog](../apps/Mindboard/docs/backlog.md)。
 
 跨外掛的工作：
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
+| `plugins/` 改名 `apps/`、首字大寫 | 待審 | 合併前 L2（Fable 5.2 high，見審查紀錄），之後請使用者開雲端 session | Claude | [任務說明](tasks/rename-plugins-to-apps.md) |
 
 ## 等觸發點
 
@@ -27,15 +28,15 @@
 
 ## 路線圖
 
-搬到 Cards 的[〈路線圖〉](../plugins/cards/docs/roadmap.md#路線圖)（D-208 第二步）。
+搬到 Cards 的[〈路線圖〉](../apps/Cards/docs/roadmap.md#路線圖)（D-208 第二步）。
 
 ## 未來準備開發：獨立 App
 
-搬到 Cards 的[〈未來準備開發：獨立 App〉](../plugins/cards/docs/roadmap.md#未來準備開發獨立-app)（D-208 第二步）。
+搬到 Cards 的[〈未來準備開發：獨立 App〉](../apps/Cards/docs/roadmap.md#未來準備開發獨立-app)（D-208 第二步）。
 
 ## 已完成
 
-由工具產生：入口的狀態變成已合併或已結案時，`node tools/roadmap-sync.ts` 把那一列移到最上面（[D-217](decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）；不設列數上限、不搬去封存（[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 5 點）。決定不列在這裡：白板的「最近定案」從決策紀錄產生。2026-11-21 以前跨外掛的完成在 [Cards 的〈已完成〉](../plugins/cards/docs/roadmap.md#已完成)與[已完成（封存）](archive/roadmap-completed.md#已完成)。
+由工具產生：入口的狀態變成已合併或已結案時，`node tools/roadmap-sync.ts` 把那一列移到最上面（[D-217](decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）；不設列數上限、不搬去封存（[D-214](decisions.md#d-214-工作流程一件事一個現在位置反方向由工具算) 第 5 點）。決定不列在這裡：白板的「最近定案」從決策紀錄產生。2026-11-21 以前跨外掛的完成在 [Cards 的〈已完成〉](../apps/Cards/docs/roadmap.md#已完成)與[已完成（封存）](archive/roadmap-completed.md#已完成)。
 
 | 日期 | 工作 |
 |---|---|

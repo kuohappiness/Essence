@@ -23,7 +23,7 @@ function needs(change: (n: Needs) => void = () => {}): string {
       result: 'success',
       outputs: {
         tools: 'false', cards: 'true', capture: 'false', mindboard: 'true',
-        reasons: JSON.stringify({ tools: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', mindboard: '完整檢查（改到 plugins/mindboard/a.ts）' }),
+        reasons: JSON.stringify({ tools: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', mindboard: '完整檢查（改到 apps/Mindboard/a.ts）' }),
         compare: 'aaa..bbb（PR：分岔點到 PR 的 head）',
       },
     },
@@ -43,7 +43,7 @@ void test('§4 gate：每個 job 都照 plan 才過；摘要有對象、跑不�
   const text = summary(result);
   assert.match(text, /\| 對象 \| 跑不跑 \| 理由 \| 結果 \|/);
   assert.match(text, /\| Capture \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
-  assert.match(text, /\| Mindboard \| 跑 \| 完整檢查（改到 plugins\/mindboard\/a\.ts） \| success \|/);
+  assert.match(text, /\| Mindboard \| 跑 \| 完整檢查（改到 apps\/Mindboard\/a\.ts） \| success \|/);
   assert.match(text, /\| 共用工具 \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
   assert.match(text, /比較：aaa\.\.bbb/);
 });
@@ -129,7 +129,7 @@ void test('§4 gate：比較端點與理由缺、空或型別錯都不過（L2 R
   const loose = (n: Needs) => n as Record<string, Record<string, unknown>>;
   const outputs = (n: Needs) => n.plan.outputs as Record<string, unknown>;
   const reasons = (value: unknown) => (n: Needs) => { n.plan.outputs!.reasons = JSON.stringify(value); };
-  const full = { tools: '照分派表跳過（…）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（…）', mindboard: '完整檢查（改到 plugins/mindboard/a.ts）' };
+  const full = { tools: '照分派表跳過（…）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（…）', mindboard: '完整檢查（改到 apps/Mindboard/a.ts）' };
   const cases: [string, (n: Needs) => void, RegExp][] = [
     ['沒有 compare', n => { delete n.plan.outputs!.compare; }, /plan 沒有比較的端點/],
     ['compare 是空字串', n => { n.plan.outputs!.compare = ''; }, /plan 沒有比較的端點/],
@@ -171,9 +171,9 @@ void test('§4 gate 的命令：結束碼跟著結論，摘要寫進 GITHUB_STEP
 
 /**
  * 暫存 repo：
- *   start ── cards1（改 src/a.ts）── mindboard1（改 plugins/mindboard/a.ts）   ← feature（分支改過 Cards）
+ *   start ── cards1（改 src/a.ts）── mindboard1（改 apps/Mindboard/a.ts）   ← feature（分支改過 Cards）
  *     ├── main1（改 src/b.ts）                                               ← main（PR 開了之後 base 前進、改了 Cards）
- *     └── only（改 plugins/mindboard/b.ts）                                   ← only（只改 Mindboard 的分支）
+ *     └── only（改 apps/Mindboard/b.ts）                                   ← only（只改 Mindboard 的分支）
  */
 async function history(t: test.TestContext) {
   const root = await mkdtemp(join(tmpdir(), 'essence-ci-plan-'));
@@ -195,9 +195,9 @@ async function history(t: test.TestContext) {
   const main1 = await commit(`${C}src/b.ts`, 'export const b = 1;\n');
   git('checkout', '-q', '-b', 'feature', start);
   const cards1 = await commit(`${C}src/a.ts`, 'export const a = 2;\n');
-  const mindboard1 = await commit('plugins/mindboard/a.ts', 'export const m = 1;\n');
+  const mindboard1 = await commit('apps/Mindboard/a.ts', 'export const m = 1;\n');
   git('checkout', '-q', '-b', 'only', start);
-  const only = await commit('plugins/mindboard/b.ts', 'export const m = 2;\n');
+  const only = await commit('apps/Mindboard/b.ts', 'export const m = 2;\n');
   // GitHub 的 refs/pull/N/merge：base（main1）與 PR 的 head（only）的合併 commit。
   git('checkout', '-q', '--detach', main1);
   git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'merge', '-q', '--no-ff', '--no-verify', '-m', 'pr', only);
@@ -221,7 +221,7 @@ void test('§4 比較端點：PR 用分岔點到 head，不用 base 的最新；
   assert.equal(runs(plan({ ...event, payload: {} }, gitIn(h.root), h.root)), 'tools,cards,capture,mindboard');
 });
 
-void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家前開的分支只改 tools/install.ts，合併後落在 plugins/cards/tools/ → Cards 也跑', async t => {
+void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家前開的分支只改 tools/install.ts，合併後落在 apps/Cards/tools/ → Cards 也跑', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-ci-moved-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = { ...process.env };
@@ -238,20 +238,20 @@ void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家�
   git('commit', '-q', '--no-verify', '-m', 'old branch');
   const old = git('rev-parse', 'HEAD');
   git('checkout', '-q', 'main');
-  await mkdir(join(root, 'plugins/cards/tools'), { recursive: true });
-  git('mv', 'tools/install.ts', 'plugins/cards/tools/install.ts');
+  await mkdir(join(root, 'apps/Cards/tools'), { recursive: true });
+  git('mv', 'tools/install.ts', 'apps/Cards/tools/install.ts');
   git('commit', '-q', '--no-verify', '-m', 'move');
   const moved = git('rev-parse', 'HEAD');
   // GitHub 的 refs/pull/N/merge：第一個 parent 是 base，第二個是 PR 的 head。
   git('checkout', '-q', '--detach', moved);
   git('merge', '-q', '--no-ff', '--no-verify', '-m', 'merge', old);
   const merge = git('rev-parse', 'HEAD');
-  assert.match(git('diff', '--name-only', moved, merge), /^plugins\/cards\/tools\/install\.ts$/);
+  assert.match(git('diff', '--name-only', moved, merge), /^apps\/Cards\/tools\/install\.ts$/);
 
   const event: Event = { name: 'pull_request', ref: 'refs/pull/1/merge', sha: merge, payload: { pull_request: { base: { sha: moved }, head: { sha: old } } } };
   const p = plan(event, gitIn(root), root);
   assert.equal(runs(p), 'tools,cards');
-  assert.match(p.reasons.cards, /plugins\/cards\/tools\/install\.ts/);
+  assert.match(p.reasons.cards, /apps\/Cards\/tools\/install\.ts/);
   assert.match(p.compare, new RegExp(`^${before}\\.\\.${old}.*${moved}\\.\\.${merge}`));
   // 合併 commit 的第二個 parent 不是 PR 的 head、或不是合併 commit：對不上就跑全部。
   for (const sha of [moved, 'merge-sha']) {
@@ -311,7 +311,7 @@ void test('§4 plan 的命令：寫 GITHUB_OUTPUT 的旗標、理由與比較的
   const lines = (await readFile(output, 'utf8')).trim().split('\n');
   assert.deepEqual(lines.slice(0, 4), ['tools=false', 'cards=false', 'capture=false', 'mindboard=true']);
   const reasons = JSON.parse(lines.find(line => line.startsWith('reasons='))!.slice('reasons='.length)) as Record<string, string>;
-  assert.match(reasons.mindboard, /完整檢查（改到 plugins\/mindboard\/b\.ts）/);
+  assert.match(reasons.mindboard, /完整檢查（改到 apps\/Mindboard\/b\.ts）/);
   assert.match(lines.find(line => line.startsWith('compare='))!, new RegExp(`${h.start}\\.\\.${h.only}`));
   assert.match(stdout, new RegExp(`checkout：${h.only}`));
   assert.match(await readFile(summaryFile, 'utf8'), /Mindboard：跑/);

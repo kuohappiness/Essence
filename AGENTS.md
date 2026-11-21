@@ -21,7 +21,7 @@
 
 ## 開始工作前
 
-- 先讀最上層 `docs/roadmap.md` 的「現在在哪裡」（入口，[工作流程規範〈roadmap〉](docs/agents/workflow.md#roadmap)）；做某個外掛時，先讀 `plugins/<外掛>/AGENTS.md`，再讀它的 roadmap。其他文件看任務需要，照〈文件分工〉找。
+- 先讀最上層 `docs/roadmap.md` 的「現在在哪裡」（入口，[工作流程規範〈roadmap〉](docs/agents/workflow.md#roadmap)）；做某個軟體時，先讀 `apps/<軟體>/AGENTS.md`，再讀它的 roadmap。其他文件看任務需要，照〈文件分工〉找。
 - 查決定：已知 D-ID 用 `node tools/decisions-index.ts D-xxx`；不知道時讀索引裡相關的主題。
 - 讀長文件（backlog、roadmap、quality.md、決策紀錄）只取需要的那一段：用 `node tools/section.ts <檔案> <標題>`，或先找標題的行號再讀那一段；入口文件只讀上面那一節（[工作流程規範](docs/agents/workflow.md#只讀需要的那一段)，[D-215](docs/decisions.md#d-215-狀態留在-repo獨立的第一輪決定的門檻只讀需要的那一段)）。
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
@@ -60,7 +60,7 @@
 給 GitHub 上的 Codex 審查讀，是合併前的補充，不取代 L2（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端) 第 7 點）。
 
 - 用繁體中文回覆。
-- 標成 P1：寫進使用者筆記的格式（`plugins/cards/docs/syntax.md`、`docs/transcript.md`）被改壞或舊版外掛讀不到、學習目標 ID 或複習紀錄遺失或重複、排程（FSRS 與紀錄重播）算錯、寫回筆記不冪等、金鑰或個人資料進了 repo。
+- 標成 P1：寫進使用者筆記的格式（`apps/Cards/docs/syntax.md`、`docs/transcript.md`）被改壞或舊版外掛讀不到、學習目標 ID 或複習紀錄遺失或重複、排程（FSRS 與紀錄重播）算錯、寫回筆記不冪等、金鑰或個人資料進了 repo。
 - 只改文件的 PR，看壞掉的連結、狀態行，以及和 `docs/decisions.md` 矛盾的地方。
 
 ## 改這份檔案

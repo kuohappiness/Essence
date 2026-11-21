@@ -57,7 +57,7 @@ try {
 
 // 和 check.yml 每個 job 安裝的資料夾相同（tools/tests/cloud-setup.test.ts 照字面比，CI 加了外掛 job 沒改這裡就紅燈）。
 // 清單寫死、不 import tools/dispatch.ts：雲端 session 開場時 PATH 上可能是 Node 22，跑不了 .ts。
-const DIRS = ['tools', 'plugins/cards', 'plugins/capture', 'plugins/mindboard'];
+const DIRS = ['tools', 'apps/Cards', 'apps/Capture', 'apps/Mindboard'];
 
 // 每個資料夾都寫一句結果（第二步 §A5）：跳過的寫理由，分得出「裝好了」和「根本沒走到」。
 for (const dir of DIRS) {

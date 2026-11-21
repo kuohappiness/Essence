@@ -206,7 +206,7 @@ export async function selftest() {
     // 9. 另一份設定：只拿掉考題凍結，接法與 R3 提示不變；次數分開存；方案接法的 dry-run 估得出 token。
     const socialFile = 'arch/第二輪/國小社會設定.json', social = await secondSettings(ROOT, socialFile);
     assert.deepEqual(social.models['sol-plan'], config.models['sol-plan']);
-    assert.deepEqual(social.configs.R3[0].system, ['格式.md', '../短規則.md', '判斷邊界.md', '五步.md', '../../../../plugins/cards/docs/card-rules/elementary-social.md']);
+    assert.deepEqual(social.configs.R3[0].system, ['格式.md', '../短規則.md', '判斷邊界.md', '五步.md', '../../../../apps/Cards/docs/card-rules/elementary-social.md']);
     assert.deepEqual(social.configs.R3[0].output, ['全貌', '架構', '卡組']);
     assert.deepEqual(social.materials['2-1'].任務資料, ['學生：國小五年級（小五上）', '科目：社會', '單元：2-1 地形如何影響我們的生活', '學習目的：準備段考', '允許 AI 補充：是', '學生已有的學習目標：無', '家長調整：無', '教材：課本轉錄稿（教師用書，含給老師的註記）與習作轉錄稿']);
     const preset = path.resolve(root, 'arch/第二輪', social.configs.R3[0].system[4]);

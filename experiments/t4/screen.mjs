@@ -75,7 +75,7 @@ export async function buildUser(out, name, material) {
 }
 
 export function cleanCommit(repo = REPO, git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true })) {
-  if (git('status', '--porcelain', '--', 'experiments/t4/screen', 'plugins/cards/docs/card-rules').trim())
+  if (git('status', '--porcelain', '--', 'experiments/t4/screen', 'apps/Cards/docs/card-rules').trim())
     throw new Error('screen 或 card-rules 有未 commit 的修改，停止送出');
   return git('rev-parse', 'HEAD').trim();
 }

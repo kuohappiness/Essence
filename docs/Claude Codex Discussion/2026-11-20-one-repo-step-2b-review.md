@@ -20,7 +20,7 @@
 
 **規格，已在實際文件重現。** §B0、§B2 與驗收紀錄允許 rebase 後重跑，預期已手修的連結維持原意。我依已提交的文件清單與拆檔對照重建計畫，重跑待審樹時，唯一一筆改寫是 `plugins/cards/docs/backlog.md:14` 的 `tasks/` → `../../../docs/tasks/`。只把這一筆套進暫存 clone，`check-docs` 仍以 0 結束。讀者點「已交付規格」會進共用任務目錄。
 
-**真實路徑與處理。** 合併前重跑是預定步驟。只要計畫將 Cards backlog 登記為從 `docs/backlog.md` 拆出，兩個位置都能解出 `tasks/`，腳本便會優先選搬家前的解法。我使用重建的計畫，原始計畫檔的逐位元組重跑待驗證。建議合併前先用 `--check`，兩個解法指到不同現存目標時列給人核對，並拿這一列做回歸案例。 [搬家腳本](<../../experiments/tools/move-links.mjs>)（第 227 行） · [Cards backlog](<../../plugins/cards/docs/backlog.md>)（第 14 行）
+**真實路徑與處理。** 合併前重跑是預定步驟。只要計畫將 Cards backlog 登記為從 `docs/backlog.md` 拆出，兩個位置都能解出 `tasks/`，腳本便會優先選搬家前的解法。我使用重建的計畫，原始計畫檔的逐位元組重跑待驗證。建議合併前先用 `--check`，兩個解法指到不同現存目標時列給人核對，並拿這一列做回歸案例。 [搬家腳本](<../../experiments/tools/move-links.mjs>)（第 227 行） · [Cards backlog](<../../apps/Cards/docs/backlog.md>)（第 14 行）
 
 #### R2｜P3｜延續 A 的 R4：同段純文字會被當成真連結改寫
 
@@ -44,19 +44,19 @@
 
 **規格，已核對來源與目的地。** Cards 架構開頭的「做到什麼程度」連到最上層產品定義，Cards 的範圍正文在外掛內。Cards 產品定義的「技術怎麼做」也連到最上層架構，Cards 的技術正文在外掛內。另有一處語意更明確的例子，國小社會試用任務的「轉錄稿圖號項目」連到最上層 backlog，該項目實際在 Capture backlog。這些目標檔都存在，文件檢查無法辨認連結文字指的是哪一段內容。
 
-**真實路徑與處理。** 讀者依現行文件開工或回查試用時會遇到。建議讓前兩處直接互連 Cards 的文件，試用任務直接連到 Capture 的圖號項目。 [Cards 架構](<../../plugins/cards/docs/architecture.md>)（第 5 行） · [Cards 產品定義](<../../plugins/cards/docs/product.md>)（第 5 行） · [國小社會試用](<../../plugins/cards/docs/tasks/elementary-social-sol-trial.md>)（第 25 行）
+**真實路徑與處理。** 讀者依現行文件開工或回查試用時會遇到。建議讓前兩處直接互連 Cards 的文件，試用任務直接連到 Capture 的圖號項目。 [Cards 架構](<../../apps/Cards/docs/architecture.md>)（第 5 行） · [Cards 產品定義](<../../apps/Cards/docs/product.md>)（第 5 行） · [國小社會試用](<../../apps/Cards/docs/tasks/elementary-social-sol-trial.md>)（第 25 行）
 
 #### R6｜P3｜兩份產品定義對第 8 條原則的歸屬說法不一致
 
 **規格，靜態核對。** §B2 將 D-023 第 8 條留在最上層。最上層 §4 正文確實保留該條，該節結尾卻說「八條原則」搬到 Cards。Cards §4 說功能提案要通過七條檢驗，同一張表又列第 8 條並指回最上層。
 
-**真實路徑與處理。** 兩份都是現行產品規格，從任一份判斷提案時都可能讀到矛盾。建議明寫「Cards 的七條，加上全專案適用的第 8 條」，並保留現有的正文位置。 [共用產品定義](<../../docs/product.md>)（第 31 行） · [Cards 產品原則](<../../plugins/cards/docs/product.md>)（第 68 行）
+**真實路徑與處理。** 兩份都是現行產品規格，從任一份判斷提案時都可能讀到矛盾。建議明寫「Cards 的七條，加上全專案適用的第 8 條」，並保留現有的正文位置。 [共用產品定義](<../../docs/product.md>)（第 31 行） · [Cards 產品原則](<../../apps/Cards/docs/product.md>)（第 68 行）
 
 #### R7｜P3｜Capture 的待辦仍指示跨兩個 repo 改轉錄稿格式
 
 **規範與設計，靜態核對。** Capture backlog 的兩條待辦仍寫「兩個 repo 一起改」，第一條的連結名稱仍是 `syntax.md §1`，實際已指到 `docs/transcript.md`。D-208 與目前分派表的約定是在同一個 repo 維護共用規格，並檢查 Capture 寫端與 Cards 讀端。
 
-**真實路徑與處理。** 第一個處理圖號或課本加習作的 Capture 任務會讀這兩條。建議同步更新操作說明與連結名稱，保留原本的待決問題和試用紀錄。 [Capture backlog](<../../plugins/capture/docs/backlog.md>)（第 19 行） · [共用規格分派](<../../tools/dispatch.ts>)（第 55 行）
+**真實路徑與處理。** 第一個處理圖號或課本加習作的 Capture 任務會讀這兩條。建議同步更新操作說明與連結名稱，保留原本的待決問題和試用紀錄。 [Capture backlog](<../../apps/Capture/docs/backlog.md>)（第 19 行） · [共用規格分派](<../../tools/dispatch.ts>)（第 55 行）
 
 ### 驗證結果
 
@@ -192,8 +192,8 @@
 
 ### 其餘核對與驗證
 
-- **Cards 導覽連結，R5 修正已驗證。** 從文件清單重建 244 筆整檔搬移、5 份拆分來源與其錨點，加入 `stay`、`frozen`、`settled: true`。同一份計畫在 `756ecd8` 得到 0 個修改、2 個要人看、結束碼 1，兩處正是架構與產品定義的互連。在 `a3d307d` 得到 **0 個修改、0 個要人看、結束碼 0**。兩條新路徑都能從 Cards 的現址解到正確文件，從搬家前的 `docs/` 解會超出 repo。[Cards 架構](../../plugins/cards/docs/architecture.md)（第 5 行）、[Cards 產品定義](../../plugins/cards/docs/product.md)（第 5 行）
-- **Capture backlog，R7 修正已驗證。** 第 7、19 行都顯示「轉錄稿格式」，指向 `docs/transcript.md#1-轉錄稿`。錨點存在，該 backlog 已無 `syntax.md §1`。[Capture backlog](../../plugins/capture/docs/backlog.md)（第 19 行）、[轉錄稿格式](../transcript.md)（第 9 行）
+- **Cards 導覽連結，R5 修正已驗證。** 從文件清單重建 244 筆整檔搬移、5 份拆分來源與其錨點，加入 `stay`、`frozen`、`settled: true`。同一份計畫在 `756ecd8` 得到 0 個修改、2 個要人看、結束碼 1，兩處正是架構與產品定義的互連。在 `a3d307d` 得到 **0 個修改、0 個要人看、結束碼 0**。兩條新路徑都能從 Cards 的現址解到正確文件，從搬家前的 `docs/` 解會超出 repo。[Cards 架構](../../apps/Cards/docs/architecture.md)（第 5 行）、[Cards 產品定義](../../apps/Cards/docs/product.md)（第 5 行）
+- **Capture backlog，R7 修正已驗證。** 第 7、19 行都顯示「轉錄稿格式」，指向 `docs/transcript.md#1-轉錄稿`。錨點存在，該 backlog 已無 `syntax.md §1`。[Capture backlog](../../apps/Capture/docs/backlog.md)（第 19 行）、[轉錄稿格式](../transcript.md)（第 9 行）
 - **指定測試。** Windows、Node `v24.13.0`。`move-links.test.mjs` 9/9 通過，`tools/tests/check-docs.test.ts` 16/16 通過。`node tools/check-docs.ts` 通過，檢查 387 份 Markdown、7,980 個連結。
 - **交回紀錄。** 任務〈結果〉記載的本輪整樹檢查數字與獨立重跑一致。`git diff --check` 另標出貼入討論稿的四行行尾空格，均為 Markdown 換行用的雙空格。暫存副本與探針已刪除，repo 工作樹維持乾淨。
 

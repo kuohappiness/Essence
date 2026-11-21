@@ -7,7 +7,7 @@ import { ROOT, exists, readJson, validateOut, writeJson, textPart, redact } from
 import { buildPrompt as screenPrompt, buildUser } from './screen.mjs';
 import { hash, references } from './screen-analysis.mjs';
 import { check } from './check-syntax.mjs';
-import { parseDeck } from '../../plugins/cards/src/core/deck/parse.ts';
+import { parseDeck } from '../../apps/Cards/src/core/deck/parse.ts';
 import { createSession, splitSections } from './arch-request.mjs';
 
 export async function settings(root = ROOT) { return readJson(path.join(root, 'arch/設定.json')); }

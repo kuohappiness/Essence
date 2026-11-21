@@ -106,13 +106,13 @@
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| W6 複習畫面 | 實作完，在分支 `claude/w6`，未合併 | Codex 做 L2 | 使用者轉給 Codex | [任務說明](../../plugins/cards/docs/tasks/w6.md) |
-| 卡組讀不到就跳過那一篇 | 已排程，和 W6 的 L2 同時做 | 在 `claude/state-load` 實作，iPhone 測試前合併 | 本機 Opus | [任務說明](../../plugins/cards/docs/tasks/state-load.md) |
-| 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設草稿](../../plugins/cards/docs/card-rules/elementary-social.md) |
-| 更新與相容 | 討論中 | 一次一題，先問每台裝置要不要記版本 | 使用者 | [規畫](../../plugins/cards/docs/plans/updates.md) |
-| 外掛架構逐環節檢視 | 討論中，環節 1 第二稿 | Codex 回應環節 1 第二稿 | Codex | [討論稿](../../plugins/cards/docs/Claude%20Codex%20Discussion/2026-10-26-plugin-architecture.md) |
+| W6 複習畫面 | 實作完，在分支 `claude/w6`，未合併 | Codex 做 L2 | 使用者轉給 Codex | [任務說明](../../apps/Cards/docs/tasks/w6.md) |
+| 卡組讀不到就跳過那一篇 | 已排程，和 W6 的 L2 同時做 | 在 `claude/state-load` 實作，iPhone 測試前合併 | 本機 Opus | [任務說明](../../apps/Cards/docs/tasks/state-load.md) |
+| 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設草稿](../../apps/Cards/docs/card-rules/elementary-social.md) |
+| 更新與相容 | 討論中 | 一次一題，先問每台裝置要不要記版本 | 使用者 | [規畫](../../apps/Cards/docs/plans/updates.md) |
+| 外掛架構逐環節檢視 | 討論中，環節 1 第二稿 | Codex 回應環節 1 第二稿 | Codex | [討論稿](../../apps/Cards/docs/Claude%20Codex%20Discussion/2026-10-26-plugin-architecture.md) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](../decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
-| 製卡規則下一輪試用 | 等真實影片筆記 | 一起看目標數量、共同成功判準、洩漏 | 新教材 | [試用紀錄](../../plugins/cards/docs/card-rules/trials.md) |
+| 製卡規則下一輪試用 | 等真實影片筆記 | 一起看目標數量、共同成功判準、洩漏 | 新教材 | [試用紀錄](../../apps/Cards/docs/card-rules/trials.md) |
 | 英文一字多義 | 規則已改 | 有多義字的真實教材時試用 | 新教材 | [D-125](../decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
 
 下一個里程碑：W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」，剩 W6 合併與 iPhone 測試。

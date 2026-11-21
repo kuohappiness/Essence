@@ -29,7 +29,7 @@ export function endpoints(event: Event, git: Git): Endpoints {
     if (!base || !head) return { kind: 'all', why: 'PR 事件缺 base 或 head 的 SHA' };
     const fork = git(['merge-base', base, head]);
     if (!fork) return { kind: 'all', why: `找不到 PR 的分岔點（${base}、${head}）` };
-    // 分岔點到 head 是分支上的路徑；搬家前開的分支，改動在合併樹裡落到新路徑（tools/install.ts → plugins/cards/tools/install.ts）。
+    // 分岔點到 head 是分支上的路徑；搬家前開的分支，改動在合併樹裡落到新路徑（tools/install.ts → apps/Cards/tools/install.ts）。
     // 所以也看 GitHub 的合併 commit（GITHUB_SHA，第二個 parent 是 PR 的 head）對第一個 parent 的差異，兩邊的分派取聯集；對不上就跑全部。
     const parents = git(['rev-list', '--parents', '-n', '1', event.sha])?.split(/\s+/).slice(1) ?? [];
     const first = parents[0];

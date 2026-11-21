@@ -1,5 +1,5 @@
 // 共用工具自己的 ESLint 設定（D-208 第二步 §A2）：照 Cards 的設定對 tools/ 生效的那些規則搬一份。
-// Cards 專用的邊界規則（src/ 的模組邊界、D-148）不搬：共用工具不能 import plugins/，由 check-plugin-imports 擋。
+// Cards 專用的邊界規則（src/ 的模組邊界、D-148）不搬：共用工具不能 import apps/，由 check-app-imports 擋。
 import tseslint from 'typescript-eslint';
 
 // 測試不改全域的 Node 內建模組（第一個里程碑回顧的 R1）：Node 自己的實作也呼叫它們，換掉的結果隨 Node 版本改變。

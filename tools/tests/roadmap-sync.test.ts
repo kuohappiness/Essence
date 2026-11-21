@@ -136,9 +136,9 @@ void test('入口一格兩個連結、入口不是新格式、同一份入口兩
 void test('L2 R4 連結的路徑照原本的編碼改基準（%23、%20 不解開）；行內程式碼裡的連結不改，入口一格也不算', async t => {
   const { root, add, read, sync } = await repo(t);
   assert.deepEqual(moveText('[索引](../決策%23索引.md#一節)', 'docs/tasks/x.md', 'docs/roadmap.md'), { text: '[索引](決策%23索引.md#一節)' });
-  assert.deepEqual(moveText('[空白](../Claude%20Codex%20Discussion/d.md)', 'plugins/cards/docs/tasks/x.md', 'plugins/cards/docs/roadmap.md'),
+  assert.deepEqual(moveText('[空白](../Claude%20Codex%20Discussion/d.md)', 'apps/Cards/docs/tasks/x.md', 'apps/Cards/docs/roadmap.md'),
     { text: '[空白](Claude%20Codex%20Discussion/d.md)' });
-  assert.deepEqual(moveText('範例 `[入口](a.md)`、``[也是](a.md)``，[真的](a.md)', 'plugins/cards/docs/tasks/x.md', 'plugins/cards/docs/roadmap.md'),
+  assert.deepEqual(moveText('範例 `[入口](a.md)`、``[也是](a.md)``，[真的](a.md)', 'apps/Cards/docs/tasks/x.md', 'apps/Cards/docs/roadmap.md'),
     { text: '範例 `[入口](a.md)`、``[也是](a.md)``，[真的](tasks/a.md)' });
   // 同步寫出的 roadmap，文件檢查照樣找得到 %23 的檔。
   await add('docs/決策#索引.md', '# 索引\n\n## 一節\n');
@@ -154,10 +154,10 @@ void test('L2 R4 連結的路徑照原本的編碼改基準（%23、%20 不解�
 
 void test('連結改寫：上一層、只有錨點、有空白的路徑、格子裡的直線；寫出的 roadmap 文件檢查與白板都讀得出來', async t => {
   const { root, add, read, sync } = await repo(t);
-  const roadmapFile = 'plugins/cards/docs/roadmap.md';
-  await add('plugins/cards/docs/tasks/x.md', entry('狀態：實作中｜下一步：看 [上一層](../plans/p.md#一節)、[本檔](#結果)、[空白](<../Claude Codex Discussion/d.md>)、[外部](https://example.com)、a|b｜等誰：使用者'));
-  await add('plugins/cards/docs/plans/p.md', '# P\n\n狀態：規劃中｜下一步：x｜等誰：使用者\n\n## 一節\n');
-  await add('plugins/cards/docs/Claude Codex Discussion/d.md', '# D\n\n狀態：討論中｜下一步：x｜等誰：Codex\n');
+  const roadmapFile = 'apps/Cards/docs/roadmap.md';
+  await add('apps/Cards/docs/tasks/x.md', entry('狀態：實作中｜下一步：看 [上一層](../plans/p.md#一節)、[本檔](#結果)、[空白](<../Claude Codex Discussion/d.md>)、[外部](https://example.com)、a|b｜等誰：使用者'));
+  await add('apps/Cards/docs/plans/p.md', '# P\n\n狀態：規劃中｜下一步：x｜等誰：使用者\n\n## 一節\n');
+  await add('apps/Cards/docs/Claude Codex Discussion/d.md', '# D\n\n狀態：討論中｜下一步：x｜等誰：Codex\n');
   await add(roadmapFile, roadmap(['| 甲 | x | x | x | [任務](tasks/x.md) |']));
   assert.equal(sync().status, 0);
   const text = await read(roadmapFile);
@@ -167,10 +167,10 @@ void test('連結改寫：上一層、只有錨點、有空白的路徑、格子
   assert.deepEqual(problems.filter(p => p.startsWith(roadmapFile)), []);
   const [work] = parsePluginWorks(text, roadmapFile);
   assert.equal(work.next.text, '看 上一層、本檔、空白、外部、a|b');
-  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/plugins\/cards\/docs\/Claude%20Codex%20Discussion\/d\.md"/);
+  assert.match(work.next.html, /href="https:\/\/github\.com\/kuohappiness\/Essence\/blob\/main\/apps\/Cards\/docs\/Claude%20Codex%20Discussion\/d\.md"/);
   assert.deepEqual(moveText('[a][b]', 'docs/tasks/x.md', 'docs/roadmap.md'), { error: '參照式連結（[文字][名稱]）搬不進 roadmap：入口的狀態行改用 [文字](路徑)' });
   // 工具寫的〈已完成〉列白板也讀得出來。
-  await add('plugins/cards/docs/tasks/x.md', entry('狀態：已合併｜完成：正式 vault 升到 `0.7.0`：做完｜等誰：—'));
+  await add('apps/Cards/docs/tasks/x.md', entry('狀態：已合併｜完成：正式 vault 升到 `0.7.0`：做完｜等誰：—'));
   assert.equal(sync().status, 0);
   const release = parseRelease(await read(roadmapFile), roadmapFile);
   assert.equal(release.done[0].date, TODAY);
@@ -537,9 +537,9 @@ void test('L2 M2 換入口只認舊入口的「已結案 → 新入口」：同�
   const check = () => sync('--check', '--staged');
   // 同名的兩列在不同 roadmap：刪掉最上層那一列（入口沒結束）照擋。
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
-  await add('plugins/cards/docs/tasks/b.md', entry('狀態：實作中｜下一步：y｜等誰：Claude'));
+  await add('apps/Cards/docs/tasks/b.md', entry('狀態：實作中｜下一步：y｜等誰：Claude'));
   await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
-  await add('plugins/cards/docs/roadmap.md', roadmap(['| 甲 | 實作中 | y | Claude | [任務](tasks/b.md) |']));
+  await add('apps/Cards/docs/roadmap.md', roadmap(['| 甲 | 實作中 | y | Claude | [任務](tasks/b.md) |']));
   commit();
   await add('docs/roadmap.md', roadmap([]));
   assert.match(check().stderr, /docs\/roadmap\.md:3  入口 docs\/tasks\/a\.md 還沒結束（實作中）/);
@@ -619,11 +619,11 @@ void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
   await add('docs/roadmap.md', roadmap(['| 甲 | x | x | x | [任務](tasks/a.md) |']));
-  await add('plugins/cards/docs/roadmap.md', roadmap([], ['| 甲 | x | [任務](../../../docs/tasks/a.md) |']));
+  await add('apps/Cards/docs/roadmap.md', roadmap([], ['| 甲 | x | [任務](../../../docs/tasks/a.md) |']));
   const both = sync();
   assert.equal(both.status, 1);
-  assert.match(both.stderr, /plugins\/cards\/docs\/roadmap\.md:14  入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:9 也有一列：同一份入口只能在一份 roadmap 有一列/);
-  await add('plugins/cards/docs/roadmap.md', roadmap([]));
+  assert.match(both.stderr, /apps\/Cards\/docs\/roadmap\.md:14  入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:9 也有一列：同一份入口只能在一份 roadmap 有一列/);
+  await add('apps/Cards/docs/roadmap.md', roadmap([]));
   assert.equal(sync().status, 0);
   git(['add', 'docs/roadmap.md']);
   commit();
@@ -631,16 +631,16 @@ void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列
   await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
   assert.equal(sync().status, 0);
   git(['add', 'docs/roadmap.md']);
-  await add('plugins/cards/docs/roadmap.md', roadmap([], [], [`| ${TODAY} | **甲**：做完（已合併，[入口](../../../docs/tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']));
-  assert.match(sync('--check', '--staged').stderr, /plugins\/cards\/docs\/roadmap\.md:19  .*入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:19 已經有一筆新的完成列/);
+  await add('apps/Cards/docs/roadmap.md', roadmap([], [], [`| ${TODAY} | **甲**：做完（已合併，[入口](../../../docs/tasks/a.md)） |`, '| 2026-11-20 | 舊的一列 |']));
+  assert.match(sync('--check', '--staged').stderr, /apps\/Cards\/docs\/roadmap\.md:19  .*入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:19 已經有一筆新的完成列/);
 });
 
 void test('L2 R1 最上層最後一列搬走：同步、暫存區檢查、文件檢查與白板都接受空的狀態板', async t => {
   const { root, add, git, read, sync, commit } = await repo(t);
-  const top = (board: string[], done?: string[]) => roadmap(board, [], done).replace('開工只讀這一節。', '外掛的工作：[Cards](../plugins/cards/docs/roadmap.md#現在在哪裡)。');
+  const top = (board: string[], done?: string[]) => roadmap(board, [], done).replace('開工只讀這一節。', '外掛的工作：[Cards](../apps/Cards/docs/roadmap.md#現在在哪裡)。');
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
   await add('docs/roadmap.md', top(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
-  await add('plugins/cards/docs/roadmap.md', roadmap([]));
+  await add('apps/Cards/docs/roadmap.md', roadmap([]));
   commit();
   await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
   assert.equal(sync().status, 0);

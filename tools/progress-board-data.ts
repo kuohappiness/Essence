@@ -132,7 +132,7 @@ export interface Meta { updated: string; commit?: string; deferred?: number }
 export function debtNote(meta: Meta): string {
   if (meta.deferred === undefined) return '';
   // 數最上層與 Cards 的 backlog（D-208 第二步 §B3）：v1 的補測幾乎都在 Cards，連到 Cards 的技術債表。字要短：畫布頁頂端那一列在 375px 要放得下。
-  return `<a class="debt" href="${REPO}/blob/main/plugins/cards/docs/backlog.md#${encodeURIComponent('技術債')}">v1 結案前待補測 ${meta.deferred} 列（最上層與 Cards）</a>`;
+  return `<a class="debt" href="${REPO}/blob/main/apps/Cards/docs/backlog.md#${encodeURIComponent('技術債')}">v1 結案前待補測 ${meta.deferred} 列（最上層與 Cards）</a>`;
 }
 
 /** 兩頁共用的顏色（含深色模式）。 */
