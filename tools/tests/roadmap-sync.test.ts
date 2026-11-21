@@ -408,6 +408,39 @@ void test('L2 N3 HEAD 的完成列不見了就擋（刪掉、解衝突時丟掉�
   assert.equal(check().status, 0, check().stderr);
 });
 
+void test('L2 N5 同一天結束、重新開工、再結束：第二筆完成列放行；入口不在 HEAD 的狀態板時抄一筆同一天的照樣擋', async t => {
+  const { add, git, read, sync, commit } = await repo(t);
+  const check = () => sync('--check', '--staged');
+  const at = '2026-11-25T10:00:00+08:00';
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));
+  await add('docs/roadmap.md', roadmap(['| 甲 | 實作中 | x | Claude | [任務](tasks/a.md) |']));
+  commit();
+  await add('docs/tasks/a.md', entry('狀態：已合併｜完成：做完｜等誰：—'));
+  assert.equal(sync().status, 0);
+  git(['add', 'docs/roadmap.md']);
+  commit(at);
+  // 當天發現問題、重新開工：狀態板手寫一列。
+  await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：修｜等誰：Claude'));
+  await add('docs/roadmap.md', (await read('docs/roadmap.md')).replace('|---|---|---|---|---|\n', '|---|---|---|---|---|\n| 甲 | 實作中 | 修 | Claude | [任務](tasks/a.md) |\n'));
+  assert.equal(check().status, 0, check().stderr);
+  commit(at);
+  const reopened = await read('docs/roadmap.md');
+  // 同一天再結束：工具寫的第二筆通過（「完成」那一句一樣也通過）。
+  for (const done of ['修好了', '做完']) {
+    await add('docs/roadmap.md', reopened);
+    await add('docs/tasks/a.md', entry(`狀態：已合併｜完成：${done}｜等誰：—`));
+    assert.equal(sync().status, 0);
+    git(['add', 'docs/roadmap.md']);
+    assert.equal(check().status, 0, check().stderr);
+  }
+  // 結束之後（HEAD 的狀態板沒有它）再抄一筆同一天的：擋。
+  commit(at);
+  const closed = await read('docs/roadmap.md');
+  const top = closed.split('\n').find(line => line.startsWith(`| ${TODAY} |`))!;
+  await add('docs/roadmap.md', closed.replace(`${top}\n`, `${top}\n${top}\n`));
+  assert.match(check().stderr, /入口 docs\/tasks\/a\.md 在 docs\/roadmap\.md:19 已經有同一天的完成列/);
+});
+
 void test('L2 R5 同一份入口只能在一份 roadmap 有列；新的完成列跨 roadmap 也只能一筆', async t => {
   const { add, git, sync, commit } = await repo(t);
   await add('docs/tasks/a.md', entry('狀態：實作中｜下一步：x｜等誰：Claude'));

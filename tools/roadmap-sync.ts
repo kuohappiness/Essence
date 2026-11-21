@@ -335,7 +335,7 @@ const isDate = (text: string) => {
  * - 格式、入口已結束、「完成」那一句和入口一致；
  * - 日期是入口收尾那天（合併、squash、cherry-pick、rebase 時另一邊的列只要不晚於今天）；
  * - HEAD 的狀態板或〈等觸發點〉有這份入口時，工作名稱相同；
- * - 一份入口只有一筆新的列，也不和舊的列同一天；
+ * - 一份入口只有一筆新的列，也不和舊的列同一天（重新開工又結束的除外）；
  * - HEAD 有列的入口結束了、列不見了，就要有它的新列（手動刪掉的列會漏記）；同名的工作還在（換入口）、
  *   HEAD 是上線前的 roadmap（沒有〈等觸發點〉）時不要。
  * - HEAD 的〈已完成〉每一列都還在。
@@ -394,8 +394,9 @@ export function checkDone(roadmaps: readonly { file: string; text: string }[], s
         const name = before.get(entry);
         if (name && stripBold(name.work) !== match[1]) add(`工作名稱要和 HEAD 狀態板的「${stripBold(name.work)}」一樣`);
         if (first) add(`入口 ${entry} 在 ${first} 已經有一筆新的完成列`);
+        // 重新開工（HEAD 的狀態板或〈等觸發點〉有它）又在同一天結束的第二筆放行（L2 第二輪 N5）。
         const same = old.find(o => o.path === entry && o.date === row.date);
-        if (same) add(`入口 ${entry} 在 ${same.at} 已經有同一天的完成列`);
+        if (same && !before.has(entry)) add(`入口 ${entry} 在 ${same.at} 已經有同一天的完成列`);
       });
     }
     // HEAD 的列沒有對到的：被刪掉或搬走了（解衝突時丟掉一邊也是），L2 第二輪 N3。
