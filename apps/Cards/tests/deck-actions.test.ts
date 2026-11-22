@@ -155,7 +155,7 @@ void test('§7 預覽的按鈕與命令：開關關掉都不見，打開立刻�
   assert.deepEqual(labels(view), ['全部卡']);
 });
 
-void test('§7 預覽按鈕的預設（D-220）：沒動過開關時電腦顯示、手機不顯示；動過的照存的值', async t => {
+void test('§7 預覽按鈕的預設（D-222）：沒動過開關時電腦顯示、手機不顯示；動過的照存的值', async t => {
   assert.deepEqual(labels((await setup(t, {}, { desktop: true })).open(ACTIVE)), ['全部卡', '預覽'], '電腦沒動過：預設打開');
   assert.deepEqual(labels((await setup(t, { [PREVIEW_ON]: 'yes' }, { desktop: true })).open(ACTIVE)), ['全部卡', '預覽'], '電腦存了壞值：當成沒動過');
   assert.deepEqual(labels((await setup(t, { [PREVIEW_ON]: false }, { desktop: true })).open(ACTIVE)), ['全部卡'], '電腦關掉過：照舊關');
