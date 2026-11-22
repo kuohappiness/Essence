@@ -29,12 +29,12 @@ const PREVIEW_ON = 'essence-cards-preview-button';
 const NO_REMIND = 'essence-cards-full-deck-no-remind';
 
 interface FakeView { actions: { icon: string; label: string; click: () => void }[]; value: string; file: { path: string } | null }
-async function setup(t: TestContext, local: Record<string, unknown> = {}) {
+async function setup(t: TestContext, local: Record<string, unknown> = {}, options: { desktop?: boolean } = {}) {
   const memory = createMemoryFiles(texts);
   const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: false, build: '0.2.0+test', now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
   t.after(() => state.close());
   await state.ready();
-  const stub = createObsidianStub({ localStorage: local });
+  const stub = createObsidianStub({ localStorage: local, desktop: options.desktop });
   const cleanups: (() => void)[] = [];
   const commands = new Map<string, { checkCallback: (checking: boolean) => boolean }>();
   const plugin = { app: stub.app, addCommand(command: { id: string; checkCallback: (checking: boolean) => boolean }) { commands.set(command.id, command); }, registerEvent() {}, register(cleanup: () => void) { cleanups.push(cleanup); } };
@@ -153,6 +153,14 @@ void test('§7 預覽的按鈕與命令：開關關掉都不見，打開立刻�
   (h.stub.app.saveLocalStorage as (key: string, value: unknown) => void)(PREVIEW_ON, false);
   h.actions.refresh();
   assert.deepEqual(labels(view), ['全部卡']);
+});
+
+void test('§7 預覽按鈕的預設（D-220）：沒動過開關時電腦顯示、手機不顯示；動過的照存的值', async t => {
+  assert.deepEqual(labels((await setup(t, {}, { desktop: true })).open(ACTIVE)), ['全部卡', '預覽'], '電腦沒動過：預設打開');
+  assert.deepEqual(labels((await setup(t, { [PREVIEW_ON]: 'yes' }, { desktop: true })).open(ACTIVE)), ['全部卡', '預覽'], '電腦存了壞值：當成沒動過');
+  assert.deepEqual(labels((await setup(t, { [PREVIEW_ON]: false }, { desktop: true })).open(ACTIVE)), ['全部卡'], '電腦關掉過：照舊關');
+  assert.deepEqual(labels((await setup(t)).open(ACTIVE)), ['全部卡'], '手機沒動過：預設關閉');
+  assert.deepEqual(labels((await setup(t, { [PREVIEW_ON]: true })).open(ACTIVE)), ['全部卡', '預覽'], '手機打開過：照舊開');
 });
 
 void test('§7 預覽讀編輯器目前的文字，不強迫存檔；沒有題目時用通知說明，不開畫面', async t => {
