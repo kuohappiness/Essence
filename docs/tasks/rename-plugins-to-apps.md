@@ -165,7 +165,7 @@ iPhone 不用測：外掛 ID 與 vault 格式都沒變；建置產物只差 5 �
 | 改連結的腳本照資料夾對照能一次改完、可以重跑 | 2026-11-21 雲端暫存複本（Linux），`8a03736` 上 git mv 三個資料夾後跑 | 成立：715 個、0 個要人看，再跑 `--check` 是 0 |
 | 規則檔的路徑不進嵌入內容與雜湊 | 讀程式：`plugins/cards/tools/build.mjs` 的 `embedRules`（只用 `file.path` 讀檔與報錯） | 對 `CARD_RULES` 成立（2026-11-21 讀程式）；驗收第 4 項實測。路徑字串會進 `main.js`（`RULE_SUBJECTS` 在執行時被 import），開工前查核 R1 在暫存 clone 重現，§5 第 1 項換回舊字串再比 |
 | 路徑字串在執行時不影響行為 | 讀程式：`file.path` 只在 `rules.ts:54-59` 的錯誤訊息；`ruleText` 只有 `tools/build.mjs:91` 呼叫；`ai-cards.ts`、`deepen.ts` 用 `RULE_SUBJECTS` 的 `key`、`subject`、`pick` | 成立（2026-11-21 讀程式） |
-| TypeScript（5.9.3）的 `forceConsistentCasingInFileNames` 預設是 true，在 Windows 擋得住大小寫不對的 import | Windows、`tsc`，一個 import 只差大小寫的樣本 | `tools/` 成立（開工前查核，TS1149）；`apps/Cards/` 待驗（驗收第 8 項） |
+| TypeScript（5.9.3）的 `forceConsistentCasingInFileNames` 預設是 true，在 Windows 擋得住大小寫不對的 import | Windows、`tsc`，一個 import 只差大小寫的樣本 | `tools/` 成立（開工前查核，TS1149）；`apps/Cards/` 也成立（驗收第 8 項，暫存 clone 跑 `tsc` 報 TS1149） |
 | `check-docs` 在 Windows 把只差大小寫的連結當成找不到 | Windows、暫存 clone 放 `../apps/cards/AGENTS.md` 與 `../Apps/Cards/AGENTS.md` | 成立（開工前查核，工作樹與 `--staged` 都擋）；只限相對連結，行內程式碼與網址不查（§3 第 3 點補） |
 | `git mv plugins/cards apps/Cards` 在 Windows 一步完成（不是只改大小寫，不用兩段式） | Windows、Git 2.52、暫存 clone | 成立，兩個前提：先 `mkdir apps`（沒有時 `No such file or directory`）；沒有程序的工作目錄在 `plugins/cards` 底下（有時 `Permission denied`、一個檔都不動）。`node_modules` 跟著搬（開工前查核） |
 | Windows 上索引裡還沒有的資料夾，`git add` 照打的大小寫記；已有的資料夾底下的新檔對齊索引的大小寫 | Windows、Git 2.52、暫存 clone | 成立（開工前查核）：`apps/portal/…` 記成小寫，改回要兩段式 `git mv`；`git status -- apps/cards/…`、`git ls-tree`、`git show <rev>:<path>` 在 Windows 也分大小寫 |
