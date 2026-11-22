@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
-import { dirname, resolve, relative } from 'node:path';
+import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
 
@@ -129,9 +129,15 @@ export async function buildPlugin({ root: given = defaultRoot, rulesRoot, dev = 
     const map = JSON.parse(await readFile(outfile + '.map', 'utf8'));
     // esbuild 的 sources 相對輸出資料夾；輸出和 repo 在不同磁碟（例如暫存資料夾在 C:）時是 file: 網址。
     const absolute = source => source.startsWith('file:') ? fileURLToPath(source) : resolve(outdir, source);
+    // node_modules 是連結（pre-commit 在暫存副本裡借工作樹的，Windows 是 junction）時，esbuild 給的是連結指到的真實路徑，
+    // 算出來會是 `../` 開頭或另一顆磁碟的絕對路徑；換回 root 底下的 node_modules，對照表照樣相對 repo。
+    const modules = resolve(root, 'node_modules');
+    let realModules = modules;
+    try { realModules = realpathSync.native(modules); } catch { /* 沒有 node_modules：不用換 */ }
+    const inRoot = path => realModules !== modules && path.startsWith(realModules + sep) ? join(modules, relative(realModules, path)) : path;
     // 相對 repo 的根（Cards 往上 RULES_FROM_ROOT），不是 Cards 的根：搬家後 locate 回的路徑才在 repo 裡找得到（第二步 L2 R5）。
     // 搬家前保存的對照表是相對當時的根（就是 repo 的根），照舊對。
-    map.sources = map.sources.map(source => relative(resolve(root, RULES_FROM_ROOT), absolute(source)).replaceAll('\\', '/'));
+    map.sources = map.sources.map(source => relative(resolve(root, RULES_FROM_ROOT), inRoot(absolute(source))).replaceAll('\\', '/'));
     await rm(outfile + '.map');
     await mkdir(dirname(resolve(sourcemap)), { recursive: true });
     await writeFile(resolve(sourcemap), JSON.stringify(map));
