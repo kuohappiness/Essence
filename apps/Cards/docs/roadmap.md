@@ -10,7 +10,6 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| 國小社會預設 | 實作中 | 使用者決定要不要定稿（2026-11-23 歷史單元 3-1、3-2 試用通過） | 使用者 | [預設](card-rules/elementary-social.md) |
 | 國小國語預設 | 實作中 | 跑 L8 測跨課比對；字義與詞義重疊怎麼留等使用者決定 | 使用者 | [預設草稿](card-rules/elementary-chinese.md) |
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
@@ -62,6 +61,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-23 | **國小社會預設**：v0.9 定稿（使用者 2026-11-23；歷史單元 3-1、3-2 試用通過）（已合併，[入口](card-rules/elementary-social.md)） |
 | 2026-11-22 | **Obsidian 官方審查檢查**：Cards 的 lint 擋 Obsidian 官方審查會算錯誤的寫法，現有 13 個 lookbehind 記成基準（PR #39）（已合併，[入口](tasks/obsidian-review-check.md)） |
 | 2026-11-21 | 三個外掛同一個 repo 的第二步 B 合併進 `main`：Cards 的文件搬進 `plugins/cards/docs/`，任務與討論稿搬進 `docs/`，轉錄稿格式拆到最上層的 `docs/transcript.md`；製卡規則送給 AI 的內容逐位元組不變；Codex L2 四輪（[PR #28](https://github.com/kuohappiness/Essence/pull/28)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 三個外掛同一個 repo 的第二步 A 合併進 `main`：Cards 的程式、測試與工具搬進 `plugins/cards/`，產品程式逐位元組不變；共用工具有自己的檢查與分派對象；Codex L2 四輪（[PR #27](https://github.com/kuohappiness/Essence/pull/27)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
