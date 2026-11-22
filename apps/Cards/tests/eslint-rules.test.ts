@@ -2,11 +2,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
+import obsidianmd from 'eslint-plugin-obsidianmd';
 import tseslint from 'typescript-eslint';
+
+// 片段不是完整產品檔案，不建 TypeScript project：typescript-eslint 與 obsidianmd 要型別的規則都關掉（D-220 的區塊有 no-unsupported-api 等）。
+const syntaxOnly = [tseslint.configs.disableTypeChecked, { rules: Object.fromEntries(Object.keys(obsidianmd.ruleConfigs.recommendedTypeChecked).map(rule => [rule, 'off' as const])) }];
 
 void test('ESLint 的模組邊界與日期規則會擋下違規寫法，允許公開介面與 UTC', async () => {
   // 這裡只驗證語法規則；片段不是完整產品檔案，不需要建立 TypeScript project。
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const name of ['obsidian', 'react/jsx-runtime', 'react-dom/client', 'motion/react', 'node:fs', 'fs/promises', 'path', 'ts-fsrs']) {
     const [result] = await lint.lintText(`import '${name}';`, { filePath: 'src/core/files.ts' });
     assert.ok(result.messages.some(m => m.ruleId === 'no-restricted-imports'), name);
@@ -44,7 +48,7 @@ for (const [name, path, dependency] of [
   ['入口不能載入核心內部', 'src/main.ts', './core/study/fsrs.ts'],
   ['工具不能直接載入 ts-fsrs', 'tools/example.mjs', 'ts-fsrs'],
 ] as const) void test('L2-4 ' + name + '，涵蓋 import、export、動態 import 與 require', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const code of loadForms(dependency)) {
     const [result] = await lint.lintText(code, { filePath: path });
     assert.ok(result.messages.some(isBoundary), path + ': ' + code);
@@ -52,7 +56,7 @@ for (const [name, path, dependency] of [
 });
 
 void test('L2-4 三個目錄都受邊界規則保護，公開入口與 FSRS 包裝例外仍可使用', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, name, blocked] of [
     ['src/core/files.ts', 'node:fs', true], ['src/core/files.ts', 'fs/promises', true],
     ['src/core/files.ts', 'obsidian', true], ['src/core/files.ts', 'motion/react', true],
@@ -78,7 +82,7 @@ void test('L2-4 三個目錄都受邊界規則保護，公開入口與 FSRS 包�
 });
 
 void test('W4 核心模組之間只能 import 對方的 index.ts，deck 不能依賴 study，study 從 deck 只拿型別', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, code, blocked] of [
     ['src/core/study/plan.ts', "import type { Deck } from '../deck/index.ts';", false],
     ['src/core/study/plan.ts', "export type { Deck } from '../deck/index.ts';", false],
@@ -107,7 +111,7 @@ void test('W4 核心模組之間只能 import 對方的 index.ts，deck 不能�
 });
 
 void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不能 import 核心以外的 src', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, code, blocked] of [
     ['src/state/index.ts', "import { Notice } from 'obsidian';", true],
     ['src/state/index.ts', "void import('obsidian');", true],
@@ -140,7 +144,7 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
 // 技術債 A7：state 和核心一樣只能透過 index.ts 使用（state 裡面互相 import 照舊）。
 // 第一個里程碑回顧的 R1：tests/node-files.test.ts 換掉全域的 fs.readdirSync，Linux 上 Node 自己的遞迴監看也被換掉，CI 紅了三天。
 void test('R1 測試不能改全域的 Node 內建模組：syncBuiltinESMExports 與指定 fs 的成員都擋，呼叫照常', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [code, rule] of [
     ["import { syncBuiltinESMExports } from 'node:module';\nsyncBuiltinESMExports();", 'no-restricted-imports'],
     ["import fs from 'node:fs';\nfs.readdirSync = () => [];", 'no-restricted-syntax'],
@@ -155,7 +159,7 @@ void test('R1 測試不能改全域的 Node 內建模組：syncBuiltinESMExports
 });
 
 void test('A7 src/state/ 只能透過 index.ts 使用，涵蓋 import、export、動態 import 與 require', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, name, blocked] of [
     ['src/main.ts', './state/ids.ts', true],
     ['src/main.ts', './state/device.ts', true],
@@ -176,7 +180,7 @@ void test('A7 src/state/ 只能透過 index.ts 使用，涵蓋 import、export�
 
 // W6 限制第 3 點：review 和 state 一樣純；ui 與 review 只透過 state 拿資料，不碰檔案存取、排程與寫紀錄的函式。
 void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review 不能 import 讀檔、排程、寫紀錄的函式', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, code, blocked] of [
     ['src/review/index.ts', "import { useState } from 'react';", true],
     ['src/review/index.ts', "import { Notice } from 'obsidian';", true],
@@ -223,7 +227,7 @@ void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review
 // @codemirror 只有 src/obsidian/ 與 main.ts。
 // 第二次里程碑檢查 R8：依賴方向是 ui → review → state，ui 拿備份、AI、設定的動作由 main.ts 交進來；deck、study 不知道 AI 與備份。
 void test('R8 state、review 不能 import ui；deck、study 不能 import ai、backup；ui 從 backup、ai、settings 只拿型別', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   const toUi = /state 與 review 不能 import 畫面/;
   const toAi = /不能 import (ai|backup)。/;
   const runtime = /ui 從 core 的 backup、ai、settings 只能 import 型別/;
@@ -270,7 +274,7 @@ void test('R8 state、review 不能 import ui；deck、study 不能 import ai、
 });
 
 void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法都擋，src/desktop/ 只能由 main.ts 動態載入', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   const cases: [string, string, boolean][] = [
     ['src/ui/a.ts', "import { readFile } from 'node:fs/promises';", true],
     ['src/obsidian/a.ts', "import 'fs';", true],
@@ -320,7 +324,7 @@ void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法
 
 // tasks/error-log.md §2-4：產品程式的錯要交給錯誤紀錄（D-155 第 2 點）；只有先印 console 再交出錯誤的幾個檔、開發命令可以用 console。
 void test('§2-4 src/ 開 no-console：新加的 console.log 報錯；main.ts、Markdown.tsx、開發命令放行；tools 與 tests 不管', async () => {
-  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
   for (const [path, blocked] of [
     ['src/core/errors/log.ts', true],
     ['src/state/index.ts', true],
@@ -338,5 +342,20 @@ void test('§2-4 src/ 開 no-console：新加的 console.log 報錯；main.ts、
     const [result] = await lint.lintText("console.log('x');\nconsole.error('y');", { filePath: path });
     const found = result.messages.filter(message => message.ruleId === 'no-console').length;
     assert.equal(found, blocked ? 2 : 0, path);
+  }
+});
+
+void test('D-220 Obsidian 官方審查會算錯誤的寫法在 src/ 擋下，註解關不掉；開發版專用的檔不查', async () => {
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
+  const rulesAt = async (code: string, filePath: string) => (await lint.lintText(code, { filePath }))[0].messages.map(m => m.ruleId);
+  for (const [code, rule] of [
+    ['export const a = /(?<=a)b/;', 'obsidianmd/regex-lookbehind'],
+    ['document.head.appendChild(document.createElement("style"));', 'obsidianmd/no-forbidden-elements'],
+    ['export function f(el: HTMLElement, text: string): void { el.innerHTML = text; }', 'no-unsanitized/property'],
+    ['export function f(el: HTMLElement): void { el.style.color = "red"; }', 'obsidianmd/no-static-styles-assignment'],
+    ['// eslint-disable-next-line obsidianmd/regex-lookbehind -- 測試\nexport const a = /(?<=a)b/;', 'eslint-comments/no-restricted-disable'],
+  ] as const) {
+    assert.ok((await rulesAt(code, 'src/obsidian/save.ts')).includes(rule), code);
+    assert.ok(!(await rulesAt(code, 'src/obsidian/dev-markup.ts')).includes(rule), 'dev-markup.ts: ' + code);
   }
 });

@@ -321,7 +321,7 @@ export default class EssenceCardsPlugin extends Plugin {
       this.statusBar = this.addStatusBarItem();
       this.statusBar.addClass('essence-cards-reminders');
       this.statusBar.addEventListener('click', () => { this.openEntry(); });
-      this.statusBar.style.display = 'none';
+      this.statusBar.hide();
     }
     let calls = (): number => 0;
     let beforeLayoutReady: number | null = null;
@@ -475,7 +475,8 @@ export default class EssenceCardsPlugin extends Plugin {
   private updateReminders(): void {
     if (!this.statusBar) return;
     const { count } = reminderView(this.state, this.guard?.issues(), this.deepen?.rows());
-    this.statusBar.style.display = count ? '' : 'none';
+    // hide()／toggle() 是 Obsidian 的寫法；官方審查不准直接設 style（D-220 第 3 點）。
+    this.statusBar.toggle(count > 0);
     this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
 
