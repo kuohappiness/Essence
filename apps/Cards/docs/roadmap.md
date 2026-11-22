@@ -62,6 +62,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-22 | **Obsidian 官方審查檢查**：Cards 的 lint 擋 Obsidian 官方審查會算錯誤的寫法，現有 13 個 lookbehind 記成基準（PR #39）（已合併，[入口](tasks/obsidian-review-check.md)） |
 | 2026-11-21 | 三個外掛同一個 repo 的第二步 B 合併進 `main`：Cards 的文件搬進 `plugins/cards/docs/`，任務與討論稿搬進 `docs/`，轉錄稿格式拆到最上層的 `docs/transcript.md`；製卡規則送給 AI 的內容逐位元組不變；Codex L2 四輪（[PR #28](https://github.com/kuohappiness/Essence/pull/28)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 三個外掛同一個 repo 的第二步 A 合併進 `main`：Cards 的程式、測試與工具搬進 `plugins/cards/`，產品程式逐位元組不變；共用工具有自己的檢查與分派對象；Codex L2 四輪（[PR #27](https://github.com/kuohappiness/Essence/pull/27)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |
 | 2026-11-20 | 正式 vault 升到 `0.6.0`（tag `v0.6.0`，`037b359`）：全詩順序卡、接句卡、英文的打字與排序、AI 製卡第 1～3 批與閱讀模式按「啟用」的修正；iPhone 必測 A1～A5 通過，兩台都換好，是 Cards 搬家的穩定基線（[清單](tasks/release-0.6.0.md)） |

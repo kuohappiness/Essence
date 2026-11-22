@@ -226,9 +226,7 @@ void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相�
   assert.equal(map.version, 3);
   // 相對 repo 的根，不是 Cards 的根（第二步 L2 R5：搬家後 Cards 在 plugins/cards/）。
   assert.ok(map.sources.includes(repoPath('src/main.ts')), map.sources.slice(0, 5).join(', '));
-  assert.ok(map.sources.every(source => !source.includes('\\')), '用 /');
-  // 套件的開頭不檢查：commit 的 hook 在暫存副本裡跑，node_modules 是借工作樹的連結，esbuild 照真實路徑寫，套件的路徑會在副本外面（..）。
-  assert.ok(map.sources.filter(source => !source.includes('node_modules/')).every(source => !source.startsWith('..')), '自己的程式相對 repo');
+  assert.ok(map.sources.every(source => !source.includes('\\') &&!source.startsWith('..')), '相對 repo、用 /');
   assert.equal(map.sourcesContent.length, map.sources.length);
 });
 

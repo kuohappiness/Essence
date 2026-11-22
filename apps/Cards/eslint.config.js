@@ -1,5 +1,6 @@
 import { builtinModules } from 'node:module';
 import { posix } from 'node:path';
+import obsidianmd from 'eslint-plugin-obsidianmd';
 import tseslint from 'typescript-eslint';
 
 const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tools/compare/*.ts', 'tests/**/*.ts'];
@@ -191,6 +192,47 @@ const moduleBoundaries = {
   },
 };
 
+// D-220 第 3 點：Obsidian 官方目錄審查會算錯誤的規則，現在就擋，免得上架前一次改。只開這些，不用 configs.recommended 整包（約 290 項警告）。
+// no-unsanitized 與 eslint-comments 用 obsidianmd 帶的那一份，和官方審查同版本。現有的 13 個 lookbehind 記在 eslint-suppressions.json（同一個檔多一個就擋），
+// 上架前改寫；改寫掉的用 `npx eslint src tools tests --prune-suppressions` 拿掉。
+function bundledPlugin(name) {
+  const plugin = obsidianmd.configs.recommended.find(block => block.plugins?.[name])?.plugins[name];
+  if (!plugin) throw new Error(`eslint-plugin-obsidianmd 的 recommended 設定裡找不到 ${name}`);
+  return plugin;
+}
+// 開發版專用（只從 main.ts 的 if (DEV) 載入，正式建置的 main.js 沒有它們；上架時不放進公開 repo 或改掉）。
+const devOnly = ['src/obsidian/dev.ts', 'src/obsidian/dev-*.ts'];
+const obsidianReview = {
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: devOnly,
+  plugins: { obsidianmd, 'no-unsanitized': bundledPlugin('no-unsanitized'), 'eslint-comments': bundledPlugin('eslint-comments') },
+  rules: {
+    'no-eval': 'error',
+    'no-new-func': 'error',
+    '@typescript-eslint/no-implied-eval': 'error',
+    'no-unsanitized/method': 'error',
+    'no-unsanitized/property': 'error',
+    'obsidianmd/regex-lookbehind': 'error',
+    'obsidianmd/no-forbidden-elements': 'error',
+    // 新送審外掛的那一層
+    'obsidianmd/no-static-styles-assignment': 'error',
+    'obsidianmd/platform': 'error',
+    'obsidianmd/no-unsupported-api': 'error',
+    'obsidianmd/sample-names': 'error',
+    'obsidianmd/no-sample-code': 'error',
+    'obsidianmd/no-plugin-as-component': 'error',
+    'obsidianmd/detach-leaves': 'error',
+    'obsidianmd/no-view-references-in-plugin': 'error',
+    'obsidianmd/settings-tab/no-manual-html-headings': 'error',
+    'obsidianmd/settings-tab/no-problematic-settings-headings': 'error',
+    // 官方審查不准用註解關掉 obsidianmd/*，我們也不准。
+    'eslint-comments/no-unlimited-disable': 'error',
+    'eslint-comments/require-description': 'error',
+    'eslint-comments/disable-enable-pair': ['error', { allowWholeFile: false }],
+    'eslint-comments/no-restricted-disable': ['error', 'obsidianmd/*'],
+  },
+};
+
 export default tseslint.config(
   { ignores: ['node_modules/**', 'experiments/**', 'docs/**', 'main.js', '.claude/**', '.agents/**'] },
   {
@@ -272,4 +314,5 @@ export default tseslint.config(
   // main.ts 的 fail() 印了再記；Markdown.tsx 印出顯示不出來的那篇，再經 onFail 交給主機；開發命令（dev*.ts、src/dev/）本來就印。
   { files: ['src/**/*.{ts,tsx}'], rules: { 'no-console': 'error' } },
   { files: ['src/main.ts', 'src/ui/Markdown.tsx', 'src/obsidian/dev*.ts', 'src/dev/**/*.{ts,tsx}'], rules: { 'no-console': 'off' } },
+  obsidianReview,
 );

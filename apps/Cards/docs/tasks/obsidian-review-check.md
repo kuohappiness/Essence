@@ -1,6 +1,6 @@
 # 官方審查的程式檢查加進 Cards 的檢查（D-220 第 3 點，給 Claude，雲端可做）
 
-狀態：規劃中｜下一步：開一個雲端 session 照這份實作｜等誰：Claude
+狀態：已合併｜完成：Cards 的 lint 擋 Obsidian 官方審查會算錯誤的寫法，現有 13 個 lookbehind 記成基準（PR #39）｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。
 
@@ -51,4 +51,37 @@
 
 ## 結果
 
-（實作完填：版本、排除清單、基準的內容、探針與重跑的結果、量到的時間、和規格不同的地方。）
+實作在分支 `claude/project-thread-nkvvca` 的 `6c609fd`（雲端，2026-11-22），基準是 `main` 的 `ee4ab0a`；開工時重跑，錯誤和 `b30f596` 一樣是正式程式 14 項。
+
+延後的測試：「補測：電腦狀態列改用 hide()／toggle() 之後的顯示」
+
+### 做了什麼
+
+- **相依**：`eslint-plugin-obsidianmd` 釘 `0.6.0`（開工時 npm 上的最新版）。安裝印 `ERESOLVE overriding peer dependency`，照它 README 是 ESLint 10 的已知情況；`npm ci` 通過（`node_modules` 從 153 個套件變成 315 個）。
+- **規則**：`apps/Cards/eslint.config.js` 最後的 `obsidianReview` 區塊，§1 第 2 點列的 22 條規則全部 `error`，名稱和 0.6.0 一致，沒有改名或拿掉的。`no-unsanitized`、`eslint-comments` 兩個外掛不另外裝，從 `obsidianmd.configs.recommended` 取它帶的那一份（和官方審查同版本，找不到就讓 lint 直接失敗）。`no-restricted-disable` 只擋 `obsidianmd/*`，沒有照官方再擋 `no-console` 等其他規則：那些不在這一步的範圍。
+- **排除清單**：`src/obsidian/dev.ts` 與 `src/obsidian/dev-*.ts`（21 個檔）。確認方法：正式建置的 esbuild metafile 裡這 21 個檔都不是輸入；`dev.ts` 只由 `main.ts` 的 `if (DEV)` 動態載入，其餘 20 個只被 `dev*.ts` import；有字串可比的 15 個檔，各自的字串在開發版 `main.js` 有、正式版沒有。
+- **`main.ts`**：狀態列一開始用 `hide()`，更新時用 `toggle(count > 0)`，兩處同一種寫法；`no-unsupported-api` 沒報，表示 `minAppVersion` 1.8.7 就有。測試用的 Obsidian 替身（`tests/helpers/obsidian.ts`）照 Obsidian 的寫法補上 `hide()`／`show()`／`toggle()`（改 `style.display`），`main-wiring` 原有的三個斷言（有提醒時 `''`、沒有時 `'none'`）不改、照樣通過。
+- **回歸測試**（規格沒寫，另加）：`tests/eslint-rules.test.ts` 加一個測試，把 §2 第 2 點的五種寫法（含用註解關）在 `src/obsidian/save.ts` 都要擋、在 `src/obsidian/dev-markup.ts` 都不擋寫死，之後有人改設定時自動發現；拿掉 `obsidianReview` 區塊時這個測試失敗。同一個檔原本的測試用 `disableTypeChecked` 跑片段，新區塊的 `no-unsupported-api` 等要型別，所以改用 `syntaxOnly`：再關掉 `obsidianmd.ruleConfigs.recommendedTypeChecked` 列的規則，其他不變。
+- **基準**：`apps/Cards/eslint-suppressions.json`，只記 `obsidianmd/regex-lookbehind`：`core/deck/sources.ts` 8 項，`core/ai/deepen-snapshot.ts`、`core/catalog/scope.ts`、`core/deck/markdown.ts`、`core/deck/question-types.ts`、`review/extras.ts` 各 1 項，共 13 項，和規格一致。
+
+### 驗收
+
+1. `apps/Cards/` 的 `npm run check` 通過（型別、lint、knip；測試 2907 項：通過 2903、失敗 0、略過 4）。第一次跑有 27 項失敗：6 項 ESLint 測試是本來的片段測試碰到新區塊要型別的規則（已改，見上面〈回歸測試〉），21 項是雲端的 clone 沒有版本 tag（`pathspec 'v0.3.0' did not match`），抓下 tag 後重跑都通過。CI 看 PR 的 Check。
+2. **探針**（加在 `src/obsidian/save.ts` 檔尾，一次一種，跑 `npx eslint` 那個檔；都已拿掉、沒有 commit）：
+   - `/(?<=a)b/` → `obsidianmd/regex-lookbehind` 擋。
+   - 同一行前面加 `// eslint-disable-next-line obsidianmd/regex-lookbehind -- 測試` → 改由 `eslint-comments/no-restricted-disable` 擋（「Disabling 'obsidianmd/regex-lookbehind' is not allowed」）。
+   - `document.head.appendChild(document.createElement("style"))` → `obsidianmd/no-forbidden-elements` 擋。
+   - `el.innerHTML = text` → `no-unsanitized/property` 擋。
+   - `el.style.color = "red"` → `obsidianmd/no-static-styles-assignment` 擋。
+   - 拿掉後 exit 0。
+3. 基準的 13 項不擋（`npm run lint` exit 0）；在 `core/deck/sources.ts` 再加一個 lookbehind → 擋。注意：超過基準時 ESLint 會把那個檔的 9 項全部列出，不是只列新加的那一項。
+4. **官方設定重跑**：用 `obsidianmd.configs.recommended`（parserOptions 照官方的 `projectService`），排除測試、`tools/` 與第 4 點的檔，跑 `src` 與 `manifest.json`，再照官方說明的嚴重度分（舊外掛只有安全類與 `regex-lookbehind`、`no-forbidden-elements` 算錯誤，加上新送審外掛那一層與三條註解規則；`no-undef`、`restrict-template-expressions` 等官方關掉的不算）。錯誤只剩基準的 13 項 lookbehind。警告 125 項：`prefer-window-timers` 49、`prefer-create-el` 24、`no-irregular-whitespace` 17、`prefer-active-doc` 11、`prefer-instanceof` 9、`no-nodejs-modules` 8、`no-useless-assignment` 2，`no-control-regex`、`no-misleading-character-class`、`preserve-caught-error`、`settings-tab/prefer-setting-definitions`、`no-useless-escape` 各 1；另外 `manifest.json` 的介紹結尾不是英文標點（`validate-manifest`，官方審查關掉這條，上架前照規畫改）。這是之後清理的起點；比規畫時的「約 290」少，是因為這次排除了開發版專用的檔。這份設定是暫時的，沒有 commit。
+5. **建置比對**：在同一個 commit 前後各建一次正式版，`main.js` 以分號切開逐行比，只有兩種差別：狀態列那兩處（`style.display="none"` → `hide()`，`style.display=t?"":"none"` → `toggle(t>0)`），以及建置版本多了 `.dirty`（工作樹有沒 commit 的改動，不是程式的差別）。
+6. **時間**（雲端容器，Node 22，各量 1～2 次）：`npm ci` 加之前 3.8～4.3 秒、加之後 5.5 秒；`npm run lint` 加之前 32.0～36.2 秒、加之後 37.9～40.1 秒，約多 3～6 秒。
+
+### 其他
+
+- `npm audit`（含開發相依）從 9 項 moderate 變成 12 項，多的 3 項（`eslint-plugin-obsidianmd`、它帶的 `@microsoft/eslint-plugin-sdl`、`eslint-plugin-n`）都只在開發相依；CI 跑的 `npm audit --omit=dev --audit-level=high` 是 0 項。
+- 這個容器只有 Node 22（`package.json` 要 24），`npm` 印 `EBADENGINE` 警告；檢查都在 Node 22 跑過，CI 用 Node 24。
+- **另修一個既有的問題**（`d8d9adf`，單獨一個 commit）：雲端 commit 時，pre-commit 的 Cards 完整檢查在 `tests/build.test.ts` 的 sourcemap 測試失敗（「相對 repo、用 /」）。原因：hook 的暫存副本借工作樹的 `node_modules`（連結），esbuild 給的是真實路徑，對照表裡 `node_modules` 的來源變成 `../../…` 開頭；和[技術債表](../backlog.md#技術債)那一列 Windows 同一顆磁碟才失敗是同一個原因。`tools/build.mjs` 把連結指到的真實路徑換回 root 底下的 `node_modules`，只動對照表、不動 `main.js`。在連結的副本裡：改之前這個測試失敗、改之後通過；工作樹的 `build`、`locate` 測試 22 項通過。Windows 的 junction 還沒跑過，那一列改成等 Windows 驗證。
+- 和規格不同的地方：多了上面的回歸測試與 sourcemap 的修正；其他沒有。
