@@ -1,0 +1,32 @@
+{
+  "src/core/ai/deepen-snapshot.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 1
+    }
+  },
+  "src/core/catalog/scope.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 1
+    }
+  },
+  "src/core/deck/markdown.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 1
+    }
+  },
+  "src/core/deck/question-types.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 1
+    }
+  },
+  "src/core/deck/sources.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 8
+    }
+  },
+  "src/review/extras.ts": {
+    "obsidianmd/regex-lookbehind": {
+      "count": 1
+    }
+  }
+}

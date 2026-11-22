@@ -326,7 +326,14 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     addCommand(command: Command) { commands.set(command.id, command); return command; }
     addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) { ribbons.push({ icon, title, callback }); return {}; }
     addStatusBarItem() {
-      const item = { textContent: '', style: { display: '' }, clicks: [] as (() => void)[], addClass() {}, addEventListener(_type: string, callback: () => void) { item.clicks.push(callback); } };
+      // hide()／show()／toggle() 照 Obsidian 加在 HTMLElement 上的寫法：改 style.display。
+      const item = {
+        textContent: '', style: { display: '' }, clicks: [] as (() => void)[], addClass() {},
+        addEventListener(_type: string, callback: () => void) { item.clicks.push(callback); },
+        hide() { item.style.display = 'none'; },
+        show() { item.style.display = ''; },
+        toggle(show: boolean) { if (show) item.show(); else item.hide(); },
+      };
       statusBar.push(item);
       return item;
     }
