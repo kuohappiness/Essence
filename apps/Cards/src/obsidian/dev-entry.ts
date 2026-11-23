@@ -194,8 +194,9 @@ export async function entryCheck(host: EntryDevHost, folder: string, devLog: Dev
     check('預覽的標示', text(inReview('.ec-count')[0]));
     check('預覽沒有旗子', inReview('.ec-flag').length === 0);
     await capture('預覽');
-    for (let i = 0; i < 20 && inReview('.ec-next').length; i++) {
-      inReview('.ec-next')[0].click();
+    const next = (): HTMLElement | undefined => inReview('.ec-pager [aria-label="下一張"]:not(:disabled)').at(0);
+    for (let i = 0; i < 20 && next(); i++) {
+      next()?.click();
       await sleep(350);
     }
     check('預覽走到底', inReview('.ec-done').length === 1);

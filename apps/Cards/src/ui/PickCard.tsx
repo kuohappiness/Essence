@@ -197,8 +197,8 @@ export const pickScreen: Screen = {
       return shown.length ? <Rates view={view} shown={shown} animating={animating} rate={rate} /> : null;
     }
     if (view.allowed.length) return <Rates view={view} shown={view.allowed} animating={animating} rate={rate} />;
-    // 預覽下面已經有自己的「下一張」。
-    return view.nextLabel ? null : <button type="button" className="ec-show" disabled={animating} onClick={commit}>下一張</button>;
+    // 預覽也一樣（自動展開時是這裡）：上方的 › 之外，下方和複習畫面一樣有「下一張」。
+    return <button type="button" className="ec-show" disabled={animating} onClick={commit}>下一張</button>;
   },
   tap() {},
   enter(view, { act, commit }) {

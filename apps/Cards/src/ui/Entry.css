@@ -191,7 +191,3 @@
 .ec-app .ec-sc-end:hover, .ec-app .ec-sc-end:focus { background: none; }
 .ec-app .ec-sc-end.is-armed { color: var(--ec-miss); font-weight: 600; }
 
-/* 預覽的「下一張」（D-161）：不強制作答 */
-.ec-next-row { flex: none; display: flex; justify-content: center; border-top: 1px solid var(--ec-line); }
-.ec-app .ec-next { min-height: var(--ec-touch); height: auto; padding: 0 20px; border: 0; border-radius: 0; background: none; color: var(--ec-muted); font-size: var(--ec-size-base); }
-.ec-app .ec-next:hover, .ec-app .ec-next:focus { background: none; }

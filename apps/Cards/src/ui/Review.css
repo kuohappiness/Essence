@@ -18,6 +18,11 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-top { flex: none; display: grid; grid-template-columns: var(--ec-touch) 1fr auto auto var(--ec-touch); align-items: center; padding: 6px 10px 0; }
 .ec-count { text-align: center; font-size: 14px; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
 .ec-app .ec-return { justify-self: center; display: inline-flex; align-items: center; gap: 2px; min-height: var(--ec-touch); padding: 0 4px 0 10px; border: 0; background: none; color: var(--ec-ink); font-size: 14px; font-weight: 500; }
+/* 預覽（D-161）：‹ 預覽，不記錄 › 成對放在中間，不作答也能前後換（使用者 2026-11-24）。
+   第一張寫「跳過 N 個…」比較長時，中間的字換行、兩個箭頭往外移；只有那一張，所以不固定寬度（固定的話那一行會斷成三行） */
+.ec-pager { justify-self: center; display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.ec-pager .ec-count { min-width: 0; }
+.ec-app .ec-pager .ec-ico:disabled { opacity: .35; }
 /* 自動朗讀（D-188 第 4 點）：開著是喇叭加聲波、一般文字的顏色；關掉時聲波換成 ×、變灰 */
 .ec-app .ec-auto[aria-checked="true"] { color: var(--ec-ink); }
 .ec-app .ec-auto[aria-checked="false"] { color: var(--ec-muted); opacity: .75; }

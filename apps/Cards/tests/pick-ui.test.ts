@@ -232,13 +232,32 @@ void test('對照：考到的字照句子的順序排前面，其他照組裡的
   assert.deepEqual(ui.find('ec-rate').map(rate => [ui.text(rate), rate.props['aria-pressed']]), [['記住了', false], ['太簡單', true]]);
 });
 
-void test('預覽的自動展開：沒有記號、結果與評分；下面只有預覽自己的下一張', async t => {
+void test('預覽的自動展開：沒有記號、結果與評分；下面和有錯時一樣只有「下一張」', async t => {
   const ui = await show(t, preview(PROPS + CHARS, true));
   assert.deepEqual(ui.find('ec-pick-mark').map(mark => ui.text(mark)), ['', '', '', '']);
   assert.deepEqual(ui.find('ec-chip'), []);
   assert.deepEqual(ui.find('ec-rate'), []);
-  assert.deepEqual(ui.find('ec-show'), []);
-  assert.deepEqual(ui.find('ec-actions'), []);
-  assert.equal(ui.text(ui.find('ec-next')[0]), '下一張');
+  assert.deepEqual(actionTexts(ui), ['下一張']);
   assert.equal(ui.find('ec-cmp').length, 4);
+  const before = ui.text(ui.find('ec-body')[0]);
+  press(ui, 'ec-show');
+  await ui.settle();
+  assert.notEqual(ui.text(ui.find('ec-body')[0]), before, '換到下一張');
+});
+
+void test('預覽的上一張、下一張成對在上方中間，左上角沒有另一顆 ‹，下方沒有另一條', async t => {
+  const ui = await show(t, preview(PROPS + CHARS));
+  const labels = (): unknown[] => ui.find('ec-top')[0].children.flatMap(child => typeof child === 'string' ? [] : [child.props['aria-label']]);
+  assert.deepEqual(labels(), [undefined, undefined, undefined, undefined, '結束複習'], '上方列的五格：空、中間、喇叭、旗子都空、✕');
+  const pager = (label: string): { props: Record<string, unknown> } | undefined => ui.find('ec-pager')[0].children.flatMap(child => typeof child === 'string' || child.props['aria-label'] !== label ? [] : [child])[0];
+  assert.equal(ui.text(ui.find('ec-pager')[0]), '預覽，不記錄');
+  assert.equal(pager('上一張')?.props.disabled, true, '第一張沒有上一張');
+  assert.equal(pager('下一張')?.props.disabled, false);
+  assert.deepEqual(ui.find('ec-next'), []);
+  const first = ui.text(ui.find('ec-body')[0]);
+  const next = ui.find('ec-pager')[0].children.flatMap(child => typeof child === 'string' || child.props['aria-label'] !== '下一張' ? [] : [child])[0];
+  ui.click(next);
+  await ui.settle();
+  assert.notEqual(ui.text(ui.find('ec-body')[0]), first, '換到下一張');
+  assert.equal(pager('上一張')?.props.disabled, false);
 });
