@@ -290,16 +290,25 @@ export function Review(props: ReviewProps): React.JSX.Element {
   useLayoutEffect(() => { if (view.kind === 'done' && (!opened.current || pendingNext.current !== null)) painted(); });
 
   const top = view.top;
+  /** 預覽：不作答也能往後（canForward 只有預覽有）。 */
+  const pager = top.canForward !== undefined;
   const english = view.kind === 'card' && view.card.english;
   const screen = view.kind === 'card' ? SCREENS[questionType(view.card.card)] : null;
   const bottom = screen && view.kind === 'card' ? screen.bottom({ view: view.card, animating, reveal, rate, act, commit: next, focusApp }) : undefined;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
     {/* 回報的選單開著時，背後的東西不能取得焦點也不能操作（inert，Codex L2 的 R1）：Tab 只在選單裡走 */}
     <div className="ec-top" inert={reporting}>
-      <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
-      {top.viewing
-        ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
-        : <span className="ec-count" aria-live="polite">{view.kind === 'done' && !top.pinned ? '' : top.center}</span>}
+      {/* 預覽（D-161）：上一張、下一張成對夾住中間的字，下方和複習畫面一樣（使用者 2026-11-24）；左邊留一格空的，中間才會置中 */}
+      {pager ? <span aria-hidden="true" /> : <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>}
+      {pager
+        ? <span className="ec-pager">
+          <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
+          <span className="ec-count" aria-live="polite">{top.center}</span>
+          <button type="button" className="ec-ico" aria-label="下一張" disabled={!top.canForward || animating} onClick={forward}><Icon type="forward" /></button>
+        </span>
+        : top.viewing
+          ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
+          : <span className="ec-count" aria-live="polite">{view.kind === 'done' && !top.pinned ? '' : top.center}</span>}
       {/* 自動朗讀的喇叭（D-188）：會自動朗讀的卡才有，點一下關掉或打開，這台裝置記住。沒有時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
       {english
         ? <button type="button" className="ec-ico ec-auto" role="switch" aria-checked={autoOn} aria-label="自動朗讀" onClick={() => { setAutoOn(!autoOn); props.autoRead.set(!autoOn); }}><Icon type={autoOn ? 'speaker' : 'muted'} /></button>
@@ -327,7 +336,6 @@ export function Review(props: ReviewProps): React.JSX.Element {
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>{view.done.buttons.find(button => button.kind === 'close')?.label ?? '結束複習'}</button>}
       {bottom}
     </div>}
-    {view.kind === 'card' && view.card.nextLabel && <div className="ec-next-row"><button type="button" className="ec-next" disabled={animating} onClick={forward}>{view.card.nextLabel}</button></div>}
     {reporting && view.kind === 'card' && <ReportMenu menuRef={menuEl} choose={choose} cancel={closeMenu} />}
   </div>;
 }

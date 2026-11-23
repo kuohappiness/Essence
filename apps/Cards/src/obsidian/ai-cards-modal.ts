@@ -53,6 +53,8 @@ class AiCardsModal extends Modal {
   private confirmed = false;
   private service: string | null = null;
   private busy = false;
+  /** 畫面是重開命令時的工作清單（start）。 */
+  private inList = false;
   constructor(app: App, host: AiCardsModalHost, modals: Set<Modal>) {
     super(app);
     this.host = host;
@@ -73,7 +75,10 @@ class AiCardsModal extends Modal {
     const jobs = cards.jobs();
     if (!jobs.length && !cards.broken) { this.showForm(); return; }
     const el = this.reset();
+    this.inList = true;
     if (cards.broken) el.createEl('p', { text: TEXT.broken(cards.broken), cls: 'essence-cards-issue-note' });
+    // 「做新的一課」放最上面、自成一列（使用者 2026-11-24：放在最後一列底下時，看起來像那一課的按鈕，以為被擋住進不去）。
+    el.createDiv({ cls: 'essence-cards-issue' }).createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: TEXT.newLesson }).addEventListener('click', () => { this.showForm(); });
     for (const job of jobs) {
       const row = el.createDiv({ cls: 'essence-cards-issue' });
       if (job.save) {
@@ -83,12 +88,15 @@ class AiCardsModal extends Modal {
         buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
       } else {
         row.createEl('p', { text: TEXT.resumePaste(labelOf(job), ago(job.copiedMs, this.host.now())) });
-        row.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: '接著貼回', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null); });
+        const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
+        buttons.createEl('button', { text: '接著貼回', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null); });
+        // 不會再貼回的（使用者 2026-11-24）：還沒寫任何檔、沒有預留 ID，放棄只是從這台電腦清掉這一筆。
+        buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
       }
     }
-    el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: TEXT.newLesson }).addEventListener('click', () => { this.showForm(); });
   }
   private reset(): HTMLElement {
+    this.inList = false;
     this.contentEl.empty();
     this.contentEl.addClass('essence-cards-ai');
     return this.contentEl;
@@ -293,9 +301,11 @@ class AiCardsModal extends Modal {
     const result = await cards.abandon(job);
     if ('kind' in result) { await this.finish(Promise.resolve(result)); return; }
     pasted.delete(job.id);
-    this.close();
     const names = result.left.map(path => path.slice(path.lastIndexOf('/') + 1, -3));
-    this.host.notify(names.length ? `已放棄這次的製卡，沒有快照。留下的草稿：${names.join('、')}` : '已放棄這次的製卡，沒有留下任何卡組');
+    this.host.notify(names.length ? `已放棄這次的製卡，沒有快照。留下的草稿：${names.join('、')}` : `已放棄這次的製卡（${labelOf(job)}），沒有留下任何卡組`);
+    // 從清單上放棄還沒貼回的、清單還有別筆：留在清單，可以一筆接一筆清。
+    if (!job.save && this.inList && cards.jobs().length) { this.job = null; this.start(); return; }
+    this.close();
   }
 }
 

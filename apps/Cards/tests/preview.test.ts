@@ -47,7 +47,7 @@ void test('自評按鈕或「下一張」都只換下一張；上一張、下一
   s.back();
   assert.equal(question(s.view()), '第一題', '到頭不動');
   assert.equal(s.rate('good'), false, '還沒翻面不算');
-  assert.equal(card(s.view()).nextLabel, '下一張');
+  assert.equal(s.view().top.canForward, true, '不作答也能往後');
   s.reveal();
   assert.deepEqual(card(s.view()).allowed, ['miss', 'near', 'good', 'easy'], '自評按鈕照樣顯示');
   assert.equal(s.rate('miss'), true);

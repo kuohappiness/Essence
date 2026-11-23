@@ -38,8 +38,9 @@ export const RULE_SUBJECTS: readonly RuleSubject[] = [
   { key: 'chinese', label: '國語（國小）', subject: '國語', r3: true, supplement: true, pick: true, files: [...R3, { path: 'apps/Cards/docs/card-rules/elementary-chinese.md', name: '國小國語', version: 'v0.9', marker: true }] },
   { key: 'english', label: '英文（國中）', subject: '英文', r3: false, supplement: false, pick: true, files: [COMMON, { path: 'apps/Cards/docs/card-rules/english.md', name: '英文', version: 'v0.16', marker: true }] },
   { key: 'science', label: '自然', subject: '自然', r3: true, supplement: true, pick: false, files: R3 },
-  { key: 'general', label: '一般知識', subject: null, r3: false, supplement: false, pick: false, files: [COMMON, { path: 'apps/Cards/docs/card-rules/general.md', name: '一般知識', version: 'v0.5', marker: true }] },
   { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, pick: false, files: [...R3, { path: 'apps/Cards/docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.9', marker: true }] },
+  // 不是學業的卡組：選單叫「其他」、排最後（使用者 2026-11-24）；規則檔仍是一般知識。
+  { key: 'general', label: '其他', subject: null, r3: false, supplement: false, pick: false, files: [COMMON, { path: 'apps/Cards/docs/card-rules/general.md', name: '一般知識', version: 'v0.5', marker: true }] },
 ];
 
 /**

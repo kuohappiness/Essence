@@ -68,7 +68,7 @@ export function createPreview(options: PreviewOptions): Session | null {
     const { revealed, allowed, speakable, typed, pick } = flow.view();
     const view: CardView = {
       kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: isEnglish(card),
-      speakable, autoRead: flow.autoRead, viewing: null, shown: index, nextLabel: '下一張',
+      speakable, autoRead: flow.autoRead, viewing: null, shown: index,
     };
     return { kind: 'card', top, card: view };
   }

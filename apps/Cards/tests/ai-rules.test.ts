@@ -24,7 +24,7 @@ void test('§1 送出範圍：只送標記以下，換行統一成 \\n、拿掉 
 });
 
 void test('§1 表：五科全開（§0），規則照表的順序；card-rules 的每一份剛好一個標記，狀態框不送', async () => {
-  assert.deepEqual(RULE_SUBJECTS.map(subject => subject.label), ['國語（國小）', '英文（國中）', '自然', '一般知識', '社會（國小）']);
+  assert.deepEqual(RULE_SUBJECTS.map(subject => subject.label), ['國語（國小）', '英文（國中）', '自然', '社會（國小）', '其他']);
   const r3 = ['格式', '短規則', '判斷邊界', '五步'];
   assert.deepEqual(Object.fromEntries(RULE_SUBJECTS.map(subject => [subject.key, subject.files.map(file => `${file.name} ${file.version}`)])), {
     chinese: [...r3.map(name => name + ' R3 第二輪'), '國小國語 v0.9'],

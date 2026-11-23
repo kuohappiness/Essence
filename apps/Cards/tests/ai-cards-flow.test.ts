@@ -93,6 +93,25 @@ void test('§2～§5 複製 → 貼回 → 存成草稿：提示照存下的、�
   assert.equal(state.deckTargets('Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md').length, 1);
 });
 
+void test('還沒貼回的工作可以放棄（使用者 2026-11-24）：只從這台電腦清掉那一筆，別筆留著；不寫任何檔、不動不再配出的 ID', async t => {
+  const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const box = machine();
+  const { cards } = await load(t, memory, box, Math.random);
+  const first = await cards.copy(form);
+  const second = await cards.copy({ ...form, unit: 'L4 Jobs' });
+  assert.ok('job' in first && 'job' in second);
+  assert.equal(cards.jobs().length, 2);
+  const files = [...memory.texts.keys()].sort();
+  assert.deepEqual(await cards.abandon(first.job), { left: [] });
+  assert.deepEqual(cards.jobs().map(job => job.id), [second.job.id]);
+  assert.deepEqual((box.saved.jobs as { id: string }[]).map(job => job.id), [second.job.id], '存回這台電腦');
+  assert.deepEqual([...memory.texts.keys()].sort(), files);
+  assert.deepEqual(box.saved.retired, []);
+  assert.match((await cards.abandon(first.job) as { message: string }).message, /已經結束/, '同一筆再按一次');
+  assert.deepEqual(await cards.abandon(second.job), { left: [] });
+  assert.deepEqual(cards.jobs(), []);
+});
+
 void test('§5 同一個工作同時只有一個操作（L2-1）：存到一半關掉重開，繼續、放棄、選擇都不動它；存完之後舊視窗也叫不回來', async t => {
   const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
   const box = machine();

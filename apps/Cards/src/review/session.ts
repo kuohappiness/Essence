@@ -50,8 +50,6 @@ export interface CardView {
   viewing: { index: number; total: number } | null;
   /** 這一張第幾次從頭出現：切走超過 60 秒回來重新開始時加一（畫面用它換卡）；回看的卡是 0。 */
   shown: number;
-  /** 不作答也能往後的按鈕的字（預覽，D-161）；複習沒有。 */
-  nextLabel?: string;
 }
 interface TopView {
   /** 中間的文字：「還剩 N 張」或「再複習一些」。 */
