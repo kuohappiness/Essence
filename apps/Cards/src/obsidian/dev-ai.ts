@@ -102,6 +102,46 @@ async function oneRun(host: EntryDevHost, capture: (name: string) => Promise<voi
   return { checks, decks, created };
 }
 
+/**
+ * 不會再貼回的工作（使用者 2026-11-24）：複製之後關掉，重開時「做新的一課」在最上面；在那一列按「放棄」，
+ * 那一筆從這台電腦清掉、不建任何檔，別筆留著。
+ */
+async function dropUnpasted(host: EntryDevHost, capture: (name: string) => Promise<void>, unit: string): Promise<Record<string, unknown>> {
+  const { app } = host;
+  const checks: Record<string, unknown> = {};
+  const before = new Set(app.vault.getFiles().map(file => file.path));
+  const unpasted = (): { form?: { unit?: string } }[] => ((aiPrefs.jobs(app) ?? []) as { form?: { unit?: string } }[]);
+  const others = unpasted().filter(each => each.form?.unit !== unit).length;
+  command(app, 'essence-cards:ai-cards');
+  await until(() => modal() !== null);
+  button('做新的一課')?.click();
+  await until(() => inModal('select').length >= 3);
+  const [subjectBox, termBox] = inModal<HTMLSelectElement>('select');
+  setValue(subjectBox, 'english', 'change');
+  setValue(termBox, '高三下', 'change');
+  setValue(inModal<HTMLInputElement>('input[type="text"]')[0], unit, 'input');
+  await sleep(200);
+  button('複製提示')?.click();
+  await until(() => inModal('textarea').length > 0);
+  button('取消')?.click();
+  await until(() => modals() === 0);
+  command(app, 'essence-cards:ai-cards');
+  await until(() => modal() !== null);
+  checks.newLessonFirst = text(inModal('button').at(0) ?? null) === '做新的一課';
+  await capture('放棄還沒貼回的');
+  const row = inModal('.essence-cards-issue').find(each => text(each).includes(unit));
+  checks.dropButton = !!(row && button('放棄', row));
+  if (row) button('放棄', row)?.click();
+  checks.dropped = await until(() => !unpasted().some(each => each.form?.unit === unit));
+  checks.othersKept = unpasted().length === others;
+  checks.noFiles = app.vault.getFiles().filter(file => !before.has(file.path) && file.path.startsWith('Essence Cards/')).map(file => file.path);
+  await sleep(300);
+  await capture('放棄之後');
+  modal()?.querySelector<HTMLElement>('.modal-close-button')?.click();
+  await until(() => modals() === 0);
+  return checks;
+}
+
 export async function aiCardsDev(host: EntryDevHost & { device: string }, folder: string): Promise<unknown> {
   const { app } = host;
   const state = host.state;
@@ -177,6 +217,7 @@ export async function aiCardsDev(host: EntryDevHost & { device: string }, folder
     ].join('\n'), '英文');
     created.push(...english.created);
     checks.english = english.checks;
+    checks.dropUnpasted = await dropUnpasted(host, capture, `L${code} Drop ${run}`);
   } finally {
     previewButton.set(app, wasPreview);
     rendering.restore();
