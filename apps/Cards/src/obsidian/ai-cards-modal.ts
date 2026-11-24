@@ -246,9 +246,12 @@ class AiCardsModal extends Modal {
     }
     const taken = new Set(this.app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase()));
     const list = el.createEl('ul');
+    const cards = this.host.cards(), job = this.job;
     for (const piece of inspection.pieces) {
-      const name = freeName(piece.name, taken);
-      const renamed = name === piece.name ? '' : `（已有同名的卡組，這一篇存成「${name}」）`;
+      // 手機建的檔名多了識別碼（tasks/phone-cards.md §2-3）：照會用的檔名比同名。
+      const base = cards && job ? cards.nameOf(job, piece.name) : piece.name;
+      const name = freeName(base, taken);
+      const renamed = name === base ? '' : `（已有同名的卡組，這一篇存成「${name}」）`;
       list.createEl('li', { text: `${name}${renamed}：學習目標 ${String(piece.targets)}、題目 ${String(piece.prompts)}、候選卡片 ${String(piece.candidates)}、加進已有的學習目標 ${String(piece.adds.length)}` });
     }
     if (inspection.hints.length) {

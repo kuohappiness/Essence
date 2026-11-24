@@ -960,3 +960,20 @@ void test('D-226 第 5 點：快照的末次核對比全文，核對之後、寫
   assert.ok(files.has(SNAPSHOT));
 });
 
+
+void test('D-226 第 5 點：建卡組讀回逾時（unreadable）之後才晚到，全文相同照樣認成這次寫的；晚到的是異文就停下', async () => {
+  for (const late of [(text: string) => text, (text: string) => text.replace('借入', '借進來')]) {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const create = io.createDeck.bind(io);
+    io.createDeck = (path, text, ids) => path === WORD ? Promise.resolve({ kind: 'unreadable', path, error: Error('逾時') }) : create(path, text, ids);
+    assert.equal((await publish(job, io)).kind, 'unreadable');
+    assert.equal(reload().save!.decks[0].stage, 'started');
+    io.createDeck = create;
+    files.set(WORD, late(job.save!.decks[0].text));
+    const result = await publish(reload(), io);
+    if (files.get(WORD) === job.save!.decks[0].text) assert.equal(result.kind, 'done');
+    else assert.deepEqual(result, { kind: 'deck', index: 0, situation: 'unclear', path: WORD });
+  }
+});

@@ -234,6 +234,7 @@ export default class EssenceCardsPlugin extends Plugin {
         picks: () => aiPrefs.picks(app), savePick: (key, pick) => { aiPrefs.savePick(app, key, pick); },
       },
       clipboard: text => navigator.clipboard.writeText(text),
+      phone: !Platform.isDesktopApp,
       now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
       onError: error => { this.fail('ai', error); },
     });

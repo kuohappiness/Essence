@@ -16,7 +16,7 @@ export type { SourceOwner as SourceProps } from './existing-sources.ts';
 export { buildPrompt, existingTargets, learnedWords, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { groupHints, issueText, normalizeReply } from './reply.ts';
-export { activationCounts, freeName, inspectReply, planDraft, rawPath, SNAPSHOT_FOLDER } from './draft.ts';
+export { activationCounts, freeName, inspectReply, planDraft, rawPath, SNAPSHOT_FOLDER, withCode } from './draft.ts';
 export type { ExistingNow, Inspection } from './draft.ts';
 export { isJob, readJobs, reservedIds } from './job.ts';
 export type { CardJob, SavedDeck } from './job.ts';

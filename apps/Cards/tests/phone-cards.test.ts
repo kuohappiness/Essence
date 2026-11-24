@@ -21,9 +21,12 @@ const REPLY = [
   '國二上英文 L3 文法', '', '## 文法', '', '- 能用 be going to 說未來的計畫', '    - 出處：p.42', '    - 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to', '<<<完>>>',
 ].join('\n');
 const form: CardForm = { subject: 'english', term: '國二上', unit: 'L3 Sports', purpose: '準備段考', supplement: false, adjust: '', material: '' };
-const WORD = 'Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md';
-const GRAMMAR = 'Essence Cards/學業/國二上/英文/國二上英文 L3 文法.md';
-const SNAPSHOT = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
+/** 手機建的檔名後面加這次製卡的識別碼（§2-3）。 */
+const names = (code: string) => ({
+  WORD: `Essence Cards/學業/國二上/英文/國二上英文 L3 單字 ${code}.md`,
+  GRAMMAR: `Essence Cards/學業/國二上/英文/國二上英文 L3 文法 ${code}.md`,
+  SNAPSHOT: `Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports ${code}.md`,
+});
 const NOW = Date.parse('2026-11-07T10:02:11+08:00');
 const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 
@@ -44,6 +47,7 @@ async function phone(t: TestContext, on: boolean) {
       retired: () => [], retire() {}, last: () => ({}), saveLast() {}, picks: () => ({}), savePick() {},
     },
     clipboard: () => Promise.resolve(),
+    phone: true,
     now: () => ({ ms: NOW, offset: 480 }),
     onError: error => { throw error; },
   });
@@ -55,7 +59,7 @@ async function phone(t: TestContext, on: boolean) {
   const inspection = cards.inspect(copied.job, REPLY);
   assert.ok(!('error' in inspection));
   assert.deepEqual(inspection.errors, []);
-  return { memory, toggle, saved, state, cards, job: copied.job, shown: inspectionKey(inspection) };
+  return { memory, toggle, saved, state, cards, job: copied.job, shown: inspectionKey(inspection), ...names(copied.job.id) };
 }
 
 void test('§2-1 開關關著（預設）：手機不配號、不建任何檔，說明要到設定頁打開；工作留著，打開之後接著存', async t => {
@@ -73,7 +77,11 @@ void test('§2-1 開關關著（預設）：手機不配號、不建任何檔，
 void test('§2-2 開關打開：手機建原文、草稿卡組與快照，新目標配好 ID、避開已有的；其他寫入照舊擋（不補 ID、不改狀態、加深不配號）', async t => {
   const h = await phone(t, true);
   const result = await h.cards.save(h.job, REPLY, null, h.shown);
+  const { WORD, GRAMMAR, SNAPSHOT } = h;
   assert.deepEqual(result, { kind: 'done', decks: [WORD, GRAMMAR], targets: 2 });
+  // 檔名後面是這次的識別碼（§2-3），快照的 `識別碼` 也是它；檢查結果的畫面用同一個名字。
+  assert.match(h.job.id, /^[a-hjkmnp-z][a-hjkmnp-z2-9]{5}$/);
+  assert.equal(h.cards.nameOf(h.job, '國二上英文 L3 單字'), `國二上英文 L3 單字 ${h.job.id}`);
   for (const path of [WORD, GRAMMAR]) {
     const deck = parseDeck(h.memory.texts.get(path)!);
     assert.equal(deck.props.status, 'draft');
@@ -97,6 +105,7 @@ void test('§2-2 開關打開：手機建原文、草稿卡組與快照，新目
 
 void test('§2-1 存到一半關掉開關：寫到一半的那一篇照樣讀回核對，之後的卡組、快照都不寫；工作留著，打開後按繼續補齊、不重配 ID', async t => {
   const h = await phone(t, true);
+  const { WORD, GRAMMAR, SNAPSHOT } = h;
   const held = h.memory.holdModify(WORD);
   const saving = h.cards.save(h.job, REPLY, null, h.shown);
   while (!h.memory.texts.has(WORD)) await new Promise(resolve => setTimeout(resolve, 1));

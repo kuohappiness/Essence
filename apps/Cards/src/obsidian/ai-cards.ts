@@ -1,4 +1,4 @@
-import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
@@ -24,6 +24,8 @@ export interface AiCardsDeps {
     /** 點選填空每一科上次的選擇（D-210 第 2 點）。 */
     picks(): Record<string, boolean>; savePick(key: string, pick: boolean): void };
   clipboard: (text: string) => Promise<void>;
+  /** 這台是手機（tasks/phone-cards.md §2-3）：建的卡組與快照，檔名後面加這次製卡的識別碼。 */
+  phone?: boolean;
   now: () => { ms: number; offset: number };
   random?: () => number;
   onError: (error: unknown) => void;
@@ -151,6 +153,8 @@ export function createAiCards(deps: AiCardsDeps) {
     subjects,
     /** 這一科用哪些規則與版號（唯讀的一行）。 */
     rulesLine: (key: string): string => (deps.rules[key] ?? []).map(rule => `${rule.name} ${rule.version}`).join('、'),
+    /** 這一篇在這台會用的檔名基底（檢查結果的畫面用；手機加識別碼，tasks/phone-cards.md §2-3）。 */
+    nameOf: (job: CardJob, name: string): string => withCode(name, deps.phone === true ? job.id : null),
     /** 沒完成的工作：最新的在前。 */
     jobs: (): readonly CardJob[] => [...jobs].sort((a, b) => b.copiedMs - a.copiedMs),
     /** 這台電腦預留、不能配出的 ID（§5〈ID 的預留〉）：state 每次配號時問。 */
@@ -230,7 +234,7 @@ export function createAiCards(deps: AiCardsDeps) {
       if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] } satisfies Outcome;
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
-      const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10));
+      const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10), deps.phone === true ? latest.id : null);
       const saved = beginSave(latest, reply, service, planned, started);
       // 第 2 步：恢復資料先存進這台電腦，存不進去就不碰 vault。
       try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' } satisfies Outcome; }
