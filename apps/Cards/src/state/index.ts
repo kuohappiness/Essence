@@ -338,6 +338,8 @@ export interface State {
   aiCreateSnapshot(path: string, text: string, decks: readonly SnapshotDeck[], nameFree: () => boolean, cards?: boolean): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）：先讀完已知的變動（L2-2）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
   aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
+  /** 卡組都讀完了（讀完、沒有送來通知還沒讀的、沒有讀不到的）：複製提示時算已有目標用，不等（剪貼簿要在按下的當下寫，手機製卡 L2 第四輪）。 */
+  aiSettled(): boolean;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
   aiCreate(path: string, text: string, cards?: boolean): Promise<CreateResult>;
   /** 直接讀一個檔（§5 第 3～6 步的原文、快照與目的地）：不存在是 null；讀不到或超過 stuckAfter 沒回來就丟錯，不當成不存在（R3-5）。 */
@@ -1233,6 +1235,7 @@ export function createState(options: StateOptions): State {
       return tracker.where(ids);
     },
     aiRead: path => writes.readTimed(path),
+    aiSettled: () => life.loaded && unread.size === 0 && !reads.waitingFor(isDeckPath),
     aiDisplaced: path => options.displaced?.(path) ?? false,
     async aiAppend(path, editor, plan) {
       // 前一筆寫入逾時、結果不明的那一篇（加入或加深）：這一筆確定沒寫，不是結果不明（L2 R2）。排隊之前、輪到時、改字之前都看。

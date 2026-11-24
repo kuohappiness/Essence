@@ -1,6 +1,6 @@
 # 手機 AI 製卡（D-226 第一步，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第四輪（只審第三輪的重整）；第一輪審 `27da3550`、第二輪審 `dfb7f5ed`、第三輪審 `20df973d`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+狀態：實作中｜下一步：四輪審完，使用者決定第四輪的 P1；第四輪審 `cc2240af`；第一輪審 `27da3550`、第二輪審 `dfb7f5ed`、第三輪審 `20df973d`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：使用者
 
 ## 第四輪（只審重整）
 

@@ -187,6 +187,7 @@ export function createAiCards(deps: AiCardsDeps) {
       const block = state?.writeBlock(true);
       if (!state || !subject || block === 'loading') return 'loading';
       if (block === 'unread' || state.unread().length > 0) return 'unread';
+      if (!state.aiSettled()) return 'loading';
       return state.aiExisting(subject.subject, form.term).length;
     },
     /** 第二步：組提示、存成待貼回的工作（按下的當下就存，F1），再放進剪貼簿。 */
@@ -196,8 +197,10 @@ export function createAiCards(deps: AiCardsDeps) {
       const block = state?.writeBlock(true);
       if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
-      // 已有目標照讀完已知變動的索引算（L2 第三輪重整：和存草稿同一個入口 aiWhere）：送來通知、還在讀的卡組也要等它；讀不完、讀不到就不複製。
-      if (block === 'unread' || state.unread().length > 0 || await state.aiWhere([]) === null) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
+      if (block === 'restore' || block === 'restoreStuck') return { error: '正在還原，還原完才知道學生已有哪些學習目標；等一下再按' };
+      if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
+      // 送來通知、還在讀的卡組：不等，請家長等一下再按（L2 第四輪：剪貼簿要在按下的當下寫，iPhone 等過 I/O 可能被拒；等的期間開關、還原也可能變）。
+      if (!state.aiSettled()) return { error: '正在讀取剛同步來的卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
       const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;

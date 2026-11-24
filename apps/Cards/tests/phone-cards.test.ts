@@ -296,7 +296,7 @@ void test('§2-2 還原中按「存成草稿」（第二輪 R2 修正引入）�
   assert.equal(h.cards.jobs()[0].save, null, '沒有開始存');
 });
 
-void test('§2-5 讀完之後才同步來的卡組（L2 第三輪延續 R6）：通知到了、還在讀時按複製，等它讀完再照實數，不送不完整的已有目標', async t => {
+void test('§2-5 讀完之後才同步來的卡組（L2 第三、四輪延續 R6）：通知到了、還在讀時按複製，不等、不複製（剪貼簿要在按下的當下寫）；讀完再按照實數', async t => {
   const memory = createMemoryFiles({});
   const saved: { jobs: unknown } = { jobs: null };
   // eslint-disable-next-line prefer-const -- state 與流程互相參照
@@ -316,12 +316,15 @@ void test('§2-5 讀完之後才同步來的卡組（L2 第三輪延續 R6）：
   const held = memory.holdRead(OLD);
   memory.write(OLD, OLD_TEXT);
   await held.started;
-  const box: { done: boolean } = { done: false };
-  const copying = cards.copy(form).finally(() => { box.done = true; });
-  await settle();
-  assert.equal(box.done, false, '還在讀，等著');
+  assert.equal(cards.existing(form), 'loading');
+  const early = await cards.copy(form);
+  assert.ok('error' in early);
+  assert.match(early.error, /正在讀取剛同步來的卡組/);
+  assert.deepEqual(cards.jobs(), []);
   held.release();
-  const copied = await copying;
+  await settle();
+  assert.equal(cards.existing(form), 1);
+  const copied = await cards.copy(form);
   assert.ok('job' in copied);
   assert.equal(copied.job.existing.length, 1);
 });

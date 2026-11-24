@@ -1,6 +1,6 @@
 # 家長的手機也能製卡與啟用：第一批（D-226，給 Claude）
 
-狀態：實作中｜下一步：L2 第四輪（只審第三輪的重整，[請求](phone-cards-l2.md)）；格式查核已做（[回報](<../Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3）｜等誰：Codex
+狀態：實作中｜下一步：L2 四輪審完（[報告](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者決定第四輪的 P1、合併；格式查核已做（[回報](<../Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3）｜等誰：使用者
 
 來自：[討論稿](<../Claude Codex Discussion/2026-11-24-phone-full-features.md>)
 
