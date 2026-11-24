@@ -289,7 +289,8 @@ void test('§1 圖示與命令打開入口，「目錄」直接開目錄；開�
   await h.plugin.state?.ready();
   assert.equal(opened.length, 0, '啟動時不打開');
   assert.equal(h.commands.has('start-review'), false);
-  assert.deepEqual(h.ribbons.map(ribbon => ribbon.title), ['Essence Cards：打開入口']);
+  // 手機：AI 製卡的圖示註冊了但藏著（設定頁沒打開，tasks/phone-cards.md §2-1）。
+  assert.deepEqual(h.ribbons.filter(ribbon => ribbon.el.style.display !== 'none').map(ribbon => ribbon.title), ['Essence Cards：打開入口']);
   h.ribbons[0].callback({});
   assert.equal(opened[0].screen, 'entry');
   h.commands.get('open-catalog')?.callback?.();

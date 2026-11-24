@@ -24,7 +24,7 @@ export interface DeckActionsHost {
   preview: (session: Session) => void;
   notify: (message: string) => void;
   /** 草稿的「啟用」（tasks/ai-cards-mvp.md §7）：只在電腦傳；回傳要提示的字，沒事是 null。 */
-  activate?: (path: string) => Promise<string | null>;
+  activate?: (path: string, confirmed: string) => Promise<string | null>;
 }
 
 /** 全部卡按下去先出的提醒（D-146 的原文）：12 是這一輪的目標數；只記這台裝置。目錄的全部卡不提醒。 */
@@ -146,9 +146,11 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
     const state = host.state();
     if (!alive || !state || !host.activate) return;
     const activate = host.activate;
-    new ActivateModal(app, activationText(state, path, view.editor.getValue()), modals, () => {
+    // 確認視窗顯示的就是這一版：寫入當下不同就不寫（D-226 第 5 點）。
+    const shown = view.editor.getValue();
+    new ActivateModal(app, activationText(state, path, shown), modals, () => {
       if (!alive) return;
-      void activate(path).then(tip => { host.notify(tip ?? '已啟用，孩子之後就看得到這一篇'); });
+      void activate(path, shown).then(tip => { host.notify(tip ?? '已啟用，孩子之後就看得到這一篇'); });
     }).open();
   }
 

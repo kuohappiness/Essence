@@ -12,6 +12,11 @@
 .essence-cards-ai-form input[type="text"] {
   width: 100%;
 }
+/* 手機（tasks/phone-cards.md §2）：螢幕窄，名稱與欄位上下排，欄位才有整行寬。 */
+.is-phone .essence-cards-ai-form {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
 .essence-cards-ai-pick-note {
   margin-left: 8px;
   color: var(--text-muted);

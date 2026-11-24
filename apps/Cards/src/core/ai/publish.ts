@@ -23,8 +23,8 @@ export interface PublishIo {
   create(path: string, text: string): Promise<CreateResult>;
   /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄）、整個 vault 沒有同名檔，不符合是 refused、不建。 */
   createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
-  /** 建快照：寫入的當下每一篇都還要在原位置、整個 vault 沒有同名檔，不符合是 refused、不建。 */
-  createSnapshot(path: string, text: string, decks: readonly { path: string; ids: readonly string[] }[]): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
+  /** 建快照：寫入的當下每一篇都還要在原位置、內容和這次核對時讀到的 text 相同（D-226 第 5 點）、整個 vault 沒有同名檔，不符合是 refused、不建。 */
+  createSnapshot(path: string, text: string, decks: readonly SnapshotDeck[]): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）：等已知的變動讀完才回答；占用資訊不完整（有讀不到的、讀不完）是 null。 */
   where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
@@ -34,8 +34,14 @@ export interface PublishIo {
   now(): { ms: number; offset: number };
 }
 
-/** 一篇停下來要家長選（§5〈中斷與重試〉）：missing 是 ID 一個都找不到（可以重建）；split 是 ID 分在好幾篇或只剩一部分；taken 是這一篇還沒建過，它的 ID 卻已經有人用了。 */
-export interface DeckStop { kind: 'deck'; index: number; situation: 'missing' | 'split' | 'taken'; path: string }
+/** 快照寫入當下要核對的一篇：位置、這次配的 ID、這一輪核對時讀到的全文。 */
+export interface SnapshotDeck { path: string; ids: readonly string[]; text: string }
+
+/**
+ * 一篇停下來要家長選（§5〈中斷與重試〉）：missing 是 ID 一個都找不到（可以重建）；split 是 ID 分在好幾篇或只剩一部分；taken 是這一篇還沒建過，它的 ID 卻已經有人用了；
+ * unclear 是那裡的檔和這次要寫的不同，認不出是不是這次寫的（D-226 第 5 點：記成開始建了、還沒讀回核對就中斷，之後內容變了；或這一篇沒有 ID 可以認）。
+ */
+export interface DeckStop { kind: 'deck'; index: number; situation: 'missing' | 'split' | 'taken' | 'unclear'; path: string }
 export type PublishResult =
   | { kind: 'done'; decks: string[]; targets: number }
   | { kind: 'blocked'; reason: string }
@@ -99,10 +105,23 @@ function snapshotText(job: CardJob, time: string): string {
 }
 
 /**
- * 這一篇在目的地寫成了：內容和恢復資料相同，或這一篇配的每一個 ID 都在這個檔裡（寫成之後被家長改過字）。
- * 還沒碰過 vault 的篇不能靠 ID 認：那個檔不是這次寫的（R3-3，同步晚到的卡組撞了路徑與 ID）。
+ * 這個檔是不是這次寫的那一篇（D-226 第 5 點，任務說明 phone-cards.md §2-3）：
+ * - 全文和恢復資料相同：是（任何階段；逾時後晚到的寫入也是這樣認）。
+ * - 還沒碰過 vault 的篇：不是（R3-3，同步晚到的卡組撞了路徑與 ID）。
+ * - 寫成、讀回核對過（written）之後內容變了，這一篇配的每一個 ID 都還在：是，家長改過字，不覆寫、不重建。
+ * - 記成開始建了（started、rebuild）、內容不同而 ID 都在，或這一篇沒有 ID 可以認：認不出來（unclear），停下來，不當成寫成、也不重建。
+ * - 其他：不是。
+ * 只靠 ID 會把同 ID 的異文當成自己的（Codex 第一輪的探針：異文同 ID 在 started 判成已寫成）。
  */
-const writtenIn = (deck: SavedDeck, text: string | null): boolean => text !== null && (sha256Hex(text) === deck.sha256 || (deck.stage !== 'pending' && (() => { const ids = blockIds(text); return deck.ids.every(id => ids.has(id)); })()));
+function ownText(deck: SavedDeck, text: string | null): 'yes' | 'no' | 'unclear' {
+  if (text === null) return 'no';
+  if (sha256Hex(text) === deck.sha256) return 'yes';
+  if (deck.stage === 'pending') return 'no';
+  const ids = blockIds(text);
+  const all = deck.ids.length > 0 && deck.ids.every(id => ids.has(id));
+  if (all && deck.stage === 'written') return 'yes';
+  return all || !deck.ids.length ? 'unclear' : 'no';
+}
 
 /**
  * 照恢復資料做第 3～7 步（§5）。每一步改了恢復資料就先存再往下。停下來的情況回傳原因，恢復資料留著，之後可以再呼叫。
@@ -140,6 +159,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   };
   const early = await already();
   if (early) return early;
+  /** 這一輪核對每一篇時讀到的全文（照 index）：快照寫入的當下要一字不差（末次核對，D-226 第 5 點）。 */
+  const seenText = new Map<number, string>();
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。
   for (const text of [...job.parts.map(part => part.text), save().reply]) {
@@ -163,10 +184,13 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const found = await read(deck.path);
     if ('kind' in found) return found;
     const update = (change: Partial<SavedDeck>): void => { keep({ ...save(), decks: save().decks.map((each, i) => i === index ? { ...each, ...change } : each) }); };
-    if (writtenIn(deck, found.text)) {
+    const mine = ownText(deck, found.text);
+    if (mine === 'yes') {
+      seenText.set(index, found.text!);
       if (deck.stage !== 'written') update({ stage: 'written' });
       return null;
     }
+    if (mine === 'unclear') return { kind: 'deck', index, situation: 'unclear', path: deck.path };
     const where = await io.where(deck.ids);
     if (!where) return { kind: 'blocked', reason: 'unread' };
     // 目的地的檔照剛讀到的內容算（state 可能還沒讀到它），其他卡組問 state。
@@ -178,7 +202,14 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 還沒碰過 vault 的篇不可能被搬走：它的 ID 出現在別處是撞號或同步來的，不能算成自己（R2-2）。
     if (deck.stage === 'pending' && (here.length || paths.some(each => each.length))) return { kind: 'deck', index, situation: 'taken', path: deck.path };
     if (!here.length && other !== undefined && paths.every(each => each.length === 1 && each[0] === other)) {
-      // 家長把它改名或搬走了：照現在的位置算寫成，不在舊位置再建一份。
+      // 家長把它改名或搬走了：新位置的檔照同一套規則認（D-226 第 5 點），認得是自己的才照現在的位置算寫成，不在舊位置再建一份。
+      const moved = await read(other);
+      if ('kind' in moved) return moved;
+      const there = ownText(deck, moved.text);
+      if (there === 'unclear') return { kind: 'deck', index, situation: 'unclear', path: other };
+      // 剛讀到時又變了（ID 不全了、檔不見了）：照「一直在變動」請家長等一下，不猜。
+      if (there === 'no') return { kind: 'blocked', reason: 'changing' };
+      seenText.set(index, moved.text!);
       update({ path: other, stage: 'written' });
       return null;
     }
@@ -204,6 +235,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
       return created.kind === 'refused' && created.why === 'ids' ? { kind: 'deck', index, situation: 'taken', path } : { kind: 'name', path };
     }
     if (created.kind !== 'done') return created;
+    seenText.set(index, deck.text);
     update({ stage: 'written' });
     return null;
   };
@@ -239,7 +271,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     }
 
     // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
-    const decks = save().decks.filter(deck => !deck.skipped).map(deck => ({ path: deck.path, ids: deck.ids }));
+    const decks: SnapshotDeck[] = save().decks.flatMap((deck, index) => deck.skipped ? [] : [{ path: deck.path, ids: deck.ids, text: seenText.get(index)! }]);
     // 同卡組的 started：先記成可能寫成、存好才去寫；寫入前就擋下的改回去（R5-2）。
     const attempted = save().published!.attempted;
     const mark = (value: boolean): void => { keep({ ...save(), published: { ...save().published!, attempted: value } }); };

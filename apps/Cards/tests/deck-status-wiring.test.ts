@@ -24,11 +24,14 @@ const TIPS = {
   blocked: '還有檔案沒讀到，狀態先不改；讀取完成後請再按一次',
   backup: '備份還沒成功，狀態先不改；到設定頁看原因',
   needsUpdate: '這篇筆記需要新版的外掛才讀得懂，更新外掛之前不能改狀態',
+  changed: '這篇筆記在你按「啟用」之後改過了，還沒啟用；請再按一次「啟用」，看過新的內容再確認',
+  already: '這一篇已經不是草稿（啟用或暫停），狀態沒有改',
+  gone: '找不到這一篇，狀態沒有改',
 };
 type Result = { kind: string; reason?: string; error?: unknown };
 interface Module {
   changeDeckStatus: (app: unknown, state: unknown, path: string, value: string, onError: (error: unknown) => void) => Promise<string | null>;
-  activateDeck: (app: unknown, state: unknown, path: string, onError: (error: unknown) => void) => Promise<string | null>;
+  activateDeck: (app: unknown, state: unknown, path: string, confirmed: string, onError: (error: unknown) => void) => Promise<string | null>;
 }
 interface Fake { stub: ObsidianStub; module: Module; run: (result?: Result) => Promise<string | null>; calls: { path: string; value: string; editor: { path: string; text(): string | null } | null }[]; errors: unknown[] }
 
@@ -98,9 +101,21 @@ void test('只開在閱讀模式的草稿按「啟用」：走檔案，隱藏的
   // 隱藏的編輯器不跟著磁碟重讀：還是「加入」之前的字。
   openTab(h, draft + '> [!note]- 候選卡片\n> - 還沒加入 ^cand01\n', 'preview');
   const calls: unknown[] = [];
-  const activateDraft = (path: string, editor: unknown): Promise<Result> => { calls.push([path, editor]); return Promise.resolve({ kind: 'done' }); };
-  assert.equal(await h.module.activateDeck(h.stub.app, { activateDraft }, DECK, () => {}), null);
-  assert.deepEqual(calls, [[DECK, null]]);
+  const activateDraft = (path: string, editor: unknown, confirmed: unknown): Promise<Result> => { calls.push([path, editor, confirmed]); return Promise.resolve({ kind: 'done' }); };
+  assert.equal(await h.module.activateDeck(h.stub.app, { activateDraft }, DECK, draft, () => {}), null);
+  assert.deepEqual(calls, [[DECK, null, draft]]);
+});
+
+void test('啟用的結果分清楚（D-226 第 5 點）：寫成才說已啟用（null）；確認之後變了、已經不是草稿、檔不見了都各有一句，不說成已啟用', async () => {
+  const h = setup();
+  const cases: [Result, string | null][] = [
+    [{ kind: 'done' }, null], [{ kind: 'saved' }, null],
+    [{ kind: 'changed' }, TIPS.changed], [{ kind: 'already' }, TIPS.already], [{ kind: 'unchanged' }, TIPS.gone],
+  ];
+  for (const [result, tip] of cases) {
+    const activateDraft = (): Promise<Result> => Promise.resolve(result);
+    assert.equal(await h.module.activateDeck(h.stub.app, { activateDraft }, DECK, TEXT, () => {}), tip, JSON.stringify(result));
+  }
 });
 
 void test('暫停、恢復也一樣：閱讀模式的分頁不算開著；另有開在編輯模式的分頁才走編輯器', async () => {
