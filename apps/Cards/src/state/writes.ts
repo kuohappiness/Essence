@@ -88,6 +88,8 @@ export interface WritesOptions {
   reads: Reads;
   /** 補學習目標 ID：電腦 true、手機 false（StateOptions.fillIds）。 */
   fillIds: boolean;
+  /** 手機在設定頁打開了製卡（StateOptions.phoneCards，D-226）：每次問，關掉之後排隊中的建檔也停。 */
+  phoneCards?: () => boolean;
   /** 等一次寫進磁碟最多多久（毫秒）。 */
   writeTimeout: number;
   /** 直接讀一個檔最多等多久（毫秒）；和讀取層判定卡住的時間相同。 */
@@ -132,9 +134,10 @@ export function createWrites(options: WritesOptions) {
    * 門檻裡不看是哪一篇的部分，依 state 目前所知（State.writeBlock 也用這一份，存檔按鈕的說明和按下的結果照同一個順序）：
    * 只在電腦（D-134）、讀完之後、還沒關閉、這台電腦有一份成功的備份（D-150 第 3 點），而且沒有讀不到的卡組或紀錄
    * （state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）。
+   * cards：AI 製卡建新檔與配號（D-226 第 2 點的窄入口）；手機只有這一種、而且設定頁打開了才放，其他寫入照舊回 phone。
    */
-  function blockedNow(): WriteBlock | null {
-    if (!options.fillIds) return 'phone';
+  function blockedNow(cards = false): WriteBlock | null {
+    if (!options.fillIds && !(cards && options.phoneCards?.() === true)) return 'phone';
     if (!life.loaded) return 'loading';
     if (life.closed) return 'closed';
     if (restoring) return sealed ? 'restoreStuck' : 'restore';
@@ -285,11 +288,12 @@ export function createWrites(options: WritesOptions) {
    * guard（建卡組與快照時給）：先讀完已知的變動再核對，寫入回呼裡再核對一次（L2-2、R2-1：改名、搬移、同步都是先有事件才讀檔，排隊與等回呼的期間都可能再來）。
    * 核對沒過回 refused、不建；回呼裡還有沒讀完的變動就放棄這一次、讀完再來，最多 DRAIN_ROUNDS 輪。門檻在回呼裡也再問一次（R3-1）：blocked 一定是還沒寫。
    */
-  function create(path: string, text: string): Promise<CreateResult>;
-  function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }>;
-  async function create<Why extends string>(path: string, text: string, guard?: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }> {
+  function create(path: string, text: string, guard?: undefined, cards?: boolean): Promise<CreateResult>;
+  function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>, cards?: boolean): Promise<CreateResult | { kind: 'refused'; why: Why }>;
+  async function create<Why extends string>(path: string, text: string, guard?: CreateGuard<Why>, cards = false): Promise<CreateResult | { kind: 'refused'; why: Why }> {
     const rounds = { count: 0 };
-    const blocked = (): CreateBlock | null => blockedNow() ?? (options.displaced?.(path) ? 'displaced' : null);
+    // cards（AI 製卡，D-226）：手機的開關在排隊前、回呼裡都再問一次（任務說明 §2-1：關掉之後排隊中的寫入都不寫）。
+    const blocked = (): CreateBlock | null => blockedNow(cards) ?? (options.displaced?.(path) ? 'displaced' : null);
     for (;;) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (guard && await drain(rounds, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };

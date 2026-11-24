@@ -68,13 +68,59 @@ void test('選項與預設（D-104）', async t => {
   assert.equal(row(COUNTDOWN).toggle?.value, true);
 });
 
-void test('分區的順序：複習、學期、備份；文字不寫角色（D-156）', async t => {
+void test('分區的順序：複習、學期、（手機的）AI 製卡、備份；文字不寫角色（D-156）', async t => {
   const { tab, row } = await open(t);
-  assert.deepEqual(tab.containerEl.rows.filter(item => item.heading).map(item => item.name), ['複習', '學期', '備份']);
+  assert.deepEqual(tab.containerEl.rows.filter(item => item.heading).map(item => item.name), ['複習', '學期', 'AI 製卡', '備份']);
+  const desktop = await open(t, { desktop: true });
+  assert.deepEqual(desktop.tab.containerEl.rows.filter(item => item.heading).map(item => item.name), ['複習', '學期', '備份']);
   const words = (el: FakeEl): string => el.text + el.children.map(words).join('');
   const all = tab.containerEl.rows.map(item => item.name + item.desc + words(item.nameEl) + words(item.descEl)).join('\n');
   assert.ok(!/給家長|學生/.test(all), all);
   assert.match(words(row(RETENTION).descEl), /預計還記得的比例/);
+});
+
+void test('手機的製卡開關（D-226 第 1 點、tasks/phone-cards.md §2-1）：預設關；打開先問，取消或關掉視窗維持關；打開後命令與圖示出現，關掉立刻不見、開著的視窗關掉', async t => {
+  const h = await open(t);
+  const visible = (): string[] => h.ribbons.filter(ribbon => ribbon.el.style.display !== 'none').map(ribbon => ribbon.title);
+  const command = h.commands.get('ai-cards') as { checkCallback: (checking: boolean) => boolean };
+  const toggle = h.row('在這台裝置製卡').toggle!;
+  assert.equal(toggle.value, false);
+  assert.equal(command.checkCallback(true), false);
+  assert.ok(!visible().includes('Essence Cards：AI 製卡'));
+  const answer = (text: string | null): void => {
+    const modal = h.modals.at(-1)!;
+    assert.equal(modal.titleEl.text, '在這台裝置打開製卡？');
+    assert.match(modal.contentEl.children[0].text, /孩子複習用的手機或平板不要打開/);
+    if (text === null) { modal.close(); return; }
+    modal.contentEl.querySelectorAll('button').find(button => button.text === text)!.click();
+    assert.equal(modal.isOpen, false);
+  };
+  // 取消、關掉視窗：不存，開關回到關。
+  for (const how of ['取消', null]) {
+    toggle.choose(true);
+    answer(how);
+    assert.equal(toggle.value, false);
+    assert.equal(h.storage('essence-cards-phone-cards'), null);
+    assert.equal(command.checkCallback(true), false);
+  }
+  toggle.choose(true);
+  answer('打開');
+  assert.equal(toggle.value, true);
+  assert.equal(h.storage('essence-cards-phone-cards'), true);
+  assert.equal(command.checkCallback(true), true);
+  assert.ok(visible().includes('Essence Cards：AI 製卡'));
+  // 打開 AI 製卡的視窗，再關掉開關：視窗關掉，命令與圖示不見；關掉不用問。
+  const before = h.modals.length;
+  command.checkCallback(false);
+  const ai = h.modals[before];
+  assert.equal(ai.titleEl.text, 'AI 製卡');
+  assert.equal(ai.isOpen, true);
+  toggle.choose(false);
+  assert.equal(h.modals.length, before + 1, '關掉不跳確認');
+  assert.equal(ai.isOpen, false);
+  assert.equal(h.storage('essence-cards-phone-cards'), false);
+  assert.equal(command.checkCallback(true), false);
+  assert.ok(!visible().includes('Essence Cards：AI 製卡'));
 });
 
 void test('改上限：存進設定檔、data.json 不動，排程馬上照新的值', async t => {

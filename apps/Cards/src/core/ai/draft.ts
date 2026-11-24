@@ -184,12 +184,15 @@ export function linked(line: string, id: string, found: { path: string; name: st
 /** 引言框裡疑似重複的理由行（tasks/ai-cards-add.md §5 第 2 點）：前綴到 `可能重複 `、原稿的 ID、後面的字。 */
 const SUSPECT_REASON = /^(\s{0,3}>.*?(?:[-*+]|\d+[.)])\s+理由\s*[：:]\s*可能重複\s*)([a-hjkmnp-z2-9]{6})((?:\s*[｜|].*)?)$/;
 
+/** 卡組與快照的檔名基底（tasks/phone-cards.md §2-3）：code 是這次製卡的識別碼（手機建的才給），接在名稱後面，兩台在彼此看見之前不會選到同一個名字。 */
+export const withCode = (name: string, code: string | null): string => code === null ? name : `${name} ${code}`;
+
 /**
  * 存草稿的第 1 步（§5）：定好每一篇的目的地、配好 ID、做出每一篇卡組與快照本文的全文。next() 給一個新的 ID（state 配的，已經避開所有占用）；
- * taken 是整個 vault 現在的檔名（小寫、不含 .md），用掉的會加進去。date 是快照檔名的日期（YYYY-MM-DD）。
+ * taken 是整個 vault 現在的檔名（小寫、不含 .md），用掉的會加進去。date 是快照檔名的日期（YYYY-MM-DD）。code：手機建的檔名加上的識別碼（withCode），電腦是 null。
  */
 export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, sent: readonly ExistingTarget[], now: (id: string) => ExistingNow,
-  next: () => string, taken: Set<string>, date: string): PlannedDraft {
+  next: () => string, taken: Set<string>, date: string, code: string | null = null): PlannedDraft {
   if (inspection.errors.length) throw Error('還有擋住的錯誤，不能存草稿');
   const { lines, raw } = inspection.normalized;
   // 名稱行的改動：拿掉 AI 的 ID、行尾配上新的 ID。快照與卡組都套用。
@@ -229,11 +232,12 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
       : props.term === form.term.trim() && props.subject === subject.subject && props.unit?.code === unit.code && props.unit.name === unit.name.replace(/[ \t　]+/g, ' '));
     const trailing = new Set(text.split('\n').map(line => TRAILING_ID.exec(line)?.[1]).filter((id): id is string => !!id));
     if (!same || (piece.pick && props.need !== PICK_NEEDS) || !ids.every(id => trailing.has(id))) throw Error(`做出來的卡組讀回來和要寫的不同：${piece.name}`);
-    decks.push({ path: `${folder}/${freeName(piece.name, taken)}.md`, base: piece.name, text, sha256: sha256Hex(text), ids });
+    const base = withCode(piece.name, code);
+    decks.push({ path: `${folder}/${freeName(base, taken)}.md`, base, text, sha256: sha256Hex(text), ids });
   }
   const prefix = titlePrefix(form, subject);
   const label = prefix === null ? form.unit.trim() : `${form.term.trim()}${subject.subject ?? ''} ${form.unit.trim()}`;
-  const snapshotBase = safeFileName(`${date} ${label}`.replace(/[ 	　]+/g, ' '));
+  const snapshotBase = withCode(safeFileName(`${date} ${label}`.replace(/[ 	　]+/g, ' ')), code);
   const snapshot = freeName(snapshotBase, taken);
   return { decks, snapshotBody: edited.join('\n'), snapshotPath: `${SNAPSHOT_FOLDER}/${snapshot}.md`, snapshotBase, edits };
 }

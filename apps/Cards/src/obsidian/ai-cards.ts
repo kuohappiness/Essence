@@ -1,4 +1,4 @@
-import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
@@ -24,6 +24,8 @@ export interface AiCardsDeps {
     /** 點選填空每一科上次的選擇（D-210 第 2 點）。 */
     picks(): Record<string, boolean>; savePick(key: string, pick: boolean): void };
   clipboard: (text: string) => Promise<void>;
+  /** 這台是手機（tasks/phone-cards.md §2-3）：建的卡組與快照，檔名後面加這次製卡的識別碼。 */
+  phone?: boolean;
   now: () => { ms: number; offset: number };
   random?: () => number;
   onError: (error: unknown) => void;
@@ -35,7 +37,7 @@ export type Outcome =
   | { kind: 'stop'; message: string; deck?: DeckStop & { name: string; stage: SavedDeck['stage'] } };
 
 const BLOCKED: Record<WriteBlock | 'displaced' | 'changing', string> = {
-  phone: 'AI 製卡只在電腦上做',
+  phone: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」），這次沒有存；打開之後再按「繼續」',
   loading: '正在讀取卡組，先不存；讀完再按「繼續」',
   closed: '外掛關閉了，這次沒有存完；重開之後按「繼續」',
   restore: '正在還原，先不存；還原完再按「繼續」',
@@ -46,15 +48,33 @@ const BLOCKED: Record<WriteBlock | 'displaced' | 'changing', string> = {
   changing: '這幾篇卡組一直在變動（可能正在同步），先不存；等一下再按「繼續」',
 };
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+/** 還沒開始存的工作停下時，畫面只有「回上一步」（第二輪 P3）：照畫面上真的有的按鈕說。 */
+const firstSave = (message: string): string => message.replace(/再?按「繼續」$/, '回上一步，再按一次「存成草稿」');
+
+/**
+ * 家長在檢查結果看到的那一版（D-226 第 5 點，tasks/phone-cards.md §2-3）：每一篇的名稱與數字、擋住與提示的字。
+ * 存草稿時照現況重新檢查，和這一份不同就不存，請家長再按一次「檢查」（例如檢查之後才同步來的卡組，讓加進已有的學習目標改成照原文留著）。
+ */
+export function inspectionKey(inspection: Inspection): string {
+  return JSON.stringify({
+    pieces: inspection.pieces.map(piece => [piece.name, piece.targets, piece.prompts, piece.candidates, piece.adds.length]),
+    errors: inspection.errors.map(issue => [issue.line, issue.message]),
+    hints: inspection.hints.map(issue => [issue.line, issue.message]),
+  });
+}
 
 export function createAiCards(deps: AiCardsDeps) {
   const subjects = RULE_SUBJECTS.filter(subject => deps.rules[subject.key]?.length);
   const loaded = readJobs(deps.store.jobs(), deps.now().ms);
   let jobs = loaded.jobs;
-  /** 存回這台電腦：沒開始存草稿的最多 5 個、14 天（readJobs 照規則拿掉）。存不進去丟錯。 */
+  /**
+   * 存回這台裝置：沒開始存草稿的最多 5 個、14 天（readJobs 照規則拿掉）。存不進去丟錯。
+   * 存完讀回來核對，一字不差才算存好（tasks/phone-cards.md §2-5：手機的存放可能被系統清掉或存不下）；不同也丟錯，呼叫的一方照「存不進去」處理。
+   */
   function persist(next: CardJob[]): void {
     const kept = readJobs(next, deps.now().ms).jobs;
     deps.store.saveJobs(kept);
+    if (JSON.stringify(readJobs(deps.store.jobs(), deps.now().ms).jobs) !== JSON.stringify(kept)) throw Error('存進這台裝置之後讀回來不同');
     jobs = kept;
   }
   const put = (job: CardJob): void => { persist([job, ...jobs.filter(each => each.id !== job.id)]); };
@@ -87,6 +107,7 @@ export function createAiCards(deps: AiCardsDeps) {
         const deck = job.save!.decks[result.index];
         const name = fileName(deck.path);
         const message = result.situation === 'taken' ? `「${name}」要用的學習目標 ID 已經被別的卡組或複習紀錄用了，這一篇沒有建`
+          : result.situation === 'unclear' ? `「${fileName(result.path)}」和這次要存的內容不同，認不出是不是這次寫的（可能是上次中斷後改過，或是別台裝置的檔）；沒有覆蓋，也不會自動重建`
           : result.situation === 'split' ? `「${name}」的學習目標現在分在好幾篇，或只剩一部分；不會自動補回`
           : deck.stage === 'written' ? `「${name}」寫成之後找不到了（可能被刪掉）；不會自動補回` : `上一次建「${name}」時中斷，現在找不到它；不會自動補回`;
         return { kind: 'stop', message, deck: { ...result, name, stage: deck.stage } };
@@ -110,9 +131,10 @@ export function createAiCards(deps: AiCardsDeps) {
       remove(done) { drop(done); },
       read: path => state.aiRead(path),
       displaced: path => state.aiDisplaced(path),
-      create: (path, text) => state.aiCreate(path, text),
-      createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path)),
-      createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path)),
+      // cards：AI 製卡的窄入口（D-226 第 2 點），手機打開了製卡也放。
+      create: (path, text) => state.aiCreate(path, text, true),
+      createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path), true),
+      createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path), true),
       where: ids => state.aiWhere(ids),
       names: deps.names,
       named: deps.named,
@@ -133,6 +155,8 @@ export function createAiCards(deps: AiCardsDeps) {
     subjects,
     /** 這一科用哪些規則與版號（唯讀的一行）。 */
     rulesLine: (key: string): string => (deps.rules[key] ?? []).map(rule => `${rule.name} ${rule.version}`).join('、'),
+    /** 這一篇在這台會用的檔名基底（檢查結果的畫面用；手機加識別碼，tasks/phone-cards.md §2-3）。 */
+    nameOf: (job: CardJob, name: string): string => withCode(name, deps.phone === true ? job.id : null),
     /** 沒完成的工作：最新的在前。 */
     jobs: (): readonly CardJob[] => [...jobs].sort((a, b) => b.copiedMs - a.copiedMs),
     /** 這台電腦預留、不能配出的 ID（§5〈ID 的預留〉）：state 每次配號時問。 */
@@ -155,18 +179,28 @@ export function createAiCards(deps: AiCardsDeps) {
       return (deps.state()?.decks() ?? []).filter(({ deck: { props } }) => props.subject === subject && props.term !== null && termKey(props.term) === termKey(form.term) && props.unit !== null && codeKey(props.unit.code) === code)
         .map(entry => ({ name: fileName(entry.path), status: label[entry.deck.props.status] }));
     },
-    /** 會一起送出的已有學習目標；還沒讀完是 null。 */
-    existing(form: CardForm): number | null {
+    /** 會一起送出的已有學習目標；還沒讀完是 loading，有卡組或紀錄讀不到是 unread（數字不完整）。 */
+    existing(form: CardForm): number | 'loading' | 'unread' {
       const state = deps.state();
       const subject = subjects.find(each => each.key === form.subject);
-      if (!state || !subject || state.writeBlock() === 'loading') return null;
+      // 看 AI 製卡自己的門檻（cards）：手機的一般門檻一律先回 phone，會蓋掉還沒讀完（L2 R6）。讀不到的卡組也不能當成沒有（第二輪延續 R6）。
+      const block = state?.writeBlock(true);
+      if (!state || !subject || block === 'loading') return 'loading';
+      if (block === 'unread' || state.unread().length > 0) return 'unread';
+      if (!state.aiSettled()) return 'loading';
       return state.aiExisting(subject.subject, form.term).length;
     },
     /** 第二步：組提示、存成待貼回的工作（按下的當下就存，F1），再放進剪貼簿。 */
     async copy(form: CardForm): Promise<{ job: CardJob; chars: number } | { error: string }> {
       const state = deps.state();
       const subject = subjects.find(each => each.key === form.subject);
-      if (!state || state.writeBlock() === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+      const block = state?.writeBlock(true);
+      if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+      if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
+      if (block === 'restore' || block === 'restoreStuck') return { error: '正在還原，還原完才知道學生已有哪些學習目標；等一下再按' };
+      if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
+      // 送來通知、還在讀的卡組：不等，請家長等一下再按（L2 第四輪：剪貼簿要在按下的當下寫，iPhone 等過 I/O 可能被拒；等的期間開關、還原也可能變）。
+      if (!state.aiSettled()) return { error: '正在讀取剛同步來的卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
       const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
@@ -195,22 +229,29 @@ export function createAiCards(deps: AiCardsDeps) {
     },
     /**
      * 存成草稿（§5 第 1、2 步之後接著做）。同一個工作已經用另一份回覆存過一部分就停下；用同一份就從停下的地方接著做。
+     * shown：家長看到的檢查結果（inspectionKey）；還沒開始存、重新檢查的結果和它不同就不存（D-226 第 5 點）。畫面一定給；沒給（測試）時不比。
      */
-    save: (job: CardJob, reply: string, service: string | null): Promise<Outcome> => exclusive(job.id, async () => {
+    save: (job: CardJob, reply: string, service: string | null, shown?: string): Promise<Outcome> => exclusive(job.id, async () => {
       const latest = current(job);
       if (!latest) return { kind: 'stop', message: '找不到這次複製的提示，可能已經結束了或放太久被清掉了；請重新複製一次' } satisfies Outcome;
       if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' } satisfies Outcome;
       const state = deps.state();
       if (!state) return { kind: 'stop', message: BLOCKED.loading } satisfies Outcome;
+      // 等之前先看門檻（第二輪 R2 修正引入）：還原、備份、手機沒打開時，不等到它們結束才接著存。
+      const block = state.writeBlock(true);
+      if (block) return { kind: 'stop', message: firstSave(BLOCKED[block]) } satisfies Outcome;
+      // 先讀完已知的變動，再照現況重新檢查（L2 R2）：送來通知、還沒讀進索引的卡組也要算進去；讀不完就不存（一直有新的通知是 changing）。
+      if (await state.aiWhere([]) === null) return { kind: 'stop', message: firstSave(BLOCKED[state.writeBlock(true) ?? 'changing']) } satisfies Outcome;
       const inspection = inspectReply(reply, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id));
       if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' } satisfies Outcome;
+      if (shown !== undefined && inspectionKey(inspection) !== shown) return { kind: 'stop', message: '存之前再檢查一次，結果和剛才看到的不同（可能剛同步來新的卡組）；這次沒有存。回上一步再按「檢查」，看過新的結果再存' } satisfies Outcome;
       const count = inspection.pieces.reduce((sum, piece) => sum + piece.names.length, 0);
       // 題目、答案與其他行的區塊 ID 會原樣存進卡組（§4）：配號要避開，新目標的連結才不會指到別行（L2-12）。
-      const ids = state.aiIds(count, blockIds(inspection.normalized.lines.join('\n')));
-      if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] } satisfies Outcome;
+      const ids = state.aiIds(count, blockIds(inspection.normalized.lines.join('\n')), true);
+      if (typeof ids === 'string') return { kind: 'stop', message: firstSave(BLOCKED[ids]) } satisfies Outcome;
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
-      const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10));
+      const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10), deps.phone === true ? latest.id : null);
       const saved = beginSave(latest, reply, service, planned, started);
       // 第 2 步：恢復資料先存進這台電腦，存不進去就不碰 vault。
       try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' } satisfies Outcome; }

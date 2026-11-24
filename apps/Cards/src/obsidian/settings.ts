@@ -1,9 +1,9 @@
-import { Platform, PluginSettingTab, Setting, setIcon } from 'obsidian';
+import { Modal, Platform, PluginSettingTab, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
-import { deepenRemindOff, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
+import { deepenRemindOff, phoneCards, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
@@ -26,6 +26,16 @@ const REVIEW = {
   quizNote: '在目錄替單元或某一篇設小考日期，入口最上面會多一列。不改複習的排程。只影響這台裝置的目錄按鈕。',
   deepen: '這台電腦的加深提醒',
   deepenNote: '一篇卡組有一半以上的新目標記穩了，入口的提醒一區會問要不要加深。關掉後仍可用命令「加深這一節」。',
+};
+/** 手機的製卡開關（D-226 第 1 點、tasks/phone-cards.md §2-1）：只在手機顯示；打開時先問。照 D-156 只寫功能、不寫角色，寫的是哪一種裝置不要打開。 */
+const CARDS = {
+  section: 'AI 製卡',
+  phone: '在這台裝置製卡',
+  phoneNote: '打開後，這台手機也能用 AI 製卡、存成草稿。只影響這台裝置。',
+  confirmTitle: '在這台裝置打開製卡？',
+  confirm: '打開後，這台手機可以用 AI 製卡，存成草稿卡組。孩子複習用的手機或平板不要打開，免得不小心改到卡組。只影響這台裝置，其他裝置不會跟著打開；隨時可以回到這裡關掉。',
+  yes: '打開',
+  no: '取消',
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -93,6 +103,8 @@ export interface SettingsHost {
   previewChanged: () => void;
   /** 加深提醒的開關變了（tasks/ai-cards-deepen.md §5-2）：重算提醒一區。 */
   deepenChanged?: () => void;
+  /** 手機的製卡開關變了（tasks/phone-cards.md §2-1）：命令、圖示跟著，關掉時開著的 AI 製卡視窗關掉。 */
+  phoneCardsChanged?: () => void;
   /** 同步的設定（設定檔）。 */
   settings: SettingsStore;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：選學期時記下選的那一天。 */
@@ -120,6 +132,38 @@ function infoToggle(icon: HTMLElement, details: HTMLElement, open: () => boolean
   icon.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } });
 }
 const infoAttr = (open: boolean): Record<string, string> => ({ role: 'button', tabindex: '0', 'aria-label': '說明', 'aria-expanded': String(open) });
+
+/** 打開手機製卡前的確認（D-226 第 1 點）：按「打開」才是 true；取消、點外面、按 Esc 都是 false，只回答一次。 */
+class ConfirmModal extends Modal {
+  private answered = false;
+  private readonly body: string;
+  private readonly yes: string;
+  private readonly no: string;
+  private readonly done: (yes: boolean) => void;
+  constructor(app: App, title: string, body: string, yes: string, no: string, done: (yes: boolean) => void) {
+    super(app);
+    this.titleEl.setText(title);
+    this.body = body;
+    this.yes = yes;
+    this.no = no;
+    this.done = done;
+  }
+  private answer(yes: boolean): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.done(yes);
+  }
+  onOpen(): void {
+    this.contentEl.createEl('p', { text: this.body });
+    const buttons = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    buttons.createEl('button', { text: this.no }).addEventListener('click', () => { this.answer(false); this.close(); });
+    buttons.createEl('button', { text: this.yes, cls: 'mod-cta' }).addEventListener('click', () => { this.answer(true); this.close(); });
+  }
+  onClose(): void {
+    this.answer(false);
+    this.contentEl.empty();
+  }
+}
 
 class EssenceSettingTab extends PluginSettingTab {
   private readonly host: SettingsHost;
@@ -149,6 +193,7 @@ class EssenceSettingTab extends PluginSettingTab {
     }
     this.review(containerEl);
     this.term(containerEl);
+    if (!Platform.isDesktopApp) this.cards(containerEl);
     new Setting(containerEl).setName(TEXTS.section).setHeading();
     if (!Platform.isDesktopApp) {
       new Setting(containerEl).setDesc(TEXTS.phone);
@@ -221,6 +266,24 @@ class EssenceSettingTab extends PluginSettingTab {
     if (Platform.isDesktopApp) new Setting(containerEl).setName(REVIEW.deepen).setDesc(REVIEW.deepenNote).addToggle(toggle => toggle.setValue(!deepenRemindOff.get(this.app)).onChange(on => {
       deepenRemindOff.set(this.app, !on);
       this.host.deepenChanged?.();
+    }));
+  }
+
+  /** 手機的「AI 製卡」一區（D-226 第 1 點）：打開先跳確認視窗，取消就維持關；關掉不用問。 */
+  private cards(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(CARDS.section).setHeading();
+    new Setting(containerEl).setName(CARDS.phone).setDesc(CARDS.phoneNote).addToggle(toggle => toggle.setValue(phoneCards.get(this.app)).onChange(on => {
+      if (!on) {
+        phoneCards.set(this.app, false);
+        this.host.phoneCardsChanged?.();
+        return;
+      }
+      // 確認之前不存：視窗被關掉或按取消，開關回到關。按了「打開」不再 setValue：Obsidian 的 setValue 會再叫一次 onChange，又跳一次確認。
+      new ConfirmModal(this.app, CARDS.confirmTitle, CARDS.confirm, CARDS.yes, CARDS.no, yes => {
+        if (!yes) { toggle.setValue(false); return; }
+        phoneCards.set(this.app, true);
+        this.host.phoneCardsChanged?.();
+      }).open();
     }));
   }
 

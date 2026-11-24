@@ -2,10 +2,10 @@ import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
 import { freeName, groupHints, issueText, PURPOSES } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
-import { PICK_NOTE, SERVICES } from './ai-cards.ts';
+import { inspectionKey, PICK_NOTE, SERVICES } from './ai-cards.ts';
 import type { AiCards, Outcome } from './ai-cards.ts';
 
-// AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：電腦才有（D-039：手機上不製卡），入口與目錄不放（D-100）。
+// AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：電腦一直有；手機在設定頁打開才有（D-226、tasks/phone-cards.md §2-1）。入口與目錄不放（D-100）。
 // 用 Obsidian 的視窗、和存檔按鈕的小視窗同一種做法：家長要在瀏覽器與 Obsidian 之間來回，視窗不蓋住整個工作區。
 
 const TEXT = {
@@ -20,6 +20,9 @@ const TEXT = {
   blocked: '擋住了，改好再檢查（可以直接在上面改字）：',
   hints: '提示（可以存）：',
   saving: '正在存成草稿…',
+  /** 待貼回的工作只存在這台裝置（tasks/phone-cards.md §2-5；保留規則在 core/ai/job.ts）。 */
+  // 清掉的時機照 readJobs（載入與存工作時）：寫「可能」，不寫成到期那一刻就清（L2 R7）。
+  local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒開始存成草稿的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
   broken: (n: number) => `有 ${String(n)} 份之前複製的提示讀不懂，已經拿掉；要用的話請重新複製一次。`,
 };
 
@@ -150,7 +153,7 @@ class AiCardsModal extends Modal {
       const found = cards.sameUnit(form);
       same.setText(found.length ? `已經有：${found.map(each => `${each.name}（${each.status}）`).join('、')}。還是要做一份新的嗎？舊的不會動。` : '');
       const count = cards.existing(form);
-      existing.setText(count === null ? '正在讀取卡組…' : count ? `會一起送出 ${String(count)} 個已有的學習目標` : '已有的學習目標：無');
+      existing.setText(count === 'loading' ? '正在讀取卡組…' : count === 'unread' ? '還有卡組沒讀到（可能還在從 iCloud 下載），讀到才知道已有哪些學習目標' : count ? `會一起送出 ${String(count)} 個已有的學習目標` : '已有的學習目標：無');
       copy.disabled = this.busy || !form.unit.trim();
     };
     subject.addEventListener('change', () => {
@@ -190,6 +193,7 @@ class AiCardsModal extends Modal {
     if (!cards || !job) { this.close(); return; }
     const el = this.reset();
     el.createEl('p', { text: (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
+    el.createEl('p', { text: TEXT.local(job.id), cls: 'essence-cards-issue-note' });
     const again = el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: chars === null ? '再複製一次提示' : '再複製一次' });
     again.addEventListener('click', () => { void cards.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
     const box = el.createEl('textarea', { cls: 'essence-cards-ai-paste', attr: { placeholder: TEXT.paste, rows: '12' } });
@@ -224,7 +228,10 @@ class AiCardsModal extends Modal {
     saveButton.addEventListener('click', () => {
       this.busy = true;
       update();
-      void this.finish(cards.save(job, box.value, this.service));
+      // 存的是檢查過的那一份、綁著看到的結果（D-226 第 5 點）：改過字的話 inspection 已經清掉，按不到這裡。
+      const shown = this.inspection;
+      if (!shown) return;
+      void this.finish(cards.save(job, box.value, this.service, inspectionKey(shown)));
     });
     update();
   }
@@ -240,9 +247,12 @@ class AiCardsModal extends Modal {
     }
     const taken = new Set(this.app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase()));
     const list = el.createEl('ul');
+    const cards = this.host.cards(), job = this.job;
     for (const piece of inspection.pieces) {
-      const name = freeName(piece.name, taken);
-      const renamed = name === piece.name ? '' : `（已有同名的卡組，這一篇存成「${name}」）`;
+      // 手機建的檔名多了識別碼（tasks/phone-cards.md §2-3）：照會用的檔名比同名。
+      const base = cards && job ? cards.nameOf(job, piece.name) : piece.name;
+      const name = freeName(base, taken);
+      const renamed = name === base ? '' : `（已有同名的卡組，這一篇存成「${name}」）`;
       list.createEl('li', { text: `${name}${renamed}：學習目標 ${String(piece.targets)}、題目 ${String(piece.prompts)}、候選卡片 ${String(piece.candidates)}、加進已有的學習目標 ${String(piece.adds.length)}` });
     }
     if (inspection.hints.length) {
@@ -272,7 +282,10 @@ class AiCardsModal extends Modal {
       if (job) pasted.delete(job.id);
       this.close();
       if (outcome.decks[0]) this.host.openNote(outcome.decks[0]);
-      this.host.notify(`已存成草稿：${String(outcome.decks.length)} 篇、${String(outcome.targets)} 個學習目標。看過、改好後按「啟用」，孩子才看得到`);
+      // 列實際的檔名：按下之後才出現同名時，名字會和檢查結果畫面的不同（tasks/phone-cards.md §2-3、L2 R5）。
+      const names = outcome.decks.map(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '')).join('、');
+      // 每一篇都跳過了：快照照樣存，沒有可以啟用的草稿（第二輪 P3）。
+      this.host.notify(names ? `已存成草稿：${names}（${String(outcome.targets)} 個學習目標）。看過、改好後按「啟用」，孩子才看得到` : '這次的卡組都跳過了，沒有留下草稿');
       return;
     }
     const cards = this.host.cards();
@@ -309,11 +322,26 @@ class AiCardsModal extends Modal {
   }
 }
 
-/** 命令「AI 製卡」與左側功能列的圖示（§2）：只在電腦註冊。停用外掛時關掉開著的視窗。 */
-export function wireAiCards(plugin: Plugin, host: AiCardsModalHost): void {
+/**
+ * 命令「AI 製卡」與左側功能列的圖示（§2）。停用外掛時關掉開著的視窗。
+ * 手機（tasks/phone-cards.md §2-1）：host.cards() 在設定頁沒打開時是 null，命令不列、圖示藏起來；refresh() 在開關變了時呼叫，關掉就關掉開著的視窗。
+ */
+export function wireAiCards(plugin: Plugin, host: AiCardsModalHost): { refresh(): void } {
   const modals = new Set<Modal>();
-  plugin.register(() => { for (const modal of [...modals]) modal.close(); });
+  const closeAll = (): void => { for (const modal of [...modals]) modal.close(); };
+  plugin.register(closeAll);
   const open = (): void => { if (host.cards()) new AiCardsModal(plugin.app, host, modals).open(); };
-  plugin.addRibbonIcon('sparkles', 'Essence Cards：AI 製卡', open);
-  plugin.addCommand({ id: 'ai-cards', name: TEXT.title, callback: open });
+  const icon = plugin.addRibbonIcon('sparkles', 'Essence Cards：AI 製卡', open);
+  plugin.addCommand({ id: 'ai-cards', name: TEXT.title, checkCallback: checking => {
+    if (!host.cards()) return false;
+    if (!checking) open();
+    return true;
+  } });
+  const refresh = (): void => {
+    const on = host.cards() !== null;
+    icon.toggle(on);
+    if (!on) closeAll();
+  };
+  refresh();
+  return { refresh };
 }

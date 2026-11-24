@@ -32,6 +32,7 @@ export class FakeEl {
   createSpan(options?: { text?: string }) { return this.createEl('span', options); }
   createEl(tag: string, options?: { text?: string }) { const el = new FakeEl(tag, options); this.children.push(el); return el; }
   addClass() {}
+  focus() {}
   setAttribute() {}
   toggle(show: boolean) { this.hidden = !show; }
   addEventListener(type: string, callback: () => void) { if (type === 'click') this.clicks.push(callback); }
@@ -149,7 +150,7 @@ export interface ObsidianStub {
   app: Record<string, unknown>;
   notices: string[];
   commands: Map<string, Command>;
-  ribbons: { icon: string; title: string; callback: (evt: unknown) => unknown }[];
+  ribbons: { icon: string; title: string; callback: (evt: unknown) => unknown; el: { style: { display: string } } }[];
   extensions: () => number;
   /** open() 過的 Modal：open 時呼叫 onOpen、close 時呼叫 onClose；isOpen 是開著沒。 */
   modals: { titleEl: FakeEl; contentEl: FakeEl; isOpen: boolean; close(): void }[];
@@ -324,7 +325,12 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     /** 停用外掛（Obsidian 呼叫的是這個）：onunload，再移除登記的事件。 */
     unload(): void { this.onunload(); for (const cleanup of this.cleanups.splice(0)) cleanup(); }
     addCommand(command: Command) { commands.set(command.id, command); return command; }
-    addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) { ribbons.push({ icon, title, callback }); return {}; }
+    addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) {
+      // toggle() 照 Obsidian 加在 HTMLElement 上的寫法：改 style.display（AI 製卡的圖示在手機跟著開關藏起來）。
+      const el = { style: { display: '' }, toggle(on: boolean) { el.style.display = on ? '' : 'none'; } };
+      ribbons.push({ icon, title, callback, el });
+      return el;
+    }
     addStatusBarItem() {
       // hide()／show()／toggle() 照 Obsidian 加在 HTMLElement 上的寫法：改 style.display。
       const item = {

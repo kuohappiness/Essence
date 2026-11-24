@@ -48,7 +48,8 @@ function vault(files = new Map<string, string>()) {
       return Promise.resolve({ kind: 'done' });
     },
     createDeck(path, text) { return this.create(path, text); },
-    createSnapshot(path, text, decks) { return decks.some(deck => { const found = blockIds(files.get(deck.path) ?? ''); return !deck.ids.every(id => found.has(id)); }) ? Promise.resolve({ kind: 'refused', why: 'decks' }) : this.create(path, text); },
+    // 寫入當下的末次核對（state 的 aiCreateSnapshot）：ID 都在原位置、內容和核對時讀到的一字不差（D-226 第 5 點）。
+    createSnapshot(path, text, decks) { return decks.some(deck => { const now = files.get(deck.path); const found = blockIds(now ?? ''); return !deck.ids.every(id => found.has(id)) || now !== deck.text; }) ? Promise.resolve({ kind: 'refused', why: 'decks' }) : this.create(path, text); },
     where(ids) {
       const found = new Map<string, string[]>();
       for (const [path, text] of files) if (isDeckPath(path)) for (const id of blockIds(text)) if (ids.includes(id)) found.set(id, [...found.get(id) ?? [], path]);
@@ -858,4 +859,121 @@ void test('§5 目的地在存了恢復資料之後才被別人用了（F4）：
   const result = await publish(job, io);
   assert.deepEqual(result, { kind: 'done', decks: [WORD.replace('.md', ' 2.md'), GRAMMAR], targets: 3 });
   assert.equal(files.get(WORD), '家長剛建的筆記');
+});
+
+/** 第一篇建好、記成寫出過之前當掉：第一篇停在開始建了（started），檔已經是全文。 */
+async function startedOnly() {
+  const v = vault();
+  const job = saved(copied());
+  v.io.store(job);
+  let stores = 0;
+  v.box.crash = what => what === 'store' && ++stores === 2;
+  await assert.rejects(publish(job, v.io), Crash);
+  v.box.crash = () => false;
+  assert.equal(v.reload().save!.decks[0].stage, 'started');
+  assert.equal(v.files.get(WORD), v.reload().save!.decks[0].text);
+  return v;
+}
+
+void test('D-226 第 5 點：中斷後用內容雜湊認自己的產物（Codex 第一輪探針的反例）；開始建了、內容不同而 ID 都在的認不出來，停下、不覆寫、不重建、不發布', async () => {
+  // 開始建了、全文相同：就是這次寫的（逾時後晚到的寫入也是這樣認）。
+  {
+    const { io, reload } = await startedOnly();
+    assert.equal((await publish(reload(), io)).kind, 'done');
+  }
+  // 開始建了、內容不同、配的 ID 全都在（家長中斷後改過字，或別台同 ID 的異文）：unclear。
+  {
+    const { files, io, reload } = await startedOnly();
+    const other = files.get(WORD)!.replace('借入', '借進來');
+    files.set(WORD, other);
+    assert.deepEqual(await publish(reload(), io), { kind: 'deck', index: 0, situation: 'unclear', path: WORD });
+    assert.equal(files.get(WORD), other);
+    assert.ok(!files.has(SNAPSHOT));
+    assert.equal(reload().save!.decks[0].stage, 'started');
+    // 跳過：ID 不再配出，其他篇照常發布，快照不列它。
+    const skipped = skipDeck(reload(), 0);
+    assert.deepEqual(skipped.retire, ['aaaaa2', 'bbbbb2']);
+    assert.deepEqual(await publish(skipped.job!, io), { kind: 'done', decks: [GRAMMAR], targets: 1 });
+    assert.equal(files.get(WORD), other);
+  }
+  // 開始建了、全部 ID 跑到另一篇、內容不同：不當成自己搬走了，停在那一篇。
+  {
+    const { files, io, reload } = await startedOnly();
+    const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+    files.set(moved, files.get(WORD)!.replace('借入', '借進來'));
+    files.delete(WORD);
+    assert.deepEqual(await publish(reload(), io), { kind: 'deck', index: 0, situation: 'unclear', path: moved });
+    assert.ok(!files.has(SNAPSHOT));
+  }
+  // 開始建了、搬到另一篇、全文相同：跟過去。
+  {
+    const { files, io, reload } = await startedOnly();
+    const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+    files.set(moved, files.get(WORD)!);
+    files.delete(WORD);
+    assert.deepEqual(await publish(reload(), io), { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
+  }
+  // 寫成、讀回核對過（written）之後被改字、搬走：ID 都在就認得（家長合法的修改不覆寫）。
+  {
+    const { files, io, reload } = await firstWritten();
+    const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+    files.set(moved, files.get(WORD)!.replace('借入', '借進來'));
+    files.delete(WORD);
+    assert.deepEqual(await publish(reload(), io), { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
+    assert.ok(files.get(moved)!.includes('借進來'));
+  }
+});
+
+void test('D-226 第 5 點：沒有 ID 可以認的篇，寫成之後內容變了也停下（只靠 ID 時任何檔都會被當成寫成）', async () => {
+  const { files, io, box, reload } = vault();
+  const job = saved(copied());
+  // 把第二篇的 ID 拿掉，模擬只有隱含題、沒有名稱行的篇。
+  const decks = job.save!.decks.map((deck, i) => i === 1 ? { ...deck, ids: [] } : deck);
+  const bare: CardJob = { ...job, save: { ...job.save!, decks } };
+  io.store(bare);
+  let stores = 0;
+  // 第 1、2 次存是第一篇開始建了、寫出過，第 3、4 次是第二篇，第 5 次是準備發布：在那裡當掉，兩篇都是 written。
+  box.crash = what => what === 'store' && ++stores === 5;
+  await assert.rejects(publish(bare, io), Crash);
+  box.crash = () => false;
+  assert.equal(reload().save!.decks[1].stage, 'written');
+  files.set(GRAMMAR, '別的內容');
+  assert.deepEqual(await publish(reload(), io), { kind: 'deck', index: 1, situation: 'unclear', path: GRAMMAR });
+  assert.equal(files.get(GRAMMAR), '別的內容');
+  assert.ok(!files.has(SNAPSHOT));
+});
+
+void test('D-226 第 5 點：快照的末次核對比全文，核對之後、寫快照之前卡組被改，照現況重新核對再寫（ID 都在的照新內容發布）', async () => {
+  const { files, io } = vault();
+  const job = saved(copied());
+  io.store(job);
+  const create = io.createSnapshot.bind(io);
+  let calls = 0;
+  io.createSnapshot = (path, text, decks) => {
+    // 第一次寫快照的當下，家長剛好改了第一篇的字（ID 都在）。
+    if (++calls === 1) files.set(WORD, files.get(WORD)!.replace('借入', '借進來'));
+    return create(path, text, decks);
+  };
+  assert.deepEqual(await publish(job, io), { kind: 'done', decks: [WORD, GRAMMAR], targets: 3 });
+  assert.equal(calls, 2);
+  assert.ok(files.get(WORD)!.includes('借進來'));
+  assert.ok(files.has(SNAPSHOT));
+});
+
+
+void test('D-226 第 5 點：建卡組讀回逾時（unreadable）之後才晚到，全文相同照樣認成這次寫的；晚到的是異文就停下', async () => {
+  for (const late of [(text: string) => text, (text: string) => text.replace('借入', '借進來')]) {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const create = io.createDeck.bind(io);
+    io.createDeck = (path, text, ids) => path === WORD ? Promise.resolve({ kind: 'unreadable', path, error: Error('逾時') }) : create(path, text, ids);
+    assert.equal((await publish(job, io)).kind, 'unreadable');
+    assert.equal(reload().save!.decks[0].stage, 'started');
+    io.createDeck = create;
+    files.set(WORD, late(job.save!.decks[0].text));
+    const result = await publish(reload(), io);
+    if (files.get(WORD) === job.save!.decks[0].text) assert.equal(result.kind, 'done');
+    else assert.deepEqual(result, { kind: 'deck', index: 0, situation: 'unclear', path: WORD });
+  }
 });

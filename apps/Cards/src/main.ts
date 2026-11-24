@@ -41,7 +41,7 @@ import { createState, type ErrorSource, type State, type StudyPick } from './sta
 import { reminderView, type Session } from './review/index.ts';
 import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
-import { aiPrefs, deepenRemindOff } from './ui/prefs.ts';
+import { aiPrefs, deepenRemindOff, phoneCards } from './ui/prefs.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -126,8 +126,10 @@ export default class EssenceCardsPlugin extends Plugin {
   private guard: FolderGuard | null = null;
   /** 狀態列的提醒（D-163 第 5 點）：只有電腦。 */
   private statusBar: HTMLElement | null = null;
-  /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
+  /** AI 製卡（tasks/ai-cards-mvp.md）：電腦與手機都建（手機要讀進未完成工作的預留 ID）；手機在設定頁打開才用得到（D-226、tasks/phone-cards.md §2-1）。 */
   private ai: AiCards | null = null;
+  /** AI 製卡的命令與圖示：手機的開關變了時重畫。 */
+  private aiWiring: { refresh(): void } | null = null;
   private deepen: Deepen | null = null;
   /** 打開「加深這一節」的視窗（命令與提醒一區共用）。 */
   private openDeepen: ((path: string) => void) | null = null;
@@ -198,7 +200,7 @@ export default class EssenceCardsPlugin extends Plugin {
     if (Platform.isDesktopApp) this.ids = this.wireIds();
     // 設定分頁（D-104、D-156 依功能分區）：備份一區在 iPhone 上只寫「備份在電腦上做」。
     this.settingTab = wireSettings({
-      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); }, deepenChanged: () => { this.refreshDeepen(0); },
+      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); }, deepenChanged: () => { this.refreshDeepen(0); }, phoneCardsChanged: () => { this.aiWiring?.refresh(); },
       settings: this.store, today: todayText,
       settingsMissing: () => this.settingsFile?.missing() ?? false,
       recreateSettings: () => this.settingsFile ? this.settingsFile.recreate(this.store) : Promise.resolve('unreadable'),
@@ -216,27 +218,29 @@ export default class EssenceCardsPlugin extends Plugin {
       start: pick => { this.startReview(pick); },
       preview: session => { this.startPreview(session); },
       notify: message => { new Notice(message); },
-      activate: Platform.isDesktopApp ? path => this.state ? activateDeck(this.app, this.state, path, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
+      activate: Platform.isDesktopApp ? (path, confirmed) => this.state ? activateDeck(this.app, this.state, path, confirmed, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
     });
-    // AI 製卡只在電腦（D-039）。待貼回的工作在建立 state 之前就讀好：state 第一次配號時，未完成工作的預留一定已經載入（§5〈ID 的預留〉）。
+    // AI 製卡：電腦一直有，手機在設定頁打開才有（D-226 第 1 點）。待貼回的工作在建立 state 之前就讀好：state 第一次配號時，未完成工作的預留一定已經載入（§5〈ID 的預留〉）。
+    const app = this.app;
+    this.ai = createAiCards({
+      rules: JSON.parse(CARD_RULES) as EmbeddedRules,
+      state: () => this.state,
+      names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
+      named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+      store: {
+        jobs: () => aiPrefs.jobs(app), saveJobs: jobs => { aiPrefs.saveJobs(app, jobs); },
+        retired: () => aiPrefs.retired(app), retire: ids => { aiPrefs.retire(app, ids); },
+        last: () => aiPrefs.last(app), saveLast: last => { aiPrefs.saveLast(app, last); },
+        picks: () => aiPrefs.picks(app), savePick: (key, pick) => { aiPrefs.savePick(app, key, pick); },
+      },
+      clipboard: text => navigator.clipboard.writeText(text),
+      phone: !Platform.isDesktopApp,
+      now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
+      onError: error => { this.fail('ai', error); },
+    });
+    this.aiWiring = wireAiCards(this, { cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+    // 加深只在電腦（D-226 第 2 點：手機的第一批只有 AI 製卡建新檔）。
     if (Platform.isDesktopApp) {
-      const app = this.app;
-      this.ai = createAiCards({
-        rules: JSON.parse(CARD_RULES) as EmbeddedRules,
-        state: () => this.state,
-        names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
-        named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
-        store: {
-          jobs: () => aiPrefs.jobs(app), saveJobs: jobs => { aiPrefs.saveJobs(app, jobs); },
-          retired: () => aiPrefs.retired(app), retire: ids => { aiPrefs.retire(app, ids); },
-          last: () => aiPrefs.last(app), saveLast: last => { aiPrefs.saveLast(app, last); },
-          picks: () => aiPrefs.picks(app), savePick: (key, pick) => { aiPrefs.savePick(app, key, pick); },
-        },
-        clipboard: text => navigator.clipboard.writeText(text),
-        now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
-        onError: error => { this.fail('ai', error); },
-      });
-      wireAiCards(this, { cards: () => this.unloaded ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
       // 加深這一節（tasks/ai-cards-deepen.md）：寫入走開在編輯模式的分頁（同引言框的加入），否則走檔案。
       const editingView = (path: string): MarkdownView | null => app.workspace.getLeavesOfType('markdown')
         .map(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path === path ? leaf.view : null).find(each => each !== null && each.getMode() === 'source') ?? null;
@@ -432,6 +436,11 @@ export default class EssenceCardsPlugin extends Plugin {
     const setting = (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting;
     setting?.open();
     setting?.openTabById(this.manifest.id);
+  }
+
+  /** 這台裝置可以製卡：電腦一直可以；手機要在設定頁打開（D-226 第 1 點），每次問，關掉立刻生效。 */
+  private cardsHere(): boolean {
+    return Platform.isDesktopApp || phoneCards.get(this.app);
   }
 
   /** 加深的提醒晚一點重算（tasks/ai-cards-deepen.md §4）：作答、存檔會連續觸發，合成一次。 */
@@ -704,7 +713,7 @@ export default class EssenceCardsPlugin extends Plugin {
     try {
       this.register(files.watch(path => { if (isSettingsPath(path)) void this.store.reload(); }));
     } catch { /* 見上 */ }
-    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => [...this.ai?.reserved() ?? [], ...this.deepen?.reserved() ?? []], onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, phoneCards: () => this.cardsHere(), backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => [...this.ai?.reserved() ?? [], ...this.deepen?.reserved() ?? []], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();

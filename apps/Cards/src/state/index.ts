@@ -18,7 +18,7 @@ import { createWrites, REFUSE, WriteTimeout } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import { CLEAR_WHY, clearExisting, existingTargets, EXISTING_WHY, findItem, hasOutsideItem, learnedWords, moveItems, planExisting, WHY } from '../core/ai/index.ts';
-import type { AppendWrite, ClearItem, DeepenStop, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan } from '../core/ai/index.ts';
+import type { AppendWrite, ClearItem, DeepenStop, Endpoint, ExistingNow, ExistingTarget, ItemRef, Left, MovePlan, SnapshotDeck } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 import { createObserver } from './observe.ts';
@@ -63,6 +63,11 @@ export interface StateOptions {
   /** 補學習目標 ID：電腦 true、手機 false（D-134：iPhone 不寫卡組筆記）。 */
   fillIds: boolean;
   /**
+   * 手機在設定頁打開了製卡（D-226 第 1、2 點）：fillIds 是 false 時，只放 AI 製卡建新檔與配號（呼叫時帶 cards: true 的那幾個方法）。
+   * 每次寫入前與寫入回呼裡都問，關掉之後排隊中的也不寫。沒傳是不放。
+   */
+  phoneCards?: () => boolean;
+  /**
    * 改寫卡組之前要先有一份成功的備份（D-150 第 3 點）：電腦上外掛內的備份接上時是 true，寫入的閘門一開始關著
    * （save、resolve 回 blocked backup，fillIds 回傳 false），backupReady(true) 才打開。沒傳或 false 時不擋（手機、測試）。
    */
@@ -87,6 +92,8 @@ export interface StateOptions {
   displaced?: (path: string) => boolean;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
+/** 改狀態的結果：寫入的結果、屬性區讀不懂（unwritable）；啟用時另有 changed（家長確認之後內容變了）、already（已經不是草稿）。 */
+export type ActivateResult = WriteResult | { kind: 'unwritable' } | { kind: 'changed' } | { kind: 'already' };
 /**
  * 一次複習的範圍：study 的 Pick，加上要經過單元索引才知道目標集合的（D-142 原則 5）。unit 是單元的鍵（Catalog 的 key）；
  * 沒有 since 是單元的當日卡，有 since 是單元的全部卡；deck 加 since 是卡組筆記的全部卡（D-146）。目標集合每次都照 state 現在讀到的內容算。
@@ -289,9 +296,10 @@ export interface State {
   setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
    * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成後一樣由偵測的出口記一行 `set: status`（`val: 啟用`）。
-   * 不是草稿（啟用、暫停）是 unchanged；需要新版、屬性區讀不懂的照 setDeckStatus。
+   * 不是草稿（啟用、暫停）是 already；需要新版、屬性區讀不懂的照 setDeckStatus。
+   * confirmed（D-226 第 5 點，tasks/phone-cards.md §2-3）：家長在確認視窗看的那一版全文；寫入當下的全文和它不同（換行不算）就不寫、回 changed，請家長重新確認。
    */
-  activateDraft(path: string, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
+  activateDraft(path: string, editor: EditorHandle | null, confirmed?: string): Promise<ActivateResult>;
   /**
    * 引言框的候選加入（tasks/ai-cards-add.md §2）：同一篇，和補 ID 走同一條寫入（同一列、同樣的門檻）。寫入回呼裡對這一篇最新的文字先問 still
    * （「全部加入」確認之後批次變了就不寫，回 changed，呼叫端重新確認），再照 core/ai 的 moveCandidates 算；ID 和別篇卡組（含需要新版的）重複的留項。
@@ -318,14 +326,22 @@ export interface State {
   aiTarget(id: string): ExistingNow;
   /** 這一篇的目標會不會被正式排程停出（§7 啟用確認的計數，R2-8）：待處理的行、重複的 ID、和需要新版的卡組同 ID、紀錄讀不懂或不完整。 */
   aiStopped(path: string): (target: { id: string; line: number }) => boolean;
-  /** 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用、這台電腦的預留與 avoid（將一起存入的區塊 ID），配出的之後都不再配。 */
-  aiIds(count: number, avoid?: Iterable<string>): string[] | WriteBlock;
-  /** 建快照（§5 第 6 步）：同 aiCreate，但先讀完已知的變動，寫入的當下每一篇都還要在原位置（ID 都在），整個 vault 也沒有同名檔；不符合回 refused、不建（R2-3、R2-4）。 */
-  aiCreateSnapshot(path: string, text: string, decks: readonly { path: string; ids: readonly string[] }[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
+  /**
+   * 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用、這台電腦的預留與 avoid（將一起存入的區塊 ID），配出的之後都不再配。
+   * cards：AI 製卡的新草稿（D-226 第 2 點）：手機打開了製卡也放（StateOptions.phoneCards）；加深不帶。下面幾個 aiCreate 的 cards 同義。
+   */
+  aiIds(count: number, avoid?: Iterable<string>, cards?: boolean): string[] | WriteBlock;
+  /**
+   * 建快照（§5 第 6 步）：同 aiCreate，但先讀完已知的變動，寫入的當下每一篇都還要在原位置（ID 都在）、內容和發布核對時讀到的一字不差（換行不算，D-226 第 5 點），
+   * 整個 vault 也沒有同名檔；不符合回 refused、不建（R2-3、R2-4）。
+   */
+  aiCreateSnapshot(path: string, text: string, decks: readonly SnapshotDeck[], nameFree: () => boolean, cards?: boolean): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）：先讀完已知的變動（L2-2）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
   aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
+  /** 卡組都讀完了（讀完、沒有送來通知還沒讀的、沒有讀不到的）：複製提示時算已有目標用，不等（剪貼簿要在按下的當下寫，手機製卡 L2 第四輪）。 */
+  aiSettled(): boolean;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
-  aiCreate(path: string, text: string): Promise<CreateResult>;
+  aiCreate(path: string, text: string, cards?: boolean): Promise<CreateResult>;
   /** 直接讀一個檔（§5 第 3～6 步的原文、快照與目的地）：不存在是 null；讀不到或超過 stuckAfter 沒回來就丟錯，不當成不存在（R3-5）。 */
   aiRead(path: string): Promise<string | null>;
   /** 這個路徑的上層有系統資料夾不在原位、也沒搬回（R3-4）：aiRead 回 null 也不代表真的沒有。 */
@@ -336,12 +352,13 @@ export interface State {
    */
   aiAppend(path: string, editor: EditorHandle | null, plan: (text: string) => { text: string } | { why: DeepenStop['why'] }): Promise<AppendWrite>;
   /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次，並確認整個 vault 沒有同名檔（nameFree，R2-4）。 */
-  aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
+  aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean, cards?: boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
+   * cards：AI 製卡的窄入口（D-226）：手機打開了開關時不回 phone，照後面的順序（例如還沒讀完是 loading）。
    */
-  writeBlock(): WriteBlock | null;
+  writeBlock(cards?: boolean): WriteBlock | null;
   /**
    * 還原的獨占時段（tasks/plugin-restore.md §3-2）：呼叫的當下就關寫入的閘門（writeBlock 回 restore），等正在跑的寫入與範圍檔、小考檔的隊伍，再跑 work。
    * 排隊中的寫入回受阻，範圍檔、小考檔排在後面、輪到時照舊核對；閘門不論成敗都放開，只有 work 呼叫過 seal 時留著關（writeBlock 回 restoreStuck）。已經在還原時丟錯。
@@ -890,7 +907,9 @@ export function createState(options: StateOptions): State {
   const prepare = (path: string, text: string): Prepared => withNeed(track(path, () => tracker.fill(path, text)), text, version);
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, stuckAfter, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip, displaced: options.displaced });
+  /** 換行統一成 \n：快照的末次核對比全文時，CRLF 與 LF 不算不同。 */
+  const lf = (text: string): string => text.replace(/\r\n?/g, '\n');
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, phoneCards: options.phoneCards, writeTimeout, stuckAfter, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip, displaced: options.displaced });
   function answerLine(entry: NewEntry): QueuedLine | null {
     if (!life.loaded) throw Error('state 還沒 ready');
     if (!permits(entry)) return null;
@@ -900,12 +919,20 @@ export function createState(options: StateOptions): State {
   }
 
   /** 目錄的暫停／恢復與草稿的啟用（§7）：只改屬性區的 `狀態`，和補 ID 走同一條寫入。activate：只有草稿能改（改成啟用）；否則草稿不動。 */
-  async function changeStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null, activate: boolean): Promise<WriteResult | { kind: 'unwritable' }> {
+  async function changeStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null, activate: boolean, confirmed?: string): Promise<ActivateResult> {
     let unwritable = false;
-    const plan = (text: string): Prepared | null => {
+    /** 寫入回呼最後一次看到的原因（回呼可能跑好幾次，照最後一次）。 */
+    let why: 'changed' | 'already' | null = null;
+    const plan = (text: string): Prepared | null | typeof REFUSE => {
+      why = null;
       // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
-      if ((parseDeck(text).props.status === 'draft') !== activate) return null;
+      // 不改的時候明確拒寫：edit 不存編輯器（L2 R1：存回去會蓋掉剛同步來的字）。
+      if ((parseDeck(text).props.status === 'draft') !== activate) { if (activate) why = 'already'; return REFUSE; }
+      if (confirmed !== undefined && lf(text) !== lf(confirmed)) { why = 'changed'; return REFUSE; }
+      // 開著的筆記在寫入當下有沒存的字（排隊中才打的）：不寫，免得之後存檔又蓋回去。
+      const typed = confirmed !== undefined ? editor?.text() ?? null : null;
+      if (typed !== null && lf(typed) !== lf(text)) { why = 'changed'; return REFUSE; }
       const next = setStatusLine(text, value);
       if (next === null) { unwritable = true; return null; }
       // 啟用的那一刻目標才開始排程：草稿裡手寫或 AI 寫的 `課外：`、比較卡要的 `需要版本` 和狀態一起寫（D-209 第 2 點、L2 R1）。
@@ -914,8 +941,15 @@ export function createState(options: StateOptions): State {
       if (prepared.text === text && next !== text) { unwritable = true; return null; }
       return { ...prepared, status: parseDeck(prepared.text).props.status };
     };
-    const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+    // 綁著確認那一版的啟用（D-226 第 5 點）一律直接改磁碟上的檔，不經編輯器（L2 第三輪重整，D-197）：plan 拿到的就是寫入當下磁碟的原文，
+    // 和確認的比、改、寫在同一次 modify 裡，同步剛送來、通知還沒到的新版也比得到。編輯器有沒存的字，排隊之前已經擋下（deck-status 的 unsaved）；
+    // 排隊中才打的字在寫入當下再比一次（plan 裡讀編輯器）。
+    const viaEditor = editor !== null && confirmed === undefined;
+    const result = await writes.enqueue(() => viaEditor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
     if (unwritable) return { kind: 'unwritable' };
+    // why 是回呼裡設的，TypeScript 看不出它變過。
+    const reason = why as 'changed' | 'already' | null;
+    if (result.kind === 'unchanged' && reason !== null) return { kind: reason };
     return result;
   }
 
@@ -1169,8 +1203,9 @@ export function createState(options: StateOptions): State {
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
       return result.kind === 'done' || result.kind === 'saved';
     },
-    setDeckStatus: (path, value, editor) => changeStatus(path, value, editor, false),
-    activateDraft: (path, editor) => changeStatus(path, '啟用', editor, true),
+    // 暫停／恢復不帶 confirmed、不是啟用：不會回 changed、already（型別上收回 unchanged）。
+    setDeckStatus: async (path, value, editor) => { const result = await changeStatus(path, value, editor, false); return result.kind === 'changed' || result.kind === 'already' ? { kind: 'unchanged' } : result; },
+    activateDraft: (path, editor, confirmed) => changeStatus(path, '啟用', editor, true, confirmed),
     addCandidates,
     addExisting,
     aiExisting(subject, term) {
@@ -1191,8 +1226,8 @@ export function createState(options: StateOptions): State {
       const skip = life.loaded ? tracker.lines(path) : new Set<number>();
       return target => skip.has(target.line) || tracker.isDuplicate(target.id) || gatedIds.has(target.id) || history.incomplete || history.held.includes(target.id);
     },
-    aiIds(count, avoid = []) {
-      return writes.blockedNow() ?? tracker.allocate(count, avoid);
+    aiIds(count, avoid = [], cards = false) {
+      return writes.blockedNow(cards) ?? tracker.allocate(count, avoid);
     },
     async aiWhere(ids) {
       const stopped = await writes.enqueue(() => writes.drain({ count: 0 }, true));
@@ -1200,6 +1235,7 @@ export function createState(options: StateOptions): State {
       return tracker.where(ids);
     },
     aiRead: path => writes.readTimed(path),
+    aiSettled: () => life.loaded && unread.size === 0 && !reads.waitingFor(isDeckPath),
     aiDisplaced: path => options.displaced?.(path) ?? false,
     async aiAppend(path, editor, plan) {
       // 前一筆寫入逾時、結果不明的那一篇（加入或加深）：這一筆確定沒寫，不是結果不明（L2 R2）。排隊之前、輪到時、改字之前都看。
@@ -1240,13 +1276,17 @@ export function createState(options: StateOptions): State {
       if (result.kind === 'blocked') return { kind: 'not', why: result.reason === 'phone' || result.reason === 'loading' || result.reason === 'needs-update' ? result.reason : 'blocked', detail: result.reason };
       return { kind: 'not', why: (why as DeepenStop['why'] | null) ?? 'changed' };
     },
-    aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
-    aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
-    aiCreateSnapshot: (path, text, decks, nameFree) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {
-      check: () => decks.some(deck => { const found = tracker.where(deck.ids); return deck.ids.some(id => !found.get(id)?.includes(deck.path)); }) ? 'decks' : null,
+    aiCreate: (path, text, cards = false) => writes.enqueue(() => writes.create(path, text, undefined, cards)),
+    aiCreateDeck: (path, text, ids, nameFree, cards = false) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' }, cards)),
+    aiCreateSnapshot: (path, text, decks, nameFree, cards = false) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {
+      check: () => decks.some(deck => {
+        const found = tracker.where(deck.ids);
+        const now = tracker.text(deck.path);
+        return deck.ids.some(id => !found.get(id)?.includes(deck.path)) || now === undefined || lf(now) !== lf(deck.text);
+      }) ? 'decks' : null,
       atWrite: () => nameFree() ? null : 'name',
-    })),
-    writeBlock: () => writes.blockedNow(),
+    }, cards)),
+    writeBlock: (cards = false) => writes.blockedNow(cards),
     restore(work) {
       let open = (): void => {};
       const gate = new Promise<void>(resolve => { open = resolve; });

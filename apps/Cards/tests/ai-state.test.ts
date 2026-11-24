@@ -6,6 +6,7 @@ import { blockIds } from '../src/core/deck/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { createMemoryEditor } from './helpers/editor.ts';
 
 // tasks/ai-cards-mvp.md 在 state 的部分：§5 配號、ID 在哪、只建立的寫入、ID 的預留（R2-3），§6 引言框裡的 ID 算占用，§7 草稿 → 啟用。真正的 createState，記憶體 Files。
 
@@ -149,10 +150,12 @@ void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: sta
   assert.deepEqual(h.state.deckTargets(DECK), ['k3m9qa']);
   await h.state.flush();
   assert.deepEqual(h.logged().slice(baseline).filter(each => each.set === 'status').map(({ t: _t, ...rest }) => rest), [{ set: 'status', deck: DECK, val: '啟用' }]);
-  assert.equal((await h.state.activateDraft(DECK, null)).kind, 'unchanged');
-  assert.equal((await h.state.activateDraft(paused, null)).kind, 'unchanged');
+  // 已經不是草稿：already，不說成剛啟用（D-226 第 5 點）。屬性區讀不懂的照預設當成啟用，也是 already。
+  assert.equal((await h.state.activateDraft(DECK, null)).kind, 'already');
+  assert.equal((await h.state.activateDraft(paused, null)).kind, 'already');
   assert.ok(h.texts.get(paused)!.includes('狀態: 暫停'));
-  assert.equal((await h.state.activateDraft(broken, null)).kind, 'unchanged');
+  assert.equal((await h.state.activateDraft(broken, null)).kind, 'already');
+  assert.equal((await h.state.activateDraft('Essence Cards/沒有這篇.md', null)).kind, 'unchanged');
   // 需要新版的草稿：和目錄的暫停同一道門檻（needs-update），不改字、不記。
   const newer = draft.replace('狀態: 草稿', '狀態: 草稿\n需要版本: 99.0.0');
   const gated = await setup(t, { [DECK]: newer });
@@ -166,4 +169,72 @@ void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: sta
   const phone = await setup(t, { [DECK]: draft }, { fillIds: false });
   assert.deepEqual(await phone.state.activateDraft(DECK, null), { kind: 'blocked', reason: 'phone' });
   assert.equal(phone.texts.get(DECK), draft);
+});
+
+void test('§7 啟用綁定確認時的那一版（D-226 第 5 點、tasks/phone-cards.md §2-3）：確認之後內容變了不寫、回 changed；換行不同不算變；相同才啟用', async t => {
+  const draft = head('草稿') + '- 能說出密度 ^k3m9qa\n    - 密度？ :: 質量除以體積\n';
+  const h = await setup(t, { [DECK]: draft });
+  await h.state.flush();
+  const baseline = h.logged().length;
+  // 家長看的是 A，按下之前同步來了 B。
+  const b = draft.replace('質量除以體積', '體積除以質量');
+  h.texts.set(DECK, b);
+  assert.deepEqual(await h.state.activateDraft(DECK, null, draft), { kind: 'changed' });
+  assert.equal(h.texts.get(DECK), b);
+  await h.state.flush();
+  assert.deepEqual(h.logged().slice(baseline).filter(each => each.set === 'status'), []);
+  // 確認的是 B（CRLF 版也算同一版）：啟用。
+  assert.equal((await h.state.activateDraft(DECK, null, b.replaceAll('\n', '\r\n'))).kind, 'done');
+  assert.equal(h.texts.get(DECK), b.replace('狀態: 草稿', '狀態: 啟用'));
+});
+
+void test('§7 開著的筆記按啟用（L2 R1）：不寫的每一種（磁碟同步來新版而編輯器還是舊的、確認之後打了字、已經不是草稿）都不存編輯器、不動磁碟；三份相同才啟用', async t => {
+  const draft = head('草稿') + '- 能說出密度 ^k3m9qa\n    - 密度？ :: 質量除以體積\n';
+  const b = draft.replace('質量除以體積', '體積除以質量');
+  // 磁碟已經是同步來的 B（state 讀到了），編輯器與確認視窗都還是 A。
+  const h = await setup(t, { [DECK]: b });
+  await h.state.flush();
+  const baseline = h.logged().length;
+  const stale = createMemoryEditor(h, DECK, draft);
+  assert.deepEqual(await h.state.activateDraft(DECK, stale, draft), { kind: 'changed' });
+  assert.equal(stale.persists, 0);
+  assert.equal(h.texts.get(DECK), b);
+  // 確認的是 B、磁碟是 B，編輯器裡多打了字還沒存：不寫，也不把打的字存進去。
+  const typed = createMemoryEditor(h, DECK, b + '\n- 新打的\n');
+  assert.deepEqual(await h.state.activateDraft(DECK, typed, b), { kind: 'changed' });
+  assert.equal(typed.persists, 0);
+  assert.equal(h.texts.get(DECK), b);
+  // 已經不是草稿：already，不存。
+  const active = b.replace('狀態: 草稿', '狀態: 啟用');
+  const other = await setup(t, { [DECK]: active });
+  const shown = createMemoryEditor(other, DECK, active);
+  assert.deepEqual(await other.state.activateDraft(DECK, shown, active), { kind: 'already' });
+  assert.equal(shown.persists, 0);
+  await h.state.flush();
+  assert.deepEqual(h.logged().slice(baseline).filter(each => each.set === 'status'), []);
+  // 磁碟已經是 C，通知還沒到（state 與編輯器、確認都還是 B）：寫入時讀真的磁碟，不寫（第二輪延續 R1）。
+  const c = b.replace('體積除以質量', '密度的定義');
+  h.texts.set(DECK, c);
+  const late = createMemoryEditor(h, DECK, b);
+  assert.deepEqual(await h.state.activateDraft(DECK, late, b), { kind: 'changed' });
+  assert.equal(late.persists, 0);
+  assert.equal(h.texts.get(DECK), c);
+  h.texts.set(DECK, b);
+  // 三份相同：啟用。
+  const same = createMemoryEditor(h, DECK, b);
+  assert.equal((await h.state.activateDraft(DECK, same, b)).kind, 'done');
+  assert.equal(h.texts.get(DECK), active);
+});
+
+void test('§5 快照寫入當下的末次核對（D-226 第 5 點）：每一篇要在原位置、ID 都在，而且全文和發布核對時讀到的一字不差（換行不算）；不同回 refused', async t => {
+  const text = head('草稿') + '- 能說出密度 ^k3m9qa\n    - 密度？ :: 質量除以體積\n';
+  const h = await setup(t, { [DECK]: text });
+  const snapshot = 'Essence Cards/紀錄/AI 輸出/2026-11-07 快照.md';
+  const free = (): boolean => true;
+  // 同路徑、同 ID、內容不同（同 ID 的異文）：不算這次核對過的那一篇。
+  const other = text.replace('質量除以體積', '體積除以質量');
+  assert.deepEqual(await h.state.aiCreateSnapshot(snapshot, '快照', [{ path: DECK, ids: ['k3m9qa'], text: other }], free), { kind: 'refused', why: 'decks' });
+  assert.ok(!h.texts.has(snapshot));
+  assert.equal((await h.state.aiCreateSnapshot(snapshot, '快照', [{ path: DECK, ids: ['k3m9qa'], text: text.replaceAll('\n', '\r\n') }], free)).kind, 'done');
+  assert.equal(h.texts.get(snapshot), '快照');
 });
