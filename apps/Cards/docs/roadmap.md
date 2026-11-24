@@ -14,7 +14,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
-| 家長的手機也能製卡與啟用 | 實作中 | 第一步（手機製卡、存成草稿）L2 四輪審完（[報告](<Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者同意第四輪的 P1 記成限制並合併；開關文字等使用者看；iPhone 實機測試在提早試用之後；第二步（手機啟用）另開；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
+| 家長的手機也能製卡與啟用 | 實作中 | 第一步（手機製卡、存成草稿）L2 四輪審完（[報告](<Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者同意第四輪的 P1 記成限制並合併；開關文字使用者 2026-11-25 同意（「在這台裝置製卡」）；iPhone 實機測試在提早試用之後；第二步（手機啟用）另開；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
 | 製卡規則重整的比較測試 | 實作中 | 社會 1-2 補跑 ChatGPT（現行、候選各一份，使用者貼）後判社會；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一輪照 §9 改 | 使用者、Claude | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 
