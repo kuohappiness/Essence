@@ -3,7 +3,6 @@ import { blockIds } from '../deck/index.ts';
 import { freeName, rawPath } from './draft.ts';
 import type { PlannedDraft } from './draft.ts';
 import type { CardJob, SavedDeck, SaveState } from './job.ts';
-import { deckLink, readSnapshot, sameButTargets } from './deepen-snapshot.ts';
 import { sha256Hex, stamp } from './prompt.ts';
 
 // 存草稿與快照的順序（tasks/ai-cards-mvp.md §5）：先存恢復資料 → 原文 → 一篇一篇建卡組 → 準備發布 → 發布（快照寫成＝成功）→ 清理。
@@ -67,24 +66,13 @@ export function beginSave(job: CardJob, reply: string, service: string | null, p
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const folderOf = (path: string): string => path.slice(0, path.lastIndexOf('/'));
 
-/** 那個檔就是這一份快照：內容相同，或卡組改名、搬移時只改了 `對象`（外掛或 Obsidian 改連結；第二輪 R4 修正引入，和加深的認法相同）。 */
-/** 只差 `對象` 時，寫完整路徑的連結都要指到這次的卡組現在的位置（配出的 ID 所在）：改名之前的原快照不算，照舊停下。 */
-async function isPublished(text: string, save: SaveState, io: Pick<PublishIo, 'where'>): Promise<boolean> {
-  if (sha256Hex(text) === save.published!.sha256) return true;
-  if (!sameButTargets(text, save.published!.text)) return false;
-  const where = await io.where(save.decks.filter(deck => !deck.skipped).flatMap(deck => deck.ids));
-  if (!where) return false;
-  const now = new Set([...where.values()].flat());
-  return (readSnapshot('', text)?.links ?? []).every(link => !link.includes('/') || now.has(link.endsWith('.md') ? link : `${link}.md`));
-}
-
 /** 別的位置有同檔名、內容相同的檔：資料夾被搬到防呆認不出來的地方，原位讀到沒有不代表沒發布（R5-1）。讀不到不算沒有。 */
-export async function publishedElsewhere(save: SaveState, io: Pick<PublishIo, 'read' | 'named' | 'where'>): Promise<boolean | { kind: 'unreadable'; path: string; error: unknown }> {
+export async function publishedElsewhere(save: SaveState, io: Pick<PublishIo, 'read' | 'named'>): Promise<boolean | { kind: 'unreadable'; path: string; error: unknown }> {
   for (const path of io.named(fileName(save.snapshotPath).toLowerCase())) {
     if (path === save.snapshotPath) continue;
     let text: string | null;
     try { text = await io.read(path); } catch (error) { return { kind: 'unreadable', path, error }; }
-    if (text !== null && await isPublished(text, save, io)) return true;
+    if (text !== null && sha256Hex(text) === save.published!.sha256) return true;
   }
   return false;
 }
@@ -98,8 +86,7 @@ function snapshotText(job: CardJob, time: string): string {
     時間: time,
     識別碼: job.id,
     工作: '製卡',
-    // 寫完整路徑、顯示檔名（和加深的快照相同）：只寫檔名時，別處有同檔名的筆記就認不出是哪一篇（L2 R4）。
-    對象: save.decks.filter(deck => !deck.skipped).map(deck => deckLink(deck.path)),
+    對象: save.decks.filter(deck => !deck.skipped).map(deck => `[[${fileName(deck.path)}]]`),
     規則版本: rules.map(part => `${part.name} ${part.version}`).join('、'),
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,
@@ -162,7 +149,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     if (!published) return null;
     const found = await read(save().snapshotPath);
     if ('kind' in found) return found;
-    if (found.text !== null && await isPublished(found.text, save(), io)) return done();
+    if (found.text !== null && sha256Hex(found.text) === published.sha256) return done();
     // 確定沒寫過的位置被別人用了，不是這份快照的異文：第 5 步換下一個後綴（R5-2）。
     if (!published.attempted) return null;
     const copy = await publishedElsewhere(save(), io);
@@ -297,7 +284,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     if (created.kind === 'exists') {
       const found = await read(save().snapshotPath);
       if ('kind' in found) return found;
-      if (found.text === null || !await isPublished(found.text, save(), io)) {
+      if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) {
         if (attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
         // 這個位置這次才第一次寫：那個檔不是這份快照，換下一個後綴（R5-2）。
         nameTaken = save().snapshotPath;

@@ -295,3 +295,33 @@ void test('§2-2 還原中按「存成草稿」（第二輪 R2 修正引入）�
   assert.deepEqual(markdown(), before);
   assert.equal(h.cards.jobs()[0].save, null, '沒有開始存');
 });
+
+void test('§2-5 讀完之後才同步來的卡組（L2 第三輪延續 R6）：通知到了、還在讀時按複製，等它讀完再照實數，不送不完整的已有目標', async t => {
+  const memory = createMemoryFiles({});
+  const saved: { jobs: unknown } = { jobs: null };
+  // eslint-disable-next-line prefer-const -- state 與流程互相參照
+  let state: ReturnType<typeof createState>;
+  const cards = createAiCards({
+    rules, state: () => state, names: () => new Set(), named: () => [],
+    store: {
+      jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
+      saveJobs(jobs: CardJob[]) { saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
+      retired: () => [], retire() {}, last: () => ({}), saveLast() {}, picks: () => ({}), savePick() {},
+    },
+    clipboard: () => Promise.resolve(), phone: true, now: () => ({ ms: NOW, offset: 480 }), onError: error => { throw error; },
+  });
+  state = createState({ files: memory.files, device: 'iPhone-test', delay: 1, fillIds: false, phoneCards: () => true, now: () => NOW, offset: () => 480, onError() {} });
+  t.after(() => state.close());
+  await state.ready();
+  const held = memory.holdRead(OLD);
+  memory.write(OLD, OLD_TEXT);
+  await held.started;
+  const box: { done: boolean } = { done: false };
+  const copying = cards.copy(form).finally(() => { box.done = true; });
+  await settle();
+  assert.equal(box.done, false, '還在讀，等著');
+  held.release();
+  const copied = await copying;
+  assert.ok('job' in copied);
+  assert.equal(copied.job.existing.length, 1);
+});

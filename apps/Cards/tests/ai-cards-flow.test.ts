@@ -460,8 +460,8 @@ void test('§5 快照寫入的當下再確認每一篇還在（R2-3）：最後�
     gate.open();
     const result = await saving;
     assert.equal(result.kind, 'done', JSON.stringify(result));
-    assert.ok(memory.texts.get(SNAP)!.includes(`[[${MOVED}|單字 改名]]`));
-    assert.ok(!memory.texts.get(SNAP)!.includes(`[[${WORD}|`));
+    assert.ok(memory.texts.get(SNAP)!.includes('[[單字 改名]]'));
+    assert.ok(!memory.texts.get(SNAP)!.includes('[[國二上英文 L3 單字]]'));
   }
 });
 
@@ -474,7 +474,7 @@ void test('§5 家長選擇之前先照現況再核對（R2-7）：提示過時�
     const result = await cards.choose(job, 0, 'skip');
     assert.equal(result.kind === 'done' && result.decks.length, 2, JSON.stringify(result));
     assert.deepEqual(box.saved.retired, []);
-    assert.ok(memory.texts.get('Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md')!.includes(`[[${WORD}|國二上英文 L3 單字]]`));
+    assert.ok(memory.texts.get('Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md')!.includes('[[國二上英文 L3 單字]]'));
   }
   // 按重建時已經送回來：不多建一份。
   {

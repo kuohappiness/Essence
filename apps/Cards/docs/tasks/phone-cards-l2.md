@@ -1,6 +1,14 @@
 # 手機 AI 製卡（D-226 第一步，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第三輪（只審第二輪的修正）；第一輪審 `27da3550`、第二輪審 `dfb7f5ed`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+狀態：待審｜下一步：Codex 審第四輪（只審第三輪的重整）；第一輪審 `27da3550`、第二輪審 `dfb7f5ed`、第三輪審 `20df973d`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+
+## 第四輪（只審重整）
+
+- **待審**：`cc5fa9b3`（第三輪報告所在的 commit）到這份請求所在的 commit 的差異：`src/state/index.ts` 的 `changeStatus`（綁確認的啟用一律 `fillFile`）、`src/obsidian/ai-cards.ts` 的 `copy`（先 `aiWhere([])`），以及**退回** `a7f5660d` 的 `src/core/ai/publish.ts`、`deepen-snapshot.ts`、`deepen-job.ts` 與兩個測試檔（R4 的改動整個拿掉）。
+- **先看**：報告最後的〈Claude 核對（第三輪）：照 D-197 重整〉。這是第四輪：還有擋合併的發現時，照 code-quality 交使用者決定，不再自動送第五輪；請把每一項的真實路徑與機率寫清楚，方便使用者選。
+- **請特別試**：直接改磁碟的啟用和開著的編輯器（Obsidian 的 `vault.process` 與自動存檔）會不會互相蓋掉；編輯器在回呼裡 `text()` 是 `null`（換篇）時；`copy()` 等 `aiWhere` 時遇到還原、備份、手機開關被關掉；R4 退回之後 `syntax.md` §6 與程式是否一致，新記的三條限制（backlog〈已知的限制〉）寫得對不對。
+- **驗證**：完整的 `npm run check` 由這份請求所在 commit 的 pre-commit 在雲端 Linux 跑過。
+- 報告接在後面，標「第四輪」。
 
 ## 第三輪（只審修正）
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { blockIds, isDeckPath, parseDeck } from '../src/core/deck/index.ts';
-import { abandonJob, beginSave, buildPrompt, inspectReply, isJob, ownSnapshots, planDraft, publish, rawPath, readSnapshot, rebuildDeck, retargetSnapshot, RULE_SUBJECTS, sha256Hex, skipDeck, stamp } from '../src/core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, inspectReply, isJob, planDraft, publish, rawPath, rebuildDeck, RULE_SUBJECTS, sha256Hex, skipDeck, stamp } from '../src/core/ai/index.ts';
 import type { CardForm, CardJob, CreateResult, EmbeddedRule, ExistingNow, PublishIo } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-mvp.md §5 的順序、中斷與重試、ID 的預留（F2、F3、R2-1、R2-2、R3-1、R4-1）。檔案在記憶體裡，當掉用丟錯模擬：恢復資料只留最後一次存成功的。
@@ -89,8 +89,8 @@ void test('§5 一次做完：原文（送出的每一部分與回覆原文逐�
     '識別碼: m4k8q2',
     '工作: 製卡',
     '對象:',
-    `  - "[[${WORD}|國二上英文 L3 單字]]"`,
-    `  - "[[${GRAMMAR}|國二上英文 L3 文法]]"`,
+    '  - "[[國二上英文 L3 單字]]"',
+    '  - "[[國二上英文 L3 文法]]"',
     '規則版本: 通用 v0.15、英文 v0.14',
     '送出:',
     ...job.parts.map(part => `  - ${part.name} ${part.version} ${part.sha256}`),
@@ -230,7 +230,7 @@ void test('§5 搬走與刪掉（R3-1）：改名與搬走跟到新位置、快�
     assert.deepEqual(result, { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
     assert.ok(!files.has(WORD));
     const name = moved.slice(moved.lastIndexOf('/') + 1, -3);
-    assert.ok(files.get(SNAPSHOT)!.includes(`  - "[[${moved}|${name}]]"\n`));
+    assert.ok(files.get(SNAPSHOT)!.includes(`  - "[[${name}]]"\n`));
   }
   {
     const { files, io, reload } = await firstWritten();
@@ -257,7 +257,7 @@ void test('§5 判斷搬走只看這次配出的 ID（L2-6）：舊位置被無�
     const result = await publish(reload(), io);
     assert.deepEqual(result, { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
     assert.equal(files.get(WORD), '- 別的筆記 ^unrelated\n    - 題目 :: 答案\n');
-    assert.ok(files.get(SNAPSHOT)!.includes(`  - "[[${moved}|單字 改名]]"\n`));
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[單字 改名]]"\n'));
   }
   {
     const { files, io, reload } = await firstWritten();
@@ -296,8 +296,8 @@ void test('§5 準備發布時再核對每一篇（L2-5）：後面的篇還在�
   {
     const { files, io, job } = during(each => { each.set(moved, each.get(WORD)!); each.delete(WORD); });
     assert.deepEqual(await publish(job, io), { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
-    assert.ok(files.get(SNAPSHOT)!.includes(`  - "[[${moved}|單字 改名]]"\n`));
-    assert.ok(!files.get(SNAPSHOT)!.includes(`[[${WORD}|`));
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[單字 改名]]"\n'));
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
   }
   {
     const { files, io, job } = during(each => { const text = each.get(WORD)!; each.set(WORD, text.slice(0, text.indexOf('> [!note]-'))); each.set('Essence Cards/別篇.md', text.slice(text.indexOf('> [!note]-'))); });
@@ -311,7 +311,7 @@ void test('§5 準備發布時再核對每一篇（L2-5）：後面的篇還在�
     box.crash = () => false;
     const result = await publish(skipDeck(reload(), 0).job!, io);
     assert.deepEqual(result, { kind: 'done', decks: [GRAMMAR], targets: 1 });
-    assert.ok(!files.get(SNAPSHOT)!.includes(`[[${WORD}|`));
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
   }
 });
 
@@ -349,7 +349,7 @@ void test('§5 準備發布存下快照全文（L2-8）：重試照存下的位�
     await assert.rejects(publish(job, io), Crash);
     box.crash = () => false;
     const again = reload();
-    assert.ok(again.save!.published!.text.includes(`[[${moved}|單字 改名]]`));
+    assert.ok(again.save!.published!.text.includes('[[單字 改名]]'));
     assert.equal(again.save!.published!.time, job.save!.published!.time);
     assert.equal(sha256Hex(again.save!.published!.text), again.save!.published!.sha256);
     assert.equal((await publish(again, io)).kind, 'done');
@@ -360,7 +360,7 @@ void test('§5 準備發布存下快照全文（L2-8）：重試照存下的位�
     const { files, io, reload } = await stopAtSnapshot();
     const skipped = skipDeck(reload(), 0).job!;
     assert.equal((await publish(skipped, io)).kind, 'done');
-    assert.ok(!files.get(SNAPSHOT)!.includes(`[[${WORD}|`));
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
   }
 });
 
@@ -374,7 +374,7 @@ void test('§5 即將建立時再核對整個 vault 的檔名（L2-9）：別的
     const result = await publish(job, io);
     assert.deepEqual(result, { kind: 'done', decks: [WORD.replace('.md', ' 2.md'), GRAMMAR], targets: 3 });
     assert.equal(files.get('其他資料夾/國二上英文 l3 單字.md'), '別人的筆記');
-    assert.ok(files.get(SNAPSHOT)!.includes(`  - "[[${WORD.replace('.md', ' 2.md')}|國二上英文 L3 單字 2]]"\n`));
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[國二上英文 L3 單字 2]]"\n'));
     assert.throws(reload);
   }
   // 卡組：改名先存進恢復資料，建檔當掉、重開也是同一個路徑。
@@ -841,7 +841,7 @@ void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前�
     const { files, io, reload } = await between(createWord, false);
     const skipped = skipDeck(reload(), 0).job!;
     assert.deepEqual(await publish(skipped, io), { kind: 'done', decks: [GRAMMAR], targets: 1 });
-    assert.ok(!files.get(SNAPSHOT)!.includes(`[[${WORD}|`));
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
   }
   // 放棄：已寫成的篇照樣留著（草稿），沒碰過 vault 的篇的 ID 拿掉預留。
   {
@@ -976,64 +976,4 @@ void test('D-226 第 5 點：建卡組讀回逾時（unreadable）之後才晚�
     if (files.get(WORD) === job.save!.decks[0].text) assert.equal(result.kind, 'done');
     else assert.deepEqual(result, { kind: 'deck', index: 0, situation: 'unclear', path: WORD });
   }
-});
-
-void test('§5 快照的對象寫完整路徑（L2 R4）：快照寫入前別處出現同檔名的筆記，加深照樣認得出這份快照是哪兩篇的', async () => {
-  const { files, io, reload } = await firstWritten();
-  files.set('Essence Cards/其他/國二上英文 L3 單字.md', '別人的筆記');
-  assert.equal((await publish(reload(), io)).kind, 'done');
-  const info = readSnapshot(SNAPSHOT, files.get(SNAPSHOT)!)!;
-  // 加深的解析（src/obsidian/deepen.ts 的 resolve）：寫完整路徑的照路徑；只寫檔名的要同檔名剛好一篇。
-  const resolve = (link: string): string | null => link.includes('/') ? (link.endsWith('.md') ? link : `${link}.md`) : null;
-  for (const deck of [WORD, GRAMMAR]) {
-    const ids = new Set(blockIds(files.get(deck)!));
-    assert.equal(ownSnapshots([info], deck, ids, resolve).length, 1, deck);
-  }
-});
-
-void test('§5 快照寫成、清理之前重開，期間卡組搬走、快照的對象跟著改（第二輪 R4 修正引入）：只差對象的就是這一份，只清理；對象以外不同照舊停下', async () => {
-  const moved = 'Essence Cards/別的資料夾/國二上英文 L3 單字.md';
-  const { files, io, box, reload } = vault();
-  const job = saved(copied());
-  io.store(job);
-  box.crash = what => what === 'remove';
-  await assert.rejects(publish(job, io), Crash);
-  box.crash = () => false;
-  files.set(moved, files.get(WORD)!);
-  files.delete(WORD);
-  const retargeted = retargetSnapshot(files.get(SNAPSHOT)!, WORD, moved, () => 0);
-  assert.ok(retargeted?.includes(`[[${moved}|國二上英文 L3 單字]]`));
-  files.set(SNAPSHOT, retargeted!);
-  const before = new Map(files);
-  assert.equal((await publish(reload(), io)).kind, 'done');
-  assert.deepEqual(files, before);
-  // 對象以外也不同（同一個位置是別的內容）：照舊是衝突。
-  {
-    const again = vault();
-    const other = saved(copied());
-    again.io.store(other);
-    again.box.crash = what => what === 'remove';
-    await assert.rejects(publish(other, again.io), Crash);
-    again.box.crash = () => false;
-    again.files.set(SNAPSHOT, again.files.get(SNAPSHOT)!.replace('記穩目標: 無（初次製卡）', '記穩目標: 改過'));
-    assert.deepEqual(await publish(again.reload(), again.io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
-  }
-});
-
-void test('§5 卡組搬進名稱有連結放不下的字的資料夾（第二輪 P2）：對象退回只寫檔名，同檔名剛好一篇時加深照樣認得', async () => {
-  const moved = 'Essence Cards/08 #複習/國二上英文 L3 單字.md';
-  const { files, io, reload } = await firstWritten();
-  files.set(moved, files.get(WORD)!);
-  files.delete(WORD);
-  assert.equal((await publish(reload(), io)).kind, 'done');
-  const text = files.get(SNAPSHOT)!;
-  assert.ok(text.includes('  - "[[國二上英文 L3 單字]]"\n'));
-  const info = readSnapshot(SNAPSHOT, text)!;
-  const named = (name: string): string[] => [...files.keys()].filter(path => isDeckPath(path) && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name);
-  const resolve = (link: string): string | null => {
-    if (link.includes('/')) return link.endsWith('.md') ? link : `${link}.md`;
-    const found = named(link.toLowerCase());
-    return found.length === 1 ? found[0] : null;
-  };
-  assert.equal(ownSnapshots([info], moved, new Set(blockIds(files.get(moved)!)), resolve).length, 1);
 });

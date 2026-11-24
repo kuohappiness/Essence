@@ -923,14 +923,14 @@ export function createState(options: StateOptions): State {
     let why: 'changed' | 'already' | null = null;
     const plan = (text: string): Prepared | null | typeof REFUSE => {
       why = null;
-      // 啟用綁著確認的那一版（D-226 第 5 點，L2 R1）：在寫入那一列裡比。編輯器的字和磁碟（state 最後讀到或寫進去的）不同時，
-      // 可能是同步剛送來新版、編輯器還是舊的：不讀進來、不存回去。
-      if (confirmed !== undefined && editor) { const disk = tracker.text(path); if (disk === undefined || lf(disk) !== lf(text)) { why = 'changed'; return REFUSE; } }
       // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
       // 不改的時候明確拒寫：edit 不存編輯器（L2 R1：存回去會蓋掉剛同步來的字）。
       if ((parseDeck(text).props.status === 'draft') !== activate) { if (activate) why = 'already'; return REFUSE; }
       if (confirmed !== undefined && lf(text) !== lf(confirmed)) { why = 'changed'; return REFUSE; }
+      // 開著的筆記在寫入當下有沒存的字（排隊中才打的）：不寫，免得之後存檔又蓋回去。
+      const typed = confirmed !== undefined ? editor?.text() ?? null : null;
+      if (typed !== null && lf(typed) !== lf(text)) { why = 'changed'; return REFUSE; }
       const next = setStatusLine(text, value);
       if (next === null) { unwritable = true; return null; }
       // 啟用的那一刻目標才開始排程：草稿裡手寫或 AI 寫的 `課外：`、比較卡要的 `需要版本` 和狀態一起寫（D-209 第 2 點、L2 R1）。
@@ -939,16 +939,11 @@ export function createState(options: StateOptions): State {
       if (prepared.text === text && next !== text) { unwritable = true; return null; }
       return { ...prepared, status: parseDeck(prepared.text).props.status };
     };
-    const result = await writes.enqueue(async (): Promise<WriteResult> => {
-      // 開著的筆記：輪到寫入時先讀一次真的磁碟（L2 第二輪延續 R1）。變更的通知可能還沒到，state 讀到的還是舊的；
-      // 磁碟和確認的那一版不同就不寫。讀到之後到改編輯器之間沒有通知可等，剩下的空隙只在這一次讀取的時間內。
-      if (confirmed !== undefined && editor) {
-        let disk: string | null;
-        try { disk = await writes.readTimed(path); } catch (error) { return { kind: 'failed', error }; }
-        if (disk === null || lf(disk) !== lf(confirmed)) { why = 'changed'; return { kind: 'unchanged' }; }
-      }
-      return editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan);
-    });
+    // 綁著確認那一版的啟用（D-226 第 5 點）一律直接改磁碟上的檔，不經編輯器（L2 第三輪重整，D-197）：plan 拿到的就是寫入當下磁碟的原文，
+    // 和確認的比、改、寫在同一次 modify 裡，同步剛送來、通知還沒到的新版也比得到。編輯器有沒存的字，排隊之前已經擋下（deck-status 的 unsaved）；
+    // 排隊中才打的字在寫入當下再比一次（plan 裡讀編輯器）。
+    const viaEditor = editor !== null && confirmed === undefined;
+    const result = await writes.enqueue(() => viaEditor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
     if (unwritable) return { kind: 'unwritable' };
     // why 是回呼裡設的，TypeScript 看不出它變過。
     const reason = why as 'changed' | 'already' | null;

@@ -1,7 +1,7 @@
 import { stringify } from 'yaml';
 import { parseDeck } from '../deck/index.ts';
 import { freeName, rawPath, SNAPSHOT_FOLDER } from './draft.ts';
-import { deckLink, readSnapshot, sameButTargets } from './deepen-snapshot.ts';
+import { readSnapshot, sameButTargets } from './deepen-snapshot.ts';
 import { appendBatch, idsInDeepenBoxes, unclosedFence, verifyAppend } from './deepen-write.ts';
 import type { CardForm, SentPart } from './prompt.ts';
 import { PURPOSES, sha256Hex } from './prompt.ts';
@@ -93,7 +93,7 @@ function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'ser
     時間: time,
     識別碼: job.id,
     工作: '加深',
-    對象: [deckLink(job.deck)],
+    對象: [`[[${job.deck}|${fileName(job.deck)}]]`],
     規則版本: rules.map(part => `${part.name} ${part.version}`).join('、'),
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,

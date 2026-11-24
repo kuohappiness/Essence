@@ -196,7 +196,8 @@ export function createAiCards(deps: AiCardsDeps) {
       const block = state?.writeBlock(true);
       if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
-      if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
+      // 已有目標照讀完已知變動的索引算（L2 第三輪重整：和存草稿同一個入口 aiWhere）：送來通知、還在讀的卡組也要等它；讀不完、讀不到就不複製。
+      if (block === 'unread' || state.unread().length > 0 || await state.aiWhere([]) === null) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
       const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
@@ -291,7 +292,7 @@ export function createAiCards(deps: AiCardsDeps) {
           if (text === null && state.aiDisplaced(latest.save.snapshotPath)) return { kind: 'stop', message: '外掛用的資料夾不在原位，不知道是不是已經存好了；照提醒把它放回原位，再試一次' };
           found = text !== null && sha256Hex(text) === latest.save.published.sha256;
           if (!found && latest.save.published.attempted) {
-            const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named, where: ids => state.aiWhere(ids) });
+            const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named });
             if (typeof copy === 'object') return { kind: 'stop', message: `讀不到 ${copy.path}，不知道是不是已經存好了；等一下再試` };
             found = copy;
           }
