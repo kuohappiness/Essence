@@ -171,3 +171,34 @@ void test('§2-5 待貼回的工作存完讀回核對：存進去讀回來不同
   assert.equal(errors.length, 1);
   assert.deepEqual(cards.jobs(), []);
 });
+
+void test('§2-3 看得見的同名（別台同步來、或電腦篇名剛好帶同一碼）往後加 ` 2`，基底含識別碼；不覆寫別人的檔', async t => {
+  const h = await phone(t, true);
+  const other = '---\n年級學期: 國二上\n科目: 英文\n單元: L3 Sports\n狀態: 草稿\n---\n\n- 別台的\n    - a :: b\n';
+  h.memory.write(h.WORD, other);
+  await settle();
+  const result = await h.cards.save(h.job, REPLY, null, h.shown);
+  const moved = h.WORD.replace(/\.md$/, ' 2.md');
+  assert.deepEqual(result, { kind: 'done', decks: [moved, h.GRAMMAR], targets: 2 });
+  assert.equal(h.memory.texts.get(h.WORD), other);
+});
+
+void test('§2-3 規劃之後才同步來同名的檔：發布時照存下的基底（含識別碼）重挑，卡組與快照都不覆寫', async t => {
+  const h = await phone(t, true);
+  const other = '---\n年級學期: 國二上\n科目: 英文\n單元: L3 Sports\n狀態: 草稿\n---\n\n- 別台的\n    - a :: b\n';
+  // 讀原文時（規劃已經做完）別台的同名卡組與快照到了。
+  const original = h.memory.files.modify.bind(h.memory.files);
+  let arrived = false;
+  h.memory.files.modify = (path, edit) => {
+    if (!arrived) { arrived = true; h.memory.write(h.GRAMMAR, other); h.memory.write(h.SNAPSHOT, other); }
+    return original(path, edit);
+  };
+  await settle();
+  const result = await h.cards.save(h.job, REPLY, null, h.shown);
+  const grammar = h.GRAMMAR.replace(/\.md$/, ' 2.md');
+  assert.deepEqual(result, { kind: 'done', decks: [h.WORD, grammar], targets: 2 });
+  assert.equal(h.memory.texts.get(h.GRAMMAR), other);
+  assert.equal(h.memory.texts.get(h.SNAPSHOT), other);
+  const snapshot = h.SNAPSHOT.replace(/\.md$/, ' 2.md');
+  assert.ok(h.memory.texts.get(snapshot)!.includes(`識別碼: ${h.job.id}\n`));
+});
