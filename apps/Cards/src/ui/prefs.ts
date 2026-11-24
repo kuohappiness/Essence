@@ -21,6 +21,8 @@ export const previewReveal = flag('essence-cards-preview-reveal');
 export const quizMark = flag('essence-cards-quiz-mark');
 /** 這台電腦的加深提醒（tasks/ai-cards-deepen.md §5-2）：存的是 true 才算關，缺值或壞值是開。 */
 export const deepenRemindOff = flag('essence-cards-deepen-remind-off');
+/** 手機的製卡開關（D-226 第 1 點、tasks/phone-cards.md §2-1）：存的是 true 才算開，缺值或壞值是關。電腦不看它（電腦一直可以製卡）。 */
+export const phoneCards = flag('essence-cards-phone-cards');
 
 const TERMS = 'essence-cards-catalog-terms';
 /** 學期收合：只記使用者動過的；沒有記的照預設（最新的學期展開）。 */
