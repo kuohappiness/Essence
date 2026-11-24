@@ -82,7 +82,7 @@ flowchart TB
     O1[Obsidian + Essence Cards<br/>整理、製卡、修訂]
   end
   subgraph Phone[iPhone]
-    O2[Obsidian + Essence Cards<br/>隨手複習]
+    O2[Obsidian + Essence Cards<br/>隨手複習；家長打開後也能製卡、啟用]
   end
   V[(Vault<br/>Markdown 筆記 + 學習紀錄)]
   O1 <-->|iCloud 同步| V
@@ -92,6 +92,7 @@ flowchart TB
 ```
 
 - 平台是 Obsidian 外掛（[D-004](../../../docs/decisions.md#d-004-第一版平台)）。同步沿用使用者既有的 iCloud，不疊加其他同步服務。
+- 家長的 iPhone 在設定頁打開後也能 AI 製卡與啟用草稿，預設關（[D-226](../../../docs/decisions.md#d-226-家長的手機也能製卡與啟用預設關第一批手機只建新檔)）。第一批手機只建新檔：草稿、快照，以及 `紀錄/啟用/` 裡的啟用紀錄；改已有卡組的寫入照舊只在電腦，等第二批用 Cloudflare 當鑰匙。備份與還原只在電腦。
 - 獨立 App 已列入未來開發計畫（[D-129](../../../docs/decisions.md#d-129-獨立-app-列入未來開發計畫)）；同步與成本邊界沿用 [D-128](../../../docs/decisions.md#d-128-通用軟體使用者自備同步空間)，具體平台與接法待設計。
 - 2026-10-07 可丟棄原型已通過 Windows 與 iPhone 的最小實機驗證：自訂介面、筆記讀寫、iCloud 往返。原型程式已從 main 刪除，保留在 git 歷史（見 [archive](../../../docs/archive/README.md)）。
 - 限制：
@@ -265,7 +266,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 - ✅ 模型檔不包進外掛，也不放進 vault（[D-059](../../../docs/decisions.md#d-059-ai-的接法一種介面模型不包進外掛)）：
   - 外掛資料夾 `.obsidian/plugins/` 在 vault 裡，會經 iCloud 同步到每台裝置，包括 iPhone。語音模型約 90～330 MB，語言模型要數 GB。
   - Obsidian 每次啟動都要載入外掛，檔案太大會拖慢啟動（D-051 在意啟動時間）；iCloud 也可能把大檔案從 iPhone 移除，外掛就載入失敗。
-  - iPhone 本來就不需要模型：製卡在電腦上做（D-019），手機只要結果。英文朗讀用裝置內建的系統語音，預先產生的音檔已暫停（[D-082](../../../docs/decisions.md#d-082-英文卡組與朗讀)）。
+  - iPhone 本來就不需要模型：製卡在電腦上做（D-019）；家長在手機上 AI 製卡也是複製貼上，交給 AI App（D-226），手機只要結果。英文朗讀用裝置內建的系統語音，預先產生的音檔已暫停（[D-082](../../../docs/decisions.md#d-082-英文卡組與朗讀)）。
   - 做法：模型放在電腦本機，可以是另外安裝的程式（例如 Ollama），也可以第一次使用時下載到 vault 以外的快取。外掛本身維持很小，只把結果存進 vault，例如音檔。
 - ✅ AI 製卡快照（[D-042](../../../docs/decisions.md#d-042-ai-製卡快照)）：
   - Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點）時，把原始輸出存到 `紀錄/AI 輸出/`，一次一個 Markdown 檔；記下日期、卡組或錯題本、規則版本、材料（只記連結）、接法與模型（格式見[出題語法 §6](syntax.md#6-ai-輸出快照)；錯題分析也存，D-093）。輸入版本與規則證據照 D-115；可追溯 Cards 提交什麼，不宣稱模型實際理解了全部內容。
