@@ -1,6 +1,17 @@
 # 手機 AI 製卡（D-226 第一步，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 照這份審第一輪｜等誰：Codex
+狀態：待審｜下一步：Codex 審第二輪（只審第一輪的修正）；第一輪審 `27da3550`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+
+## 第二輪（只審修正）
+
+- **待審**：`a7f5660d`（第一輪報告所在的 commit）到這份請求所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/phone-cards-l2.md`）的差異，範圍：`src/state/index.ts` 的 `changeStatus` 與 `writeBlock`、`src/obsidian/ai-cards.ts` 的 `existing`／`copy`／`save`、`src/core/ai/publish.ts` 的快照 `對象`、`src/obsidian/ai-cards-modal.ts` 的兩句文字，以及它們的呼叫端。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第一輪）〉表：R3 記成限制的理由（兩份相同的快照對加深沒有影響）、R5 的規格釐清、R7 是請求寫錯。
+- **請特別試**：R1 的 `REFUSE` 會不會讓原本該存的情形不存（例如暫停／恢復、草稿按暫停）；有確認文字、`tracker.text` 還沒有這一篇（剛建好、讀回還沒到）時會不會一直回 `changed`；`aiWhere([])` 在手機、開關關著、還原中、讀不到的卡組時回什麼、停下的字對不對；`writeBlock(true)` 在電腦與手機各種門檻下的順序；`對象` 改寫完整路徑後，卡組改名、搬移時的 `retargetSnapshot` 與 Obsidian 的自動更新連結（`[[路徑|名稱]]` 的寫法）還對不對。
+- **另外**：使用者選了「只有手機建的加識別碼」，寫成 D-227（修改 D-226 第 5 點的字面），`syntax.md` §0、§6 已補，請一起看有沒有和 D-081、D-226 矛盾。
+- **驗證**：完整的 `npm run check` 由這份請求所在 commit 的 pre-commit 在雲端 Linux 跑過；回歸測試都先在修正前的程式上確認失敗。
+- 報告接在 `Claude Codex Discussion/2026-11-24-phone-cards-l2.md` 的後面，標「第二輪」。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
+以下是第一輪的請求，第二輪照用其中的回報格式。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 

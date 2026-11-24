@@ -181,14 +181,17 @@ export function createAiCards(deps: AiCardsDeps) {
     existing(form: CardForm): number | null {
       const state = deps.state();
       const subject = subjects.find(each => each.key === form.subject);
-      if (!state || !subject || state.writeBlock() === 'loading') return null;
+      // 看 AI 製卡自己的門檻（cards）：手機的一般門檻一律先回 phone，會蓋掉還沒讀完（L2 R6）。
+      if (!state || !subject || state.writeBlock(true) === 'loading') return null;
       return state.aiExisting(subject.subject, form.term).length;
     },
     /** 第二步：組提示、存成待貼回的工作（按下的當下就存，F1），再放進剪貼簿。 */
     async copy(form: CardForm): Promise<{ job: CardJob; chars: number } | { error: string }> {
       const state = deps.state();
       const subject = subjects.find(each => each.key === form.subject);
-      if (!state || state.writeBlock() === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+      const block = state?.writeBlock(true);
+      if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+      if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
       const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
@@ -225,6 +228,8 @@ export function createAiCards(deps: AiCardsDeps) {
       if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' } satisfies Outcome;
       const state = deps.state();
       if (!state) return { kind: 'stop', message: BLOCKED.loading } satisfies Outcome;
+      // 先讀完已知的變動，再照現況重新檢查（L2 R2）：送來通知、還沒讀進索引的卡組也要算進去；讀不完就不存。
+      if (await state.aiWhere([]) === null) return { kind: 'stop', message: BLOCKED[state.writeBlock(true) ?? 'unread'] } satisfies Outcome;
       const inspection = inspectReply(reply, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id));
       if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' } satisfies Outcome;
       if (shown !== undefined && inspectionKey(inspection) !== shown) return { kind: 'stop', message: '存之前再檢查一次，結果和剛才看到的不同（可能剛同步來新的卡組）；這次沒有存。回上一步再按「檢查」，看過新的結果再存' } satisfies Outcome;

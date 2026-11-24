@@ -33,7 +33,8 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 /** 一支手機：localStorage 的替身、開關、state（fillIds: false）與製卡流程。 */
 async function phone(t: TestContext, on: boolean) {
   const memory = createMemoryFiles({ [OLD]: OLD_TEXT, [HAND]: HAND_TEXT });
-  const toggle = { on };
+  // 複製提示時開關是開的（關著時入口不在）；之後才照 on 設定，模擬複製之後才關掉。
+  const toggle = { on: true };
   const saved: { jobs: unknown } = { jobs: null };
   // eslint-disable-next-line prefer-const -- state 與流程互相參照
   let state: ReturnType<typeof createState>;
@@ -59,16 +60,19 @@ async function phone(t: TestContext, on: boolean) {
   const inspection = cards.inspect(copied.job, REPLY);
   assert.ok(!('error' in inspection));
   assert.deepEqual(inspection.errors, []);
+  toggle.on = on;
   return { memory, toggle, saved, state, cards, job: copied.job, shown: inspectionKey(inspection), ...names(copied.job.id) };
 }
 
 void test('§2-1 開關關著（預設）：手機不配號、不建任何檔，說明要到設定頁打開；工作留著，打開之後接著存', async t => {
   const h = await phone(t, false);
-  const before = new Map(h.memory.texts);
+  // 只比 Markdown：這台的複習紀錄（.jsonl）照常寫。
+  const markdown = () => [...h.memory.texts].filter(([path]) => path.endsWith('.md'));
+  const before = markdown();
   const stop = await h.cards.save(h.job, REPLY, null, h.shown);
   assert.equal(stop.kind, 'stop');
   assert.match((stop as { message: string }).message, /在這台裝置製卡/);
-  assert.deepEqual(h.memory.texts, before);
+  assert.deepEqual(markdown(), before);
   assert.equal(h.cards.jobs().length, 1);
   h.toggle.on = true;
   assert.equal((await h.cards.save(h.job, REPLY, null, h.shown)).kind, 'done');
@@ -201,4 +205,53 @@ void test('§2-3 規劃之後才同步來同名的檔：發布時照存下的基
   assert.equal(h.memory.texts.get(h.SNAPSHOT), other);
   const snapshot = h.SNAPSHOT.replace(/\.md$/, ' 2.md');
   assert.ok(h.memory.texts.get(snapshot)!.includes(`識別碼: ${h.job.id}\n`));
+});
+
+void test('§2-3 存草稿綁檢查結果（L2 R2）：檢查之後才送來通知、還沒讀進索引的變動也要先讀完再重新檢查；不同就不存', async t => {
+  const h = await phone(t, true);
+  const reply = REPLY.replace('<<<完>>>', '> [!note] 加進已有的學習目標\n> - k3m9qa hello 英翻中\n>     - hello there :: 你好啊\n<<<完>>>');
+  const inspection = h.cards.inspect(h.job, reply);
+  assert.ok(!('error' in inspection));
+  const shown = inspectionKey(inspection);
+  // 通知送到了、state 還沒讀（不等 settle）就按存。
+  h.memory.write(OLD, OLD_TEXT.replace(' ^k3m9qa', ''));
+  const markdown = () => [...h.memory.texts].filter(([path]) => path.endsWith('.md'));
+  const before = markdown();
+  const stop = await h.cards.save(h.job, reply, null, shown);
+  assert.equal(stop.kind, 'stop');
+  assert.match((stop as { message: string }).message, /和剛才看到的不同/);
+  assert.deepEqual(markdown(), before);
+  assert.equal(h.cards.jobs()[0].save, null, '沒有開始存');
+});
+
+void test('§2-5 手機剛開、卡組還在讀（L2 R6）：已有的學習目標是「還不知道」，不能複製提示；讀完才照實數', async t => {
+  const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const held = memory.holdRead(OLD);
+  // eslint-disable-next-line prefer-const -- state 與流程互相參照
+  let state: ReturnType<typeof createState>;
+  const saved: { jobs: unknown } = { jobs: null };
+  const cards = createAiCards({
+    rules, state: () => state, names: () => new Set(), named: () => [],
+    store: {
+      jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
+      saveJobs(jobs: CardJob[]) { saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
+      retired: () => [], retire() {}, last: () => ({}), saveLast() {}, picks: () => ({}), savePick() {},
+    },
+    clipboard: () => Promise.resolve(), phone: true, now: () => ({ ms: NOW, offset: 480 }), onError: error => { throw error; },
+  });
+  state = createState({ files: memory.files, device: 'iPhone-test', delay: 1, fillIds: false, phoneCards: () => true, now: () => NOW, offset: () => 480, onError() {} });
+  t.after(() => state.close());
+  const ready = state.ready();
+  await held.started;
+  assert.equal(cards.existing(form), null);
+  const early = await cards.copy(form);
+  assert.ok('error' in early);
+  assert.match(early.error, /正在讀取卡組/);
+  assert.deepEqual(cards.jobs(), []);
+  held.release();
+  await ready;
+  assert.equal(cards.existing(form), 1);
+  const copied = await cards.copy(form);
+  assert.ok('job' in copied);
+  assert.equal(copied.job.existing.length, 1);
 });

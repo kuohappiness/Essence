@@ -14,7 +14,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
-| 家長的手機也能製卡與啟用 | 實作中 | 使用者選手機檔名加不加識別碼（§2-3），之後改 `syntax.md` §0、§6、做 L2；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
+| 家長的手機也能製卡與啟用 | 實作中 | L2 第二輪（只審第一輪的修正，[請求](tasks/phone-cards-l2.md)）；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | Codex | [任務說明](tasks/phone-cards.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。

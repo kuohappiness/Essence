@@ -86,7 +86,8 @@ function snapshotText(job: CardJob, time: string): string {
     時間: time,
     識別碼: job.id,
     工作: '製卡',
-    對象: save.decks.filter(deck => !deck.skipped).map(deck => `[[${fileName(deck.path)}]]`),
+    // 寫完整路徑、顯示檔名（和加深的快照相同）：只寫檔名時，別處有同檔名的筆記就認不出是哪一篇（L2 R4）。
+    對象: save.decks.filter(deck => !deck.skipped).map(deck => `[[${deck.path}|${fileName(deck.path)}]]`),
     規則版本: rules.map(part => `${part.name} ${part.version}`).join('、'),
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,

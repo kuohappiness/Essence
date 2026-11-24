@@ -354,8 +354,9 @@ export interface State {
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
+   * cards：AI 製卡的窄入口（D-226）：手機打開了開關時不回 phone，照後面的順序（例如還沒讀完是 loading）。
    */
-  writeBlock(): WriteBlock | null;
+  writeBlock(cards?: boolean): WriteBlock | null;
   /**
    * 還原的獨占時段（tasks/plugin-restore.md §3-2）：呼叫的當下就關寫入的閘門（writeBlock 回 restore），等正在跑的寫入與範圍檔、小考檔的隊伍，再跑 work。
    * 排隊中的寫入回受阻，範圍檔、小考檔排在後面、輪到時照舊核對；閘門不論成敗都放開，只有 work 呼叫過 seal 時留著關（writeBlock 回 restoreStuck）。已經在還原時丟錯。
@@ -920,12 +921,16 @@ export function createState(options: StateOptions): State {
     let unwritable = false;
     /** 寫入回呼最後一次看到的原因（回呼可能跑好幾次，照最後一次）。 */
     let why: 'changed' | 'already' | null = null;
-    const plan = (text: string): Prepared | null => {
+    const plan = (text: string): Prepared | null | typeof REFUSE => {
       why = null;
+      // 啟用綁著確認的那一版（D-226 第 5 點，L2 R1）：在寫入那一列裡比。編輯器的字和磁碟（state 最後讀到或寫進去的）不同時，
+      // 可能是同步剛送來新版、編輯器還是舊的：不讀進來、不存回去。
+      if (confirmed !== undefined && editor) { const disk = tracker.text(path); if (disk === undefined || lf(disk) !== lf(text)) { why = 'changed'; return REFUSE; } }
       // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
       track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
-      if ((parseDeck(text).props.status === 'draft') !== activate) { if (activate) why = 'already'; return null; }
-      if (confirmed !== undefined && lf(text) !== lf(confirmed)) { why = 'changed'; return null; }
+      // 不改的時候明確拒寫：edit 不存編輯器（L2 R1：存回去會蓋掉剛同步來的字）。
+      if ((parseDeck(text).props.status === 'draft') !== activate) { if (activate) why = 'already'; return REFUSE; }
+      if (confirmed !== undefined && lf(text) !== lf(confirmed)) { why = 'changed'; return REFUSE; }
       const next = setStatusLine(text, value);
       if (next === null) { unwritable = true; return null; }
       // 啟用的那一刻目標才開始排程：草稿裡手寫或 AI 寫的 `課外：`、比較卡要的 `需要版本` 和狀態一起寫（D-209 第 2 點、L2 R1）。
@@ -1274,7 +1279,7 @@ export function createState(options: StateOptions): State {
       }) ? 'decks' : null,
       atWrite: () => nameFree() ? null : 'name',
     }, cards)),
-    writeBlock: () => writes.blockedNow(),
+    writeBlock: (cards = false) => writes.blockedNow(cards),
     restore(work) {
       let open = (): void => {};
       const gate = new Promise<void>(resolve => { open = resolve; });

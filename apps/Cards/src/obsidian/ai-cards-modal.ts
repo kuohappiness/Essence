@@ -21,7 +21,8 @@ const TEXT = {
   hints: '提示（可以存）：',
   saving: '正在存成草稿…',
   /** 待貼回的工作只存在這台裝置（tasks/phone-cards.md §2-5；保留規則在 core/ai/job.ts）。 */
-  local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來；14 天內沒貼回會自動清掉，開始存草稿之後就不會。`,
+  // 清掉的時機照 readJobs（載入與存工作時）：寫「可能」，不寫成到期那一刻就清（L2 R7）。
+  local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒貼回的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
   broken: (n: number) => `有 ${String(n)} 份之前複製的提示讀不懂，已經拿掉；要用的話請重新複製一次。`,
 };
 
@@ -281,7 +282,9 @@ class AiCardsModal extends Modal {
       if (job) pasted.delete(job.id);
       this.close();
       if (outcome.decks[0]) this.host.openNote(outcome.decks[0]);
-      this.host.notify(`已存成草稿：${String(outcome.decks.length)} 篇、${String(outcome.targets)} 個學習目標。看過、改好後按「啟用」，孩子才看得到`);
+      // 列實際的檔名：按下之後才出現同名時，名字會和檢查結果畫面的不同（tasks/phone-cards.md §2-3、L2 R5）。
+      const names = outcome.decks.map(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '')).join('、');
+      this.host.notify(`已存成草稿：${names}（${String(outcome.targets)} 個學習目標）。看過、改好後按「啟用」，孩子才看得到`);
       return;
     }
     const cards = this.host.cards();
