@@ -22,7 +22,7 @@ const TEXT = {
   saving: '正在存成草稿…',
   /** 待貼回的工作只存在這台裝置（tasks/phone-cards.md §2-5；保留規則在 core/ai/job.ts）。 */
   // 清掉的時機照 readJobs（載入與存工作時）：寫「可能」，不寫成到期那一刻就清（L2 R7）。
-  local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒貼回的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
+  local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒開始存成草稿的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
   broken: (n: number) => `有 ${String(n)} 份之前複製的提示讀不懂，已經拿掉；要用的話請重新複製一次。`,
 };
 
@@ -153,7 +153,7 @@ class AiCardsModal extends Modal {
       const found = cards.sameUnit(form);
       same.setText(found.length ? `已經有：${found.map(each => `${each.name}（${each.status}）`).join('、')}。還是要做一份新的嗎？舊的不會動。` : '');
       const count = cards.existing(form);
-      existing.setText(count === null ? '正在讀取卡組…' : count ? `會一起送出 ${String(count)} 個已有的學習目標` : '已有的學習目標：無');
+      existing.setText(count === 'loading' ? '正在讀取卡組…' : count === 'unread' ? '還有卡組沒讀到（可能還在從 iCloud 下載），讀到才知道已有哪些學習目標' : count ? `會一起送出 ${String(count)} 個已有的學習目標` : '已有的學習目標：無');
       copy.disabled = this.busy || !form.unit.trim();
     };
     subject.addEventListener('change', () => {
@@ -284,7 +284,8 @@ class AiCardsModal extends Modal {
       if (outcome.decks[0]) this.host.openNote(outcome.decks[0]);
       // 列實際的檔名：按下之後才出現同名時，名字會和檢查結果畫面的不同（tasks/phone-cards.md §2-3、L2 R5）。
       const names = outcome.decks.map(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '')).join('、');
-      this.host.notify(`已存成草稿：${names}（${String(outcome.targets)} 個學習目標）。看過、改好後按「啟用」，孩子才看得到`);
+      // 每一篇都跳過了：快照照樣存，沒有可以啟用的草稿（第二輪 P3）。
+      this.host.notify(names ? `已存成草稿：${names}（${String(outcome.targets)} 個學習目標）。看過、改好後按「啟用」，孩子才看得到` : '這次的卡組都跳過了，沒有留下草稿');
       return;
     }
     const cards = this.host.cards();

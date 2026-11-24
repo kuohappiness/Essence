@@ -1,6 +1,14 @@
 # 手機 AI 製卡（D-226 第一步，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第二輪（只審第一輪的修正）；第一輪審 `27da3550`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+狀態：待審｜下一步：Codex 審第三輪（只審第二輪的修正）；第一輪審 `27da3550`、第二輪審 `dfb7f5ed`，[報告與核對](<../Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)｜等誰：Codex
+
+## 第三輪（只審修正）
+
+- **待審**：`058541eb`（第二輪報告所在的 commit）到這份請求所在的 commit 的差異，範圍：`src/state/index.ts` 的 `changeStatus`（寫入那一列裡讀磁碟）、`src/obsidian/ai-cards.ts` 的 `existing`／`copy`／`save`／`firstSave`、`src/core/ai/publish.ts` 的 `isPublished` 與 `publishedElsewhere`、`src/core/ai/deepen-snapshot.ts` 的 `deckLink`（加深的 `deepen-job.ts` 也改用它）、`src/obsidian/ai-cards-modal.ts` 的文字，以及它們的呼叫端。
+- **先看**：報告最後的〈Claude 核對（第二輪）〉。
+- **請特別試**：`readTimed` 在寫入列裡的逾時與讀不完整（`completeText`）；`isPublished` 用 `io.where` 時讀不到、ID 被拆到兩篇、跳過的篇、只寫檔名的舊快照；`deckLink` 退回檔名時同檔名有兩篇；加深快照改用 `deckLink` 後，加深自己的認快照（`sameButTargets`）與 `retargetSnapshot` 還對不對；`writeBlock(true)` 先擋之後，電腦在備份還沒成功時按存的說明。
+- **驗證**：完整的 `npm run check` 由這份請求所在 commit 的 pre-commit 在雲端 Linux 跑過。
+- 報告接在後面，標「第三輪」。這是延續 R1、R5、R6 的第 3 代時，照 D-197 標出來。
 
 ## 第二輪（只審修正）
 

@@ -48,6 +48,8 @@ const BLOCKED: Record<WriteBlock | 'displaced' | 'changing', string> = {
   changing: '這幾篇卡組一直在變動（可能正在同步），先不存；等一下再按「繼續」',
 };
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+/** 還沒開始存的工作停下時，畫面只有「回上一步」（第二輪 P3）：照畫面上真的有的按鈕說。 */
+const firstSave = (message: string): string => message.replace(/再?按「繼續」$/, '回上一步，再按一次「存成草稿」');
 
 /**
  * 家長在檢查結果看到的那一版（D-226 第 5 點，tasks/phone-cards.md §2-3）：每一篇的名稱與數字、擋住與提示的字。
@@ -177,12 +179,14 @@ export function createAiCards(deps: AiCardsDeps) {
       return (deps.state()?.decks() ?? []).filter(({ deck: { props } }) => props.subject === subject && props.term !== null && termKey(props.term) === termKey(form.term) && props.unit !== null && codeKey(props.unit.code) === code)
         .map(entry => ({ name: fileName(entry.path), status: label[entry.deck.props.status] }));
     },
-    /** 會一起送出的已有學習目標；還沒讀完是 null。 */
-    existing(form: CardForm): number | null {
+    /** 會一起送出的已有學習目標；還沒讀完是 loading，有卡組或紀錄讀不到是 unread（數字不完整）。 */
+    existing(form: CardForm): number | 'loading' | 'unread' {
       const state = deps.state();
       const subject = subjects.find(each => each.key === form.subject);
-      // 看 AI 製卡自己的門檻（cards）：手機的一般門檻一律先回 phone，會蓋掉還沒讀完（L2 R6）。
-      if (!state || !subject || state.writeBlock(true) === 'loading') return null;
+      // 看 AI 製卡自己的門檻（cards）：手機的一般門檻一律先回 phone，會蓋掉還沒讀完（L2 R6）。讀不到的卡組也不能當成沒有（第二輪延續 R6）。
+      const block = state?.writeBlock(true);
+      if (!state || !subject || block === 'loading') return 'loading';
+      if (block === 'unread' || state.unread().length > 0) return 'unread';
       return state.aiExisting(subject.subject, form.term).length;
     },
     /** 第二步：組提示、存成待貼回的工作（按下的當下就存，F1），再放進剪貼簿。 */
@@ -192,6 +196,7 @@ export function createAiCards(deps: AiCardsDeps) {
       const block = state?.writeBlock(true);
       if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
+      if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
       const existing = state.aiExisting(subject.subject, form.term);
       const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
@@ -228,15 +233,18 @@ export function createAiCards(deps: AiCardsDeps) {
       if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' } satisfies Outcome;
       const state = deps.state();
       if (!state) return { kind: 'stop', message: BLOCKED.loading } satisfies Outcome;
-      // 先讀完已知的變動，再照現況重新檢查（L2 R2）：送來通知、還沒讀進索引的卡組也要算進去；讀不完就不存。
-      if (await state.aiWhere([]) === null) return { kind: 'stop', message: BLOCKED[state.writeBlock(true) ?? 'unread'] } satisfies Outcome;
+      // 等之前先看門檻（第二輪 R2 修正引入）：還原、備份、手機沒打開時，不等到它們結束才接著存。
+      const block = state.writeBlock(true);
+      if (block) return { kind: 'stop', message: firstSave(BLOCKED[block]) } satisfies Outcome;
+      // 先讀完已知的變動，再照現況重新檢查（L2 R2）：送來通知、還沒讀進索引的卡組也要算進去；讀不完就不存（一直有新的通知是 changing）。
+      if (await state.aiWhere([]) === null) return { kind: 'stop', message: firstSave(BLOCKED[state.writeBlock(true) ?? 'changing']) } satisfies Outcome;
       const inspection = inspectReply(reply, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id));
       if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' } satisfies Outcome;
       if (shown !== undefined && inspectionKey(inspection) !== shown) return { kind: 'stop', message: '存之前再檢查一次，結果和剛才看到的不同（可能剛同步來新的卡組）；這次沒有存。回上一步再按「檢查」，看過新的結果再存' } satisfies Outcome;
       const count = inspection.pieces.reduce((sum, piece) => sum + piece.names.length, 0);
       // 題目、答案與其他行的區塊 ID 會原樣存進卡組（§4）：配號要避開，新目標的連結才不會指到別行（L2-12）。
       const ids = state.aiIds(count, blockIds(inspection.normalized.lines.join('\n')), true);
-      if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] } satisfies Outcome;
+      if (typeof ids === 'string') return { kind: 'stop', message: firstSave(BLOCKED[ids]) } satisfies Outcome;
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
       const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10), deps.phone === true ? latest.id : null);
@@ -283,7 +291,7 @@ export function createAiCards(deps: AiCardsDeps) {
           if (text === null && state.aiDisplaced(latest.save.snapshotPath)) return { kind: 'stop', message: '外掛用的資料夾不在原位，不知道是不是已經存好了；照提醒把它放回原位，再試一次' };
           found = text !== null && sha256Hex(text) === latest.save.published.sha256;
           if (!found && latest.save.published.attempted) {
-            const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named });
+            const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named, where: ids => state.aiWhere(ids) });
             if (typeof copy === 'object') return { kind: 'stop', message: `讀不到 ${copy.path}，不知道是不是已經存好了；等一下再試` };
             found = copy;
           }

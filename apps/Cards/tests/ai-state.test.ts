@@ -212,6 +212,14 @@ void test('§7 開著的筆記按啟用（L2 R1）：不寫的每一種（磁碟
   assert.equal(shown.persists, 0);
   await h.state.flush();
   assert.deepEqual(h.logged().slice(baseline).filter(each => each.set === 'status'), []);
+  // 磁碟已經是 C，通知還沒到（state 與編輯器、確認都還是 B）：寫入時讀真的磁碟，不寫（第二輪延續 R1）。
+  const c = b.replace('體積除以質量', '密度的定義');
+  h.texts.set(DECK, c);
+  const late = createMemoryEditor(h, DECK, b);
+  assert.deepEqual(await h.state.activateDraft(DECK, late, b), { kind: 'changed' });
+  assert.equal(late.persists, 0);
+  assert.equal(h.texts.get(DECK), c);
+  h.texts.set(DECK, b);
   // 三份相同：啟用。
   const same = createMemoryEditor(h, DECK, b);
   assert.equal((await h.state.activateDraft(DECK, same, b)).kind, 'done');

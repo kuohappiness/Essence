@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { blockIds, isDeckPath, parseDeck } from '../src/core/deck/index.ts';
-import { abandonJob, beginSave, buildPrompt, inspectReply, isJob, ownSnapshots, planDraft, publish, rawPath, readSnapshot, rebuildDeck, RULE_SUBJECTS, sha256Hex, skipDeck, stamp } from '../src/core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, inspectReply, isJob, ownSnapshots, planDraft, publish, rawPath, readSnapshot, rebuildDeck, retargetSnapshot, RULE_SUBJECTS, sha256Hex, skipDeck, stamp } from '../src/core/ai/index.ts';
 import type { CardForm, CardJob, CreateResult, EmbeddedRule, ExistingNow, PublishIo } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-mvp.md §5 的順序、中斷與重試、ID 的預留（F2、F3、R2-1、R2-2、R3-1、R4-1）。檔案在記憶體裡，當掉用丟錯模擬：恢復資料只留最後一次存成功的。
@@ -989,4 +989,51 @@ void test('§5 快照的對象寫完整路徑（L2 R4）：快照寫入前別處
     const ids = new Set(blockIds(files.get(deck)!));
     assert.equal(ownSnapshots([info], deck, ids, resolve).length, 1, deck);
   }
+});
+
+void test('§5 快照寫成、清理之前重開，期間卡組搬走、快照的對象跟著改（第二輪 R4 修正引入）：只差對象的就是這一份，只清理；對象以外不同照舊停下', async () => {
+  const moved = 'Essence Cards/別的資料夾/國二上英文 L3 單字.md';
+  const { files, io, box, reload } = vault();
+  const job = saved(copied());
+  io.store(job);
+  box.crash = what => what === 'remove';
+  await assert.rejects(publish(job, io), Crash);
+  box.crash = () => false;
+  files.set(moved, files.get(WORD)!);
+  files.delete(WORD);
+  const retargeted = retargetSnapshot(files.get(SNAPSHOT)!, WORD, moved, () => 0);
+  assert.ok(retargeted?.includes(`[[${moved}|國二上英文 L3 單字]]`));
+  files.set(SNAPSHOT, retargeted!);
+  const before = new Map(files);
+  assert.equal((await publish(reload(), io)).kind, 'done');
+  assert.deepEqual(files, before);
+  // 對象以外也不同（同一個位置是別的內容）：照舊是衝突。
+  {
+    const again = vault();
+    const other = saved(copied());
+    again.io.store(other);
+    again.box.crash = what => what === 'remove';
+    await assert.rejects(publish(other, again.io), Crash);
+    again.box.crash = () => false;
+    again.files.set(SNAPSHOT, again.files.get(SNAPSHOT)!.replace('記穩目標: 無（初次製卡）', '記穩目標: 改過'));
+    assert.deepEqual(await publish(again.reload(), again.io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
+  }
+});
+
+void test('§5 卡組搬進名稱有連結放不下的字的資料夾（第二輪 P2）：對象退回只寫檔名，同檔名剛好一篇時加深照樣認得', async () => {
+  const moved = 'Essence Cards/08 #複習/國二上英文 L3 單字.md';
+  const { files, io, reload } = await firstWritten();
+  files.set(moved, files.get(WORD)!);
+  files.delete(WORD);
+  assert.equal((await publish(reload(), io)).kind, 'done');
+  const text = files.get(SNAPSHOT)!;
+  assert.ok(text.includes('  - "[[國二上英文 L3 單字]]"\n'));
+  const info = readSnapshot(SNAPSHOT, text)!;
+  const named = (name: string): string[] => [...files.keys()].filter(path => isDeckPath(path) && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name);
+  const resolve = (link: string): string | null => {
+    if (link.includes('/')) return link.endsWith('.md') ? link : `${link}.md`;
+    const found = named(link.toLowerCase());
+    return found.length === 1 ? found[0] : null;
+  };
+  assert.equal(ownSnapshots([info], moved, new Set(blockIds(files.get(moved)!)), resolve).length, 1);
 });

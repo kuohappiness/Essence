@@ -243,7 +243,7 @@ void test('§2-5 手機剛開、卡組還在讀（L2 R6）：已有的學習目�
   t.after(() => state.close());
   const ready = state.ready();
   await held.started;
-  assert.equal(cards.existing(form), null);
+  assert.equal(cards.existing(form), 'loading');
   const early = await cards.copy(form);
   assert.ok('error' in early);
   assert.match(early.error, /正在讀取卡組/);
@@ -254,4 +254,44 @@ void test('§2-5 手機剛開、卡組還在讀（L2 R6）：已有的學習目�
   const copied = await cards.copy(form);
   assert.ok('job' in copied);
   assert.equal(copied.job.existing.length, 1);
+  // 讀完了、但那篇讀不到（iCloud 還沒下載）：也不能當成沒有（第二輪延續 R6）。
+  const failing = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const broken = failing.holdRead(OLD);
+  // eslint-disable-next-line prefer-const -- state 與流程互相參照
+  let other: ReturnType<typeof createState>;
+  const cards2 = createAiCards({
+    rules, state: () => other, names: () => new Set(), named: () => [],
+    store: { jobs: () => null, saveJobs() {}, retired: () => [], retire() {}, last: () => ({}), saveLast() {}, picks: () => ({}), savePick() {} },
+    clipboard: () => Promise.resolve(), phone: true, now: () => ({ ms: NOW, offset: 480 }), onError: error => { throw error; },
+  });
+  other = createState({ files: failing.files, device: 'iPhone-test', delay: 1, fillIds: false, phoneCards: () => true, now: () => NOW, offset: () => 480, onError() {} });
+  t.after(() => other.close());
+  const loading = other.ready();
+  await broken.started;
+  broken.release(Error('還在下載'));
+  await loading;
+  assert.equal(cards2.existing(form), 'unread');
+  const refused = await cards2.copy(form);
+  assert.ok('error' in refused);
+  assert.match(refused.error, /沒讀到/);
+});
+
+void test('§2-2 還原中按「存成草稿」（第二輪 R2 修正引入）：立刻停下、不等還原結束才接著存；什麼都不寫，說明照畫面上有的按鈕', async t => {
+  const h = await phone(t, true);
+  let release = (): void => {};
+  let begun = (): void => {};
+  const started = new Promise<void>(resolve => { begun = resolve; });
+  const restoring = h.state.restore(() => new Promise<void>(resolve => { release = resolve; begun(); }));
+  assert.equal(h.state.writeBlock(true), 'restore');
+  const markdown = () => [...h.memory.texts].filter(([path]) => path.endsWith('.md'));
+  const before = markdown();
+  const stop = await h.cards.save(h.job, REPLY, null, h.shown);
+  assert.equal(stop.kind, 'stop');
+  assert.match((stop as { message: string }).message, /正在還原.*回上一步，再按一次「存成草稿」/);
+  await started;
+  release();
+  await restoring;
+  await settle();
+  assert.deepEqual(markdown(), before);
+  assert.equal(h.cards.jobs()[0].save, null, '沒有開始存');
 });

@@ -939,7 +939,16 @@ export function createState(options: StateOptions): State {
       if (prepared.text === text && next !== text) { unwritable = true; return null; }
       return { ...prepared, status: parseDeck(prepared.text).props.status };
     };
-    const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+    const result = await writes.enqueue(async (): Promise<WriteResult> => {
+      // 開著的筆記：輪到寫入時先讀一次真的磁碟（L2 第二輪延續 R1）。變更的通知可能還沒到，state 讀到的還是舊的；
+      // 磁碟和確認的那一版不同就不寫。讀到之後到改編輯器之間沒有通知可等，剩下的空隙只在這一次讀取的時間內。
+      if (confirmed !== undefined && editor) {
+        let disk: string | null;
+        try { disk = await writes.readTimed(path); } catch (error) { return { kind: 'failed', error }; }
+        if (disk === null || lf(disk) !== lf(confirmed)) { why = 'changed'; return { kind: 'unchanged' }; }
+      }
+      return editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan);
+    });
     if (unwritable) return { kind: 'unwritable' };
     // why 是回呼裡設的，TypeScript 看不出它變過。
     const reason = why as 'changed' | 'already' | null;
