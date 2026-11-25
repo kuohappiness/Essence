@@ -67,7 +67,8 @@ try {
     endpoint, apiKey, model: values.model, reasoning,
     maxOutputTokens: Number(values['max-output']),
     input: [{ role: 'user', content }],
-    onProgress: e => { if (e.type !== 'text') console.log(`  進度：${JSON.stringify(e)}`); },
+    // 經過的毫秒數：waiting 那一行就是拿到回應標頭花的時間（驗「連不上時照樣重送」的推斷，L2 第二輪 延續 R7）。
+    onProgress: e => { if (e.type !== 'text') console.log(`  進度（${String(Date.now() - started)} ms）：${JSON.stringify(e)}`); },
   });
   console.log(`\n回覆（${result.stopReason}，${((Date.now() - started) / 1000).toFixed(1)} 秒）：\n${result.text.slice(0, 500)}\n`);
   console.log('用量：', result.usage);
