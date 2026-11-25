@@ -4,7 +4,7 @@
 // （maxTokensField、streamUsage、systemRole，見 types.ts 的 ProviderOptions）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { dataUrl } from '../body.ts';
-import { arr, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -68,6 +68,7 @@ export const openaiChat: Dialect = {
   parseResponse(json: unknown) {
     const r = obj(json);
     if (r.error) return { error: errorOf(obj(r.error), null) };
+    if (!Array.isArray(r.choices)) return badShape('response');
     const choice = obj(arr(r.choices)[0]);
     const message = obj(choice.message);
     const raw = str(choice.finish_reason);
@@ -158,7 +159,9 @@ export const openaiChat: Dialect = {
   },
 
   parseModels(json) {
-    return arr(obj(json).data)
+    const data = obj(json).data;
+    if (!Array.isArray(data)) return null;
+    return data
       .map(m => ({ id: str(obj(m).id) ?? '', label: str(obj(m).name) }))
       .filter(m => m.id);
   },

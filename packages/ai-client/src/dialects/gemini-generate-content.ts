@@ -6,7 +6,7 @@
 // 先用它，之後另加 gemini-interactions 方言（docs/tasks/ai-client.md〈6〉）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { Binary } from '../body.ts';
-import { arr, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -111,6 +111,8 @@ export const geminiGenerateContent: Dialect = {
   parseResponse(json: unknown) {
     const r = obj(json);
     if (r.error) return { error: errorOf(obj(r.error), null) };
+    // 提示被擋時沒有 candidates，只有 promptFeedback。
+    if (!Array.isArray(r.candidates) && !r.promptFeedback) return badShape('response');
     return outputOf(r, textOf(r));
   },
 
@@ -164,7 +166,9 @@ export const geminiGenerateContent: Dialect = {
   },
 
   parseModels(json) {
-    return arr(obj(json).models)
+    const models = obj(json).models;
+    if (!Array.isArray(models)) return null;
+    return models
       .map(m => ({ id: (str(obj(m).name) ?? '').replace(/^models\//, ''), label: str(obj(m).displayName) }))
       .filter(m => m.id);
   },

@@ -127,6 +127,22 @@ for (const c of cases) {
       assert.equal(result.stopReason, c.json.stopReason);
     });
 
+    void test('服務回 200 JSON：Content-Type 大小寫不同照樣讀；形狀不對算 server，不當成空白的成功（L2 R12）', async () => {
+      const upper = run([{ status: 200, headers: { 'content-type': 'Application/JSON; charset=utf-8' }, chunks: [JSON.stringify(c.json.body)] }]);
+      assert.equal((await upper.promise).text, c.json.text);
+      const wrong = run([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: ['{"ok":true}'] }]);
+      const error = await rejects(wrong.promise);
+      assert.deepEqual([error.kind, error.afterResponse, wrong.fetch.requests.length], ['server', true, 1]);
+    });
+
+    void test('測試連線：200 卻不是模型清單（錯誤物件、HTML 登入頁）算失敗（L2 R12）', async () => {
+      for (const [type, body] of [['application/json', '{"error":{"message":"no"}}'], ['text/html', '<html>login</html>']]) {
+        const fetch = mockFetch([{ status: 200, headers: { 'content-type': type }, chunks: [body] }]);
+        const result = await createAiClient({ fetch }).check({ endpoint: c.endpoint, apiKey: KEY });
+        assert.ok(!result.ok, `${c.dialect}：${body}`);
+      }
+    });
+
     void test('輸出上限到了：算結果，停止原因 length', async () => {
       const { promise } = run([sseReply(readSse(c, c.length.file))]);
       const result = await promise;
@@ -139,6 +155,8 @@ for (const c of cases) {
       const { fetch, promise } = run([sseReply(readSse(c, c.filter.file))]);
       const error = await rejects(promise);
       assert.equal(error.kind, 'content_blocked');
+      // 已經拿到 2xx：服務可能已經計費（L2 R12）。
+      assert.deepEqual([error.afterResponse, error.retryable], [true, false]);
       assert.equal(fetch.requests.length, 1);
     });
 

@@ -72,5 +72,6 @@ export interface Dialect {
   classifyError(status: number, body: string): ParsedError;
   /** 列模型（GET）。也是「測試連線」的預設：要金鑰才列得出來的服務，列得出來就表示金鑰對。 */
   buildListModels(baseUrl: string): HttpCall;
-  parseModels(json: unknown): ModelInfo[];
+  /** 不是這一家模型清單的形狀時回 null（測試連線算失敗，L2 R12）。 */
+  parseModels(json: unknown): ModelInfo[] | null;
 }

@@ -8,7 +8,7 @@
 // 拒答是 HTTP 200 加 stop_reason: refusal。
 import type { ContentPart, StopReason } from '../types.ts';
 import { Binary } from '../body.ts';
-import { arr, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 const ANTHROPIC_VERSION = '2026-10-21';
@@ -79,6 +79,7 @@ export const anthropicMessages: Dialect = {
   parseResponse(json: unknown) {
     const r = obj(json);
     if (r.type === 'error') return { error: errorOf(obj(r.error), null) };
+    if (!Array.isArray(r.content)) return badShape('message');
     let text = '';
     for (const block of arr(r.content)) {
       const b = obj(block);
@@ -155,7 +156,9 @@ export const anthropicMessages: Dialect = {
   },
 
   parseModels(json) {
-    return arr(obj(json).data)
+    const data = obj(json).data;
+    if (!Array.isArray(data)) return null;
+    return data
       .map(m => ({ id: str(obj(m).id) ?? '', label: str(obj(m).display_name) }))
       .filter(m => m.id);
   },

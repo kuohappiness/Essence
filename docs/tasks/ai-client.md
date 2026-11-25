@@ -80,7 +80,7 @@ packages/ai-client/
 
 用法寫在套件的 [README](../../packages/ai-client/README.md)，型別以 `src/types.ts` 為準。這裡只記會影響之後的決定：
 
-- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
+- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。
@@ -125,14 +125,14 @@ packages/ai-client/
    | `quota` | OpenAI `insufficient_quota`、Anthropic 402 `billing_error` 與月上限 `enforced_spend_limit_reached`、Gemini 每日額度 | 否 |
    | `rate_limit` | 其他 429 | 是 |
    | `overloaded` | 503、529、Gemini `UNAVAILABLE` | 是 |
-   | `server` | 其他 5xx、408（服務說請求沒收完，還沒開始做） | 是 |
+   | `server` | 其他 5xx、408（服務說請求沒收完，還沒開始做）；200 的本文不是那一家成功的形狀（代理的登入頁、非標準的錯誤物件，L2 R12） | 是（200 之後的不是） |
    | `network` | 連不上、斷線、沒有結束事件 | 還沒拿到成功的回應時才是 |
    | `timeout`、`cancelled` | 超過逾時、回應標頭逾時、呼叫端取消 | 否 |
    | `invalid_request` | 其他 400 | 否 |
    | `input_too_large` | 413、超過 context（「prompt is too long」「maximum context length」等） | 否 |
    | `unsupported_input` | 模型不收 PDF 或圖片 | 否 |
    | `model_not_found` | 404、模型名稱打錯或下架 | 否 |
-   | `content_blocked` | 第 6 點 | 否 |
+   | `content_blocked` | 第 6 點；已經拿到 2xx，標 `afterResponse: true`（L2 R12） | 否 |
    | `unknown` | 其他 | 否 |
 
    錯誤的 `retryable` 是「自動重送是安全的」：種類可以重試，而且 `afterResponse` 是 false（拿到成功的回應後才出錯的一律 false，L2 R6）。分類看回應內容，不只看狀態碼。分不出是不是額度用完的 429 算 `rate_limit`，重試用完仍失敗時說明加一句「如果一直這樣，可能是額度用完了」。每種方言的錯誤範例各測一次。

@@ -4,7 +4,7 @@
 // 不用背景模式（2026-07 有過背景模式加檔案一直不結束的回報）；長時間的生成用串流撐。送 store: false。
 import type { ContentPart, StopReason } from '../types.ts';
 import { dataUrl } from '../body.ts';
-import { arr, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart, role: 'user' | 'assistant'): Json {
@@ -96,6 +96,7 @@ export const openaiResponses: Dialect = {
   parseResponse(json: unknown) {
     const r = obj(json);
     if (r.status === 'failed') return { error: errorOf(obj(r.error)) };
+    if (!Array.isArray(r.output)) return badShape('response');
     return outputOf(r);
   },
 
@@ -159,7 +160,9 @@ export const openaiResponses: Dialect = {
   },
 
   parseModels(json) {
-    return arr(obj(json).data).map(m => ({ id: str(obj(m).id) ?? '', label: null })).filter(m => m.id);
+    const data = obj(json).data;
+    if (!Array.isArray(data)) return null;
+    return data.map(m => ({ id: str(obj(m).id) ?? '', label: null })).filter(m => m.id);
   },
 };
 

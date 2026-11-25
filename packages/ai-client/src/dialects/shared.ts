@@ -19,6 +19,11 @@ export function parseJson(text: string): unknown {
   }
 }
 
+/** 200 的本文卻不是這一家成功回應的形狀（代理的登入頁、相容服務的非標準錯誤）：算 server，不當成空白的成功（L2 R12）。 */
+export const badShape = (what: string): { error: ParsedError } => ({
+  error: { kind: 'server', message: `unexpected ${what} shape`, providerCode: null },
+});
+
 export const emptyUsage = (): Usage => ({
   inputTokens: null, cachedInputTokens: null, cacheWriteInputTokens: null, outputTokens: null, reasoningTokens: null,
 });

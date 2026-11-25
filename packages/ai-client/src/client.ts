@@ -195,7 +195,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       try {
         const { output, requestId } = await runAttempt(attempt);
         if (!output.text && (output.stopReason === 'content_filter' || output.stopReason === 'refusal')) {
-          throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets });
+          // 已經拿到 2xx，服務可能已經計費：afterResponse，不自動重送（L2 R12）。
+          throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets, afterResponse: true });
         }
         progress({ type: 'done' });
         // 服務回送的字串裡有金鑰就遮掉（L2 R1）：文字、編號、模型名稱、warnings 都在這一處。
@@ -293,7 +294,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         stopIfAborted();
         // 每收到一段本文就重設閒置計時：串流與服務改回 JSON 時都一樣（GitHub 審查 P2）。
         const chunks = touching(abortable(bodyChunks(response, controller.signal), controller.signal), touch);
-        if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+        // 媒體類型不分大小寫（L2 R12）。
+        if ((response.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
           // 服務沒照要求串流。
           const raw = await readText(chunks);
           let json: unknown;
@@ -399,14 +401,18 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       if (response.status < 200 || response.status >= 300) {
         throw toError(r.dialect.classifyError(response.status, raw), response.status, retryAfterOf(response.headers), meta);
       }
-      if (usePath) return { ok: true, models: null };
       let json: unknown;
       try {
         json = JSON.parse(raw) as unknown;
       } catch {
+        // 代理的登入頁這類 200 HTML 不算連上了（L2 R12）。
         throw fail('server', 'response is not JSON', meta);
       }
-      return { ok: true, models: redactDeep(r.dialect.parseModels(json), secrets) };
+      if (typeof json !== 'object' || json === null || Array.isArray(json) || 'error' in json) throw fail('server', 'unexpected check response shape', meta);
+      if (usePath) return { ok: true, models: null };
+      const models = r.dialect.parseModels(json);
+      if (!models) throw fail('server', 'unexpected model list shape', meta);
+      return { ok: true, models: redactDeep(models, secrets) };
     } catch (caught) {
       const meta = { provider: r.providerId, requestId, secrets };
       const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta)
