@@ -1,6 +1,6 @@
 # AI 連線套件第一步（Codex L2 審查請求）
 
-狀態：待審｜下一步：第四輪審完，使用者決定剩下的發現怎麼處理（[核對與建議](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第四輪>)）｜等誰：使用者
+狀態：實作中｜下一步：第四輪審完，使用者交 Fable 5.2 xhigh 看、有條件同意，Claude 照[條件](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#fable-52-xhigh-意見第四輪>)修，不再送審｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
