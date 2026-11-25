@@ -940,3 +940,20 @@ void test('取消之後一個事件都不再交：每一條路的每一個事件
     }
   }
 });
+
+void test('整體期限管送出與等待：sent 拖過期限就不送；waiting、text 拖過期限而結果已經完整收到，照樣交回（L2 第三輪 延續 R8 的前提）', async () => {
+  for (const type of ['sent', 'waiting', 'text'] as const) {
+    let now = Date.parse('2026-11-25T00:00:00Z');
+    const fetch = mockFetch([OK]);
+    const clock = { now: () => now, sleep: () => Promise.resolve(), random: () => 0.5 };
+    const events: string[] = [];
+    const run = createAiClient({ fetch, clock }).generate(request({ timeoutMs: 50, onProgress: e => { events.push(e.type); if (e.type === type) now += 85; } }));
+    if (type === 'sent') {
+      const error = await rejects(run);
+      assert.deepEqual([error.kind, fetch.requests.length], ['timeout', 0], type);
+    } else {
+      const result = await run;
+      assert.deepEqual([result.text, fetch.requests.length, events.at(-1)], [openai.stream.text, 1, 'done'], type);
+    }
+  }
+});
