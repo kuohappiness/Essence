@@ -42,7 +42,10 @@ export const batchDir = (folder: Folder, n: number): string => join(folder.root,
 /** 地圖評分的區組資料夾（rule-test-d236.md §5-3）。 */
 export const mapBlockDir = (folder: Folder, n: number, block: string): string => join(batchDir(folder, n), '地圖區組', block);
 /** 加深評分的區組資料夾（rule-test-d236.md §6-3）。 */
-const deepenBlockDir = (folder: Folder, n: number, block: string): string => join(batchDir(folder, n), '加深區組', block);
+export const deepenBlockDir = (folder: Folder, n: number, block: string): string => join(batchDir(folder, n), '加深區組', block);
+/** 一份給評審的加深的項與篇（不是祕密：只有代號）。 */
+export const readDeepenItems = (folder: Folder, n: number, lesson: string, code: string): Pick<DeepenSheet, 'items' | 'pieces'> =>
+  JSON.parse(readFileSync(join(batchDir(folder, n), '加深', lesson, `${code}.json`), 'utf8')) as Pick<DeepenSheet, 'items' | 'pieces'>;
 /** 一批的區組（只有代號，沒有組別）：評分、狀態用這個，不讀對照表。 */
 export const readBlocks = (folder: Folder, n: number): Block[] => JSON.parse(readFileSync(join(batchDir(folder, n), '區組.json'), 'utf8')) as Block[];
 

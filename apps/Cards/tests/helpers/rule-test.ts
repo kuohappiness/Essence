@@ -8,6 +8,7 @@ import { openFolder, type Folder } from '../../tools/rule-test/folder.ts';
 import { freezeFolder } from '../../tools/rule-test/freeze.ts';
 import { runQueue } from '../../tools/rule-test/generate.ts';
 import type { JudgeResult } from '../../tools/rule-test/judge.ts';
+import type { DeepenResult } from '../../tools/rule-test/deepen-judge.ts';
 import type { MapResult } from '../../tools/rule-test/map.ts';
 
 export const RUBRIC = [
@@ -49,9 +50,9 @@ ${more}`);
 
 /**
  * 假的評審：從提示讀代號與列號，每份每列判「有」（證據第 2 行）；shape 可以照代號改結果（例如記問題），first 可以讓第一次交的不合格。
- * 地圖評分的提示（rule-test-d236.md §5-3）照 shapeMap 改。
+ * 地圖評分的提示（rule-test-d236.md §5-3）照 shapeMap 改；加深評分（§6-3）每一項判接得對、每列拿第一項當證據判有（沒有項就沒有），照 shapeDeepen 改。
  */
-export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string[]) => void; first?: (result: JudgeResult) => void; shapeMap?: (result: MapResult, codes: string[]) => void } = {}): { adapter: Adapter; requests: StepRequest[] } {
+export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string[]) => void; first?: (result: JudgeResult) => void; shapeMap?: (result: MapResult, codes: string[]) => void; shapeDeepen?: (result: DeepenResult, items: Map<string, string[]>) => void } = {}): { adapter: Adapter; requests: StepRequest[] } {
   const requests: StepRequest[] = [];
   let prompt = '';
   return {
@@ -60,6 +61,18 @@ export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string
       requests.push(request);
       request.record('{}', '');
       if (request.resume === null) prompt = request.text;
+      if (prompt.startsWith('# 加深評分說明')) {
+        const codes = /- 加深：(.*)（共/.exec(prompt)![1].split('、').map(each => /加深\/(S\d+)\.md/.exec(each)![1]);
+        const chances = /- 要逐列判的加深機會（\d+ 列）：(.*)/.exec(prompt)?.[1].split('、') ?? [];
+        const items = new Map(codes.map(code => [code, [...new RegExp(`^  - ${code}：(.*)$`, 'm').exec(prompt)![1].matchAll(/(\d+-\d+)（/g)].map(match => match[1])]));
+        const result: DeepenResult = {
+          rows: chances.map(row => ({ row, decks: codes.map(deck => { const first = items.get(deck)!.at(0); return first ? { deck, evidence: '接住了', items: [first], verdict: '有' as const } : { deck, evidence: '', items: [], verdict: '沒有' as const }; }) })),
+          items: codes.flatMap(deck => items.get(deck)!.map(item => ({ deck, item, verdict: '接得對' as const, reason: '' as const, note: '' }))),
+          issues: [], unsure: '',
+        };
+        options.shapeDeepen?.(result, items);
+        return Promise.resolve({ kind: 'ok', reply: JSON.stringify(result), session: 'judge-deepen', warnings: [], ms: 1, models: [], structured: result });
+      }
       if (prompt.startsWith('# 地圖評分說明')) {
         const maps = /- 地圖：(.*)（共/.exec(prompt)![1].split('、').map(each => /地圖\/(S\d+)\.md/.exec(each)![1]);
         const mapRows = /- 要逐列判的列（\d+ 列）：(.*)/.exec(prompt)![1].split('、');

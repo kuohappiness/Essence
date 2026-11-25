@@ -13,13 +13,15 @@ import { encodeEntry } from '../src/core/study/index.ts';
 import type { StepRequest } from '../tools/rule-test/adapters.ts';
 import { blindFolder } from '../tools/rule-test/blind.ts';
 import { planCopy, readPlan, runDeepen } from '../tools/rule-test/deepen.ts';
+import { mergeDeepen, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
+import { resultFile, runJudges } from '../tools/rule-test/judge.ts';
 import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
 import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
 import { deepenSectionText } from '../tools/rule-test/prompts.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
-import { RUBRIC } from './helpers/rule-test.ts';
+import { fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
 const ENGLISH = '# 英文\n\n<!-- 以下送給 AI -->\n\n## 英文規則\n- 二\n\n<!-- 以下只在加深時送 -->\n\n- 加深的規則\n\n<!-- 以下只在錯題分析時送 -->\n- 錯題的規則\n';
 
@@ -45,7 +47,7 @@ const DECK = '國二上英文 L3 單字\n- borrow 英翻中 ^abcdef\n    - borro
 const THREE = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n' + DECK;
 
 /** 凍結、生成好的測試資料夾：甲不交三段、乙交三段；vault 已有 L1 的一篇（單字 go）。 */
-async function generated(replies: Partial<Record<'甲' | '乙', string>> = {}, unit = 'L1'): Promise<Folder> {
+async function generated(replies: Partial<Record<'甲' | '乙', string>> = {}, unit = 'L1', more = ''): Promise<Folder> {
   const { root, commit } = fixtureRepo();
   const folder = mkdtempSync(join(tmpdir(), 'rule-test-'));
   const vault = join(folder, 'vault');
@@ -53,7 +55,7 @@ async function generated(replies: Partial<Record<'甲' | '乙', string>> = {}, u
   writeFileSync(join(vault, 'Essence Cards', 'L1.md'), `---\n科目: 英文\n年級學期: 國二上\n單元: ${unit}\n狀態: 啟用\n---\n- go 英翻中 ^aaaaa2\n    - go :: 去\n`);
   mkdirSync(join(folder, '課', 'L3'), { recursive: true });
   writeFileSync(join(folder, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
-  writeFileSync(join(folder, '課', 'L3', '評分表.md'), RUBRIC.replace(' 加題 aaaaa2 ', ' '));
+  writeFileSync(join(folder, '課', 'L3', '評分表.md'), RUBRIC.replace(' 加題 aaaaa2 ', ' ') + more);
   mkdirSync(join(folder, '提示'));
   writeFileSync(join(folder, '提示', '甲.md'), '組甲\n\n{{任務段}}');
   writeFileSync(join(folder, '提示', '乙.md'), '組乙，交三段 <<<卡組>>>\n\n{{任務段}}');
@@ -231,4 +233,62 @@ void test('§13-7 加深的提示和外掛一字不差：假 vault 放凍結的�
   const copied = await deepen.copy(piece.path, '多出文法', '');
   assert.ok('job' in copied, JSON.stringify(copied));
   assert.equal(clipboard[0], prompts.get(piece.key));
+});
+
+const CHANCES = [{ id: 'D1', uses: ['R1'], ask: 'borrow 和 lend 的方向', outside: null, pages: 'p.3' }];
+const SHEET = ['# 草稿', '', '- a ^aaaaa2', '# 第 1 篇的加深', '- 新目標', '    - q :: a', '> - aaaaa2 a', '>     - q2 :: a2'];
+const context = { chances: CHANCES, codes: ['S1'], sheets: new Map([['S1', SHEET]]), items: new Map([['S1', ['1-1', '1-2']]]) };
+const answer = (over: Partial<DeepenResult> = {}): DeepenResult => ({
+  rows: [{ row: 'D1', decks: [{ deck: 'S1', evidence: '新目標', items: ['1-1'], verdict: '有' }] }],
+  items: [{ deck: 'S1', item: '1-1', verdict: '接得對', reason: '', note: '' }, { deck: 'S1', item: '1-2', verdict: '接得對', reason: '', note: '' }],
+  issues: [], unsure: '', ...over,
+});
+
+void test('驗加深評分（§6-3）：每列每份一格、每項一筆；判「有」的證據不能是自己判接錯的項；接錯要原因；行號與項要存在', () => {
+  assert.deepEqual(validateDeepen(answer(), context), []);
+  const wrong = answer({ items: [{ deck: 'S1', item: '1-1', verdict: '接錯', reason: '沒有加深', note: '換句話' }, { deck: 'S1', item: '1-2', verdict: '接錯', reason: '', note: '' }] });
+  assert.deepEqual(validateDeepen(wrong, context), ['列 D1 的 S1：1-1 你判了接錯，不能當「有」的證據（改判部分，或換證據）', 'S1 1-2：接錯要選原因']);
+  const broken = answer({
+    rows: [{ row: 'D1', decks: [{ deck: 'S1', evidence: 'x', items: ['9-9'], verdict: '部分' }] }],
+    items: [{ deck: 'S1', item: '1-1', verdict: '接得對', reason: '層次不對', note: '' }],
+    issues: [{ deck: 'S1', kind: '判錯', item: '3-1', lines: [2], note: '' }],
+  });
+  assert.deepEqual(validateDeepen(broken, context), [
+    '列 D1 的 S1：9-9 不是這一份的項', 'S1 少了這幾項：1-2', 'S1 1-1：接得對的原因寫空字串',
+    '問題第 1 筆（S1 判錯）：行號 2 不是這一份有字的行', '問題第 1 筆（S1 判錯）：3-1 不是這一份的項',
+  ]);
+  assert.deepEqual(validateDeepen(answer({ rows: [] }), context), ['少了這幾列：D1']);
+});
+
+void test('合併加深（§6-3）：項兩位都對是對、都錯是錯、不同是歧見；加深機會照卡組的表；同一項同一種問題算一筆', () => {
+  const a = answer({ issues: [{ deck: 'S1', kind: '判錯', item: '1-2', lines: [8], note: '甲' }] });
+  const b = answer({
+    rows: [{ row: 'D1', decks: [{ deck: 'S1', evidence: '', items: [], verdict: '沒有' }] }],
+    items: [{ deck: 'S1', item: '1-1', verdict: '接錯', reason: '沒有加深', note: '' }, { deck: 'S1', item: '1-2', verdict: '接得對', reason: '', note: '' }],
+    issues: [{ deck: 'S1', kind: '判錯', item: '1-2', lines: [7], note: '乙' }, { deck: 'S1', kind: '小問題', item: '', lines: [5], note: '' }],
+  });
+  const merged = mergeDeepen('S1', new Map([['甲', a], ['乙', b]]));
+  assert.deepEqual(merged.rows, { D1: '部分' });
+  assert.deepEqual(merged.disagreements, ['D1']);
+  assert.deepEqual(merged.items, { '1-1': '歧見', '1-2': '對' });
+  assert.deepEqual(merged.issues.map(issue => [issue.kind, issue.item, issue.lines, issue.judges]), [['判錯', '1-2', [8, 7], ['甲', '乙']], ['小問題', '', [5], ['乙']]]);
+});
+
+void test('加深評分：每個有加深的區組、每位評審另開一個對話；提示列加深機會與每一份的項；結果檔 -加深、鎖定表列進去', async () => {
+  const folder = await generated({}, 'L1', '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |');
+  await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
+  const batch = blindFolder(folder, { log: () => {} });
+  const judge = fakeJudge();
+  await runJudges(folder, { adapters: { claude: judge.adapter, codex: judge.adapter }, log: () => {} });
+  const [block] = batch.blocks;
+  const prompts = judge.requests.filter(request => request.text.startsWith('# 加深評分說明'));
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[0].text, /- 要逐列判的加深機會（1 列）：D1/);
+  assert.match(prompts[0].text, /^ {2}- S\d：1-1（第 \d+ 行）、1-2（第 \d+ 行）、1-3（第 \d+ 行）$/m);
+  for (const name of ['codex', 'claude']) {
+    const result = JSON.parse(readFileSync(resultFile(folder, 1, name, block.name, '加深'), 'utf8')) as DeepenResult;
+    assert.equal(result.items.length, 6);
+  }
+  const lock = readFileSync(join(folder.root, '評分', '批1', '鎖定.md'), 'utf8');
+  assert.match(lock, new RegExp(`${block.name}-加深\\.json`));
 });
