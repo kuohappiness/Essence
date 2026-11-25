@@ -4,6 +4,7 @@ import { blind } from './blind.ts';
 import { check } from './check.ts';
 import { freeze } from './freeze.ts';
 import { generate } from './generate.ts';
+import { judge } from './judge.ts';
 import { paste } from './paste.ts';
 import { probe } from './probe.ts';
 import { status } from './status.ts';
@@ -15,6 +16,7 @@ const COMMANDS: Record<string, () => Promise<void>> = {
   paste,
   check,
   blind,
+  judge,
   status,
 };
 

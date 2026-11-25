@@ -1,7 +1,7 @@
 // 比較測試工具：生成的工作與事件檔（任務說明 tasks/rule-test-tool.md §5-4）。工作＝組 × 課 × 生成器 × 第幾份；
 // 事件.jsonl 只追加（開始、每一步、完成、無效、失敗、逾時、額度用完、中斷、停下），狀態都由事件推出，不另存一份會不同步的狀態。
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { lessonsOf, type AdapterKind } from './config.ts';
 import type { Folder } from './folder.ts';
 import type { FrozenStep } from './freeze.ts';
@@ -24,17 +24,20 @@ export interface JobEvent { t: string; type: EventType; job?: string; attempt?: 
 /** 同一份工作最多試幾次（失敗、逾時、中斷都算一次）；之後停在 failed，由人決定。 */
 const MAX_ATTEMPTS = 3;
 
-const eventsFile = (folder: Folder): string => join(folder.root, '生成', '事件.jsonl');
+/** 事件檔：生成的在 生成/事件.jsonl；評分等其他步驟傳自己的檔（測試資料夾裡的相對路徑）。 */
+const GENERATE_LOG = join('生成', '事件.jsonl');
 
-export function appendEvent(folder: Folder, event: Omit<JobEvent, 't'>, now = new Date()): void {
-  mkdirSync(join(folder.root, '生成'), { recursive: true });
-  appendFileSync(eventsFile(folder), JSON.stringify({ t: now.toISOString(), ...event }) + '\n', 'utf8');
+export function appendEvent(folder: Folder, event: Omit<JobEvent, 't'>, log = GENERATE_LOG, now = new Date()): void {
+  const file = join(folder.root, log);
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, JSON.stringify({ t: now.toISOString(), ...event }) + '\n', 'utf8');
 }
 
 /** 讀事件；最後一行沒寫完（行程被中斷）就略過那一行。 */
-export function readEvents(folder: Folder): JobEvent[] {
-  if (!existsSync(eventsFile(folder))) return [];
-  return readFileSync(eventsFile(folder), 'utf8').split('\n').filter(Boolean).flatMap(line => {
+export function readEvents(folder: Folder, log = GENERATE_LOG): JobEvent[] {
+  const file = join(folder.root, log);
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(line => {
     try { return [JSON.parse(line) as JobEvent]; } catch { return []; }
   });
 }

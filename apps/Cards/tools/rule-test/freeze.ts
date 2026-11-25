@@ -156,6 +156,15 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
     files[`${LIBRARY}/${lesson.code}/教材.pdf`] = sha256File(materialOf(folder, lesson));
     if (existsSync(rubricOf(folder, lesson))) files[`${LIBRARY}/${lesson.code}/評分表.md`] = sha256File(rubricOf(folder, lesson));
   }
+  // 評審的範本（§5-7）：評分說明與用到的科目口徑，凍結一份，評分照這一份。
+  const templates = join(import.meta.dirname, 'templates');
+  const copyTemplate = (name: string): void => {
+    const path = join(folder.root, '凍結', '範本', name);
+    writeOnce(path, readFileSync(join(templates, name)));
+    record(path);
+  };
+  copyTemplate('評分說明.md');
+  for (const key of new Set(config.lessons.map(lesson => lesson.subjectKey))) if (existsSync(join(templates, '口徑', `${key}.md`))) copyTemplate(join('口徑', `${key}.md`));
   const index = join(folder.root, '凍結', '提示.json');
   writeOnce(index, JSON.stringify(steps, null, 2) + '\n');
   record(index);

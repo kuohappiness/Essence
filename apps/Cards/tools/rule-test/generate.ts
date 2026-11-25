@@ -3,7 +3,7 @@
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { claudeAdapter, type Adapter, type StepResult } from './adapters.ts';
 import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
@@ -41,7 +41,7 @@ function alive(pid: number): boolean {
 }
 
 /** 行程鎖：已經有一個 generate、judge、disputes 或 rubric 在跑就停下（N4）；上一次的行程已經不在時，把它跑到一半的工作記成中斷。 */
-export function acquireLock(folder: Folder, command: string): () => void {
+export function acquireLock(folder: Folder, command: string, log?: string): () => void {
   const file = lockFile(folder);
   if (existsSync(file)) {
     const held = JSON.parse(readFileSync(file, 'utf8')) as { pid: number; command: string; started: string };
@@ -50,9 +50,9 @@ export function acquireLock(folder: Folder, command: string): () => void {
   }
   mkdirSync(join(folder.root, '生成'), { recursive: true });
   writeFileSync(file, JSON.stringify({ pid: process.pid, command, started: new Date().toISOString() }) + '\n', { flag: 'wx' });
-  const events = readEvents(folder);
+  const events = readEvents(folder, log);
   for (const key of new Set(events.flatMap(event => event.job ?? []))) {
-    if (jobState(events, key).status === 'running') appendEvent(folder, { type: 'interrupted', job: key, detail: { why: '上一次的行程已經不在' } });
+    if (jobState(events, key).status === 'running') appendEvent(folder, { type: 'interrupted', job: key, detail: { why: '上一次的行程已經不在' } }, log);
   }
   return () => { if (existsSync(file)) unlinkSync(file); };
 }
@@ -186,12 +186,18 @@ export async function generate(): Promise<void> {
   for (const job of manual) console.log(`手貼說明：${writeManual(folder, job)}`);
   if (!auto.length) return;
   if (flags.includes('--foreground')) { await runQueue(folder); return; }
-  mkdirSync(join(folder.root, '生成'), { recursive: true });
-  const out = openSync(join(folder.root, '生成', '執行.log'), 'a');
-  const child = spawn(process.execPath, [join(import.meta.dirname, 'cli.ts'), 'generate', folder.root, '--run'], { detached: true, stdio: ['ignore', out, out], windowsHide: true });
+  const pid = detach(folder, 'generate', join('生成', '執行.log'));
+  console.log(`背景開始生成 ${String(auto.length)} 份（行程 ${String(pid)}）；進度用 status 看，輸出在 生成/執行.log。`);
+}
+
+/** 在背景開一個行程跑 `<command> <測試資料夾> --run`（主持的 Claude 不在前景等，§5-4）；輸出接到 log（測試資料夾裡的相對路徑）。 */
+export function detach(folder: Folder, command: string, log: string, more: string[] = []): number | undefined {
+  mkdirSync(dirname(join(folder.root, log)), { recursive: true });
+  const out = openSync(join(folder.root, log), 'a');
+  const child = spawn(process.execPath, [join(import.meta.dirname, 'cli.ts'), command, folder.root, '--run', ...more], { detached: true, stdio: ['ignore', out, out], windowsHide: true });
   child.unref();
   closeSync(out);
-  console.log(`背景開始生成 ${String(auto.length)} 份（行程 ${String(child.pid)}）；進度用 status 看，輸出在 生成/執行.log。`);
+  return child.pid;
 }
 
 /** 給 paste 用：把貼回的回覆存進這份工作的這一步；都齊了就存進原稿。 */
