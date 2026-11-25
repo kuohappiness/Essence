@@ -1,25 +1,12 @@
 // 比較測試工具的評分（tasks/rule-test-tool.md §5-2 評分表、§5-7 評分、驗證、補正與鎖定）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Adapter, StepRequest } from '../tools/rule-test/adapters.ts';
-import { blindFolder } from '../tools/rule-test/blind.ts';
-import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
-import { freezeFolder } from '../tools/rule-test/freeze.ts';
-import { runQueue } from '../tools/rule-test/generate.ts';
 import { readEvents } from '../tools/rule-test/jobs.ts';
 import { judgePrompt, judgeSchema, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
 import { parseRubric } from '../tools/rule-test/rubric.ts';
-
-const RUBRIC = [
-  '| 列 | 類別 | 要考的知識或判準 | 頁碼 | 可以接受的等價做法 | 跨單元 |',
-  '|---|---|---|---|---|---|',
-  '| R1 | 必備 | borrow 的字義 | p.3 | | |',
-  '| R2 | **加分** | lend 的字義 | p.3 | | 加題 aaaaa2 |',
-  '| M1 | 重大錯誤 | 字義教錯 | | | |',
-].join('\n');
+import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
 void test('評分表：讀列號、類別與跨單元；列號重複、類別不對、跨單元的 ID 不在快照裡都列出來', () => {
   const rows = parseRubric(RUBRIC, new Set(['aaaaa2']));
@@ -72,53 +59,6 @@ void test('驗評審的結果：列號一列一筆、每份一格、判有要有
   assert.deepEqual(validateResult('不是 JSON', context), ['不是照 schema 的 JSON（要有 pages、rows、issues、unsure）']);
 });
 
-const GOOD_REPLY = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
-
-async function blinded(): Promise<Folder> {
-  const root = mkdtempSync(join(tmpdir(), 'rule-test-judge-'));
-  mkdirSync(join(root, '課', 'L3'), { recursive: true });
-  writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
-  writeFileSync(join(root, '課', 'L3', '評分表.md'), RUBRIC.replace(' 加題 aaaaa2 ', ' '));
-  mkdirSync(join(root, '提示'));
-  for (const name of ['甲', '乙']) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
-  writeFileSync(join(root, '測試.yaml'), `
-名稱: 評分測試
-課庫: 課
-同時: 1
-課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
-組:
-  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }
-  - { 名稱: 乙, 規則: { 自備: { L3: 乙.md } } }
-生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
-評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
-`);
-  await freezeFolder(openFolder(root), { log: () => {} });
-  const folder = openFolder(root);
-  await runQueue(folder, { adapters: { claude: () => Promise.resolve({ kind: 'ok', reply: GOOD_REPLY, session: null, warnings: [], ms: 1, models: [] }) }, log: () => {} });
-  blindFolder(folder, { log: () => {} });
-  return folder;
-}
-
-/** 假的評審：從提示讀代號與列號，交一份合格的結果；first 可以先交一份不合格的。 */
-function fakeJudge(first?: (result: JudgeResult) => void): { adapter: Adapter; requests: StepRequest[] } {
-  const requests: StepRequest[] = [];
-  let prompt = '';
-  return {
-    requests,
-    adapter: request => {
-      requests.push(request);
-      request.record('{}', '');
-      if (request.resume === null) prompt = request.text;
-      const codes = /- 卡組：(.*)（共/.exec(prompt)![1].split('、').map(each => /卡組\/(S\d+)\.md/.exec(each)![1]);
-      const rows = /- 要逐列判的列（\d+ 列）：(.*)/.exec(prompt)![1].split('、');
-      const result: JudgeResult = { pages: [], rows: rows.map(row => ({ row, decks: codes.map(deck => ({ deck, evidence: 'borrow 英翻中', lines: [2], verdict: '有' as const })) })), issues: [], unsure: '' };
-      if (first && requests.length === 1) first(result);
-      return Promise.resolve({ kind: 'ok', reply: JSON.stringify(result), session: 'judge-1', warnings: [], ms: 1, models: [], structured: result });
-    },
-  };
-}
-
 void test('judge：每個區組、每位評審一個新對話（只開 Read、照 schema 交、資料夾是複本）；兩位都交了就鎖定', async () => {
   const folder = await blinded();
   const claude = fakeJudge(), codex = fakeJudge();
@@ -145,7 +85,7 @@ void test('judge：每個區組、每位評審一個新對話（只開 Read、�
 
 void test('judge：格式不合就在同一個對話補正（只列問題、其他判定不改）', async () => {
   const folder = await blinded();
-  const claude = fakeJudge(result => { result.rows.pop(); });
+  const claude = fakeJudge({ first: result => { result.rows.pop(); } });
   const codex = fakeJudge();
   await runJudges(folder, { adapters: { claude: claude.adapter, codex: codex.adapter }, log: () => {} });
   assert.equal(claude.requests.length, 2);

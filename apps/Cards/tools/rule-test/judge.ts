@@ -1,9 +1,10 @@
 // 比較測試工具：judge（任務說明 tasks/rule-test-tool.md §5-7）。每個區組、每位評審一個新對話，只拿到那個區組資料夾的複本；
 // 交 JSON（schema 只用兩家 CLI 都收的寫法），工具驗列號、行號、頁數，格式不合就在同一個對話補正；一批全部交齊就鎖定（雜湊寫進 鎖定.md）。
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { claudeAdapter, codexAdapter, parseJsonReply, type Adapter } from './adapters.ts';
+import { claudeAdapter, codexAdapter, type Adapter } from './adapters.ts';
+import { askJson, type AskOutcome } from './ask.ts';
 import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import type { Judge } from './config.ts';
@@ -23,9 +24,6 @@ export interface JudgeResult {
   issues: { deck: string; kind: IssueKind; lines: number[]; rubric: string; note: string }[];
   unsure: string;
 }
-
-/** 補正最多幾輪（同一個對話）；還不合格就記失敗，由操作的 Claude 決定（§5-7）。 */
-const FIX_ROUNDS = 2;
 
 const object = (properties: Record<string, unknown>): Record<string, unknown> => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
 const array = (items: unknown): Record<string, unknown> => ({ type: 'array', items });
@@ -88,7 +86,7 @@ export function validateResult(value: unknown, context: JudgeContext): string[] 
 }
 
 const LOG = (batch: number): string => join('評分', `批${String(batch)}`, '事件.jsonl');
-const resultFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '結果', judge, `${block}.json`);
+export const resultFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '結果', judge, `${block}.json`);
 const jobOf = (block: Block, judge: Judge): string => `${block.name}-${judge.name}`;
 
 /** 給評審的提示：凍結的評分說明、科目口徑，加這個區組的代號、列號與頁數。 */
@@ -112,10 +110,7 @@ export function judgePrompt(folder: Folder, block: Block, rows: readonly RubricR
 export interface JudgeOptions { adapters?: Partial<Record<'claude' | 'codex', Adapter>>; log?: (line: string) => void; temp?: string; batch?: number }
 
 /** 跑一位評審評一個區組：驗結果，不合就在同一個對話補正。 */
-async function runOne(folder: Folder, batch: number, block: Block, judge: Judge, adapter: Adapter, temp: string): Promise<'done' | 'fail' | 'timeout' | 'quota' | 'fatal'> {
-  const log = LOG(batch), key = jobOf(block, judge);
-  const attempt = jobState(readEvents(folder, log), key).attempts + 1;
-  appendEvent(folder, { type: 'start', job: key, attempt }, log);
+async function runOne(folder: Folder, batch: number, block: Block, judge: Judge, adapter: Adapter, temp: string): Promise<AskOutcome> {
   const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
   const rows = parseRubric(readFileSync(rubricOf(folder, lesson), 'utf8'), new Set(readFrozenSnapshot(folder, lesson.code)?.targets.map(t => t.id) ?? []));
   const pdf = readFileSync(materialOf(folder, lesson));
@@ -123,36 +118,13 @@ async function runOne(folder: Folder, batch: number, block: Block, judge: Judge,
   const decks = new Map(block.codes.map(code => [code, readFileSync(join(batchDir(folder, batch), '卡組', block.lesson, `${code}.md`), 'utf8').split('\n')]));
   const cwd = mkdtempSync(join(temp, 'rule-test-judge-'));
   cpSync(join(batchDir(folder, batch), '區組', block.name), cwd, { recursive: true });
-  const records = join(batchDir(folder, batch), '紀錄');
-  mkdirSync(records, { recursive: true });
-  const schema = JSON.stringify(judgeSchema(block.codes));
   try {
-    let text = judgePrompt(folder, block, rows, pages, judge.kind === 'claude');
-    let session: string | null = null, problems: string[] = [];
-    for (let round = 0; round <= FIX_ROUNDS; round++) {
-      const result = await adapter({
-        text, pdf: judge.kind === 'claude' && session === null ? pdf : null, resume: session, model: judge.model, effort: judge.effort, systemPrompt: null, cwd,
-        tools: 'Read', jsonSchema: schema, timeoutMs: folder.config.timeoutMinutes * 60_000,
-        record: (stdout, stderr) => { writeFileSync(join(records, `${key}-${String(attempt)}-${String(round)}.jsonl`), stdout + (stderr ? `\n--- stderr ---\n${stderr}` : ''), 'utf8'); },
-      });
-      if (result.kind !== 'ok') {
-        appendEvent(folder, { type: result.kind === 'fatal' ? 'fail' : result.kind, job: key, attempt, detail: { message: result.message, ...result.kind === 'fatal' ? { fatal: true } : {} } }, log);
-        return result.kind;
-      }
-      session = result.session;
-      const value = result.structured ?? parseJsonReply(result.reply);
-      problems = validateResult(value, { rows, codes: block.codes, decks, pages });
-      appendEvent(folder, { type: 'step', job: key, attempt, step: round + 1, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, problems: problems.length } }, log);
-      if (!problems.length) {
-        writeOnce(resultFile(folder, batch, judge.name, block.name), JSON.stringify(value, null, 2) + '\n');
-        appendEvent(folder, { type: 'done', job: key, attempt }, log);
-        return 'done';
-      }
-      if (!session) break;
-      text = `你交的 JSON 有這些問題：\n${problems.map(each => `- ${each}`).join('\n')}\n\n其他判定不要改，只修正這些地方，照同一個 schema 整份重交。`;
-    }
-    appendEvent(folder, { type: 'fail', job: key, attempt, detail: { message: '補正後格式仍不合', problems } }, log);
-    return 'fail';
+    return await askJson({
+      folder, log: LOG(batch), key: jobOf(block, judge), who: judge, adapter, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), pdf, cwd,
+      schema: judgeSchema(block.codes), records: join(batchDir(folder, batch), '紀錄'),
+      validate: value => validateResult(value, { rows, codes: block.codes, decks, pages }),
+      save: value => { writeOnce(resultFile(folder, batch, judge.name, block.name), JSON.stringify(value, null, 2) + '\n'); },
+    });
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 

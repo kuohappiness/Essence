@@ -2,6 +2,7 @@
 // 用法：npm run rule-test -- <指令> …；指令與步驟見同一個資料夾的 README.md。
 import { blind } from './blind.ts';
 import { check } from './check.ts';
+import { disputes } from './disputes.ts';
 import { freeze } from './freeze.ts';
 import { generate } from './generate.ts';
 import { judge } from './judge.ts';
@@ -17,6 +18,7 @@ const COMMANDS: Record<string, () => Promise<void>> = {
   check,
   blind,
   judge,
+  disputes,
   status,
 };
 
