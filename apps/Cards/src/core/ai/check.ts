@@ -146,7 +146,7 @@ function treeOf(blocks: readonly Block[]): TreeNode[] {
 
 // ── 比較卡（點選填空，tasks/question-type-seam.md §10）──
 // 認不認得出是 parseDeck 的結果（解析與檢查共用一份，產品照它出題）；這裡決定等級，再加上製卡規則量得到的幾條。
-const PICK_ENDING = /[\s）)](相似字|比較)$/; // 結尾整段是這兩個詞才算（§3〈結尾〉）：「質量比較」「這兩個字的比較」不算
+const PICK_ENDING = /[\s）)](相似字|相似詞|比較)$/; // 結尾整段是這三個詞才算（§3〈結尾〉，相似詞見 tasks/polyphone-pick.md §2）：「質量比較」「這兩個字的比較」不算
 const PICK_ANCHOR = /^記憶錨點\s*[：:]/;
 const foldPick = (s: string): string => s.replace(/\*\*|==/g, '').replace(/[！-～]/g, c => String.fromCodePoint(c.codePointAt(0)! - 0xFEE0)).replace(/[\s　]+/g, ' ').trim().toLowerCase();
 /** 整個答案出現在題目裡：英文看詞界（lend 在 blend 不算），片語要整段；中文要整個詞，單一漢字照預設〈相似字〉出現就算（喵喵叫）。 */
@@ -174,14 +174,14 @@ function checkPick(text: string, deck: Deck, issue: Report): void {
   const groups = new Map<string, DeckTarget[]>();
   for (const t of deck.targets) {
     const line = t.line + 1;
-    // 最上層的題目或名稱有 ==、＿：解析照原題型（隱式題、補 ID 留下來的），結尾又寫了相似字、比較，八成是想做比較卡（§3 判斷順序第 1 點）。
+    // 最上層的題目或名稱有 ==、＿：解析照原題型（隱式題、補 ID 留下來的），結尾又寫了相似字、相似詞、比較，八成是想做比較卡（§3 判斷順序第 1 點）。
     if (PICK_ENDING.test(t.name) && /==|＿/.test(lines[t.line].split('::')[0])) issue(line, '錯誤', 'pick-name-cloze', '比較卡的名稱不能有 == 或 ＿，這一行不會變成比較卡；名稱寫成「寨（寨、塞） 相似字」，句子放在底下');
     const spaced = spacedItem(t.name);
     if ((t.group || unrecognized.has(t)) && spaced) issue(line, '提醒', 'pick-member-space', `括號裡的項目中間有空白，可能少打一個頓號：${spaced}`);
     const group = t.group;
     if (!group) continue;
     groups.set(group.key, [...(groups.get(group.key) ?? []), t]);
-    if (group.title !== '相似字' && group.title !== '比較') issue(line, '提醒', 'pick-title', `比較卡的結尾寫「相似字」或「比較」（現在是「${group.title}」），孩子才看得懂標題`);
+    if (group.title !== '相似字' && group.title !== '相似詞' && group.title !== '比較') issue(line, '提醒', 'pick-title', `比較卡的結尾寫「相似字」「相似詞」或「比較」（現在是「${group.title}」），孩子才看得懂標題`);
     const least = group.members.length === 2 ? 3 : 2;
     if (t.prompts.length < least) issue(line, '不符', 'pick-few-sentences', `每個字至少兩句，只有兩個選項的組至少三句：這裡 ${String(t.prompts.length)} 句（D-182）`);
     for (const p of t.prompts) if (p.kind === 'qa' && answerShown(p.question, p.answer)) issue(p.line + 1, '不符', 'pick-answer-in-question', `答案「${p.answer}」出現在題目裡，不用想就答得出來`);
@@ -266,7 +266,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   } : null;
   const targets: CheckedTarget[] = [], candidates: CheckedTarget[] = [], existing: CheckedTarget[] = [], notes: string[] = [], headings: string[] = [];
   const deck = parseDeck(text, { subject });
-  // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這兩個詞的、認不得的也一樣，它們另外有比較卡的診斷。
+  // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這三個詞的、認不得的也一樣，它們另外有比較卡的診斷。
   const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name)).map(t => t.line + 1));
 
   let start = 0;

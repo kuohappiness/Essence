@@ -127,7 +127,7 @@ export function readPick(target: Target): PickReading {
   if (target.implicit || name.includes('==') || countBlanks(name) > 0 || target.direction !== null) return NOT_PICK;
   const group = readGroup(name);
   const ending = group ? group.title : endingOf(name);
-  const hinted = ending === '相似字' || ending === '比較';
+  const hinted = ending === '相似字' || ending === '相似詞' || ending === '比較'; // 相似詞：D-230 第 3 點、tasks/polyphone-pick.md §2
   const notRecognized = (lines: readonly number[], message: string): PickReading => hinted ? { group: null, problems: lines.map(line => ({ line, level: 'hint', code: 'pick-not-recognized', message })) } : NOT_PICK;
   if (prompts.every(prompt => prompt.kind === 'cloze')) return notRecognized([target.line], '填空題不會變成比較卡；比較卡的題目寫成「題幹有一個 ＿＿ :: 答案」');
   if (!group) return notRecognized([target.line], groupFailure(name));
