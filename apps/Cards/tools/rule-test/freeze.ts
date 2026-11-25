@@ -9,6 +9,7 @@ import type { RuleSource } from './config.ts';
 import { lessonDir, libraryOf, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { checkInherited, templateHashes } from './init.ts';
 import { APP_ROOT, buildFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
+import { checkRubricFile } from './rubric.ts';
 import { parseSnapshotFile, readSnapshot, type Snapshot } from './snapshot.ts';
 
 export interface FrozenStep {
@@ -158,7 +159,10 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
       });
     }
     files[`${LIBRARY}/${lesson.code}/教材.pdf`] = sha256File(materialOf(folder, lesson));
-    if (existsSync(rubricOf(folder, lesson))) files[`${LIBRARY}/${lesson.code}/評分表.md`] = sha256File(rubricOf(folder, lesson));
+    if (existsSync(rubricOf(folder, lesson))) {
+      checkRubricFile(rubricOf(folder, lesson), lesson.code, snapshot ? new Set(snapshot.targets.map(target => target.id)) : null);
+      files[`${LIBRARY}/${lesson.code}/評分表.md`] = sha256File(rubricOf(folder, lesson));
+    }
   }
   // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明，凍結一份，評分與裁定照這一份。
   const templates = join(import.meta.dirname, 'templates');

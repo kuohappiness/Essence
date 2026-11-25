@@ -9,6 +9,7 @@ import { materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, ty
 import { git, readFrozenSnapshot, readFrozenSteps, verifyLock } from './freeze.ts';
 import { rawName } from './generate.ts';
 import { jobState, planJobs, readEvents, type Job } from './jobs.ts';
+import { checkRubricFile } from './rubric.ts';
 
 export interface BlindEntry {
   lesson: string; code: string; job: string; group: string; generator: string; copy: number; replacement: boolean;
@@ -60,11 +61,17 @@ function anonymousDeck(folder: Folder, job: Job): { deck: string } | { why: stri
   return { deck: parts.join('\n') };
 }
 
+/**
+ * 外掛規定的引言框標題（syntax.md §2-9，認法同外掛 check.ts 的 calloutHead）：標題字是格式，不是組名洩漏。
+ * 2026-11-25 使用者電腦：組名叫「候選」時，每一份的 `> [!note]- 候選卡片` 都被當成洩漏。
+ */
+const FORMAT_TITLE = /^\s{0,3}>\s?\[![^\]]+\][-+]?\s*(?:候選卡片|加進已有的學習目標)\s*$/;
+
 /** 洩漏字樣（§5-6）：組名、生成器與模型的名稱、`<<<` 標記。回傳每一處（給人看）。 */
 function leaks(folder: Folder, deck: string): string[] {
   const { config } = folder;
   const words = [...new Set([...config.groups.map(each => each.name), ...config.generators.flatMap(each => [each.name, each.model, ...each.service ? [each.service] : []]), ...MODEL_WORDS, '<<<'])].filter(Boolean);
-  return deck.split('\n').flatMap((line, i) => words.filter(word => line.toLowerCase().includes(word.toLowerCase())).map(word => `第 ${String(i + 1)} 行有「${word}」`));
+  return deck.split('\n').flatMap((line, i) => FORMAT_TITLE.test(line) ? [] : words.filter(word => line.toLowerCase().includes(word.toLowerCase())).map(word => `第 ${String(i + 1)} 行有「${word}」`));
 }
 
 const numbered = (deck: string): string => deck.split('\n').map((line, i) => line === '' && i === deck.split('\n').length - 1 ? '' : `${String(i + 1)}\t${line}`).join('\n');
@@ -106,8 +113,11 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
   // 評分表在這裡鎖（凍結時還沒有的話）：之後改了就停下（§5-2 改了存成新版）。
   for (const lesson of folder.config.lessons) {
     if (!existsSync(rubricOf(folder, lesson))) throw Error(`課「${lesson.code}」還沒有評分表：${rubricOf(folder, lesson)}`);
-    try { writeOnce(join(folder.root, '凍結', '評分表', `${lesson.code}.sha256`), sha256File(rubricOf(folder, lesson)) + '\n'); }
-    catch { throw Error(`課「${lesson.code}」的評分表在鎖定之後改過；要改就存成新版、開新的測試資料夾（§5-2）`); }
+    const locked = join(folder.root, '凍結', '評分表', `${lesson.code}.sha256`), hash = sha256File(rubricOf(folder, lesson)) + '\n';
+    if (existsSync(locked) && readFileSync(locked, 'utf8') !== hash) throw Error(`課「${lesson.code}」的評分表在鎖定之後改過；要改就存成新版、開新的測試資料夾（§5-2）`);
+    const snapshot = readFrozenSnapshot(folder, lesson.code);
+    checkRubricFile(rubricOf(folder, lesson), lesson.code, snapshot ? new Set(snapshot.targets.map(target => target.id)) : null);
+    writeOnce(locked, hash);
   }
   const events = readEvents(folder);
   const jobs = planJobs(folder, readFrozenSteps(folder), events);

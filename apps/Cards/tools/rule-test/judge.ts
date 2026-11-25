@@ -1,7 +1,7 @@
 // 比較測試工具：judge（任務說明 tasks/rule-test-tool.md §5-7）。每個區組、每位評審一個新對話，只拿到那個區組資料夾的複本；
 // 交 JSON（schema 只用兩家 CLI 都收的寫法），工具驗列號、行號、頁數，格式不合就在同一個對話補正；一批全部交齊就鎖定（雜湊寫進 鎖定.md）。
 import { randomInt } from 'node:crypto';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeAdapter, codexAdapter, type Adapter } from './adapters.ts';
@@ -9,7 +9,7 @@ import { askJson, type AskOutcome } from './ask.ts';
 import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import type { Judge } from './config.ts';
-import { materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
+import { copyDir, materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { readFrozenSnapshot, verifyLock } from './freeze.ts';
 import { acquireLock, detach } from './generate.ts';
 import { appendEvent, jobState, readEvents, reopenFailed } from './jobs.ts';
@@ -165,7 +165,7 @@ async function runOne(folder: Folder, batch: number, task: Task, adapter: Adapte
   const pages = countPdfPages(pdf);
   const decks = new Map(block.codes.map(code => [code, readFileSync(join(batchDir(folder, batch), '卡組', block.lesson, `${code}.md`), 'utf8').split('\n')]));
   const cwd = mkdtempSync(join(temp, 'rule-test-judge-'));
-  cpSync(join(batchDir(folder, batch), '區組', block.name), cwd, { recursive: true });
+  copyDir(join(batchDir(folder, batch), '區組', block.name), cwd);
   try {
     return await askJson({
       folder, log: LOG(batch), key: jobOf(block, judge, task.again), who: judge, adapter, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), pdf, cwd,

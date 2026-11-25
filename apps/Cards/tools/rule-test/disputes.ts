@@ -2,14 +2,14 @@
 // 只有一位記的重大錯誤（每一筆一個新的隔離對話：看得到教材、評分表、已有目標與那一份卡組，看不到組別，照定義重判、寫理由），
 // 與兩位評審的「拿不準」（彙成一個對話，分出教學選擇與照口徑就能判的）。結果寫進 評分/批N/裁定.md；教學選擇由使用者答，
 // 操作的 Claude 照使用者的話填。解開前做；原評分不改，解開時照裁定另算。
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeAdapter, codexAdapter, type Adapter } from './adapters.ts';
 import { askJson } from './ask.ts';
 import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
-import { materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
+import { copyDir, materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { verifyLock } from './freeze.ts';
 import { acquireLock, detach } from './generate.ts';
 import { resultFile, type JudgeResult } from './judge.ts';
@@ -196,7 +196,7 @@ export async function runDisputes(folder: Folder, options: DisputeOptions = {}):
           mkdirSync(join(cwd, '評分表'), { recursive: true });
           copyFileSync(rubricOf(folder, folder.config.lessons.find(each => each.code === lesson)!), join(cwd, '評分表', `${lesson}.md`));
         }
-        for (const block of new Set(unsure.map(each => each.block))) cpSync(join(dir, '區組', block, '卡組'), join(cwd, '卡組', unsure.find(each => each.block === block)!.lesson), { recursive: true });
+        for (const block of new Set(unsure.map(each => each.block))) copyDir(join(dir, '區組', block, '卡組'), join(cwd, '卡組', unsure.find(each => each.block === block)!.lesson));
         const ids = unsure.map(each => each.id);
         log(`分類拿不準（${String(ids.length)} 筆）`);
         const outcome = await askJson({

@@ -19,25 +19,24 @@ export const RUBRIC = [
 
 const GOOD_REPLY = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 
-/** 凍結、每組生成一份（replies 可以照組換回覆）、匿名做完的測試資料夾。 */
-export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = '', rubric = RUBRIC.replace(' 加題 aaaaa2 ', ' ')): Promise<Folder> {
+/** 凍結、每組生成一份（replies 可以照組換回覆）、匿名做完的測試資料夾。groups 的第一組是基準、第二組是候選。 */
+export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = '', rubric = RUBRIC.replace(' 加題 aaaaa2 ', ' '), groups = ['甲', '乙']): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
   writeFileSync(join(root, '課', 'L3', '評分表.md'), rubric);
   mkdirSync(join(root, '提示'));
-  for (const name of ['甲', '乙']) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
+  for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
   writeFileSync(join(root, '測試.yaml'), `
 名稱: 評分測試
 課庫: 課
 同時: 1
 課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
 組:
-  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }
-  - { 名稱: 乙, 規則: { 自備: { L3: 乙.md } } }
+${groups.map(name => `  - { 名稱: ${name}, 規則: { 自備: { L3: ${name}.md } } }`).join('\n')}
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: ${groups[0]}, 候選: [${groups[1]}], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
 ${more}`);
   await freezeFolder(openFolder(root), { log: () => {} });
   const folder = openFolder(root);

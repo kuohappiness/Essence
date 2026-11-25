@@ -40,6 +40,7 @@ const builtinAssign = {
   message: builtinPatch.message,
 };
 const restricted = (patterns) => ['error', { patterns }];
+const cpMessage = '比較測試工具不用 cp／cpSync：Windows 上路徑有中文時整個行程會結束；資料夾用 tools/rule-test/folder.ts 的 copyDir。';
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
 
@@ -285,6 +286,18 @@ export default tseslint.config(
       coreEntry,
       stateEntry,
     ]) },
+  },
+  // 比較測試工具在使用者的 Windows 跑：Node 24.13 的 cpSync 帶 recursive、路徑有中文時整個行程直接結束（2026-11-25 使用者電腦），
+  // 資料夾用 folder.ts 的 copyDir。這一塊蓋過上面那一塊的 no-restricted-imports，所以三條 patterns 照抄。
+  {
+    files: ['tools/rule-test/*.ts'],
+    rules: { 'no-restricted-imports': ['error', {
+      patterns: [fsrs, coreEntry, stateEntry],
+      paths: [
+        ...['node:fs', 'fs'].map(name => ({ name, importNames: ['cp', 'cpSync'], message: cpMessage })),
+        ...['node:fs/promises', 'fs/promises'].map(name => ({ name, importNames: ['cp'], message: cpMessage })),
+      ],
+    }] },
   },
   {
     files: ['tests/**/*.{ts,tsx,mjs}'],
