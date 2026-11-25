@@ -1035,3 +1035,34 @@ void test('數字欄位給 null 整類：每一個都和沒給一樣；整體期
   const error = await rejects(createAiClient({ fetch, clock }).generate(request({ timeoutMs: 1e10 })));
   assert.deepEqual([error.kind, fetch.requests.length], ['server', 2]);
 });
+
+void test('估價警告整類：只在費用真的照服務回報的另一個模型估出來時才記；服務回報了金額、沒有用量、費用不明都不記（L2 第三輪 R13 修正引入）', async () => {
+  const catalog = { providers: [{ id: 'openrouter', models: [
+    { id: 'known-a', prices: [{ input: 1, output: 0 }], pricesAsOf: '2026-11-25' },
+    { id: 'known-b', prices: [{ input: 7, output: 0 }], pricesAsOf: '2026-11-25' },
+  ] }] };
+  const priceOf: Record<string, number> = { 'known-a': 1, 'known-b': 7 };
+  const reply = (model: string, usage: boolean, cost: boolean): MockReply => ({
+    status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [[
+      { id: 'x', model, choices: [{ index: 0, delta: { content: '好' } }] },
+      { id: 'x', model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+      ...(usage ? [{ id: 'x', model, choices: [], usage: { prompt_tokens: 1_000_000, completion_tokens: 0, ...(cost ? { cost: 0.04 } : {}) } }] : []),
+    ].map(data => `data: ${JSON.stringify(data)}\n\n`).join('') + 'data: [DONE]\n\n'],
+  });
+  for (const requested of ['known-a', 'unknown-x']) {
+    for (const reported of ['known-a', 'known-b', 'unknown-y']) {
+      for (const [usage, cost] of [[true, true], [true, false], [false, false]]) {
+        const label = `請求 ${requested}、服務說 ${reported}、${usage ? '有' : '沒有'}用量、${cost ? '有' : '沒有'}回報金額`;
+        const result = await createAiClient({ fetch: mockFetch([reply(reported, usage, cost)]), clock: instantClock(), catalog })
+          .generate(request({ endpoint: { provider: 'openrouter' }, model: requested }));
+        const pricedBy = reported in priceOf ? reported : requested in priceOf ? requested : null;
+        const expected = cost ? { amount: 0.04, currency: 'USD', estimated: false, pricesAsOf: null }
+          : usage && pricedBy ? { amount: priceOf[pricedBy], currency: 'USD', estimated: true, pricesAsOf: '2026-11-25' }
+          : null;
+        assert.deepEqual(result.cost, expected, label);
+        const warned = result.trace.warnings.some(w => w.startsWith('cost priced as'));
+        assert.equal(warned, expected?.estimated === true && pricedBy === reported && reported !== requested, `${label}：${result.trace.warnings.join(' / ')}`);
+      }
+    }
+  }
+});

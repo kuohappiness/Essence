@@ -248,16 +248,17 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         progress({ type: 'done' });
         // 服務說回答的是目錄裡另一個模型（相容服務、代理、路由換了模型）：照回答的那一個估價；不認得的（快照名稱）照請求的（L2 第二輪 R13）。
         const answered = output.resolvedModel === null ? undefined : r.models.find(m => m.id === output.resolvedModel);
-        const pricedBy = answered ?? r.model;
-        if (answered && answered !== r.model) warnings.push(`cost priced as ${answered.id}: the service reported a different model than requested`);
+        const cost = output.reportedCost !== null
+          ? { amount: output.reportedCost, currency: 'USD' as const, estimated: false, pricesAsOf: null }
+          : costOf(output.usage, answered ?? r.model, dayOf(startedAt));
+        // 警告寫實際發生的事：費用真的是照回答的那一個估出來的才記；服務回報了金額、費用不明時不記（L2 第三輪 R13 修正引入）。
+        if (answered && answered !== r.model && cost?.estimated) warnings.push(`cost priced as ${answered.id}: the service reported a different model than requested`);
         // 服務回送的字串裡有金鑰就遮掉（L2 R1）：文字、編號、模型名稱、warnings 都在這一處。
         return redactResult({
           text: output.text,
           stopReason: output.stopReason,
           usage: output.usage,
-          cost: output.reportedCost !== null
-            ? { amount: output.reportedCost, currency: 'USD', estimated: false, pricesAsOf: null }
-            : costOf(output.usage, pricedBy, dayOf(startedAt)),
+          cost,
           message: { role: 'assistant', content: [{ type: 'text', text: output.text }] },
           trace: {
             provider: r.providerId, dialect: r.dialect.id, host: new URL(call.url).host, requestedModel: request.model,

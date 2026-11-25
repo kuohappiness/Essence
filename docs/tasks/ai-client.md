@@ -86,7 +86,7 @@ packages/ai-client/
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄與證據照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。
 - **推理等級**：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。目錄寫每個模型或廠商每一級送什麼；那一家沒有的等級取最近的一級（一樣近取高的），`trace.warnings` 記一則；不指定就不送，`trace.reasoningSent` 是 `null`。
 - **用量的意思**：`inputTokens` 是全部輸入（含快取讀到與寫進快取的）；`cachedInputTokens` 是其中從快取讀到的；`cacheWriteInputTokens` 是其中寫進快取的；`outputTokens` 是全部計費的輸出（含推理）；`reasoningTokens` 是其中的推理。拿不到的寫 `null`，不寫 0。
-- **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（服務在回應裡回報金額的（OpenRouter）用它：`estimated: false`、`pricesAsOf: null`，不在目錄的模型也有；其他照目錄的牌價估：`estimated: true`、`pricesAsOf` 是目錄的查價日期；不在目錄又沒有回報的是 `null`，L2 R19）、`message`（可以原樣放回下一輪的 `input`）、`trace`。
+- **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（服務在回應裡回報金額的（OpenRouter）用它：`estimated: false`、`pricesAsOf: null`，不在目錄的模型也有；其他照目錄的牌價估：`estimated: true`、`pricesAsOf` 是目錄的查價日期，照請求的模型，服務說回答的是這一家目錄裡另一個模型時照那一個（〈7〉第 9 點），真的照那一個估出來才在 `trace.warnings` 記一筆（L2 第三輪 R13 修正引入）；不在目錄又沒有回報的是 `null`，L2 R19）、`message`（可以原樣放回下一輪的 `input`）、`trace`。
 - **進度事件**：`sent`、`waiting`、`text`（`delta` 與累計字數）、`retrying`（第幾次、等幾毫秒、原因）、`done`。呼叫端的 `onProgress` 丟例外不影響請求。
 
 ## 6. 四種方言與目錄
