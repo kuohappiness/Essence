@@ -118,3 +118,15 @@ void test('多音字：程式不分科，手寫的英文也認', () => {
   const choice = first(deck('read（/riːd/、/rɛd/） 讀音', ['I have read（＿＿） it. :: /rɛd/', 'I read（＿＿） every day. :: /riːd/'])).choice;
   assert.deepEqual(choice?.options, ['/riːd/', '/rɛd/']);
 });
+
+void test('多音字：記憶錨點照第一個全形冒號對到讀音；同一行的、同一讀音的第二行、未知讀音、半形冒號照原序留在 rest', () => {
+  const tail = '    - 記憶錨點：先想是不是變大\n        - ㄓㄤˇ：長大：成長\n        - ㄓㄤˇ：第二行\n        - ㄔㄤ˙：未知的讀音\n        - ㄔㄤˊ:半形冒號\n';
+  const choice = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, tail)).choice;
+  assert.deepEqual(choice?.anchors, ['長大：成長', null]);
+  assert.deepEqual(choice?.rest, ['先想是不是變大', 'ㄓㄤˇ：第二行', 'ㄔㄤ˙：未知的讀音', 'ㄔㄤˊ:半形冒號']);
+  // 讀音寫粗體也對得到；冒號後面是空的當成沒有說明。
+  const bold = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, '    - 記憶錨點：\n        - **ㄓㄤˇ**：長大：成長\n        - ㄔㄤˊ：\n')).choice;
+  assert.deepEqual([bold?.anchors, bold?.rest], [['長大：成長', null], []]);
+  // 沒有記憶錨點：每個讀音都沒有說明。
+  assert.deepEqual(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音')).choice?.anchors, [null, null]);
+});
