@@ -957,3 +957,31 @@ void test('整體期限管送出與等待：sent 拖過期限就不送；waiting
     }
   }
 });
+
+void test('測試連線的成功本文超過 4 MiB 整類：讀到上限之外的一律不解析，算 server、afterResponse；剛好在上限內的照解析（L2 第三輪 R9 修正與 R12 交互）', async () => {
+  const CAP = 4 * 1024 * 1024;
+  const list = JSON.stringify(openai.check.body);
+  const full = ' '.repeat(CAP - list.length) + list;
+  const pieces = (body: string, size: number) => Array.from({ length: Math.ceil(body.length / size) }, (_, i) => body.slice(i * size, (i + 1) * size));
+  const cases: { name: string; body: string; keepOpen?: boolean; want: string }[] = [
+    { name: '剛好 4 MiB', body: full, want: 'ok' },
+    { name: '4 MiB 之後接一個壞字', body: `${full}!`, want: 'server' },
+    { name: '4 MiB 之後還是空白（整份是合法的 JSON）', body: `${full}${' '.repeat(1024)}`, want: 'server' },
+    { name: '4 MiB 之後還一直送、不關', body: `${full}${' '.repeat(256 * 1024)}`, keepOpen: true, want: 'server' },
+    { name: '剛好 4 MiB、之後不關', body: full, keepOpen: true, want: 'timeout' },
+  ];
+  for (const c of cases) {
+    for (const size of [CAP * 2, 64 * 1024, 1000]) {
+      const label = `${c.name}／每段 ${String(size)} 字`;
+      const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: pieces(c.body, size), keepOpen: c.keepOpen }]);
+      const result = await createAiClient({ fetch, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 200 });
+      if (c.want === 'ok') {
+        assert.deepEqual(result.ok ? result.models?.map(m => m.id) : result.error.kind, openai.check.models, label);
+      } else {
+        assert.ok(!result.ok, label);
+        assert.deepEqual([result.error.kind, result.error.retryable], [c.want, false], label);
+        if (c.want === 'server') assert.equal(result.error.afterResponse, true, label);
+      }
+    }
+  }
+});

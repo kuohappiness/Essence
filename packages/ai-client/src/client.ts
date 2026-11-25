@@ -23,6 +23,8 @@ const BACKOFF_MS = [2_000, 8_000];
 /** 服務要求等超過這個時間就不重試，把等待時間交給呼叫端（錯誤的 retryAfterMs）。 */
 const MAX_RETRY_AFTER_MS = 60_000;
 const ERROR_BODY_MAX_BYTES = 64 * 1024;
+/** 測試連線的成功本文（模型清單）最多讀這麼多；超過的不解析，算 server（L2 第三輪 R9 與 R12 交互）。 */
+const CHECK_BODY_MAX_BYTES = 4 * 1024 * 1024;
 /** 錯誤本文多久沒資料就不等了（呼叫端設了閒置逾時就用它）：照狀態碼分類，不等到整體逾時（L2 R9）。 */
 const ERROR_BODY_IDLE_MS = 30_000;
 /** 預設的回應標頭逾時：120 秒，加上每 100 KB 本文 1 秒的上傳時間。 */
@@ -454,9 +456,10 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const errorBody = await readErrorBody(response, controller.signal, ERROR_BODY_IDLE_MS);
         throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta);
       }
-      const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
+      const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), CHECK_BODY_MAX_BYTES), controller.signal);
       // 已經拿到 2xx：形狀不對時不是「可以安全重送」（L2 第二輪 R12）。
       const after = { ...meta, afterResponse: true };
+      if (raw === null) throw fail('server', `response is larger than ${String(CHECK_BODY_MAX_BYTES)} bytes`, after);
       let json: unknown;
       try {
         json = JSON.parse(raw) as unknown;

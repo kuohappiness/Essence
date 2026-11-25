@@ -39,16 +39,20 @@ export async function* bodyChunks(response: Response, signal?: AbortSignal): Asy
   }
 }
 
-/** 把本文讀成字串。收滿 maxBytes 就不再讀（錯誤頁可能很大，也可能一直送，L2 第二輪 R9）。 */
-export async function readText(chunks: AsyncIterable<Uint8Array>, maxBytes = Number.POSITIVE_INFINITY): Promise<string> {
+/**
+ * 把本文讀成字串。給了 maxBytes 時，超過就不再讀、回 null：只收到一部分的本文不能當成完整的解析，
+ * 前面碰巧是合法的 JSON 也一樣（L2 第二輪 R9、第三輪 R9 與 R12 交互）。
+ */
+export function readText(chunks: AsyncIterable<Uint8Array>): Promise<string>;
+export function readText(chunks: AsyncIterable<Uint8Array>, maxBytes: number): Promise<string | null>;
+export async function readText(chunks: AsyncIterable<Uint8Array>, maxBytes = Number.POSITIVE_INFINITY): Promise<string | null> {
   const decoder = new TextDecoder('utf-8');
   let out = '';
   let size = 0;
   for await (const chunk of chunks) {
-    const take = size + chunk.byteLength > maxBytes ? chunk.subarray(0, maxBytes - size) : chunk;
-    size += take.byteLength;
-    out += decoder.decode(take, { stream: true });
-    if (size >= maxBytes) break;
+    size += chunk.byteLength;
+    if (size > maxBytes) return null;
+    out += decoder.decode(chunk, { stream: true });
   }
   return out + decoder.decode();
 }
