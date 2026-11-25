@@ -14,17 +14,29 @@ const config = [{ files: ['**/*.ts'], languageOptions: { parser: tseslint.parser
 const problems = (code: string) => linter.verify(code, config, 'src/probe.ts').map(m => m.ruleId);
 
 const SRC_CONFIG = join(dirname(fileURLToPath(import.meta.url)), '..', 'tsconfig.src.json');
-/** 用套件本體的編譯設定檢查一段程式（虛擬的 src/probe.ts），回傳型別錯誤的數目。 */
+/** 路徑一律用 `/` 比：TypeScript 傳給 compiler host 的是 `/`，Windows 上 `join` 組出來的是 `\`（L2 第四輪 第 4 項）。 */
+const slash = (path: string) => path.replaceAll('\\', '/');
+
+/** 用套件本體的編譯設定檢查一段程式（虛擬的 src/probe.ts），回傳型別錯誤的數目；虛擬檔沒被讀到就直接報錯。 */
 function typeErrors(code: string, options: ts.CompilerOptions): number {
-  const file = join(dirname(SRC_CONFIG), 'src', 'probe.ts');
+  const file = slash(join(dirname(SRC_CONFIG), 'src', 'probe.ts'));
+  const isProbe = (path: string) => slash(path) === file;
   const host = ts.createCompilerHost(options);
   const read = host.readFile.bind(host);
   const getSourceFile = host.getSourceFile.bind(host);
-  host.readFile = path => (path === file ? code : read(path));
-  host.fileExists = path => path === file || ts.sys.fileExists(path);
-  host.getSourceFile = (path, version, onError) => (path === file ? ts.createSourceFile(path, code, version) : getSourceFile(path, version, onError));
+  let loaded = false;
+  host.readFile = path => (isProbe(path) ? code : read(path));
+  host.fileExists = path => isProbe(path) || ts.sys.fileExists(path);
+  host.getSourceFile = (path, version, onError) => {
+    if (!isProbe(path)) return getSourceFile(path, version, onError);
+    loaded = true;
+    return ts.createSourceFile(path, code, version);
+  };
   const program = ts.createProgram([file], options, host);
-  return ts.getPreEmitDiagnostics(program).filter(d => d.file?.fileName === file).length;
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.ok(loaded, '虛擬的 src/probe.ts 沒有被編譯器讀到');
+  assert.deepEqual(diagnostics.filter(d => !d.file).map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), [], '沒有檔案位置的診斷（例如找不到檔案）');
+  return diagnostics.filter(d => d.file && isProbe(d.file.fileName)).length;
 }
 
 void test('可攜性：Node 內建模組（裸名稱、node:、子路徑、型別）、obsidian、動態 import、require、Node 的全域都擋', () => {
