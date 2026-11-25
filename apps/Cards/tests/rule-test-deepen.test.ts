@@ -305,7 +305,7 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   assert.equal(block.deepens.length, 1);
   const mark = (result: DeepenResult, item: string, reason: '接錯目標' | '沒有加深'): void => { Object.assign(result.items.find(each => each.item === item)!, { verdict: '接錯', reason }); };
   const noD2 = (result: DeepenResult): void => { result.rows.find(row => row.row === 'D2')!.decks.forEach(cell => Object.assign(cell, { verdict: '沒有', evidence: '', items: [] })); };
-  const fable = fakeJudge({ shapeDeepen: result => { mark(result, '1-2', '接錯目標'); noD2(result); } });
+  const fable = fakeJudge({ shapeDeepen: result => { mark(result, '1-2', '接錯目標'); noD2(result); result.unsure = '1-3 是換句話問，還是往下一層，兩種讀法都說得通'; } });
   // 只有 Codex 記的重大錯誤（第 1 項那一行）：送裁定。
   const { items } = JSON.parse(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${block.deepens[0]}.json`), 'utf8')) as { items: { id: string; line: number }[] };
   const codex = fakeJudge({ shapeDeepen: (result, codes) => {
@@ -328,4 +328,11 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   const byGroup = Object.fromEntries(report.decks.map(deck => [deck.group, deck]));
   assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1 });
   assert.deepEqual(byGroup.乙.deepen, { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: 2, wrong: null, disputed: 0, major: 0, harm: 0 });
+  const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8'), detail = readFileSync(join(folder.root, '結果', '明細.md'), 'utf8');
+  // 學習面的表：甲的傷到學習是加深裁定改記的判錯 1；乙存不了，加深機會全漏 2、確定接錯不算（—）。只報告的表：甲接對率 1／3。
+  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 2.0 | 0.0 | — | — | 1.0 | 1.0 | 1.0 |'));
+  assert.ok(summary.includes('| 乙 | 1 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 2.0 | — | 0.0 |'));
+  assert.ok(summary.includes('| 甲 | 0.0 | 1.0 | 1.0 | 0.0 | 2.0 | 2.0 | 0／1 | 1.0（0） | 3.0 | 33% | 0.0 |'));
+  assert.ok(!summary.includes('兩種讀法'));
+  assert.match(detail, /### 地圖與加深的拿不準（不送裁定，只列出來）\n\n- L3-B01 加深，claude：1-3 是換句話問，還是往下一層，兩種讀法都說得通\n/);
 });

@@ -34,18 +34,62 @@ function sections(folder: Folder, decks: readonly DeckMetrics[]): { lesson: stri
   }))).filter(each => each.groups.length);
 }
 
-function averages(decks: readonly DeckMetrics[]): (string | number)[] {
-  const avg = (pick: (deck: DeckMetrics) => number): string => one(mean(decks.map(pick)));
-  const ms = decks.map(deck => deck.generationMs).filter((value): value is number => value !== null);
-  const tokens = decks.map(deck => deck.tokens.input === null || deck.tokens.output === null ? null : deck.tokens.input + deck.tokens.output).filter((value): value is number => value !== null);
+/** 平均；有份沒有資料（null）就是 —，不適用（全部 null）也是 —。 */
+function avg(decks: readonly DeckMetrics[], pick: (deck: DeckMetrics) => number | null, round = false): string {
+  const values = decks.map(pick);
+  if (values.some(value => value === null)) return '—';
+  const value = mean(values as number[]);
+  return round ? String(Math.round(value)) : one(value);
+}
+/** 不適用的份（地圖、加深是 null）不算，剩下的平均；全部不適用是 —。 */
+function avgOf(decks: readonly DeckMetrics[], pick: (deck: DeckMetrics) => number | null): string {
+  const values = decks.map(pick).filter((value): value is number => value !== null);
+  return values.length ? one(mean(values)) : '—';
+}
+const deepenHarm = (deck: DeckMetrics): number => deck.deepen?.harm ?? 0;
+
+/** 三張表（rule-test-d236.md §3、§9）：學習面（門檻用的）、次要（打平時才看）、只報告。 */
+const LEARNING_HEAD = ['組', '份數', '重大（含存不了）', '傷到學習', '判錯', '洩漏', '漏的必備', '其他傷到學習', '加深的傷到學習', '每個必備平均幾題', '多餘的題', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯', '加深歧見'];
+function learningCells(decks: readonly DeckMetrics[]): (string | number)[] {
   return [
-    decks.length, avg(deck => deck.majorTotal), avg(deck => deck.harm.total), avg(deck => deck.harm.判錯), avg(deck => deck.required.沒有), avg(deck => deck.required.部分), avg(deck => deck.minor),
-    avg(deck => deck.childPrompts), avg(deck => deck.perRequired), avg(deck => deck.extraPrompts),
-    avg(deck => deck.targets), `${String(decks.filter(deck => deck.unsaveable).length)}／${String(decks.length)}`,
-    Math.round(mean(decks.map(deck => deck.rulesChars))), Math.round(mean(decks.map(deck => deck.promptChars))), tokens.length === decks.length ? Math.round(mean(tokens)) : '—', ms.length === decks.length ? minutes(mean(ms)) : '—',
+    decks.length, avg(decks, deck => deck.majorTotal), avg(decks, deck => deck.harm.total + deepenHarm(deck)),
+    avg(decks, deck => deck.harm.判錯), avg(decks, deck => deck.harm.洩漏), avg(decks, deck => deck.harm.漏的必備), avg(decks, deck => deck.harm.其他), avg(decks, deepenHarm),
+    avg(decks, deck => deck.perRequired), avg(decks, deck => deck.extraPrompts),
+    avgOf(decks, deck => deck.map?.missed ?? null), avgOf(decks, deck => deck.map?.issues ?? null),
+    avgOf(decks, deck => deck.deepen?.missed ?? null), avgOf(decks, deck => deck.deepen?.wrong ?? null), avgOf(decks, deck => deck.deepen?.disputed ?? null),
   ];
 }
-const AVERAGE_HEAD = ['組', '份數', '重大', '傷到學習', '判錯', '漏的必備', '部分的必備', '小問題', '孩子要複習的題', '每個必備平均幾題', '多餘的題', '目標', '存不了', '規則字數', '整份提示字數', 'token', '生成（分）'];
+const SECONDARY_HEAD = ['組', '規則字數', '整份提示字數', '生成 token 輸入', '生成 token 輸出', '加深 token 輸入', '加深 token 輸出', '生成（分）'];
+function secondaryCells(decks: readonly DeckMetrics[]): (string | number)[] {
+  const deepen = decks.filter(deck => deck.deepenTokens !== null);
+  return [
+    avg(decks, deck => deck.rulesChars, true), avg(decks, deck => deck.promptChars, true),
+    avg(decks, deck => deck.tokens.input, true), avg(decks, deck => deck.tokens.output, true),
+    deepen.length ? avg(deepen, deck => deck.deepenTokens!.input, true) : '—', deepen.length ? avg(deepen, deck => deck.deepenTokens!.output, true) : '—',
+    decks.some(deck => deck.generationMs === null) ? '—' : minutes(mean(decks.map(deck => deck.generationMs!))),
+  ];
+}
+const REPORT_HEAD = ['組', '部分的必備', '確定考到的必備', '加分（有）', '小問題', '孩子要複習的題', '目標', '存不了', '加深篇數（放棄）', '加深項數', '接對率', '值得學'];
+function reportCells(decks: readonly DeckMetrics[]): (string | number)[] {
+  const deepened = decks.filter(deck => deck.deepen && !deck.deepen.undeepened);
+  const items = deepened.reduce((total, deck) => total + deck.deepen!.items, 0), right = deepened.reduce((total, deck) => total + deck.deepen!.items - (deck.deepen!.wrong ?? 0) - deck.deepen!.disputed, 0);
+  return [
+    avg(decks, deck => deck.required.部分), avg(decks, deck => deck.sureRequired), avg(decks, deck => deck.bonus.有), avg(decks, deck => deck.minor),
+    avg(decks, deck => deck.childPrompts), avg(decks, deck => deck.targets), `${String(decks.filter(deck => deck.unsaveable).length)}／${String(decks.length)}`,
+    deepened.length ? `${avgOf(deepened, deck => deck.deepen!.pieces)}（${String(deepened.reduce((total, deck) => total + deck.deepen!.abandoned, 0))}）` : '—',
+    deepened.length ? avgOf(deepened, deck => deck.deepen!.items) : '—',
+    !deepened.length ? '—' : items ? `${String(Math.round(right / items * 100))}%` : '沒有項',
+    avg(decks, deck => deck.worthLearning),
+  ];
+}
+
+/** 對話數（§9）：生成、加深、卡組評分、地圖評分、加深評分各報；不含重試與重評。 */
+function conversationLine(folder: Folder, decks: readonly DeckMetrics[]): string {
+  const judges = folder.config.judges.length;
+  const blocks = (pick: (deck: DeckMetrics) => boolean): number => new Set(decks.filter(pick).map(deck => `${String(deck.batch)}/${deck.block}`)).size * judges;
+  const deepen = decks.reduce((total, deck) => total + (deck.deepen ? deck.deepen.pieces + deck.deepen.abandoned : 0), 0);
+  return `對話數（不含重試與重評）：生成 ${String(decks.length)}、加深 ${String(deepen)}、卡組評分 ${String(blocks(() => true))}、地圖評分 ${String(blocks(deck => deck.map !== null && !deck.map.missing))}、加深評分 ${String(blocks(deck => deck.deepen !== null && !deck.deepen.undeepened))}`;
+}
 
 function batchLines(reports: readonly BatchReport[]): string[] {
   return reports.map(report => `- 批 ${String(report.batch)}：${report.unblinded.slice(0, 10)} 解開，commit ${report.commit.slice(0, 8)}${report.late ? '（在前一批解開之後才匿名：看過前一批結果才決定加跑）' : ''}`);
@@ -61,8 +105,14 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
     `評估版本 ${EVALUATION}。錯誤分三級（重大、傷到學習、小問題，rule-test-d236.md §3）；孩子的時間看每個必備平均幾題與多餘的題（§4）。`, '',
   ];
   for (const section of sections(folder, unique)) {
-    lines.push(`## ${section.lesson}｜${section.generator}`, '', ...head(AVERAGE_HEAD), ...section.groups.map(each => row([each.group, ...averages(each.decks)])), '');
+    lines.push(
+      `## ${section.lesson}｜${section.generator}`, '',
+      '學習面（門檻用的；每份平均，地圖與加深只算有的份，— 是不適用或沒有資料）：', '', ...head(LEARNING_HEAD), ...section.groups.map(each => row([each.group, ...learningCells(each.decks)])), '',
+      '次要（學習面打平時才看）：', '', ...head(SECONDARY_HEAD), ...section.groups.map(each => row([each.group, ...secondaryCells(each.decks)])), '',
+      '只報告：', '', ...head(REPORT_HEAD), ...section.groups.map(each => row([each.group, ...reportCells(each.decks)])), '',
+    );
   }
+  lines.push(conversationLine(folder, all), '');
   lines.push(...gateLines(folder, reports), '', ...contrastLines(folder, reports));
   if (mode === 'summary') return lines;
 
@@ -72,6 +122,7 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
       lines.push(`### ${lesson} 評分表`, '', ...head(['列', '類別', '要考的知識或判準', '教學選擇']), ...rows.map(each => row([each.id, each.kind, each.text, each.effect ?? ''])), '');
     }
     lines.push('### 裁定', '', ...report.rulings.length ? report.rulings.map(each => `- ${each.id}：${each.text}`) : ['（沒有）'], '');
+    if (report.unsure?.length) lines.push('### 地圖與加深的拿不準（不送裁定，只列出來）', '', ...report.unsure.map(each => `- ${each.block} ${each.stage}，${each.judge}：${each.text}`), '');
   }
   for (const section of sections(folder, all)) {
     lines.push(`## ${section.lesson}｜${section.generator} 逐份`, '', ...head(['批', '區組', '代號', '組', '份', '漏的必備', '部分的必備', '加分（有／部分）', '重大錯誤（兩位／裁定）', '傷到學習', '題目品質（兩位／一位）', '小問題', '多餘的題（近義重複幾對）', '跨單元錯／列', '孩子要複習的題', '每個必備平均幾題', '目標', '題', '候選', '加題', '存不了', '規則字數', '整份提示字數', '生成（分）', '歧見', '洩漏候選', '值得學']));

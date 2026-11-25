@@ -113,6 +113,8 @@ export interface BatchReport {
   batch: number; unblinded: string; commit: string; late: boolean;
   rows: Record<string, { id: string; kind: string; text: string; effect: string | null }[]>;
   rulings: { id: string; text: string }[];
+  /** 地圖與加深評審的拿不準（§5-3、§6-3）：不送裁定，只列在明細（私人）。舊的結果檔沒有這一項。 */
+  unsure?: { block: string; stage: '地圖' | '加深'; judge: string; text: string }[];
   decks: DeckMetrics[];
 }
 
@@ -313,6 +315,8 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       ...disputes.majors.map(each => ({ id: each.id, text: `${each.block} ${each.code} ${each.at}：${rulings.majors.get(each.id)!.verdict}${rulings.majors.get(each.id)!.quality ? `，改記${rulings.majors.get(each.id)!.quality}` : ''}` })),
       ...rulings.choices.map(each => ({ id: each.id, text: `${each.kind}（${each.notes.join('、')}）：${each.kind === '照口徑' ? '照口徑' : each.effects.length ? each.effects.map(effect => effect.to === '拿掉' ? `拿掉 ${effect.row}` : `${effect.row} 改${effect.to}`).join('、') : '照原樣'}` })),
     ],
+    unsure: ([['地圖', merge.maps], ['加深', merge.deepens]] as const).flatMap(([stage, results]) => [...results].flatMap(([block, mine]) =>
+      [...mine].filter(([, result]) => result.unsure.trim()).map(([judge, result]) => ({ block, stage, judge, text: result.unsure.trim() })))),
     decks,
   };
   mkdirSync(resultsDir(folder), { recursive: true });
