@@ -3,15 +3,15 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { RULE_SUBJECTS } from '../../src/core/ai/index.ts';
+import { RULE_SUBJECTS, unitCode, type EmbeddedRule } from '../../src/core/ai/index.ts';
 import { cliPath } from '../cli-path.ts';
-import type { RuleSource } from './config.ts';
+import { deepenGroups, type RuleSource } from './config.ts';
 import { lessonDir, libraryOf, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { checkInherited, templateHashes } from './init.ts';
 import { EVALUATION } from './levels.ts';
-import { APP_ROOT, buildFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
+import { APP_ROOT, buildFor, deepenRulesFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
 import { checkRubricFile } from './rubric.ts';
-import { parseSnapshotFile, readSnapshot, type Snapshot } from './snapshot.ts';
+import { parseSnapshotFile, readVault, snapshotOf, unitDecks, wordDecksOf, type Snapshot, type WordDecks } from './snapshot.ts';
 
 export interface FrozenStep {
   group: string;
@@ -72,6 +72,17 @@ export function verifyLock(folder: Folder): Lock {
   }).map(([key]) => key);
   if (changed.length) throw Error(`凍結之後改過或不見了：${changed.join('、')}（要改就開新的測試資料夾，或照 §5-2 存成新版評分表）`);
   return lock;
+}
+
+/** 外掛的加深任務段（§6-1 第 5 點）：凍結時記雜湊，模擬時核對。 */
+export const DEEPEN_PROMPT = join(APP_ROOT, 'src', 'core', 'ai', 'deepen-prompt.ts');
+const DEEPEN_RULES = join('凍結', '加深', '規則.json');
+/** 凍結的加深規則：每一組送的規則全文（已經組好、算好雜湊），與 deepen-prompt.ts 的雜湊。 */
+export interface DeepenFrozen { prompt: string; groups: Record<string, EmbeddedRule[]> }
+export const readDeepenFrozen = (folder: Folder): DeepenFrozen => JSON.parse(readFileSync(join(folder.root, DEEPEN_RULES), 'utf8')) as DeepenFrozen;
+export function readWordDecks(folder: Folder, lesson: string): WordDecks | null {
+  const path = join(folder.root, '凍結', '加深', '單字卡組', `${lesson}.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as WordDecks : null;
 }
 
 export function readFrozenSteps(folder: Folder): FrozenStep[] {
@@ -144,10 +155,18 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   for (const lesson of config.lessons) {
     const subject = subjectOf(lesson.subjectKey);
     let snapshot: Snapshot | null = null;
-    if (lesson.existing && 'vault' in lesson.existing) snapshot = await readSnapshot(cliPath(lesson.existing.vault, 'rule-test'), subject.subject, lesson.form.term, version);
-    else if (lesson.existing) snapshot = parseSnapshotFile(readFileSync(cliPath(lesson.existing.snapshot, 'rule-test', {}, folder.root), 'utf8'), version);
+    const vault = lesson.existing && 'vault' in lesson.existing ? await readVault(cliPath(lesson.existing.vault, 'rule-test')) : null;
+    if (vault) snapshot = snapshotOf(vault, subject.subject, lesson.form.term, version);
+    else if (lesson.existing && 'snapshot' in lesson.existing) snapshot = parseSnapshotFile(readFileSync(cliPath(lesson.existing.snapshot, 'rule-test', {}, folder.root), 'utf8'), version);
     if (snapshot) {
       writes.push([join(folder.root, '凍結', '已有目標', `${lesson.code}.json`), JSON.stringify(snapshot, null, 2) + '\n']);
+    }
+    if (config.deepen) {
+      // 加深模擬的是新課（rule-test-d236.md §6-1 第 4 點）：快照檔查不了單元有沒有卡組、也沒有英文單字的排序，要從 vault 讀。
+      if (lesson.existing && !vault) throw Error(`課「${lesson.code}」跑加深，已有目標要從 vault 讀（快照檔查不了這個單元有沒有卡組，英文也排不了單字）`);
+      const taken = vault && subject.subject !== null ? unitDecks(vault, subject.subject, lesson.form.term, unitCode(lesson.form.unit)) : [];
+      if (taken.length) throw Error(`課「${lesson.code}」跑加深，但 vault 裡這個單元已經有卡組（含草稿）：${taken.join('、')}；加深模擬的是沒做過卡的新課`);
+      if (subject.subject === '英文') writes.push([join(folder.root, '凍結', '加深', '單字卡組', `${lesson.code}.json`), JSON.stringify(wordDecksOf(vault ?? [], subject.subject, version), null, 2) + '\n']);
     }
     for (const group of config.groups) {
       group.steps.forEach((step, i) => {
@@ -167,6 +186,13 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
       checkRubricFile(rubricOf(folder, lesson), lesson.code, snapshot ? new Set(snapshot.targets.map(target => target.id)) : null);
       files[`${LIBRARY}/${lesson.code}/評分表.md`] = sha256File(rubricOf(folder, lesson));
     }
+  }
+  if (config.deepen) {
+    const rules: DeepenFrozen = {
+      prompt: sha256File(DEEPEN_PROMPT),
+      groups: Object.fromEntries(deepenGroups(config).map(name => [name, deepenRulesFor(config.groups.find(group => group.name === name)!, root)])),
+    };
+    writes.push([join(folder.root, DEEPEN_RULES), JSON.stringify(rules, null, 2) + '\n']);
   }
   // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明，凍結一份，評分與裁定照這一份。
   const templates = join(import.meta.dirname, 'templates');

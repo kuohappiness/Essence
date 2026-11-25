@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { buildPrompt, RULE_MARKER, RULE_SUBJECTS, ruleText, sha256Hex, taskSection, type CardForm, type EmbeddedRule, type RuleSubject } from '../../src/core/ai/index.ts';
-import type { LessonConfig, RuleSource } from './config.ts';
+import type { Group, LessonConfig, RuleSource } from './config.ts';
 import type { Snapshot } from './snapshot.ts';
 import { applyTaskOptions } from './tasks.ts';
 
@@ -48,6 +48,19 @@ export function sectionText(raw: string, path: string): string {
   return ruleText((end < 0 ? lines : lines.slice(0, end)).join('\n'), { path, marker: true });
 }
 
+const DEEPEN_ONLY = '<!-- 以下只在加深時送 -->';
+
+/** 加深送的（rule-test-d236.md §6-1 第 5 點）：送出的那一段，加上 `<!-- 以下只在加深時送 -->` 到下一個 `<!-- 以下只在…送 -->` 為止；其他「以下只在…送」的段不送。 */
+export function deepenSectionText(raw: string, path: string): string {
+  const base = sectionText(raw, path);
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const start = lines.findIndex(line => line.trim() === DEEPEN_ONLY);
+  if (start < 0) return base;
+  const end = lines.findIndex((line, i) => i > start && /^<!-- 以下只在.*送 -->$/.test(line.trim()));
+  const extra = lines.slice(start + 1, end < 0 ? lines.length : end).join('\n').replace(/^\n+/, '').replace(/\s+$/, '');
+  return extra ? `${base}\n\n${extra}` : base;
+}
+
 /** 從 commit 讀一份檔（不讀工作樹）。 */
 function showFile(commit: string, path: string, root = REPO_ROOT): string {
   try {
@@ -58,6 +71,19 @@ function showFile(commit: string, path: string, root = REPO_ROOT): string {
 /** 檔案來源的規則：每份從 commit 讀、只取送出的那一段。名稱是檔名，版號是 commit。 */
 function commitRules(commit: string, files: readonly string[], root = REPO_ROOT): EmbeddedRule[] {
   return files.map(path => embed(basename(path), commit, sectionText(showFile(commit, path, root), path)));
+}
+
+/**
+ * 一組加深送的規則（§6-1 第 5 點）：寫了「加深規則」的從那個 commit 讀；沒寫的是同一科的外掛來源（讀設定時檢查過），照外掛嵌入的規則。
+ */
+export function deepenRulesFor(group: Pick<Group, 'name' | 'steps' | 'deepenRules'>, root = REPO_ROOT): EmbeddedRule[] {
+  if (group.deepenRules) {
+    const { commit, files } = group.deepenRules;
+    return files.map(path => embed(basename(path), commit, deepenSectionText(showFile(commit, path, root), path)));
+  }
+  const source = group.steps.find(step => step.deck)?.rules;
+  if (source?.kind !== 'plugin') throw Error(`組「${group.name}」沒有加深規則`);
+  return pluginRules(subjectOf(source.subject), root);
 }
 
 /** 規則加任務段，和外掛同樣的接法（buildPrompt：部分之間空一行）。 */

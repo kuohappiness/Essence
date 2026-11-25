@@ -24,7 +24,7 @@ export type RuleSource =
 interface Step { conversation: string; rules: RuleSource; deck: boolean }
 /** 加深規則（rule-test-d236.md §6-1 第 5 點）：「檔案」與「自備」來源的組跑加深時一定要寫，送這幾個檔的送給 AI 段加上加深段。 */
 interface DeepenRules { commit: string; files: string[] }
-interface Group { name: string; steps: Step[]; deepenRules: DeepenRules | null }
+export interface Group { name: string; steps: Step[]; deepenRules: DeepenRules | null }
 
 export interface LessonConfig {
   code: string;
@@ -389,7 +389,7 @@ export function readConfig(source: string): Config {
     return contrast;
   });
   if (deepen) {
-    const compared = new Set([baseline, ...candidates, ...contrasts.flatMap(each => [each.a, each.b])]);
+    const compared = new Set(comparedGroups({ baseline, candidates }, contrasts));
     for (const group of groups.filter(each => compared.has(each.name) && !each.deepenRules)) {
       const subjects = new Set(group.steps.filter(step => step.deck).map(step => step.rules.kind === 'plugin' ? step.rules.subject : null));
       if (subjects.has(null) || subjects.size > 1) errors.add(`組「${group.name}」`, '跑加深的組，規則不是同一科的「外掛」來源時，要寫「加深規則: { commit, 檔案 }」（rule-test-d236.md §6-1 第 5 點）');
@@ -416,6 +416,13 @@ export function readConfig(source: string): Config {
   if (errors.list.length) throw Error(`測試.yaml 有 ${String(errors.list.length)} 個問題：\n${errors.list.map(each => `- ${each}`).join('\n')}`);
   return config;
 }
+
+/** 算門檻與對照用到的組（基準、候選、對照的甲乙）：跑加深的就是這幾組（rule-test-d236.md §6-1 第 1 點）。 */
+const comparedGroups = (gates: Pick<Gates, 'baseline' | 'candidates'>, contrasts: Config['contrasts']): string[] =>
+  [...new Set([gates.baseline, ...gates.candidates, ...contrasts.flatMap(each => [each.a, each.b])])];
+
+/** 跑加深的組；沒設定加深是空的。 */
+export const deepenGroups = (config: Config): string[] => config.deepen ? comparedGroups(config.gates, config.contrasts) : [];
 
 /** 一個生成器在哪幾課跑。 */
 export const lessonsOf = (config: Config, generator: Generator): LessonConfig[] =>

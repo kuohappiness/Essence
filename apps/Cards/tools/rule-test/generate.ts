@@ -17,7 +17,7 @@ const BREAKER = 3;
 /**
  * Codex 不收附件（探針 P6）：教材放進對話的資料夾，每個對話的第一步前面加這一句；各組相同（附件說明各組相同，§5-4），記進那一步的事件。
  */
-const CODEX_MATERIAL = '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）';
+export const CODEX_MATERIAL = '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）';
 
 export const rawName = (job: Job, step: FrozenStep): string => `${job.key}${job.steps.length > 1 ? `-${String(step.step)}` : ''}.md`;
 const attemptDir = (folder: Folder, job: Job, attempt: number): string => join(folder.root, '生成', '嘗試', `${job.key}-${String(attempt)}`);

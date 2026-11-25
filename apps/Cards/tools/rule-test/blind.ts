@@ -9,6 +9,7 @@ import { anonymousMap, cutMap, handsInMap, joinMaps, type MapCut } from './map.t
 import { materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSnapshot, readFrozenSteps, verifyLock } from './freeze.ts';
 import { rawName } from './generate.ts';
+import { deepenUnfinished } from './deepen.ts';
 import { jobState, planJobs, readEvents, type Job } from './jobs.ts';
 import { checkRubricFile } from './rubric.ts';
 
@@ -142,6 +143,9 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
   const seen = new Set(previous.flatMap(batch => batch.entries.map(entry => entry.job)));
   const fresh = jobs.filter(job => jobState(events, job.key).status === 'done' && !seen.has(job.key));
   if (!fresh.length) throw Error('沒有新的有效原稿可以匿名');
+  // 這一批每一份的加深都完成或放棄才匿名（rule-test-d236.md §6-2）：匿名之後那一份的卡組、地圖、加深都固定。
+  const deepening = deepenUnfinished(folder, fresh);
+  if (deepening.length) throw Error(`還有 ${String(deepening.length)} 篇加深沒做完（等都完成或放棄再匿名）：${deepening.join('、')}`);
 
   const decks = new Map<string, string>(), maps = new Map<string, MapCut | null>(), problems: string[] = [];
   for (const job of fresh) {

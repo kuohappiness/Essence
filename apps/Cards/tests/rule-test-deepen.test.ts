@@ -1,0 +1,210 @@
+// 比較測試工具的模擬首次加深（tasks/rule-test-d236.md §6-1、§6-2）：凍結加深規則與單字卡組、假 ID、和外掛同樣組法的提示、事件與重跑、blind 要等。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import type { DeepenJob } from '../src/core/ai/index.ts';
+import { parseDeck } from '../src/core/deck/index.ts';
+import { createDeepen } from '../src/obsidian/deepen.ts';
+import { createState } from '../src/state/index.ts';
+import { encodeEntry } from '../src/core/study/index.ts';
+import type { StepRequest } from '../tools/rule-test/adapters.ts';
+import { blindFolder } from '../tools/rule-test/blind.ts';
+import { planCopy, readPlan, runDeepen } from '../tools/rule-test/deepen.ts';
+import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
+import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
+import { runQueue } from '../tools/rule-test/generate.ts';
+import { jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
+import { deepenSectionText } from '../tools/rule-test/prompts.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
+import { RUBRIC } from './helpers/rule-test.ts';
+
+const ENGLISH = '# 英文\n\n<!-- 以下送給 AI -->\n\n## 英文規則\n- 二\n\n<!-- 以下只在加深時送 -->\n\n- 加深的規則\n\n<!-- 以下只在錯題分析時送 -->\n- 錯題的規則\n';
+
+void test('加深送的規則：送出段加上加深段，其他「以下只在…送」的段不送；沒有加深段就只有送出段', () => {
+  assert.equal(deepenSectionText(ENGLISH, 'english.md'), '## 英文規則\n- 二\n\n- 加深的規則');
+  assert.equal(deepenSectionText('# x\n<!-- 以下送給 AI -->\n- 一\n<!-- 以下只在錯題分析時送 -->\n- 錯題\n', 'x.md'), '- 一');
+});
+
+/** 一個只有英文規則檔的 git repo（不碰真的 repo）。 */
+function fixtureRepo(): { root: string; commit: string } {
+  const root = mkdtempSync(join(tmpdir(), 'rule-test-repo-'));
+  const path = join(root, 'rules', 'english.md');
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, ENGLISH);
+  const git = (...args: string[]): string => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'add', '.');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'fixture');
+  return { root, commit: git('rev-parse', 'HEAD') };
+}
+
+const DECK = '國二上英文 L3 單字\n- borrow 英翻中 ^abcdef\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>';
+const THREE = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n' + DECK;
+
+/** 凍結、生成好的測試資料夾：甲不交三段、乙交三段；vault 已有 L1 的一篇（單字 go）。 */
+async function generated(replies: Partial<Record<'甲' | '乙', string>> = {}, unit = 'L1'): Promise<Folder> {
+  const { root, commit } = fixtureRepo();
+  const folder = mkdtempSync(join(tmpdir(), 'rule-test-'));
+  const vault = join(folder, 'vault');
+  mkdirSync(join(vault, 'Essence Cards'), { recursive: true });
+  writeFileSync(join(vault, 'Essence Cards', 'L1.md'), `---\n科目: 英文\n年級學期: 國二上\n單元: ${unit}\n狀態: 啟用\n---\n- go 英翻中 ^aaaaa2\n    - go :: 去\n`);
+  mkdirSync(join(folder, '課', 'L3'), { recursive: true });
+  writeFileSync(join(folder, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
+  writeFileSync(join(folder, '課', 'L3', '評分表.md'), RUBRIC.replace(' 加題 aaaaa2 ', ' '));
+  mkdirSync(join(folder, '提示'));
+  writeFileSync(join(folder, '提示', '甲.md'), '組甲\n\n{{任務段}}');
+  writeFileSync(join(folder, '提示', '乙.md'), '組乙，交三段 <<<卡組>>>\n\n{{任務段}}');
+  const rules = `加深規則: { commit: ${commit}, 檔案: [rules/english.md] }`;
+  writeFileSync(join(folder, '測試.yaml'), `
+名稱: 加深測試
+課庫: 課
+同時: 1
+課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3, 目的: 準備小考, 家長調整: 多出文法 }, 已有目標: { vault: ${JSON.stringify(vault)} } }]
+組:
+  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } }, ${rules} }
+  - { 名稱: 乙, 規則: { 自備: { L3: 乙.md } }, ${rules} }
+生成: [{ 生成器: claude, 模型: claude-opus-5-5, 推理: high, 份數: 1 }]
+評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
+加深: { 生成器: [claude] }
+`);
+  await freezeFolder(openFolder(folder), { root, log: () => {} });
+  const opened = openFolder(folder);
+  const reply = (prompt: string): string => (prompt.startsWith('組乙') ? replies.乙 ?? THREE : replies.甲 ?? DECK);
+  await runQueue(opened, { adapters: { claude: request => Promise.resolve({ kind: 'ok', reply: reply(request.text), session: null, warnings: [], ms: 1200, models: [] }) }, log: () => {} });
+  return opened;
+}
+
+/** 假的生成器：記下每次的請求，回一份加深。 */
+function fakeDeepener(): { requests: StepRequest[]; adapter: (request: StepRequest) => Promise<{ kind: 'ok'; reply: string; session: null; warnings: string[]; ms: number; models: string[] }> } {
+  const requests: StepRequest[] = [];
+  const deck = '## 文法\n- borrow 和 lend 的差別\n    - 出處：p.3\n    - 向別人拿是 ＿＿ :: borrow\n<<<完>>>';
+  return { requests, adapter: request => {
+    requests.push(request);
+    const reply = request.text.includes('照規則交全貌') ? `<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n${deck}` : deck;
+    return Promise.resolve({ kind: 'ok', reply, session: null, warnings: [], ms: 900, models: [] });
+  } };
+}
+
+void test('凍結加深：每組送的規則全文、外掛加深任務段的雜湊、英文這一科的卡組全文', async () => {
+  const folder = await generated();
+  const frozen = readDeepenFrozen(folder);
+  assert.equal(frozen.prompt, sha256File(DEEPEN_PROMPT));
+  assert.deepEqual(Object.keys(frozen.groups), ['甲', '乙']);
+  assert.equal(frozen.groups.甲[0].text, '## 英文規則\n- 二\n\n- 加深的規則');
+  assert.equal(frozen.groups.甲[0].name, 'english.md');
+  const words = JSON.parse(readFileSync(join(folder.root, '凍結', '加深', '單字卡組', 'L3.json'), 'utf8')) as { decks: { path: string }[] };
+  assert.deepEqual(words.decks.map(each => each.path), ['Essence Cards/L1.md']);
+});
+
+void test('凍結加深：vault 裡這個單元已經有卡組就停下（模擬的是新課）', async () => {
+  await assert.rejects(generated({}, 'L3 Old'), /這個單元已經有卡組（含草稿）：Essence Cards\/L1\.md/);
+});
+
+void test('模擬首次加深：假 ID 固定、避開原稿與已有的；提示照外掛的加深任務段（記穩了、同單元其他篇、地圖、已有單字）', async () => {
+  const folder = await generated();
+  const jobs = planJobs(folder, readFrozenSteps(folder), readEvents(folder));
+  const first = planCopy(folder, jobs[0]), again = planCopy(folder, jobs[0]);
+  assert.deepEqual(first.plan, again.plan);
+  const [piece] = first.plan.pieces;
+  assert.equal(first.plan.pieces.length, 1);
+  assert.equal(piece.key, '甲-L3-claude-1~加深~1');
+  assert.equal(piece.ids.length, 2);
+  assert.ok(piece.ids.every(id => /^[a-hjkmnp-z2-9]{6}$/.test(id) && id !== 'abcdef' && id !== 'aaaaa2'));
+  assert.match(piece.deck, /^---\n年級學期: 國二上\n科目: 英文\n單元: L3\n狀態: 啟用\n---\n/);
+  const prompt = first.prompts.get(piece.key)!;
+  assert.ok(prompt.startsWith('## 英文規則\n- 二\n\n- 加深的規則\n\n## 這一次的任務：加深這一節\n'));
+  assert.ok(!prompt.includes('錯題的規則'));
+  for (const line of [
+    '- 單元：L3', '- 學習目的：準備小考', '- 家長調整：多出文法',
+    `  - ${piece.ids[0]} borrow 英翻中｜記穩了｜第一題：borrow :: v. 借入`,
+    `  - ${piece.ids[1]} lend 英翻中｜記穩了｜第一題：lend :: v. 借出`,
+    '- 同單元的其他篇：無', '- 以前出過、現在不在這一篇的：無',
+    '- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：go、borrow、lend',
+    '最新的學習地圖：無。請先依教材補一份全貌與架構，再照它往下一層出。',
+  ]) assert.ok(prompt.split('\n').includes(line), line);
+  // 交三段的組：地圖照原文，提示要交三段。
+  const three = planCopy(folder, jobs[1]);
+  const text = three.prompts.get('乙-L3-claude-1~加深~1')!;
+  assert.ok(text.includes('最新的學習地圖（上一次的全貌與架構，照原文）：\n\n<<<全貌>>>\n- 借與借出\n\n<<<架構>>>\n- 第一層：字義\n'));
+  assert.ok(text.includes('照規則交全貌、架構、卡組三段'));
+  assert.equal(three.plan.map, true);
+});
+
+void test('模擬首次加深：卡組存不了的不模擬（記原因）', async () => {
+  const folder = await generated({ 甲: '國二上英文 L3 單字\n- borrow 英翻中\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>' });
+  const jobs = planJobs(folder, readFrozenSteps(folder), readEvents(folder));
+  const { plan } = planCopy(folder, jobs[0]);
+  assert.equal(plan.savable, false);
+  assert.deepEqual(plan.pieces, []);
+  assert.match(plan.why[0], /第 2 行/);
+});
+
+void test('deepen：一篇一個新對話、附教材、模型推理同生成；回覆與外掛的檢查存檔；重跑不重做；blind 等加深做完', async () => {
+  const folder = await generated();
+  assert.throws(() => blindFolder(folder, { log: () => {} }), /還有 2 篇加深沒做完.*甲-L3-claude-1（還沒跑 deepen）/);
+  const fake = fakeDeepener();
+  await runDeepen(folder, { adapters: { claude: fake.adapter }, log: () => {} });
+  assert.equal(fake.requests.length, 2);
+  const [request] = fake.requests;
+  assert.deepEqual([request.resume, request.model, request.effort, request.pdf?.toString()], [null, 'claude-opus-5-5', 'high', '%PDF-1.4 假的']);
+  const plan = readPlan(folder, '甲-L3-claude-1')!;
+  const key = plan.pieces[0].key;
+  assert.equal(readFileSync(join(folder.root, '加深', '提示', `${key}.md`), 'utf8'), request.text);
+  assert.ok(existsSync(join(folder.root, '加深', '原稿', `${key}.md`)));
+  for (const each of ['甲-L3-claude-1~加深~1', '乙-L3-claude-1~加深~1']) {
+    const format = JSON.parse(readFileSync(join(folder.root, '加深', '格式', `${each}.json`), 'utf8')) as { errors: string[] };
+    assert.deepEqual(format.errors, [], each);
+  }
+  const events = readEvents(folder, join('加深', '事件.jsonl'));
+  assert.equal(jobState(events, key).status, 'done');
+  assert.equal(events.find(event => event.type === 'done' && event.job === key)?.detail?.sent, request.text.length);
+  // 重跑：做完的篇不重做。
+  await runDeepen(folder, { adapters: { claude: fake.adapter }, log: () => {} });
+  assert.equal(fake.requests.length, 2);
+  blindFolder(folder, { log: () => {} });
+});
+
+void test('§13-7 加深的提示和外掛一字不差：假 vault 放凍結的卡組與模擬加入的那一篇、孩子都記穩了、這個單元有小考，外掛走一次 copy()', async t => {
+  const folder = await generated();
+  const jobs = planJobs(folder, readFrozenSteps(folder), readEvents(folder));
+  const { plan, prompts } = planCopy(folder, jobs[0]);
+  const [piece] = plan.pieces;
+  const at = Date.parse('2026-11-17T10:00:00+08:00');
+  // 每一個目標兩天各答對一次：外掛算成記穩了。
+  const deck = parseDeck(piece.deck);
+  const log = piece.ids.flatMap((id, i) => {
+    const fingerprint = deck.targets.find(target => target.id === id)!.prompts[0].fingerprint;
+    return [encodeEntry(`2026-11-01T10:0${String(i)}:00.000+08:00`, { lt: id, r: 'good', v: fingerprint }), encodeEntry(`2026-11-02T10:0${String(i)}:00.000+08:00`, { lt: id, r: 'good', v: fingerprint })];
+  }).join('\n') + '\n';
+  const frozen = JSON.parse(readFileSync(join(folder.root, '凍結', '加深', '單字卡組', 'L3.json'), 'utf8')) as { decks: { path: string; text: string }[] };
+  const memory = createMemoryFiles({
+    ...Object.fromEntries(frozen.decks.map(each => [each.path, each.text])),
+    [piece.path]: piece.deck,
+    'Essence Cards/紀錄/2026-11 PC-old.jsonl': log,
+    'Essence Cards/考試範圍/小考/L3.md': '---\n識別碼: q4m8t2\n小考日期: 2026-11-20\n---\n- 國二上 英文 L3\n',
+  });
+  const clipboard: string[] = [];
+  let jobsSaved: unknown = null;
+  // eslint-disable-next-line prefer-const -- state 與流程互相參照
+  let state: ReturnType<typeof createState>;
+  const deepen = createDeepen({
+    rules: { english: readDeepenFrozen(folder).groups.甲 }, state: () => state, random: Math.random,
+    store: {
+      jobs: () => jobsSaved, saveJobs(next: DeepenJob[]) { jobsSaved = next; }, retire() {}, skips: () => null, saveSkips() {}, remindOff: () => false, picks: () => ({}), savePick() {},
+    },
+    names: () => new Set(), named: () => [], snapshots: () => Promise.resolve([]),
+    read: path => Promise.resolve(memory.texts.get(path) ?? null), editor: () => null, unsaved: () => Promise.resolve(false),
+    clipboard: text => { clipboard.push(text); return Promise.resolve(); },
+    now: () => ({ ms: at, offset: 480 }), onError: error => { throw error; },
+  });
+  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random: Math.random, reserved: () => deepen.reserved(), now: () => at, offset: () => 480, onError() {} });
+  t.after(() => state.close());
+  await state.ready();
+  const copied = await deepen.copy(piece.path, '多出文法', '');
+  assert.ok('job' in copied, JSON.stringify(copied));
+  assert.equal(clipboard[0], prompts.get(piece.key));
+});
