@@ -165,7 +165,7 @@ void test('測試資料夾或課庫在 repo 裡就停下（repo 是公開的，�
   assert.throws(() => openFolder(root), /課庫在 repo 裡/);
 });
 
-void test('copyDir：一層層複製整個資料夾（中文檔名），已經有的檔不覆蓋', () => {
+void test('copyDir：一層層複製整個資料夾（中文檔名）；已經有、內容一樣的檔跳過，內容不同就停下不覆蓋', () => {
   const from = mkdtempSync(join(tmpdir(), '評分 區組-'));
   mkdirSync(join(from, '卡組', '社會1-2'), { recursive: true });
   writeFileSync(join(from, '評分表.md'), '| 列 |');
@@ -174,5 +174,9 @@ void test('copyDir：一層層複製整個資料夾（中文檔名），已經�
   copyDir(from, to);
   assert.equal(readFileSync(join(to, '評分表.md'), 'utf8'), '| 列 |');
   assert.equal(readFileSync(join(to, '卡組', '社會1-2', 'S1.md'), 'utf8'), '1\t大航海時代');
-  assert.throws(() => { copyDir(from, to); }, /EEXIST/);
+  copyDir(from, to);
+  assert.equal(readFileSync(join(to, '卡組', '社會1-2', 'S1.md'), 'utf8'), '1\t大航海時代');
+  writeFileSync(join(to, '評分表.md'), '| 改過 |');
+  assert.throws(() => { copyDir(from, to); }, /評分表\.md 已經有了、和 .* 內容不同/);
+  assert.equal(readFileSync(join(to, '評分表.md'), 'utf8'), '| 改過 |');
 });

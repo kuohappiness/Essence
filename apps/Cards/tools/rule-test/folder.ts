@@ -35,14 +35,17 @@ export const sha256File = (path: string): string => createHash('sha256').update(
 export const sha256Text = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /**
- * 複製整個資料夾，已經有的檔不覆蓋。不用 cpSync 的 recursive：Windows 上 Node 24.13 的來源或目的地路徑有中文時，
- * 整個行程直接結束（2026-11-25 使用者電腦，exit 0xC0000409、stderr 是空的）；一個個檔的 copyFileSync 沒事。eslint 擋 cpSync。
+ * 複製整個資料夾。已經有的檔內容一樣就跳過（五組以上時兩個區組共用同一份基準稿，§5-6），內容不同就停下、不覆蓋。
+ * 不用 cpSync 的 recursive：Windows 上 Node 24.13 的來源或目的地路徑有中文時，整個行程直接結束
+ * （2026-11-25 使用者電腦，exit 0xC0000409、stderr 是空的）；一個個檔的 copyFileSync 沒事。eslint 擋 cpSync。
  */
 export function copyDir(from: string, to: string): void {
   mkdirSync(to, { recursive: true });
   for (const entry of readdirSync(from, { withFileTypes: true })) {
-    if (entry.isDirectory()) copyDir(join(from, entry.name), join(to, entry.name));
-    else copyFileSync(join(from, entry.name), join(to, entry.name), constants.COPYFILE_EXCL);
+    const [source, target] = [join(from, entry.name), join(to, entry.name)];
+    if (entry.isDirectory()) copyDir(source, target);
+    else if (!existsSync(target)) copyFileSync(source, target, constants.COPYFILE_EXCL);
+    else if (Buffer.compare(readFileSync(source), readFileSync(target)) !== 0) throw Error(`${target} 已經有了、和 ${source} 內容不同；不覆蓋`);
   }
 }
 

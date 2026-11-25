@@ -83,3 +83,21 @@ void test('disputes：重大錯誤一筆一個隔離對話（只有那一份卡�
   assert.equal(fake.requests.length, 3);
   assert.match(readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8'), /\| 照原樣 \|/);
 });
+
+void test('disputes：五組拆成兩個區組、共用同一份基準稿時，拿不準照樣彙成一個對話，基準稿只放一份（§5-6）', async () => {
+  const folder = await blinded({}, '', undefined, ['甲', '乙', '丙', '丁', '戊']);
+  const codex = fakeJudge({ shape: result => { result.unsure = '列 R1 只考英翻中算不算有'; } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fakeJudge().adapter }, log: () => {} });
+  const decks: string[][] = [];
+  const adjudicator: Adapter = request => {
+    decks.push(readdirSync(join(request.cwd, '卡組', 'L3')).sort());
+    request.record('{}', '');
+    const value = { items: [{ notes: ['U1', 'U2'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
+    return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 'ruling-1', warnings: [], ms: 1, models: [], structured: value });
+  };
+  await runDisputes(folder, { adapters: { claude: adjudicator }, log: () => {} });
+  assert.deepEqual(decks, [['S1.md', 'S2.md', 'S3.md', 'S4.md', 'S5.md']]);
+  const rulings = readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8');
+  assert.ok(rulings.includes('| U1 | L3 | L3-B01 | codex | 列 R1 只考英翻中算不算有 |'));
+  assert.ok(rulings.includes('| U2 | L3 | L3-B02 | codex | 列 R1 只考英翻中算不算有 |'));
+});
