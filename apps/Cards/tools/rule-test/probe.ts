@@ -1,12 +1,13 @@
 // 比較測試工具的探針（任務說明 tasks/rule-test-tool.md §9、§11 第 0 步）：在使用者電腦上跑一次，
 // 確認轉接器要用的 CLI 行為，結果寫進輸出資料夾的 probe.md 與 probe.json，再由 Claude 填進 §9 的表。
-// 用法：npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long] [--opus <模型>] [--fable <模型>] [--codex-model <模型>]
-// 會開十幾個很短的 AI 對話（兩個讀整份 PDF、兩個長輸出）；--skip-long 跳過長輸出那兩個。
+// 用法：npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long] [--clipboard] [--opus <模型>] [--fable <模型>] [--codex-model <模型>]
+// 會開十幾個很短的 AI 對話（兩個讀整份 PDF、兩個長輸出）；--skip-long 跳過長輸出那兩個；--clipboard 才測剪貼簿（P9，會暫時借用）。
 import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
+import { borrowClipboard, readClipboard, writeClipboard } from './clipboard.ts';
 import { findClaude, findCodex, type Cli } from './clis.ts';
 import { runProcess, type RunResult } from './proc.ts';
 import { parseStream, userMessage, type ClaudeRun } from './stream.ts';
@@ -35,7 +36,7 @@ export function readPages(run: ClaudeRun, file: string): string[] {
     .map(use => typeof use.input.pages === 'string' ? use.input.pages : 'all');
 }
 
-function args(): { pdf: string; out: string; pages: number | null; skipLong: boolean; opus: string; fable: string; codexModel: string } {
+function args(): { pdf: string; out: string; pages: number | null; skipLong: boolean; clipboard: boolean; opus: string; fable: string; codexModel: string } {
   const list = process.argv.slice(3);
   const flag = (name: string, fallback: string): string => {
     const at = list.indexOf(name);
@@ -45,11 +46,13 @@ function args(): { pdf: string; out: string; pages: number | null; skipLong: boo
   };
   const skipAt = list.indexOf('--skip-long');
   if (skipAt >= 0) list.splice(skipAt, 1);
+  const clipboardAt = list.indexOf('--clipboard');
+  if (clipboardAt >= 0) list.splice(clipboardAt, 1);
   const opus = flag('--opus', 'claude-opus-5-5'), fable = flag('--fable', 'claude-fable-5-2'), codexModel = flag('--codex-model', 'gpt-6.2-sol');
   const pagesText = flag('--pages', '');
   const [pdf, out] = list;
-  if (!pdf || !out) throw Error('用法：npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long] [--opus <模型>] [--fable <模型>] [--codex-model <模型>]');
-  return { pdf: cliPath(pdf, 'rule-test'), out: cliPath(out, 'rule-test'), pages: pagesText ? Number(pagesText) : null, skipLong: skipAt >= 0, opus, fable, codexModel };
+  if (!pdf || !out) throw Error('用法：npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long] [--clipboard] [--opus <模型>] [--fable <模型>] [--codex-model <模型>]');
+  return { pdf: cliPath(pdf, 'rule-test'), out: cliPath(out, 'rule-test'), pages: pagesText ? Number(pagesText) : null, skipLong: skipAt >= 0, clipboard: clipboardAt >= 0, opus, fable, codexModel };
 }
 
 export async function probe(): Promise<void> {
@@ -241,17 +244,13 @@ export async function probe(): Promise<void> {
       details: { rateLimit: run.rateLimit } });
   });
 
-  // P9：剪貼簿的中文（只有 Windows）：先存下使用者原本的剪貼簿，測完放回去。
-  if (process.platform === 'win32') {
+  // P9：剪貼簿的中文（只有 Windows，加 --clipboard 才測）：暫時借用使用者的剪貼簿，用完放回去並核對（clipboard.ts）。
+  if (process.platform === 'win32' && !options.clipboard) record({ id: 'P9-clipboard', ok: null, summary: '沒測：加 --clipboard 才測（會暫時借用剪貼簿，先告訴使用者）', details: {} });
+  if (process.platform === 'win32' && options.clipboard) {
     await attempt('P9-clipboard', async () => {
-      const ps = (command: string): Promise<RunResult> => runProcess('powershell.exe', ['-NoProfile', '-Command', `[Console]::OutputEncoding=[Text.Encoding]::UTF8; ${command}`], { cwd: root, timeoutMs: MINUTE });
-      const b64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
-      const setFrom = (base64: string): string => `Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64}')))`;
-      const original = (await ps('$t = Get-Clipboard -Raw; if ($null -eq $t) { "" } else { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t)) }')).stdout.trim();
       const sample = `${CHINESE}\n第二行 ABC`;
-      await ps(setFrom(b64(sample)));
-      const back = (await ps('Get-Clipboard -Raw')).stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
-      await ps(original ? setFrom(original) : "Set-Clipboard -Value ' '");
+      const back = (await borrowClipboard(async () => { await writeClipboard(sample); return readClipboard(); }, join(options.out, '剪貼簿原本的內容.txt')))
+        .replace(/\r\n/g, '\n').replace(/\n$/, '');
       record({ id: 'P9-clipboard', ok: back === sample, summary: back === sample ? '讀回來一字不差' : `讀回來是「${back.slice(0, 40)}」`, details: {} });
     });
   }
