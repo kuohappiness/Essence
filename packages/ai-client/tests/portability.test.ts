@@ -103,3 +103,23 @@ void test('可攜性：不叫全域物件，取別名、解構、轉型都一樣
   }
   assert.equal(typeErrors("void fetch;\nvoid new AbortController();\nvoid new TextDecoder();\nexport {};\n", options), 0, '標準的 API 照用');
 });
+
+void test('可攜性：型別那一層也不能從程式裡打開：/// <reference> 與 declare 一律擋（L2 第四輪 第 12 項）', () => {
+  const blocked = [
+    '/// <reference types="node" />\nexport {};',
+    '/// <reference path="./node-globals.d.ts" />\nexport {};',
+    '/// <reference lib="webworker" />\nexport {};',
+    'declare const process: { env: Record<string, string> };',
+    'declare function setImmediate(fn: () => void): void;',
+    'declare let Buffer: unknown;',
+    'declare global { var Buffer: unknown }\nexport {};',
+    "declare module 'node:fs' { export const readFileSync: unknown; }",
+    'declare class Buffer {}',
+    'declare enum E { A }',
+    'declare namespace NodeJS { interface Process { env: unknown } }',
+  ];
+  for (const code of blocked) assert.notDeepEqual(problems(code), [], code);
+  // 一般的註解、型別與介面照寫。
+  const allowed = ['// <reference types="node" /> 這是普通的註解\nexport {};', 'type A = { declare: string };', 'interface B { x: number }', 'const declare = 1; void declare;'];
+  for (const code of allowed) assert.deepEqual(problems(code), [], code);
+});
