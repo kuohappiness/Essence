@@ -9,21 +9,25 @@
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
+import { APPS_ROOT, DOCS_ONLY, FOLDERS, PACKAGES, PACKAGES_ROOT } from './apps.ts';
 
 export const APPS = ['cards', 'capture', 'mindboard'] as const;
 export type App = (typeof APPS)[number];
-/** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）與三個外掛。 */
-export const TARGETS = ['tools', ...APPS] as const;
-export type Target = (typeof TARGETS)[number];
+/** 套件（tools/apps.ts 的 PACKAGES，docs/tasks/ai-client.md〈8〉）。 */
+export type Package = keyof typeof PACKAGES;
+const PACKAGE_IDS = Object.keys(PACKAGES) as Package[];
+/** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）、三個外掛與套件。 */
+export const TARGETS = ['tools', ...APPS, ...PACKAGE_IDS] as const;
+export type Target = 'tools' | App | Package;
 /** 完整：在對象的資料夾跑完整檢查；相關測試（Cards 與共用工具）：只跑寫到這些路徑的測試檔；跳過。 */
 export type Run = 'full' | 'related' | 'skip';
-export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
+export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard', 'ai-client': 'AI 連線套件' };
+const isPackage = (target: Target): target is Package => Object.hasOwn(PACKAGES, target);
 
 /** Cards 的資料夾（D-208 第二步 §A6 搬進來）。 */
 export const CARDS: string = FOLDERS.cards;
-/** 對象的資料夾（相對 repo 的根）：外掛查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
-export const folder = (target: Target): string => (target === 'tools' ? 'tools' : FOLDERS[target]);
+/** 對象的資料夾（相對 repo 的根）：外掛與套件查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
+export const folder = (target: Target): string => (target === 'tools' ? 'tools' : isPackage(target) ? PACKAGES[target] : FOLDERS[target]);
 /** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
 const prefix = (target: Target) => (folder(target) === '.' ? '' : folder(target) + '/');
 
@@ -69,11 +73,17 @@ export const RULES: Rule[] = [
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
     // 只有文件的軟體（現在是 Portal，D-218）只跑共用檢查；寫第一行程式時移進 FOLDERS、加自己的檢查。
-    id: 4, name: 'Capture、Mindboard 與只有文件的軟體的資料夾',
-    matches: under(prefix('capture'), prefix('mindboard'), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
-    effect: path => (path.startsWith(prefix('capture')) ? { capture: 'full' } : path.startsWith(prefix('mindboard')) ? { mindboard: 'full' } : {}),
+    // 套件（docs/tasks/ai-client.md〈8〉）和 Capture 一樣，改到什麼都跑它自己的完整檢查。
+    id: 4, name: 'Capture、Mindboard、套件與只有文件的軟體的資料夾',
+    matches: under(prefix('capture'), prefix('mindboard'), ...PACKAGE_IDS.map(prefix), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
+    effect: path => {
+      if (path.startsWith(prefix('capture'))) return { capture: 'full' };
+      if (path.startsWith(prefix('mindboard'))) return { mindboard: 'full' };
+      const owner = PACKAGE_IDS.find(id => path.startsWith(prefix(id)));
+      return owner ? { [owner]: 'full' } : {};
+    },
   },
-  { id: 5, name: 'apps/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
+  { id: 5, name: 'apps/、packages/ 底下不認得的路徑', matches: under(APPS_ROOT, PACKAGES_ROOT), effect: () => 'all' },
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
@@ -167,13 +177,13 @@ function toolPaths(text: string, base: string | undefined): string[] {
 
 /**
  * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
- * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
+ * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json、packages/*\/package.json 的 scripts（從外掛或套件的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
  */
 export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
-    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^apps\/[^/]+\/package\.json$/.test(path) || isSource(path));
+    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^(?:apps|packages)\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
   for (const [path, text] of texts) {
     if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);
@@ -254,8 +264,8 @@ function list(paths: string[], max = 3): string {
 }
 
 export function dispatch(changes: Change[], { root, ci, compare }: { root: string; ci: boolean; compare: Dispatch['compare'] }): Dispatch {
-  const runs: Record<Target, Run> = { tools: 'skip', cards: 'skip', capture: 'skip', mindboard: 'skip' };
-  const touched: Record<Target, string[]> = { tools: [], cards: [], capture: [], mindboard: [] };
+  const runs = Object.fromEntries(TARGETS.map(target => [target, 'skip'])) as Record<Target, Run>;
+  const touched = Object.fromEntries(TARGETS.map(target => [target, []])) as unknown as Record<Target, string[]>;
   const related: Record<'cards' | 'tools', string[]> = { cards: [], tools: [] };
   const blocked: string[] = [];
   const paths: PathResult[] = [];
@@ -266,7 +276,7 @@ export function dispatch(changes: Change[], { root, ci, compare }: { root: strin
     paths.push({ status: change.status, path: change.path, rule: rule.id, ruleName: rule.name });
     const effect = rule.effect(change.path);
     if (effect === 'blocked') { blocked.push(change.path); continue; }
-    const wanted: Partial<Record<Target, Run>> = effect === 'all' ? { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' } : effect;
+    const wanted: Partial<Record<Target, Run>> = effect === 'all' ? Object.fromEntries(TARGETS.map(target => [target, 'full'])) : effect;
     for (const target of TARGETS) {
       let run = wanted[target];
       if (!run) continue;

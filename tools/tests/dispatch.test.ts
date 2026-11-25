@@ -11,7 +11,7 @@ import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { CARDS, RULES, entryTools, relatedTests, relativeImports } from '../dispatch.ts';
-import { FOLDERS } from '../apps.ts';
+import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
 const DISPATCH = fileURLToPath(new URL('../dispatch.ts', import.meta.url));
@@ -21,8 +21,8 @@ const C = CARDS === '.' ? '' : CARDS + '/';
 const moved = C !== '';
 
 type Run = 'full' | 'related';
-type Runs = { tools?: Run; cards?: Run; capture?: 'full'; mindboard?: 'full'; tests?: string[]; toolsTests?: string[] };
-interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard', { run: string; tests: string[] }> }
+type Runs = { tools?: Run; cards?: Run; capture?: 'full'; mindboard?: 'full'; 'ai-client'?: 'full'; tests?: string[]; toolsTests?: string[] };
+interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard' | 'ai-client', { run: string; tests: string[] }> }
 
 // 本 repo 的文件路徑用拼接寫：這份測試不讀那些文件，字面寫出來會被分派表當成它們的「相關測試」，改文件時白跑這份。
 const SPEC = 'docs/' + 'transcript.md';
@@ -74,6 +74,7 @@ const BASE: Record<string, string> = {
   'apps/Mindboard/docs/backlog.md': '# B\n',
   'apps/Mindboard/a.ts': 'export {};\n', 'apps/Mindboard/b.ts': 'export {};\n', 'apps/Mindboard/Case.ts': 'export {};\n',
   'apps/Mindboard/src/old.ts': 'export {};\n',
+  'packages/ai-client/README.md': '# A\n',
   ...(moved ? { [`${C}README.md`]: '# R\n', [`${C}NOTES.MD`]: '# N\n', [`${C}docs/x.md`]: '# X\n', [`${C}docs/${'syntax.md'}`]: '# S\n' } : {}),
 };
 
@@ -104,13 +105,15 @@ async function setup(t: test.TestContext) {
 
 const expected = (runs: Runs) => ({
   tools: runs.tools ?? 'skip', cards: runs.cards ?? 'skip', capture: runs.capture ?? 'skip', mindboard: runs.mindboard ?? 'skip',
+  'ai-client': runs['ai-client'] ?? 'skip',
   tests: runs.tests ?? [], toolsTests: runs.toolsTests ?? [],
 });
 const actual = (result: Result) => ({
   tools: result.targets.tools.run, cards: result.targets.cards.run, capture: result.targets.capture.run, mindboard: result.targets.mindboard.run,
+  'ai-client': result.targets['ai-client'].run,
   tests: result.targets.cards.tests, toolsTests: result.targets.tools.tests,
 });
-const ALL: Runs = { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' };
+const ALL: Runs = { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full', 'ai-client': 'full' };
 
 type Env = Awaited<ReturnType<typeof setup>>;
 interface Case {
@@ -229,6 +232,11 @@ const CASES: Case[] = [
     change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
   },
   {
+    name: '套件的 scripts 直接跑 ../../tools/y.ts，這次只改 tools/y.ts',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node ../../tools/y.ts" } }\n'),
+    change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
     name: `改 ${SPEC}（登錄表；經 helper 的測試也選）`, change: edit(SPEC),
     preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'] },
     ci: { cards: 'full', capture: 'full', tools: 'full' },
@@ -282,6 +290,15 @@ const CASES: Case[] = [
   { name: '新增 apps/Portal/docs/backlog.md', change: edit('apps/Portal/docs/backlog.md'), preCommit: {}, ci: {} },
   { name: '只改 apps/Capture/a.ts', change: edit('apps/Capture/a.ts'), preCommit: { capture: 'full' }, ci: { capture: 'full' } },
   { name: '新增 apps/a.ts', change: edit('apps/a.ts'), preCommit: ALL, ci: ALL },
+  // 套件（docs/tasks/ai-client.md〈8〉）：改到什麼都跑它自己的完整檢查；packages/ 底下不在表上的，全部跑。
+  { name: '新增 packages/ai-client/src/a.ts', change: edit('packages/ai-client/src/a.ts'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
+  { name: '改 packages/ai-client/docs/x.md', change: edit('packages/ai-client/docs/x.md'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
+  {
+    name: 'git mv apps/Mindboard/a.ts packages/ai-client/a.ts', change: async e => { await e.git('mv', 'apps/Mindboard/a.ts', 'packages/ai-client/a.ts'); },
+    preCommit: { mindboard: 'full', 'ai-client': 'full' }, ci: { mindboard: 'full', 'ai-client': 'full' },
+  },
+  { name: '新增 packages/other/a.ts', change: edit('packages/other/a.ts'), preCommit: ALL, ci: ALL },
+  { name: '新增 packages/a.md', change: edit('packages/a.md'), preCommit: ALL, ci: ALL },
   { name: '新增根目錄的 foo.config.js', change: edit('foo.config.js'), preCommit: ALL, ci: ALL },
   { name: '空 commit', change: async () => {}, preCommit: {}, ci: {} },
   { name: '檔名有中文與空白（core.quotepath=true）', change: edit('apps/Mindboard/docs/規畫 草稿.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
@@ -432,7 +449,7 @@ function astImports(text: string, fileName: string): string[] {
 }
 
 /**
- * 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，相依用 TypeScript 的語法樹往下找（astImports，和 dispatch 的正規式分開算）；
+ * 從 hook、check.yml、外掛與套件的 scripts 照字面取 tools/ 檔，相依用 TypeScript 的語法樹往下找（astImports，和 dispatch 的正規式分開算）；
  * 找到的路徑交給 Node 的 require.resolve，以 Node 實際載入的檔為準（L2 第二輪：不寫副檔名的 require；第三輪：結尾有斜線的資料夾）。
  */
 async function independentEntries(): Promise<Set<string>> {
@@ -445,7 +462,7 @@ async function independentEntries(): Promise<Set<string>> {
   };
   for (const name of await readdir(join(ROOT, '.githooks'))) literal(await readFile(join(ROOT, '.githooks', name), 'utf8'), '.');
   literal(await readFile(join(ROOT, '.github/workflows/check.yml'), 'utf8'), undefined);
-  for (const folder of Object.values(FOLDERS)) {
+  for (const folder of [...Object.values(FOLDERS), ...Object.values(PACKAGES)]) {
     let pkg: { scripts?: Record<string, string> };
     try { pkg = JSON.parse(await readFile(join(ROOT, folder, 'package.json'), 'utf8')) as typeof pkg; } catch { continue; }
     for (const script of Object.values(pkg.scripts ?? {})) literal(script, folder);
