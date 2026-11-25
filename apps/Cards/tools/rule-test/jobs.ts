@@ -59,25 +59,37 @@ export function jobState(events: readonly JobEvent[], key: string): JobState {
 
 const jobKey = (group: string, lesson: string, generator: string, copy: number): string => `${group}-${lesson}-${generator}-${String(copy)}`;
 
+/** 補跑同一課多跑幾份（extend，§5-10）：每一行一次追加，每一組各加 count 份，份的號碼從 from 起（追加時那一組用過的號碼之後）。 */
+export interface Extension { time: string; lesson: string; generator: string; count: number; reason: string; from: Record<string, number>; afterBatch: number | null }
+export const EXTENSIONS = '追加.jsonl';
+export function readExtensions(folder: Folder): Extension[] {
+  const file = join(folder.root, EXTENSIONS);
+  return existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Extension) : [];
+}
+
 /**
- * 全部的工作：設定的份數，加上補無效原稿的（同一組、課、生成器，最多補到和份數一樣多份，免得規則本身就交不出有效原稿時一直補）。
+ * 全部的工作：設定的份數與每一次追加的份數，加上補無效原稿的（同一組、課、生成器、同一次的份，最多補到和份數一樣多份，免得規則本身就交不出有效原稿時一直補）。
  * 不同的工作算出同一個名字（名稱裡的 - 剛好湊成一樣）就停下。
  */
 export function planJobs(folder: Folder, steps: readonly FrozenStep[], events: readonly JobEvent[]): Job[] {
   const jobs: Job[] = [];
+  const extensions = readExtensions(folder);
   for (const generator of folder.config.generators) {
     for (const lesson of lessonsOf(folder.config, generator)) {
       for (const group of folder.config.groups) {
         const mine = steps.filter(step => step.group === group.name && step.lesson === lesson.code).sort((a, b) => a.step - b.step);
         if (!mine.length) throw Error(`凍結的提示裡沒有「${group.name}」在課「${lesson.code}」的提示（設定在凍結之後改過？）`);
         const make = (copy: number, replacement: boolean): Job => ({ key: jobKey(group.name, lesson.code, generator.name, copy), group: group.name, lesson: lesson.code, generator: generator.name, kind: generator.kind, copy, replacement, steps: mine });
-        const base = Array.from({ length: generator.count }, (_, i) => make(i + 1, false));
-        jobs.push(...base);
-        let next = generator.count, invalid = base.filter(job => jobState(events, job.key).status === 'invalid').length;
-        while (invalid > 0 && next < generator.count * 2) {
-          const extra = make(++next, true);
-          jobs.push(extra);
-          invalid += (jobState(events, extra.key).status === 'invalid' ? 1 : 0) - 1;
+        const segments = [{ from: 1, count: generator.count }, ...extensions.filter(each => each.lesson === lesson.code && each.generator === generator.name).map(each => ({ from: each.from[group.name], count: each.count }))];
+        for (const { from, count } of segments) {
+          const base = Array.from({ length: count }, (_, i) => make(from + i, false));
+          jobs.push(...base);
+          let next = from + count - 1, invalid = base.filter(job => jobState(events, job.key).status === 'invalid').length;
+          while (invalid > 0 && next < from - 1 + count * 2) {
+            const extra = make(++next, true);
+            jobs.push(extra);
+            invalid += (jobState(events, extra.key).status === 'invalid' ? 1 : 0) - 1;
+          }
         }
       }
     }

@@ -8,7 +8,7 @@ import { openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
 import { resultFile } from './judge.ts';
 import { readReports } from './unblind.ts';
-import { jobState, planJobs, readEvents, type JobState } from './jobs.ts';
+import { jobState, planJobs, readEvents, readExtensions, type JobState } from './jobs.ts';
 
 export function statusLines(folder: Folder): string[] {
   const lines: string[] = [`測試：${folder.config.name}`];
@@ -22,6 +22,7 @@ export function statusLines(folder: Folder): string[] {
   const states = new Map<string, JobState>(jobs.map(job => [job.key, jobState(events, job.key)]));
   const count = (status: JobState['status']): number => [...states.values()].filter(state => state.status === status).length;
   lines.push(`生成：${String(jobs.length)} 份｜完成 ${String(count('done'))}、無效 ${String(count('invalid'))}、跑中 ${String(count('running'))}、待跑 ${String(count('pending') + count('retry'))}、放棄 ${String(count('failed'))}`);
+  for (const each of readExtensions(folder)) lines.push(`  追加：${each.time.slice(0, 10)} 課 ${each.lesson}、${each.generator} 每組 ${String(each.count)} 份（${each.reason}${each.afterBatch === null ? '' : `；批 ${String(each.afterBatch)} 解開之後`}）`);
   for (const generator of folder.config.generators) {
     const mine = jobs.filter(job => job.generator === generator.name);
     const open = mine.filter(job => !['done', 'invalid'].includes(states.get(job.key)!.status));

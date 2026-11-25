@@ -3,6 +3,7 @@
 import { blind } from './blind.ts';
 import { check } from './check.ts';
 import { disputes } from './disputes.ts';
+import { extend } from './extend.ts';
 import { freeze } from './freeze.ts';
 import { generate } from './generate.ts';
 import { judge } from './judge.ts';
@@ -21,6 +22,7 @@ const COMMANDS: Record<string, () => Promise<void>> = {
   judge,
   disputes,
   unblind,
+  extend,
   status,
 };
 
