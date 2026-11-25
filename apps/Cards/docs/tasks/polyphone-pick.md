@@ -1,6 +1,6 @@
 # 多音字的點選填空與「相似詞」結尾（D-230 第 4 點，給 Claude）
 
-狀態：規劃中｜下一步：使用者選一張卡出幾句（§3）與舊版遇到這種卡怎麼辦（§4-6）；格式查核已做（[回報](<../Claude Codex Discussion/2026-11-25-polyphone-pick-format-review.md>)），兩項選完就開工｜等誰：使用者
+狀態：實作中｜下一步：使用者選一張卡出幾句（§3）與舊版遇到這種卡怎麼辦（§4-6），程式先照建議做完（〈結果〉）；開 PR、L2、Windows 看畫面｜等誰：使用者
 
 來自：[D-230](../../../../docs/decisions.md#d-230-國語字義卡和詞義卡錯開混淆點第一次就比多音字改點選填空)
 
@@ -175,4 +175,21 @@ D-230 第 3 點：國語的詞寫相似詞（`反映（反應、反映） 相似
 
 ## 結果
 
-（還沒開工）
+分支 `claude/project-thread-0mpbnw`（2026-11-25），每一節一個 commit，每個 commit 的 hook 都跑過 Cards 的完整檢查（型別、lint、knip、全部測試）：
+
+| 節 | commit | 測試 |
+|---|---|---|
+| §1 認法 | `09231d28` | `tests/polyphone-pick.test.ts` |
+| §2 相似詞 | `d91c7b3c` | `tests/pick-deck.test.ts`、`tests/check-syntax-pick.test.ts`、`tests/ai-materials.test.ts` 各加一段 |
+| §3 一張卡出幾句 | `2ec04d30` | `tests/polyphone-compose.test.ts`、`tests/question-types.test.ts` 加多音字 |
+| §4 畫面、對照與紀錄 | `75cebb3a` | `tests/polyphone-ui.test.ts`、`tests/polyphone-old-version.test.ts`（用 `v0.6.0` 的標籤跑） |
+| §5 AI 草稿的檢查 | `cd724fc5` | `tests/polyphone-ai-check.test.ts`、`tests/ai-add-existing.test.ts` 加一段 |
+| §6 國小國語預設 v0.11 | `4a84cf65` | `tests/ai-rules.test.ts` 的版號 |
+
+- **兩項照建議先做，等使用者選**：§3 是「比讀音多一句」；§4-6 是「照翻面、不擋」（卡組不加 `需要版本`）。選了別的再改：§3 只動 `compose.ts` 的 `choicePrompts`；§4-6 選擋的話照那一條做。
+- **和上面寫的不同的地方**：
+  - 錨點在解析時就對好（`Choice.answers` 對齊題目、`Choice.anchors` 對齊讀音、`Choice.rest`），不在組卡時讀字：study 從 deck 只能 import 型別（`essence/module-boundaries`）。`記憶錨點：` 同一行寫的字也照同一個方法對（§4-2 已改寫）。
+  - 任務段改字，版號加一：`提示 v5`、`加深 v3`（§2）。
+  - 沒勾點選填空的 `長 讀音` 是翻面，預設寫成句數照通用的三題上限、每個讀音至少一句（翻面一次一句、孩子自評，沒有亂猜的問題）；§6 原本沒寫這一條。
+  - `check.ts` 讓候選卡片裡的比較卡、多音字也不用寫成「能……」（原本只看本文）。
+- **還沒做**：L2；Windows 版 Obsidian 看一次畫面（標題、`（ㄓㄤˇ）` 填進去的樣子、對照）；iPhone 併進 0.7.0 的那一次。§7 的文件（syntax §2-3、§2-7、§2-8、§2-10、§5，題型專區）和這一段同一個 commit。
