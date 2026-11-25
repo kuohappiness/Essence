@@ -89,7 +89,7 @@ const defaultClock: Clock = {
   sleep: (ms, signal) => new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new Error('aborted')); return; }
     const onAbort = () => { clearTimeout(timer); reject(new Error('aborted')); };
-    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    const timer = later(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
     signal.addEventListener('abort', onAbort, { once: true });
   }),
   random: () => Math.random(),
@@ -158,6 +158,13 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
 
   async function generateOnce(request: GenerateRequest): Promise<GenerateResult> {
     const secrets = request.apiKey ? [request.apiKey] : [];
+    checkNumbers({
+      maxAttempts: request.maxAttempts, timeoutMs: request.timeoutMs, idleTimeoutMs: request.idleTimeoutMs,
+      maxOutputTokens: request.maxOutputTokens, responseTimeoutMs: options.responseTimeoutMs,
+    });
+    if (request.maxOutputTokens != null && !(Number.isInteger(request.maxOutputTokens) && request.maxOutputTokens > 0)) {
+      throw fail('invalid_request', 'maxOutputTokens must be a positive integer');
+    }
     const startedAt = clock.now();
     const r = resolve(request.endpoint, request.model);
     const input = normalize(request.input);
@@ -277,13 +284,13 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       request.signal?.addEventListener('abort', onCancel, { once: true });
       if (request.signal?.aborted) abort('cancelled');
       const remaining = deadline - clock.now();
-      const overall = setTimeout(() => abort('timeout'), Math.max(0, remaining));
-      const waitHeaders = responseTimeoutMs === null ? undefined : setTimeout(() => abort('response'), responseTimeoutMs);
+      const overall = later(() => abort('timeout'), remaining);
+      const waitHeaders = responseTimeoutMs === null ? undefined : later(() => abort('response'), responseTimeoutMs);
       let idle: ReturnType<typeof setTimeout> | undefined;
       const touch = () => {
         if (request.idleTimeoutMs === undefined) return;
         clearTimeout(idle);
-        idle = setTimeout(() => abort('idle'), request.idleTimeoutMs);
+        idle = later(() => abort('idle'), request.idleTimeoutMs);
       };
       let text = '';
       let gotResponse = false;
@@ -407,6 +414,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const secrets = request.apiKey ? [request.apiKey] : [];
     let r: Resolved;
     try {
+      checkNumbers({ timeoutMs: request.timeoutMs });
       r = resolve(request.endpoint, null);
     } catch (caught) {
       if (isAiError(caught)) return { ok: false, error: caught };
@@ -419,7 +427,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const onCancel = () => { reason = 'cancelled'; controller.abort(); };
     request.signal?.addEventListener('abort', onCancel, { once: true });
     const limit = request.timeoutMs ?? CHECK_TIMEOUT_MS;
-    const timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, Math.max(0, limit));
+    const timer = later(() => { reason = 'timeout'; controller.abort(); }, limit);
     let requestId: string | null = null;
     try {
       if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending');
@@ -487,7 +495,18 @@ function redactResult(result: GenerateResult, secrets: readonly string[]): Gener
   };
 }
 
+/** setTimeout 的上限（約 24.8 天）：超過的會被當成 1 ms 立刻到，所以很長的期限照上限算（L2 第二輪 R6）。 */
+const MAX_TIMER_MS = 2_147_483_647;
+const later = (fn: () => void, ms: number): ReturnType<typeof setTimeout> => setTimeout(fn, Math.min(MAX_TIMER_MS, Math.max(0, ms)));
+
 // ── 送出前 ──
+
+/** 數字欄位：給了就要是有限的數字。NaN 讓次數上限失效、Infinity 與字串讓計時器立刻到（L2 第二輪 R6）。沒給或 null 照預設。 */
+function checkNumbers(fields: Record<string, unknown>): void {
+  for (const [name, value] of Object.entries(fields)) {
+    if (value != null && !(typeof value === 'number' && Number.isFinite(value))) throw fail('invalid_request', `${name} must be a finite number`);
+  }
+}
 
 function normalize(input: GenerateRequest['input']): NormalizedMessage[] {
   if (!Array.isArray(input) || input.length === 0) throw fail('invalid_request', 'input must have at least one message');
@@ -671,14 +690,14 @@ async function readErrorBody(response: Response, signal: AbortSignal, idleMs: nu
   const stop = new AbortController();
   const onAbort = () => stop.abort();
   signal.addEventListener('abort', onAbort, { once: true });
-  let timer = setTimeout(() => stop.abort(), idleMs);
+  let timer = later(() => stop.abort(), idleMs);
   const decoder = new TextDecoder('utf-8');
   let out = '';
   let size = 0;
   try {
     for await (const chunk of abortable(bodyChunks(response, stop.signal), stop.signal)) {
       clearTimeout(timer);
-      timer = setTimeout(() => stop.abort(), idleMs);
+      timer = later(() => stop.abort(), idleMs);
       const take = chunk.subarray(0, ERROR_BODY_MAX_BYTES - size);
       size += take.byteLength;
       out += decoder.decode(take, { stream: true });

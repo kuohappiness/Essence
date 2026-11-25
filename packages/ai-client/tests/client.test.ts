@@ -390,6 +390,46 @@ void test('寫進快取的輸入：OpenAI Responses 與 OpenRouter 的 cache_wri
   assert.deepEqual([chat.usage.cachedInputTokens, chat.usage.cacheWriteInputTokens], [10, 90]);
 });
 
+void test('數字欄位整類：給了不是有限的數字就不送出；很大的逾時當成很長，不是立刻逾時（L2 第二輪 R6）', async () => {
+  const BAD: unknown[] = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '3', true, {}];
+  for (const field of ['maxAttempts', 'timeoutMs', 'idleTimeoutMs', 'maxOutputTokens'] as const) {
+    for (const value of BAD) {
+      const fetch = mockFetch([{ status: 500, chunks: [] }, { status: 500, chunks: [] }, { status: 500, chunks: [] }, { status: 500, chunks: [] }, OK]);
+      const error = await rejects(createAiClient({ fetch, clock: instantClock() }).generate(request({ [field]: value })));
+      assert.deepEqual([error.kind, fetch.requests.length], ['invalid_request', 0], `${field} = ${String(value)}`);
+    }
+  }
+  for (const value of [0, -1, 1.5]) {
+    const fetch = mockFetch([OK]);
+    const error = await rejects(createAiClient({ fetch, clock: instantClock() }).generate(request({ maxOutputTokens: value })));
+    assert.deepEqual([error.kind, fetch.requests.length], ['invalid_request', 0], `maxOutputTokens = ${String(value)}`);
+  }
+  for (const value of BAD) {
+    const fetch = mockFetch([OK]);
+    const error = await rejects(createAiClient({ fetch, clock: instantClock(), responseTimeoutMs: value as number }).generate(request()));
+    assert.deepEqual([error.kind, fetch.requests.length], ['invalid_request', 0], `responseTimeoutMs = ${String(value)}`);
+    const checkFetch = mockFetch([OK]);
+    const checked = await createAiClient({ fetch: checkFetch, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: value as number });
+    assert.deepEqual([checked.ok ? 'ok' : checked.error.kind, checkFetch.requests.length], ['invalid_request', 0], `check timeoutMs = ${String(value)}`);
+  }
+  // 沒給或 null 照預設。
+  const unset = mockFetch([OK]);
+  await createAiClient({ fetch: unset, clock: instantClock() }).generate(request({ maxAttempts: undefined, timeoutMs: undefined }));
+
+  // 超過計時器上限（約 24.8 天）的數字：計時器會當成 1 ms 立刻到，要當成很長（L2 第二輪 R6）。
+  const huge = 1e10;
+  const slow: MockReply = { ...OK, delayMs: 5 };
+  for (const extra of [{ timeoutMs: huge }, { idleTimeoutMs: huge }] as Partial<GenerateRequest>[]) {
+    const result = await createAiClient({ fetch: mockFetch([slow]), clock: instantClock() }).generate(request(extra));
+    assert.equal(result.text, openai.stream.text, JSON.stringify(extra));
+  }
+  const longHeaders = await createAiClient({ fetch: mockFetch([{ ...slow, headersDelayMs: 5 }]), clock: instantClock(), responseTimeoutMs: huge }).generate(request());
+  assert.equal(longHeaders.text, openai.stream.text);
+  const longCheck = await createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: ['{"data":[{"id":"gpt-5.6-terra"}]}'], headersDelayMs: 5 }]), clock: instantClock() })
+    .check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: huge });
+  assert.ok(longCheck.ok, longCheck.ok ? '' : longCheck.error.message);
+});
+
 void test('重送的規則一致：maxAttempts 最多 3 次；408 照 5xx 重送；拿到 200 後才出錯的 retryable 是 false（L2 R6）', async () => {
   const fail500: MockReply = { status: 500, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"boom"}}'] };
   const many = mockFetch([fail500, fail500, fail500, fail500, OK]);
