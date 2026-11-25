@@ -1,6 +1,6 @@
 # 題型模組：照形式分、每一科通用（給 Claude，L2 在本機）
 
-狀態：待審｜下一步：A1、A2 做完（PR #56，〈結果〉），Codex L2 第一輪（[審查請求](question-type-modules-l2.md)）；合併前在使用者的電腦跑兩個正式 vault 的 `compare-versions`、Windows 看一次畫面；使用者回 §6 第 1～3 題與第 4 題的兩件（不擋 A）｜等誰：Codex、使用者
+狀態：待審｜下一步：A1、A2 做完（PR #56，〈結果〉），L2 第一輪的五項修完，Codex 第二輪只審修正（[審查請求](question-type-modules-l2.md)）；合併前在使用者的電腦跑兩個正式 vault 的 `compare-versions`、Windows 看一次畫面；使用者回 §6 第 1～3 題與第 4 題的兩件（不擋 A）｜等誰：Codex、使用者
 
 來自：使用者 2026-11-25：「我要做的不是每一科目不同的題型，是一個通用模組，例如每一科都有填空題，配對題，單選題等等」「現在做，進0.7.0」；[題型模組規劃稿](<../Claude Codex Discussion/2026-11-25-question-type-modules.md>)（第 2 版，Fable 5.2 xhigh 第一輪審過）的 §2、§5 第 1、2 段。
 
@@ -799,5 +799,15 @@ Fable 5.2 xhigh，2026-11-25，只核對第 3 版（`fca61ca7`）有沒有把 G1
 - **程式**：`QuestionType` 多 `order`，`questionType` 多一個分支（組有 `order` 的卡）；`FLOWS.order`、`PREVIEWS.order` 照點選填空；`review/pick.ts` 改看 `questionType(card) === 'order'`；全詩與句子的題目區搬到新的 `ui/OrderCard.tsx`，照 `order.style` 選，class 不變，字鍵與底部那一排和點選填空共用（`orderScreen` 是 `{ ...pickScreen, Body: OrderBody }`）；`SCREENS.pick` 只剩比較卡與多音字。完整檢查通過。
 - **改到的測試斷言**：`english-order.test.ts:65`（說明寫 64：A1 在檔頭多 import 一行）、`poem-order-flow.test.ts:35`、`question-types.test.ts` 的 `SAMPLES` 多 `order` 一列、`card-kinds.test.ts` 的排序那 5 格與兩個卡型範例的題型、「題型對得上」（`PICKED` 改成 `TYPE_OF`：卡型對到哪一種題型）。說明沒列、多改的：`compare-versions.test.ts:392-393` 排序的兩張卡 `pick` → `order`，那個測試是 A1 才加的。
 - **差分**（A1 `74fb12f6` 對 A2，同一支腳本）：`createSession` 2,000 串共 161,154 步、`createPreview` 2,000 串共 161,476 步，`view()`、這一次做過的卡、每個檔、回傳值與元素樹都相同；目前這張的題型只有排序卡從 `pick` 變 `order`（51,631 步），其他都相同。`parseDeck`、AI 與需要版本的快速版（127,008 份窮舉加 2,000 行錄下的輸入）零差異（A2 沒改這幾處）。
+
+### L2 第一輪的修正
+
+第一輪沒有 P1；五項的判斷與修法在[報告的〈Claude 核對（第一輪）〉](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md#claude-核對第一輪>)。
+
+- **R1**（`e9f9937a`）：比較工具原本一次只給 `nextCard` 一個目標，比較卡併不到同組的目標，兩個 vault 的比較會漏掉併卡的差異。改成同一個佇列、同一篇的目標一起出卡，多記那張卡上的目標 `lts`。
+- **R2**（`4357e4d6`）：今天已經答對、這次沒有卡的目標，報告不再寫成「那一版沒有這一欄」。
+- **R3**（`7b88668f`）：差分腳本直接比兩邊的回傳值。重跑 A1、A2 兩組，數字和上面相同、零差異；故意把 `resume()` 的回傳值改壞，抓到 10 筆。
+- **R4**（`8fed3a3b`）：搬候選與加深寫的版號固定是 `PICK_NEEDS`。寫進筆記前 `withNeed` 會照 `needsOf` 補成對的版號（探針），記進技術債，等第二種要版號的卡型。
+- **R5**（`035979a6`）：§1-3、§1-7、§1-8 的文字。
 
 延後的測試：（實作後填；iPhone 併進 0.7.0 的那一次照 D-195 在技術債表寫「補測：」列）

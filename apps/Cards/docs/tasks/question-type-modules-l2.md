@@ -1,8 +1,23 @@
 # 題型模組第 A 步（A1、A2，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 第一輪審查（在使用者的電腦），Claude 核對｜等誰：Codex
+狀態：待審｜下一步：Codex 第二輪（只審修正，在使用者的電腦），Claude 核對｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
+
+## 第二輪（只審修正）
+
+- **待審**：`25e8304b`（第一輪審的 commit）到這份請求所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/question-type-modules-l2.md`）的差異，範圍：`tools/compare/adapter.ts` 的今天的份怎麼取卡（R1）、`tools/compare/snapshot.ts` 的 `uncomparedLines` 與 `lts`（R1、R2）、`tools/compare-versions.ts` 的「限制」那一句、`tests/compare-versions.test.ts`，以及〈差分腳本〉的 `session.ts`（R3）、`apps/Cards/docs/backlog.md` 技術債新的一列（R4）、任務說明 §1-3、§1-7、§1-8（R5）。產品程式（`src/`）這一輪沒改。`a4146fc4`、`cec186a4` 是另一份討論稿（配對與單選），不用看。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第一輪）〉：每一項的判斷、修法與 commit。
+- **請特別試**：
+  - R1 的取卡方式：不模擬作答，記的是每個目標還沒作答時出現的那張卡。有沒有哪種卡的內容（格數、併進誰、題目）會因為沒有作答而和真的複習不同：今天答錯、還沒到時間的同組目標（`joins` 的 `early`）、比較卡多放一句、接句的隔開、全詩與接句同一首、`more` 佇列的 `pair`。
+  - R1 對舊版：`v0.2.0`～`v0.6.0` 的 `nextCard` 選卡的先後不同時，併進誰會跟著變；這算真的差異還是取卡方式帶來的雜訊，報告要不要另外寫明。
+  - R1 的防呆：一張卡上有不在這一次範圍裡的目標時照記、不擋，這張卡上沒有還沒出的目標才當接不上。這樣夠不夠，會不會有版本出錯卻比成零差異。
+  - R2：用 `prompt` 是不是 null 判斷這次有沒有卡；有沒有別的情況 `prompt` 是 null 卻有卡，或有卡卻沒有 `prompt`。
+  - R4：同不同意記成技術債（真實路徑由 `withNeed` 補對），還是應該合併前就改。
+- **驗證**：完整的 `npm run check` 由每個改程式的 commit 的 pre-commit 在雲端 Linux 跑過；R1、R2 的回歸測試先在修正前確認失敗。R3 重跑的數字在〈Claude 核對（第一輪）〉。
+- 報告接在 `Claude Codex Discussion/2026-11-25-question-type-modules-l2.md` 的後面，標「第二輪」。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
+以下是第一輪的請求，第二輪照用其中的回報格式。
 
 [任務說明](question-type-modules.md) 的第 A 步把目標的六個卡型欄位併成一欄 `Target.kind`、把卡型的認法拆成每一種一個檔、每一層照卡型分的地方改成照 `KindId` 的 `switch`（A1，行為不變），再讓排序成為自己的題型（A2，內部的 `QuestionType` 多 `order`，作答照點選填空）。碰到卡型的認法（[syntax §2-3](../syntax.md)，`AGENTS.md`〈Code Review Rules〉的 P1 範圍）、組卡、今天的份、作答與畫面，屬於[高風險範圍](../../../../docs/agents/quality.md#高風險範圍要做-l2)，合併前做 L2。
 
