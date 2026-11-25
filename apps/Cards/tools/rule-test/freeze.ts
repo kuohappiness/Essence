@@ -11,6 +11,8 @@ import { checkInherited, templateHashes } from './init.ts';
 import { EVALUATION } from './levels.ts';
 import { APP_ROOT, buildFor, deepenRulesFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
 import { checkRubricFile } from './rubric.ts';
+import { evaluationSpec, unreachable } from './spec.ts';
+import { appendEvent } from './jobs.ts';
 import { parseSnapshotFile, readVault, snapshotOf, unitDecks, wordDecksOf, type Snapshot, type WordDecks } from './snapshot.ts';
 
 export interface FrozenStep {
@@ -74,9 +76,16 @@ export function verifyLock(folder: Folder): Lock {
   return lock;
 }
 
+/** 使用者同意用量（--confirmed）：在事件裡記下〈評估規格〉的雜湊，代表使用者看過的就是這一份（rule-test-d236.md §11）。 */
+export function confirmSpec(folder: Folder, log?: string): void {
+  appendEvent(folder, { type: 'confirmed', detail: { spec: sha256File(join(folder.root, SPEC)) } }, log);
+}
+
 /** 外掛的加深任務段（§6-1 第 5 點）：凍結時記雜湊，模擬時核對。 */
 export const DEEPEN_PROMPT = join(APP_ROOT, 'src', 'core', 'ai', 'deepen-prompt.ts');
 const DEEPEN_RULES = join('凍結', '加深', '規則.json');
+/** 〈評估規格〉的位置（§11）。 */
+export const SPEC = join('凍結', '評估規格.md');
 /** 凍結的加深規則：每一組送的規則全文（已經組好、算好雜湊），與 deepen-prompt.ts 的雜湊。 */
 export interface DeepenFrozen { prompt: string; groups: Record<string, EmbeddedRule[]> }
 export const readDeepenFrozen = (folder: Folder): DeepenFrozen => JSON.parse(readFileSync(join(folder.root, DEEPEN_RULES), 'utf8')) as DeepenFrozen;
@@ -200,6 +209,8 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   checkInherited(folder, steps, templateHashes(names, templates));
   for (const name of names) writes.push([join(folder.root, '凍結', '範本', name), readFileSync(join(templates, name))]);
   writes.push([join(folder.root, '凍結', '提示.json'), JSON.stringify(steps, null, 2) + '\n']);
+  // 〈評估規格〉（rule-test-d236.md §11）：照設定與工具的常數產生，鎖住；給使用者看用量時一起給。
+  writes.push([join(folder.root, SPEC), evaluationSpec(config, steps)]);
   for (const [path, content] of writes) {
     writeOnce(path, content);
     record(path);
@@ -215,7 +226,8 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
       log(`  ${step.group}${step.steps > 1 ? ` 第 ${String(step.step)} 步` : ''}：規則 ${step.rulesChars.toLocaleString('en-US')} 字、整份 ${step.chars.toLocaleString('en-US')} 字${step.pending.length ? `（生成時代入 ${step.pending.join('、')}）` : ''}`);
     }
   }
-  for (const warning of usedWarnings(folder, root)) log(`警告：${warning}`);
+  for (const warning of [...usedWarnings(folder, root), ...unreachable(config)]) log(`警告：${warning}`);
+  log(`評估規格：${join(folder.root, SPEC)}（給使用者看用量時一起給）`);
   log(`\n凍結完成：commit ${lock.commit.slice(0, 8)}${lock.dirty ? '（工作樹有別的修改）' : ''}。`);
   return lock;
 }

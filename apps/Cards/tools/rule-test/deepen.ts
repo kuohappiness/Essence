@@ -15,7 +15,7 @@ import { cliPath } from '../cli-path.ts';
 import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './adapters.ts';
 import { deepenGroups } from './config.ts';
 import { materialOf, openFolder, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
-import { DEEPEN_PROMPT, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, verifyLock } from './freeze.ts';
+import { confirmSpec, DEEPEN_PROMPT, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, SPEC, verifyLock } from './freeze.ts';
 import { acquireLock, CODEX_MATERIAL, detach, rawName } from './generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
 import { subjectOf } from './prompts.ts';
@@ -348,9 +348,10 @@ export async function deepen(): Promise<void> {
       const mine = todo.filter(each => each.job.generator === generator.name);
       if (mine.length) console.log(`${generator.name}（${generator.model}，${generator.effort}）：${String(mine.length)} 篇、提示共 ${mine.reduce((sum, each) => sum + each.piece.chars, 0).toLocaleString('en-US')} 字`);
     }
-    console.log(todo.length ? '\n同意用量後加 --confirmed 開跑。' : '沒有要加深的了。');
+    console.log(todo.length ? `\n給使用者看用量時，一起給〈評估規格〉：${join(folder.root, SPEC)}。同意用量後加 --confirmed 開跑。` : '沒有要加深的了。');
     return;
   }
+  if (todo.length) confirmSpec(folder, LOG);
   if (retry && failed.length) console.log(`重開放棄的：${reopenFailed(folder, failed.map(each => each.piece.key), LOG).join('、')}`);
   if (!todo.length) return;
   if (flags.includes('--foreground')) { await runDeepen(folder); return; }

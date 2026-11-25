@@ -8,7 +8,7 @@ import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './ad
 import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
-import { readFrozenSteps, verifyLock, type FrozenStep } from './freeze.ts';
+import { confirmSpec, readFrozenSteps, SPEC, verifyLock, type FrozenStep } from './freeze.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent } from './jobs.ts';
 import { fillReplies } from './prompts.ts';
 
@@ -216,9 +216,10 @@ export async function generate(): Promise<void> {
       const chars = mine.reduce((sum, job) => sum + job.steps.reduce((n, step) => n + step.chars, 0), 0);
       console.log(`${generator.name}（${generator.model}，${generator.effort}）：${String(mine.length)} 份、${String(mine.reduce((n, job) => n + job.steps.length, 0))} 次送出、提示共 ${chars.toLocaleString('en-US')} 字${generator.kind === 'manual' ? '（手貼）' : ''}`);
     }
-    console.log(todo.length ? '\n同意用量後加 --confirmed 開跑。' : '沒有要生成的了。');
+    console.log(todo.length ? `\n給使用者看用量時，一起給〈評估規格〉：${join(folder.root, SPEC)}。同意用量後加 --confirmed 開跑。` : '沒有要生成的了。');
     return;
   }
+  if (todo.length) confirmSpec(folder);
   if (retry && failed.length) console.log(`重開放棄的：${reopenFailed(folder, failed.map(job => job.key)).join('、')}`);
   for (const job of manual) console.log(`手貼說明：${writeManual(folder, job)}`);
   if (!auto.length) return;
