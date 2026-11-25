@@ -83,7 +83,7 @@ packages/ai-client/
 - `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
-- **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。
+- **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄、費用與證據都照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。
 - **推理等級**：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。目錄寫每個模型或廠商每一級送什麼；那一家沒有的等級取最近的一級（一樣近取高的），`trace.warnings` 記一則；不指定就不送，`trace.reasoningSent` 是 `null`。
 - **用量的意思**：`inputTokens` 是全部輸入（含快取讀到與寫進快取的）；`cachedInputTokens` 是其中從快取讀到的；`cacheWriteInputTokens` 是其中寫進快取的；`outputTokens` 是全部計費的輸出（含推理）；`reasoningTokens` 是其中的推理。拿不到的寫 `null`，不寫 0。
 - **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（照牌價的 `estimated`，或服務自己回報的 `reported`，都帶查價日期；不在目錄的模型是 `null`）、`message`（可以原樣放回下一輪的 `input`）、`trace`。

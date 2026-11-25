@@ -135,10 +135,10 @@ void test('extraBody 蓋掉推理參數：trace 記實際送出的值並記 warn
   // 沒指定等級、只用 extraBody 送：一樣照實記。
   const onlyExtra = await client.generate(request({ extraBody: { reasoning: { effort: 'minimal' } } }));
   assert.equal(onlyExtra.trace.reasoningSent, 'minimal');
-  // extraBody 沒碰推理參數：照原本的值，不記 warning。
+  // extraBody 沒碰推理參數：照原本的值，不記推理的 warning（改了哪些欄位另記一條，L2 R13）。
   const untouched = await client.generate(request({ reasoning: 'high', extraBody: { service_tier: 'flex' } }));
   assert.equal(untouched.trace.reasoningSent, 'high');
-  assert.ok(!untouched.trace.warnings.some(w => /extraBody/.test(w)));
+  assert.ok(!untouched.trace.warnings.some(w => /reasoning set by extraBody/.test(w)));
 });
 
 void test('連不上：等 2 秒、8 秒重送，加減 20%', async () => {
@@ -495,4 +495,21 @@ void test('Gemini 最後一塊只有用量：前面的停止原因、模型、�
     [result.text, result.stopReason, result.trace.rawStopReason, result.trace.resolvedModel, result.trace.responseId, result.usage.inputTokens],
     ['光合作用', 'content_filter', 'SAFETY', 'gemini-3.8-flash-001', 'gem-2', 10],
   );
+});
+
+void test('extraBody 不能改模型或串流；改了哪些欄位記在 trace，未登錄模型的推理欄位也查得到（L2 R13）', async () => {
+  const fetch = mockFetch([OK]);
+  const client = createAiClient({ fetch, clock: instantClock() });
+  for (const extraBody of [{ model: 'gpt-5.6-pro' }, { stream: false }]) {
+    assert.equal((await rejects(client.generate(request({ extraBody })))).kind, 'invalid_request', JSON.stringify(extraBody));
+  }
+  assert.equal(fetch.requests.length, 0);
+
+  const gemini = loadCases().find(c => c.dialect === 'gemini-generate-content')!;
+  const google = mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(gemini, gemini.stream.file)] }]);
+  const result = await createAiClient({ fetch: google, clock: instantClock() }).generate(request({
+    endpoint: { provider: 'google' }, model: 'gemini-9-unlisted', extraBody: { generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } },
+  }));
+  assert.deepEqual(bodyOf(google).generationConfig, { thinkingConfig: { thinkingLevel: 'high' } });
+  assert.ok(result.trace.warnings.includes('extraBody set: generationConfig.thinkingConfig.thinkingLevel'), result.trace.warnings.join(' / '));
 });

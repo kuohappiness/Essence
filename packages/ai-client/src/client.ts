@@ -158,7 +158,14 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const body = call.body ?? {};
     let reasoningSent = applyReasoning(body, r.reasoning, request.reasoning, warnings);
     if (request.extraBody) {
+      // 模型用 request.model（目錄、費用、證據都照它）；套件一律要求串流（L2 R13）。
+      for (const key of ['model', 'stream']) {
+        if (Object.hasOwn(request.extraBody, key)) throw fail('invalid_request', `extraBody cannot set ${key}`, { provider: r.providerId });
+      }
       deepMerge(body, request.extraBody);
+      // 逃生口改了哪些欄位一律記下：目錄沒登錄的推理寫法也查得到（L2 R13）。只記路徑，不記值。
+      const paths = leafPaths(request.extraBody);
+      if (paths.length > 0) warnings.push(`extraBody set: ${paths.join(', ')}`);
       // trace 記實際送出的推理參數：extraBody 蓋掉或自己送了，就照合併後的本文（GitHub 審查 P2）。
       if (r.reasoning) {
         const actual = sentValue(getPath(body, r.reasoning.path));
@@ -528,6 +535,13 @@ function setPath(target: Record<string, unknown>, path: string, value: unknown):
     node = node[key] as Record<string, unknown>;
   }
   node[keys[keys.length - 1]] = value;
+}
+
+/** 物件裡每個葉子的路徑（a.b.c）；陣列與其他值都算葉子。 */
+function leafPaths(source: Record<string, unknown>, prefix = ''): string[] {
+  return Object.entries(source).flatMap(([key, value]) => (
+    isPlain(value) && Object.keys(value).length > 0 ? leafPaths(value, `${prefix}${key}.`) : [`${prefix}${key}`]
+  ));
 }
 
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
