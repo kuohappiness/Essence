@@ -35,7 +35,7 @@ const R3: readonly RuleFile[] = [
 const COMMON: RuleFile = { path: 'apps/Cards/docs/card-rules/common.md', name: '通用', version: 'v0.16', marker: true };
 
 export const RULE_SUBJECTS: readonly RuleSubject[] = [
-  { key: 'chinese', label: '國語（國小）', subject: '國語', r3: true, supplement: true, pick: true, files: [...R3, { path: 'apps/Cards/docs/card-rules/elementary-chinese.md', name: '國小國語', version: 'v0.9', marker: true }] },
+  { key: 'chinese', label: '國語（國小）', subject: '國語', r3: true, supplement: true, pick: true, files: [...R3, { path: 'apps/Cards/docs/card-rules/elementary-chinese.md', name: '國小國語', version: 'v0.11', marker: true }] },
   { key: 'english', label: '英文（國中）', subject: '英文', r3: false, supplement: false, pick: true, files: [COMMON, { path: 'apps/Cards/docs/card-rules/english.md', name: '英文', version: 'v0.16', marker: true }] },
   { key: 'science', label: '自然', subject: '自然', r3: true, supplement: true, pick: false, files: R3 },
   { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, pick: false, files: [...R3, { path: 'apps/Cards/docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.9', marker: true }] },

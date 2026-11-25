@@ -236,6 +236,11 @@ export interface CardGroup {
    * 英文的句子排序（tasks/english-typed-order.md §4）多一個 starts：哪幾格在句首，放進去的字第一個字母顯示成大寫；這時 members 是詞塊。
    */
   order?: { head: string; tails: readonly string[]; starts?: readonly boolean[] };
+  /**
+   * 多音字才有（tasks/polyphone-pick.md §4）：這時 title 是「讀音：長」、members 是括號裡的讀音、rows 是每個讀音一行的對照；
+   * rest 是記憶錨點裡對不到讀音的行，照原本的順序接在對照後面。
+   */
+  choice?: { rest: readonly string[] };
 }
 
 export interface Card {

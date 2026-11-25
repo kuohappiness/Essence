@@ -10,13 +10,14 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| 國小國語預設 | 實作中 | 跑 L8 測跨課比對；字義與詞義重疊怎麼留等使用者決定 | 使用者 | [預設草稿](card-rules/elementary-chinese.md) |
+| 國小國語預設 | 實作中 | 跑 L8 測跨課比對與 v0.10、v0.11 的改動；v0.11 的多音字跟著外掛 0.7.0 上線（[任務說明](tasks/polyphone-pick.md)） | Claude | [預設草稿](card-rules/elementary-chinese.md) |
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
 | 家長的手機也能製卡與啟用 | 實作中 | 第一步（手機製卡、存成草稿）L2 四輪審完（[報告](<Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者同意第四輪的 P1 記成限制並合併；開關文字使用者 2026-11-25 同意（「在這台裝置製卡」）；iPhone 實機測試在提早試用之後；第二步（手機啟用）另開；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
 | 製卡規則重整的比較測試 | 實作中 | 社會 1-2 補跑 ChatGPT（現行、候選各一份，使用者貼）後判社會；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一輪照 §9 改 | 使用者、Claude | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
+| 題型模組（每個學習目標掛上一種題型） | 討論中 | Fable 5.2 xhigh 審[任務說明](tasks/question-type-modules.md)；配對、單選（D-233）的寫法照七項一題一題談 | Claude | [討論稿](<Claude Codex Discussion/2026-11-25-question-type-modules.md>) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
 
@@ -63,6 +64,8 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-25 | **製卡規則的比較測試工具**：比較測試工具的 13 個指令做完（PR #54）；使用者電腦上的 `claude` 探針與 §8 第 17～19 條照〈結果〉的延後測試補（已合併，[入口](tasks/rule-test-tool.md)） |
+| 2026-11-25 | **多音字的點選填空**：PR #53 合併進 `main`（2026-11-25，使用者同意）；L2 四輪結束，第四輪使用者選收窄修完、不再送審；外掛畫面在雲端看過，真的 Obsidian 的畫面與 iPhone 併進 0.7.0 的實機測試（〈結果〉的延後的測試）（已合併，[入口](tasks/polyphone-pick.md)） |
 | 2026-11-23 | **國小社會預設**：v0.9 定稿（使用者 2026-11-23；歷史單元 3-1、3-2 試用通過）（已合併，[入口](card-rules/elementary-social.md)） |
 | 2026-11-22 | **Obsidian 官方審查檢查**：Cards 的 lint 擋 Obsidian 官方審查會算錯誤的寫法，現有 13 個 lookbehind 記成基準（PR #39）（已合併，[入口](tasks/obsidian-review-check.md)） |
 | 2026-11-21 | 三個外掛同一個 repo 的第二步 B 合併進 `main`：Cards 的文件搬進 `plugins/cards/docs/`，任務與討論稿搬進 `docs/`，轉錄稿格式拆到最上層的 `docs/transcript.md`；製卡規則送給 AI 的內容逐位元組不變；Codex L2 四輪（[PR #28](https://github.com/kuohappiness/Essence/pull/28)、[任務說明](../../../docs/tasks/one-repo-step-2.md)） |

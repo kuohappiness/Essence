@@ -20,7 +20,8 @@
     "knip": "node tools/knip.mjs",
     "check": "npm run typecheck && npm run lint && npm run knip && npm test",
     "bench": "node tools/bench-study.ts",
-    "export-compare": "node tools/export-compare.ts"
+    "export-compare": "node tools/export-compare.ts",
+    "rule-test": "node tools/rule-test/cli.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

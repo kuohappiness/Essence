@@ -62,7 +62,7 @@ void test('§1-3 英文的已有單字接在已有目標後面；沒有寫無；
   assert.ok(!taskSection(form({ subject: 'science' }), subject('science'), []).includes('英文單字'));
 });
 
-void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或沒勾的規則；提示 v4', () => {
+void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或沒勾的規則；提示 v5', () => {
   const on = lines(taskSection(form(), subject('science'), []));
   assert.equal(on[on.indexOf('- 允許 AI 補充：否') + 1], '- 點選填空：要');
   assert.ok(on.includes('- 家長勾了點選填空：容易混淆的一組字、詞或觀念（說得出這一課容易錯在哪），寫成點選填空的比較：'));
@@ -71,11 +71,14 @@ void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或
   const off = lines(taskSection(form({ pick: false }), subject('science'), []));
   assert.equal(off[off.indexOf('- 允許 AI 補充：否') + 1], '- 點選填空：不要');
   assert.ok(off.some(line => line.startsWith('- 家長沒勾點選填空：比較題寫成一般的問答題')));
+  // tasks/polyphone-pick.md §2 第 3 點：兩段都寫到相似詞。
+  assert.ok(off.some(line => line.includes('最後也不要單獨寫「比較」「相似字」或「相似詞」')));
+  assert.ok(on.some(line => line.includes('國語的相似字結尾寫「相似字」、詞寫「相似詞」')));
   assert.ok(!off.some(line => line.startsWith('- 家長勾了')));
   // 規則在「另外」底下，不在任務資料裡。
   assert.ok(on.indexOf('另外：') < on.findIndex(line => line.startsWith('- 家長勾了')));
   const prompt = buildPrompt(form(), subject('english'), [], [], ['go']);
-  assert.equal(prompt.parts.at(-1)!.version, '提示 v4');
+  assert.equal(prompt.parts.at(-1)!.version, '提示 v5');
   assert.ok(prompt.text.includes('：go'));
 });
 

@@ -21,6 +21,7 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     "tools/*.ts",
-    "tools/compare/*.ts"
+    "tools/compare/*.ts",
+    "tools/rule-test/*.ts"
   ]
 }

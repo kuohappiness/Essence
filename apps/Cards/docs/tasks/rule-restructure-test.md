@@ -7,6 +7,7 @@
 → [外掛施工的任務說明](rule-restructure-plugin.md)（2026-11-25）
 → [三層架構檢討（Fable）](<../Claude Codex Discussion/2026-11-25-three-layer-review.md>)（2026-11-25）
 → [兩段送法檢討（Fable）](<../Claude Codex Discussion/2026-11-25-two-stage-sending-review.md>)（2026-11-25）
+→ [比較測試工具](rule-test-tool.md)（2026-11-25）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫候選規則與評分表 **Opus、xhigh**；跑生成 **Opus、high**。決定見 [D-228](../../../../docs/decisions.md#d-228-製卡規則重整成核心任務模組科目模組先用比較測試判斷)（規則重整與這份測試）、[D-229](../../../../docs/decisions.md#d-229-已有目標改用精簡清單送貼回時擋同名與重複加題)（已有目標的送法）。
 
