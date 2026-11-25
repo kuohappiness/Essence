@@ -3,7 +3,7 @@ import { encodeBody } from './body.ts';
 import { BUILTIN_CATALOG, endpointProblem, isLocalUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
-import { AiError, asError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
+import { AiError, asError, describeThrown, withSecrets, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
 import { MIN_SECRET_LENGTH, redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
@@ -100,7 +100,19 @@ const defaultClock: Clock = {
 };
 
 type Init = ConstructorParameters<typeof AiError>[0];
-const fail = (kind: AiErrorKind, message: string, extra: Partial<Init> = {}) => new AiError({ kind, message, ...extra });
+
+/**
+ * client 自己做的錯誤（fail、toError 登記）。只有這些原樣往外交；其他丟出來的值，連傳輸層丟的 AiError，
+ * 都不讀它的欄位，和其他值走同一條安全的路，照 client 看到的狀態（拿到 2xx 了沒、請求編號）重新標（L2 第四輪 第 1、11 項）。
+ * 不放進 AiError 的建構子：傳輸層也 new 得出真的 AiError。
+ */
+const own = new WeakSet<object>();
+const isOwn = (value: unknown): value is AiError => typeof value === 'object' && value !== null && own.has(value);
+const mark = (error: AiError): AiError => {
+  own.add(error);
+  return error;
+};
+const fail = (kind: AiErrorKind, message: string, extra: Partial<Init> = {}) => mark(new AiError({ kind, message, ...extra }));
 
 export function createAiClient(options: AiClientOptions = {}): AiClient {
   const doFetch = options.fetch ?? defaultFetch;
@@ -167,7 +179,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       return await generateOnce(request);
     } catch (caught) {
       const secrets = request.apiKey ? [request.apiKey] : [];
-      throw isAiError(caught) ? withSecrets(caught, secrets) : fail('unknown', describeThrown(caught), { secrets, cause: caught });
+      throw isOwn(caught) ? withSecrets(caught, secrets) : fail('unknown', describeThrown(caught), { secrets, cause: caught });
     }
   }
 
@@ -274,7 +286,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           },
         }, secrets);
       } catch (caught) {
-        const error = isAiError(caught) ? caught : fail('unknown', describeThrown(caught), { secrets, cause: caught, provider: r.providerId });
+        const error = isOwn(caught) ? caught : fail('unknown', describeThrown(caught), { secrets, cause: caught, provider: r.providerId });
         error.attempts = attempt;
         // 只在還沒拿到成功的回應時自動重送：拿到 200 之後才斷，推理可能已經算錢了，交給呼叫端問使用者。
         if (!error.retryable || error.afterResponse || attempt >= maxAttempts) throw error;
@@ -425,7 +437,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           : reason === 'idle' ? fail('timeout', `no data for ${String(idleTimeoutMs)} ms`, meta())
           // 請求已經送出、服務可能已經在做（或中間的代理把串流整段收完才交），重送可能讓同一件事做兩次、付兩次錢（L2 R7）。
           : reason === 'response' ? fail('timeout', `no response headers within ${responseTimeoutMs} ms`, meta())
-          : isAiError(caught) ? caught
+          : isOwn(caught) ? caught
           : fail('network', describeThrown(caught), { ...meta(), cause: caught });
         log.error = error.kind;
         throw error;
@@ -450,8 +462,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       r = resolve(request.endpoint, null);
       checkKey(r, request.apiKey);
     } catch (caught) {
-      if (isAiError(caught)) return { ok: false, error: caught };
-      throw caught;
+      // 和其他出口一樣再遮一次：金鑰誤填在 provider 這類欄位時，訊息會帶著它（L2 第四輪 Fable 補充）。
+      const error = isOwn(caught) ? caught : fail('unknown', describeThrown(caught), { secrets, cause: caught });
+      return { ok: false, error: withSecrets(error, secrets) };
     }
     const usePath = r.options.checkPath;
     const call = usePath ? { url: `${r.baseUrl}/${usePath.replace(/^\/+/, '')}`, headers: r.dialect.buildListModels(r.baseUrl).headers } : r.dialect.buildListModels(r.baseUrl);
@@ -494,7 +507,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     } catch (caught) {
       const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
         : reason === 'timeout' ? fail('timeout', 'timed out', meta())
-        : isAiError(caught) ? caught
+        : isOwn(caught) ? caught
         : fail('network', describeThrown(caught), { ...meta(), cause: caught });
       return { ok: false, error: withSecrets(error, secrets) };
     } finally {
@@ -701,10 +714,10 @@ function retryAfterOf(headers: Headers): number | null {
 }
 
 function toError(parsed: ParsedError, status: number | null, retryAfterMs: number | null, meta: Partial<Init>): AiError {
-  return new AiError({
+  return mark(new AiError({
     kind: parsed.kind, message: parsed.message, status, providerCode: parsed.providerCode ?? null,
     retryAfterMs: retryAfterMs ?? parsed.retryAfterMs ?? null, ...meta,
-  });
+  }));
 }
 
 /** 傳輸層不能中止時（例如 requestUrl），至少讓這邊在中止時立刻停下。 */

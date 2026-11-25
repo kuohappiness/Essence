@@ -52,6 +52,8 @@ const check = await ai.check({ endpoint: { provider: 'openai' }, apiKey });   //
 
 `createAiClient({ fetch })` 收一個和標準 `fetch` 同形狀的函式，回傳標準的 `Response`。例如 Obsidian 的 `requestUrl` 可以包成這個形狀；它要等整段本文收完才交出，所以同時設 `responseTimeoutMs: null`。請求一律要求服務串流（連線不會因為久沒資料被切斷），不串流的傳輸層一樣能讀，只是文字最後一次才到。
 
+傳輸層要表示失敗就丟例外，丟什麼都可以，但不要自己丟 `AiError` 指定種類：套件只相信自己做的錯誤，傳輸層丟的任何值（連 `AiError`）都照套件看到的狀態處理。拿到 2xx 之前丟的算 `network`、照規則重送；拿到 2xx 之後（讀本文時）丟的標 `afterResponse`、不自動重送，請求編號用回應標頭的。
+
 ## 加一家、加一種方言
 
 - **講四種方言之一的服務**：在 `catalog.json` 加一筆廠商（或呼叫端用 `createAiClient({ catalog: { providers: [...] } })` 加），寫方言、網址、認證標頭、上限與模型。各家相容服務的差異寫在 `options`（`maxTokensField`、`streamUsage`、`systemRole`、`checkPath`，見 `src/types.ts`）。

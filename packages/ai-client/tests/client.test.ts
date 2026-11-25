@@ -1146,3 +1146,72 @@ void test('標頭整類：每個來源（目錄、自訂服務、extraHeaders、
     assert.deepEqual(await outcome(given), { generated: 'ok', checked: 'ok', sent: 2 }, JSON.stringify(given));
   }
 });
+
+void test('只相信 client 自己做的錯誤：傳輸層丟的 AiError（真的、getter 會丟、凍結、假原型）和其他值一樣處理，200 之後丟的只送 1 次、標 afterResponse、帶回應的請求編號（L2 第四輪 第 1、11 項）', async () => {
+  const boom = () => { throw new Error(`leak ${KEY}`); };
+  const foreign: [string, () => unknown][] = [
+    ['真的 AiError（auth）', () => new AiError({ kind: 'auth', message: `adapter ${KEY}`, requestId: `req_${KEY}`, partialText: `part ${KEY}` })],
+    ['真的 AiError（network、afterResponse）', () => new AiError({ kind: 'network', message: 'x', afterResponse: true })],
+    ...['message', 'kind', 'afterResponse', 'requestId', 'partialText', 'cause', 'attempts'].map(property => [`${property} getter 會丟`, () => {
+      const error = new AiError({ kind: 'network', message: 'x' });
+      Object.defineProperty(error, property, { get: boom, set: boom });
+      return error;
+    }] as [string, () => unknown]),
+    ['凍結的 AiError', () => Object.freeze(new AiError({ kind: 'server', message: `frozen ${KEY}` }))],
+    ['假原型（message 是物件）', () => Object.create(AiError.prototype, { message: { value: { note: KEY } }, kind: { value: 'network' } }) as unknown],
+  ];
+  const surface = (error: unknown): string => {
+    assert.ok(isAiError(error), '要是 AiError');
+    const cause = error.cause as { name?: unknown; message?: unknown } | undefined;
+    return [error.message, JSON.stringify(error), cause?.name, cause?.message].map(String).join('\n');
+  };
+  const json = { 'content-type': 'application/json', 'x-request-id': 'req_from_response' };
+  const sources: [string, (value: unknown) => FetchLike, boolean][] = [
+    ['同步丟', value => () => { throw value; }, false],
+    ['被拒絕的 promise', value => () => Promise.resolve().then(() => { throw value; }), false],
+    ['200 之後讀本文時丟', value => () => Promise.resolve(new Response(new ReadableStream({ pull(controller) { controller.error(value); } }), { status: 200, headers: json })), true],
+  ];
+  for (const [label, make] of foreign) {
+    for (const [where, source, after] of sources) {
+      const name = `${label}／${where}`;
+      let sends = 0;
+      const counted = (fetch: FetchLike): FetchLike => (url, init) => { sends++; return fetch(url, init); };
+      let generated: unknown;
+      try {
+        await createAiClient({ fetch: counted(source(make())), clock: instantClock() }).generate(request());
+      } catch (error) { generated = error; }
+      assert.ok(!surface(generated).includes(KEY), `${name}：${surface(generated)}`);
+      const g = generated as AiError;
+      // 拿到 2xx 之前：當成連不上，照規則重送；之後：不重送，留下回應的請求編號。
+      assert.deepEqual([g.kind, g.afterResponse, g.retryable, g.requestId, sends], after
+        ? ['network', true, false, 'req_from_response', 1]
+        : ['network', false, true, null, 3], `generate ${name}`);
+      const checked = await createAiClient({ fetch: source(make()), clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY });
+      assert.ok(!checked.ok, name);
+      assert.ok(!surface(checked.error).includes(KEY), `${name}：${surface(checked.error)}`);
+      assert.deepEqual([checked.error.kind, checked.error.afterResponse, checked.error.retryable, checked.error.requestId], after
+        ? ['network', true, false, 'req_from_response']
+        : ['network', false, true, null], `check ${name}`);
+    }
+  }
+});
+
+void test('check() 送出前的錯誤和 generate 一樣：再遮一次金鑰、不丟原生例外（L2 第四輪 Fable 補充）', async () => {
+  const endpoints: [string, unknown][] = [
+    ['金鑰誤填在 provider', { provider: KEY }],
+    ['金鑰誤填在 dialect', { custom: { dialect: KEY, baseUrl: 'https://api.example.com/v1' } }],
+    ['endpoint 是 undefined', undefined],
+    ['endpoint 是 null', null],
+  ];
+  for (const [label, endpoint] of endpoints) {
+    const fetch = mockFetch([OK]);
+    const client = createAiClient({ fetch, clock: instantClock() });
+    const generated = await rejects(client.generate(request({ endpoint: endpoint as never })));
+    const checked = await client.check({ endpoint: endpoint as never, apiKey: KEY });
+    assert.ok(!checked.ok, label);
+    assert.ok(isAiError(checked.error), `${label}：要是 AiError`);
+    assert.equal(checked.error.kind, generated.kind, label);
+    for (const error of [generated, checked.error]) assert.ok(!`${error.message}\n${JSON.stringify(error)}`.includes(KEY), `${label}：${error.message}`);
+    assert.equal(fetch.requests.length, 0, label);
+  }
+});
