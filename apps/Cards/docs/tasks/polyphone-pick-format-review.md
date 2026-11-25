@@ -1,6 +1,6 @@
 # 多音字的點選填空開工前的格式查核（給 Codex）
 
-狀態：規劃中｜下一步：Codex 查 §1、§2、§4、§6，回報寫在 `Claude Codex Discussion/`｜等誰：Codex
+狀態：已結案 → [回報](<../Claude Codex Discussion/2026-11-25-polyphone-pick-format-review.md>)｜完成：Codex 2026-11-25 查完，Claude 核對後改進任務說明，混版交使用者選｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**，只讀、不改檔。
 
