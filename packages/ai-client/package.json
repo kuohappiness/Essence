@@ -16,7 +16,7 @@
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "knip": "knip",
+    "knip": "node tools/knip.mjs",
     "check": "npm run typecheck && npm run lint && npm run knip && npm test",
     "smoke": "node tools/smoke.ts"
   },
