@@ -17,9 +17,15 @@ export function questionType(card: Card): QuestionType {
  */
 export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>, times = 0): Card {
   const { lt, deck, target, prompt, isNew, early } = fields;
-  if (target.order && prompt.kind === 'cloze') return orderCardOf(fields, target.order, times);
-  if (target.sentence && prompt.kind === 'cloze') return sentenceCardOf(fields, target.sentence, times);
-  return { lt, deck, target, prompt, isNew, typed: prompt.kind === 'qa' && prompt.typed !== null, early, blanks: [{ lt, target, prompt }] };
+  const plain = (): Card => ({ lt, deck, target, prompt, isNew, typed: prompt.kind === 'qa' && prompt.typed !== null, early, blanks: [{ lt, target, prompt }] });
+  const kind = target.kind;
+  if (!kind || prompt.kind !== 'cloze') return plain();
+  // 照卡型分（題型模組任務說明 §1-4）：排序再照樣子；比較卡、多音字由 pickCardOf、choiceCardOf 組，走到這裡照一格出。
+  switch (kind.id) {
+    case 'order': return kind.order.style === 'poem' ? orderCardOf(fields, kind.order, times) : sentenceCardOf(fields, kind.order, times);
+    case 'group': case 'polyphone': case 'typing': case 'couplet': return plain();
+    default: { const never: never = kind; return never; }
+  }
 }
 
 // ── 比較卡（tasks/question-type-seam.md §5）：純計算，不用 Math.random，同一張卡重來不變，測試與回放才固定。 ──
@@ -69,7 +75,7 @@ function rotation(target: Target, shown: Shown): Prompt[] {
 
 /** 一格：答案照 group（選中的目標的括號）的寫法，和字鍵相同。 */
 function cellOf(group: PickGroup, mate: PickMate, prompt: Prompt): Blank {
-  return { lt: mate.lt, target: mate.target, prompt, answer: group.members[group.memberKeys.indexOf(mate.target.group?.wordKey ?? '')] };
+  return { lt: mate.lt, target: mate.target, prompt, answer: group.members[group.memberKeys.indexOf((mate.target.kind?.id === 'group' ? mate.target.kind.group.wordKey : undefined) ?? '')] };
 }
 
 /** 格子定了之後的一張卡：打散格子與字鍵（§5-3），lt、target、prompt 是選中的目標在畫面上的第一格。 */
@@ -82,12 +88,12 @@ function assembled(fields: { deck: string; isNew: boolean; early: boolean }, cho
 
 /** 字鍵與對照：這篇卡組裡同一組的字，不看它在不在這次的範圍裡（§5-1）。字鍵三個以上時順序一定和括號不同（§5-3）。 */
 function groupOf(chosen: Target, deckTargets: readonly Target[], random: () => number): CardGroup {
-  const group = chosen.group;
+  const group = chosen.kind?.id === 'group' ? chosen.kind.group : undefined;
   if (!group) throw TypeError('不是比較卡：' + chosen.name);
   const keys = shuffled(group.members, random);
   if (keys.length >= 3 && keys.every((key, i) => key === group.members[i])) keys.push(keys.shift() as string);
   const rows = group.members.map((member, i) => {
-    const target = deckTargets.find(each => each.group?.key === group.key && each.group.wordKey === group.memberKeys[i]);
+    const target = deckTargets.find(each => each.kind?.id === 'group' && each.kind.group.key === group.key && each.kind.group.wordKey === group.memberKeys[i]);
     const anchor = target?.shared.find(line => ANCHOR.test(line));
     return { member, lt: target?.id ?? null, anchor: anchor === undefined ? null : anchor.replace(ANCHOR, '') };
   });
@@ -100,7 +106,7 @@ function groupOf(chosen: Target, deckTargets: readonly Target[], random: () => n
  */
 export function pickCardOf(fields: { deck: string; isNew: boolean; early: boolean }, mates: readonly PickMate[], deckTargets: readonly Target[]): Card {
   const chosen = mates[0];
-  const group = chosen.target.group;
+  const group = chosen.target.kind?.id === 'group' ? chosen.target.kind.group : undefined;
   if (!group) throw TypeError('不是比較卡：' + chosen.target.name);
   const cells: Blank[] = [];
   const rest: { mate: PickMate; prompt: Prompt }[] = [];
@@ -163,14 +169,14 @@ type ChoiceFields = Omit<Card, 'typed' | 'blanks' | 'prompt' | 'group'>;
 /** 一張多音字卡（§3）：今天的份、全部卡的一輪與小考共用；shown 是這個目標的出題歷史。 */
 export function choiceCardOf(fields: ChoiceFields, shown: Shown): Card {
   const { lt, target } = fields;
-  const choice = target.choice;
+  const choice = target.kind?.id === 'polyphone' ? target.kind.polyphone : undefined;
   if (!choice) throw TypeError('不是多音字：' + target.name);
   return choiceAssembled(fields, choice, choicePrompts(target, choice, shown).map(prompt => choiceCell(lt, target, choice, prompt)));
 }
 
 /** 預覽（§3-4）：一張「第一次」的卡，其餘不同指紋的句子各一張（一格，字鍵照樣是全部讀音）。 */
 export function choicePreviewCards(deck: string, target: Target): Card[] {
-  const choice = target.choice;
+  const choice = target.kind?.id === 'polyphone' ? target.kind.polyphone : undefined;
   if (!choice) throw TypeError('不是多音字：' + target.name);
   const fields: ChoiceFields = { lt: target.id ?? '', deck, target, isNew: false, early: false };
   const first = choiceCardOf(fields, new Map());
@@ -240,8 +246,8 @@ export function pickPreviewCards(deck: string, members: readonly Target[], deckT
   const rest = mates.flatMap(mate => rotation(mate.target, mate.shown)
     .filter(prompt => !first.blanks.some(blank => blank.prompt === prompt))
     .map(prompt => {
-      if (!mate.target.group) throw TypeError('不是比較卡：' + mate.target.name);
-      return assembled(fields, mate, [cellOf(mate.target.group, mate, prompt)], deckTargets);
+      if (mate.target.kind?.id !== 'group') throw TypeError('不是比較卡：' + mate.target.name);
+      return assembled(fields, mate, [cellOf(mate.target.kind.group, mate, prompt)], deckTargets);
     }));
   return [first, ...rest];
 }

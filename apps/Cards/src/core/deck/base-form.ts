@@ -20,7 +20,7 @@ const withoutMeaning = (name: string): string | null => name.replace(/\s*（[^�
  */
 export function learnedWord(target: Target): string | null {
   if (target.direction !== null && target.pairKey !== null) return withoutMeaning(unbold(target.pairKey));
-  return target.typing?.kind === 'inflection' ? target.typing.hint : null;
+  return target.kind?.id === 'typing' && target.kind.typing.style === 'inflection' ? target.kind.typing.hint : null;
 }
 
 /**
@@ -28,8 +28,8 @@ export function learnedWord(target: Target): string | null {
  * 和答案一樣時跳過由複習端判斷（typed.ts）。
  */
 export function typedHint(target: Target, question: string): string | null {
-  const typing = target.typing;
+  const typing = target.kind?.id === 'typing' ? target.kind.typing : undefined;
   if (!typing) return baseForm(target);
-  if (typing.kind === 'grammar' && typing.hint !== null && mentions(question, typing.hint)) return null;
+  if (typing.style === 'grammar' && typing.hint !== null && mentions(question, typing.hint)) return null;
   return typing.hint;
 }

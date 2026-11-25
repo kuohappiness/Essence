@@ -38,11 +38,11 @@ export function readTyping(target: Pick<Target, 'name' | 'implicit' | 'direction
   if (ending === '文法') {
     const bracket = lastBracket(rest);
     const point = bracket ? bracket.before : rest;
-    return { kind: 'grammar', hint: point && !BRACKETS.test(point) ? point : null, pair: null };
+    return { style: 'grammar', hint: point && !BRACKETS.test(point) ? point : null, pair: null };
   }
   const split = splitMeaning(rest);
   if (!split || /\p{Script=Han}/u.test(split.word)) return null;
-  return { kind: 'inflection', hint: split.word, pair: { key: wordKey(split.word, split.meaning), exact: split.meaning !== null } };
+  return { style: 'inflection', hint: split.word, pair: { key: wordKey(split.word, split.meaning), exact: split.meaning !== null } };
 }
 
 /** 英翻中的 pairKey 配對用的寫法（§3-1）：exact 含意思，base 只有字；拆不開時兩個都是整段。 */

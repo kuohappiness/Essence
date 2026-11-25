@@ -11,7 +11,7 @@ import { endingOf } from './shared.ts';
 export function readOrder(target: Target, notes: readonly string[], english = false): PoemOrder | null {
   const { name, prompts } = target;
   if (english && !/(^|\s)全詩\s*排序$/.test(name)) return null;
-  if (target.implicit || target.direction !== null || target.group || endingOf(name) !== '排序') return null;
+  if (target.implicit || target.direction !== null || endingOf(name) !== '排序') return null;
   const prompt = prompts.length === 1 ? prompts[0] : null;
   if (prompt?.kind !== 'cloze' || prompt.blanks.length < 2) return null;
   const { text, blanks } = prompt;
@@ -77,7 +77,7 @@ function visibleText(text: string): string {
  */
 export function readSentence(target: Target): SentenceOrder | null {
   const { name, prompts } = target;
-  if (target.implicit || target.direction !== null || target.group || readGroup(name) || endingOf(name) !== '排序' || /(^|\s)全詩\s*排序$/.test(name) || !prompts.length) return null;
+  if (target.implicit || target.direction !== null || readGroup(name) || endingOf(name) !== '排序' || /(^|\s)全詩\s*排序$/.test(name) || !prompts.length) return null;
   const cells = prompts.map(sentenceCells);
   if (cells.some(each => each === null)) return null;
   return { title: name.replace(/\s*排序$/, '').trim(), prompts: cells as SentenceCells[] };

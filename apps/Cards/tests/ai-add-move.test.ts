@@ -4,6 +4,7 @@ import { introBoxes, moveCandidates, WHY } from '../src/core/ai/index.ts';
 import type { ItemRef } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { box, cand, savedExample } from './helpers/add-cases.ts';
+import { kindCouplet, kindGroup } from './helpers/kinds.ts';
 
 // tasks/ai-cards-add.md §2：候選卡片搬進同一篇的本文。只用 syntax.md 的例子與自編的內容。
 // 輸入與搬完的全文另由 tests/deck.test.ts 的往返範例（deckCases）檢查往返與冪等（tests/helpers/add-cases.ts 的 ADD_INPUTS）。
@@ -156,7 +157,7 @@ void test('§2 比較卡（F6）：只有候選有比較卡，搬出來同一次
   const text = `---\n狀態: 草稿\n---\n- 能甲 ^aaaaa2\n    - 問 :: 答\n\n${box(pick)}\n`;
   const out = moved(text);
   assert.equal(parseDeck(out).props.need, '0.4.0');
-  assert.ok(parseDeck(out).targets.some(t => t.group));
+  assert.ok(parseDeck(out).targets.some(t => kindGroup(t)));
   const newer = text.replace('狀態: 草稿', '狀態: 草稿\n需要版本: 0.9.0');
   assert.equal(parseDeck(moved(newer)).props.need, '0.9.0');
 });
@@ -187,7 +188,7 @@ void test('§2 接句與全詩順序的候選照插入處的小標題讀詩名�
   ]) {
     const out = moved(text);
     const added = parseDeck(out).targets.find(t => t.id === 'aaaaa2');
-    assert.equal(added?.couplet?.title, '自編四句', out);
-    assert.equal(added.section, '自編四句');
+    assert.equal(kindCouplet(added)?.title, '自編四句', out);
+    assert.equal(added?.section, '自編四句');
   }
 });

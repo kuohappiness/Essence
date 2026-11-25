@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { kindGroup, kindPoem } from './helpers/kinds.ts';
 
 // 全詩順序卡的認法（D-187 第 3、10 點、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。預期值照卡組的寫法手寫，不用同樣的算法再算一次。
 
@@ -11,11 +12,11 @@ const POEM = `### 鳥鳴澗
         - 人心清閒，桂花悄悄飄落；
         - 夜晚寂靜，春山顯得空曠。
 `;
-const orderOf = (text: string) => parseDeck(text).targets[0]?.order;
+const orderOf = (text: string) => kindPoem(parseDeck(text).targets[0]);
 
 void test('全詩順序卡：詩名、每一句、每一句後面接的標點', () => {
   assert.deepEqual(orderOf(POEM), { title: '鳥鳴澗', head: '', lines: ['人閒桂花落', '夜靜春山空', '月出驚山鳥', '時鳴春澗中'], tails: ['，', '。', '，', '。'], notes: ['人心清閒，桂花悄悄飄落；', '夜晚寂靜，春山顯得空曠。'] });
-  assert.equal(parseDeck(POEM).targets[0].group, undefined, '不是比較組');
+  assert.equal(kindGroup(parseDeck(POEM).targets[0]), undefined, '不是比較組');
   assert.deepEqual(parseDeck(POEM).problems, []);
 });
 

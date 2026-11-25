@@ -80,7 +80,7 @@ function pickCard(item: QueueItem, slot: Slot, scope: readonly QueueItem[], toda
   const others = scope.filter(other => {
     if (other.lt === item.lt || other.deck !== item.deck) return false;
     const each = slotOf(today, other.lt);
-    if (each.target.group?.key !== slot.target.group?.key) return false;
+    if ((each.target.kind?.id === 'group' ? each.target.kind.group.key : undefined) !== (slot.target.kind?.id === 'group' ? slot.target.kind.group.key : undefined)) return false;
     const entries = valid.get(other.lt);
     return joins(entries, early, () => againAt(each, entries ?? []) <= input.now);
   });
@@ -127,9 +127,13 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(({ each }) => each), holdOrders(fresh, each => slotOf(today, each.id).memory === null), apart)?.item ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const slot = slotOf(today, item.lt);
-  if (slot.target.group) return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
-  // 多音字（tasks/polyphone-pick.md §3）：一個目標一張、好幾格，題目照出題歷史挑；不併別的目標。
-  if (slot.target.choice) return { kind: 'card', card: choiceCardOf({ lt: item.lt, deck: item.deck, target: slot.target, isNew: slot.memory === null && !any.has(item.lt), early }, shownWith(slot.seen, valid.get(item.lt) ?? [])) };
+  // 照卡型選組卡的方式（題型模組任務說明 §1-4）：比較卡併同組的目標；多音字（tasks/polyphone-pick.md §3）一個目標一張、好幾格，題目照出題歷史挑，不併別的目標。
+  switch (slot.target.kind?.id) {
+    case 'group': return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
+    case 'polyphone': return { kind: 'card', card: choiceCardOf({ lt: item.lt, deck: item.deck, target: slot.target, isNew: slot.memory === null && !any.has(item.lt), early }, shownWith(slot.seen, valid.get(item.lt) ?? [])) };
+    case 'order': case 'typing': case 'couplet': case undefined: break;
+    default: { const never: never = slot.target.kind; return never; }
+  }
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);
   return { kind: 'card', card: cardOf({
     lt: item.lt, deck: item.deck, target: slot.target, prompt,

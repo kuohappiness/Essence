@@ -105,7 +105,7 @@ function PickBody(props: BodyProps): React.JSX.Element {
   const { card } = view;
   const { pick, group } = partsOf(view);
   const { order } = group;
-  const notes = order && pick.stage === 'result' ? orderNotes(card.target.order?.notes ?? [], card.blanks.length) : null;
+  const notes = order && pick.stage === 'result' ? orderNotes((card.target.kind?.id === 'order' && card.target.kind.order.style === 'poem' ? card.target.kind.order.notes : undefined) ?? [], card.blanks.length) : null;
   // 全詩順序卡的空格先撐到最長那一句的寬度，填進去時句子不跳（D-204 第 1 點）。
   const width = order ? Math.max(...group.members.map(line => [...line].length)) : 0;
   const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>

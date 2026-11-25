@@ -72,7 +72,7 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 接句卡（D-185、tasks/couplet-cards.md §3）：詩名在最上面；每一句一段不換行的字，放不下才換行；記憶錨點的子項目一行一列。
-  const couplet = card.target.couplet;
+  const couplet = card.target.kind?.id === 'couplet' ? card.target.kind.couplet : undefined;
   // 題目底下與目標底下各自第一個記憶錨點，換成解析器分好的子項目（L2 R2）。
   const notesAt = new Map<number, readonly string[]>();
   if (couplet) {
@@ -207,7 +207,7 @@ function TypedBody(props: BodyProps): React.JSX.Element {
   const copying = typing?.step === 3;
   const actions = typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />;
   return <QaCard props={props} parts={{
-    mode: 'typed', revealedQuestion: revealed && !inline, lines, words: revealed ? typed.answer.split(/\s+/) : [], spoken: revealed ? typedSentence(card, typed.answer) ?? (card.target.typing ? typed.answer : question) : question, copying,
+    mode: 'typed', revealedQuestion: revealed && !inline, lines, words: revealed ? typed.answer.split(/\s+/) : [], spoken: revealed ? typedSentence(card, typed.answer) ?? (card.target.kind?.id === 'typing' ? typed.answer : question) : question, copying,
     middle: <>
       {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
       {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}

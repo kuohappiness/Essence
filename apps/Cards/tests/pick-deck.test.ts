@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assignIds, parseDeck } from '../src/core/deck/index.ts';
 import type { ProblemCode } from '../src/core/deck/index.ts';
+import { kindGroup } from './helpers/kinds.ts';
 
 // 點選填空的卡組寫法（tasks/question-type-seam.md §3）。預期值照任務說明的表，不用同樣的算法再算一次。
 
 const S = '盜匪躲在山＿＿裡。';
 /** 一個明確目標，題目都是比較句，答案是 answer。 */
 const deck = (name: string, answer: string, ...more: string[]): string => `- ${name}\n    - ${S} :: ${answer}\n${more.map(line => `    - ${line}\n`).join('')}`;
-const groupOf = (text: string) => parseDeck(text).targets[0]?.group;
+const groupOf = (text: string) => kindGroup(parseDeck(text).targets[0]);
 const codes = (text: string): ProblemCode[] => parseDeck(text).problems.map(problem => problem.code).filter(code => code.startsWith('pick-'));
 
 void test('比較卡：正式的寫法', () => {
@@ -60,7 +61,7 @@ void test('少打一個頓號：字鍵叫「寒 賽」，寒自己的目標不�
 void test('比較卡：粗體、中間的 ID、不切 UTF-16', () => {
   assert.equal(groupOf(deck('**寨**（寨、塞）', '寨'))?.word, '寨');
   const misplaced = parseDeck(deck('寨 ^abc222（寨、塞） 比較', '寨'));
-  assert.deepEqual(misplaced.targets[0].group?.members, ['寨', '塞']);
+  assert.deepEqual(kindGroup(misplaced.targets[0])?.members, ['寨', '塞']);
   assert.deepEqual(misplaced.problems.map(problem => problem.code), ['misplaced-id']);
   assert.deepEqual(groupOf(deck('𠮷（𠮷、吉）', '𠮷'))?.members, ['𠮷', '吉']);
 });
@@ -68,8 +69,8 @@ void test('比較卡：粗體、中間的 ID、不切 UTF-16', () => {
 void test('比較卡：其他括號是義項，留在目標名稱；結尾的括號只是標題', () => {
   for (const name of ['light（輕的）（light、lit） 比較', 'light（不 重）（light、lit） 比較', 'light（不、重）（light、lit） 比較']) {
     const target = parseDeck(deck(name, 'light')).targets[0];
-    assert.equal(target.group?.word, 'light', name);
-    assert.deepEqual(target.group?.members, ['light', 'lit'], name);
+    assert.equal(kindGroup(target)?.word, 'light', name);
+    assert.deepEqual(kindGroup(target)?.members, ['light', 'lit'], name);
     assert.equal(target.name, name);
   }
   assert.deepEqual(groupOf(deck('take off（take off、起飛）（take off、land） 比較', 'take off'))?.members, ['take off', 'land']);
@@ -148,30 +149,30 @@ void test('答案比對用正規化：句首的大寫、前後空白、粗體；
 void test('判斷的順序：最上層寫題目、名稱有 == 或空格，照原題型', () => {
   const top = parseDeck('- 寨（寨、塞） 山＿＿ :: 寨\n');
   assert.equal(top.targets[0].implicit, true);
-  assert.equal(top.targets[0].group, undefined);
+  assert.equal(kindGroup(top.targets[0]), undefined);
   assert.deepEqual(codes('- 寨（寨、塞） 山＿＿ :: 寨\n'), []);
   // 補 ID 前後結果相同。
   const filled = assignIds('- 寨（寨、塞） 山＿＿ :: 寨\n', { taken: new Set(), random: () => 0.5 }).text;
   assert.equal(parseDeck(filled).targets[0].implicit, false);
-  assert.equal(parseDeck(filled).targets[0].group, undefined);
+  assert.equal(kindGroup(parseDeck(filled).targets[0]), undefined);
   assert.deepEqual(codes(filled), []);
 
   const cloze = '- ==寨==（寨、塞） 相似字\n    - 山＿＿ :: 寨\n';
   assert.equal(parseDeck(cloze).targets[0].implicit, true);
-  assert.equal(parseDeck(cloze).targets[0].group, undefined);
+  assert.equal(kindGroup(parseDeck(cloze).targets[0]), undefined);
   assert.deepEqual(codes(cloze), []);
   // 沒有空格的隱式問答補 ID 後，題目仍然沒有空格，落在表的最後一列。
   const plain = '- 寨（寨、塞） 字形 :: 寨\n';
-  assert.equal(parseDeck(plain).targets[0].group, undefined);
+  assert.equal(kindGroup(parseDeck(plain).targets[0]), undefined);
   const plainFilled = assignIds(plain, { taken: new Set(), random: () => 0.5 }).text;
-  assert.equal(parseDeck(plainFilled).targets[0].group, undefined);
+  assert.equal(kindGroup(parseDeck(plainFilled).targets[0]), undefined);
   assert.deepEqual(codes(plainFilled), []);
 });
 
 void test('判斷的順序：中翻英、英翻中優先，前面的空白半形全形都算', () => {
   const half = parseDeck('- borrow（borrow、lend） 中翻英\n    - 借入＿＿ :: borrow\n').targets[0];
   assert.equal(half.direction, 'zh-en');
-  assert.equal(half.group, undefined);
+  assert.equal(kindGroup(half), undefined);
   assert.equal(half.pairKey, 'borrow（borrow、lend）');
   const full = parseDeck('- borrow（borrow、lend）　中翻英\n    - 借入＿＿ :: borrow\n').targets[0];
   assert.equal(full.direction, 'zh-en');
@@ -222,7 +223,7 @@ void test('表：空題目也照原來的錯誤，不往下判', () => {
   const { targets, problems } = parseDeck('- 寨（寨、塞） 比較\n    - :: 寨\n    - 水＿＿ :: 塞\n');
   assert.deepEqual(problems.map(problem => [problem.line, problem.code]), [[1, 'empty-question']]);
   assert.equal(targets[0].ok, false);
-  assert.equal(targets[0].group, undefined);
+  assert.equal(kindGroup(targets[0]), undefined);
 });
 
 void test('表：有一般語法錯誤時照原來的錯誤，不往下判', () => {
@@ -230,7 +231,7 @@ void test('表：有一般語法錯誤時照原來的錯誤，不往下判', () 
   const { targets, problems } = parseDeck(text);
   assert.deepEqual(problems.map(problem => [problem.line, problem.code]), [[1, 'missing-answer']]);
   assert.equal(targets[0].ok, false);
-  assert.equal(targets[0].group, undefined);
+  assert.equal(kindGroup(targets[0]), undefined);
 });
 
 void test('表：答案是組裡別的字是 pick-answer-invalid，定位到每一個，跳過這個目標', () => {
@@ -238,13 +239,13 @@ void test('表：答案是組裡別的字是 pick-answer-invalid，定位到每�
   const { targets, problems } = parseDeck(text);
   assert.deepEqual(problems.map(problem => [problem.line, problem.level, problem.code]), [[1, 'error', 'pick-answer-invalid'], [3, 'error', 'pick-answer-invalid']]);
   assert.equal(targets[0].ok, false);
-  assert.equal(targets[0].group, undefined);
+  assert.equal(kindGroup(targets[0]), undefined);
 });
 
 void test('表：混了別的照原題型，hint pick-mixed，按題指出', () => {
   const text = '- 寨（寨、塞）\n    - 山＿＿ :: 寨\n    - 沒有空格 :: 寨\n    - 兩格＿＿和＿＿ :: 寨\n    - 山==寨==\n    - 多行＿＿ ::\n        - 第一行\n        - 第二行\n    - 組外＿＿ :: 村\n';
   const { targets, problems } = parseDeck(text);
-  assert.equal(targets[0].group, undefined);
+  assert.equal(kindGroup(targets[0]), undefined);
   assert.equal(targets[0].ok, true);
   assert.deepEqual(problems.map(problem => [problem.line, problem.level, problem.code]), [[2, 'hint', 'pick-mixed'], [3, 'hint', 'pick-mixed'], [4, 'hint', 'pick-mixed'], [5, 'hint', 'pick-mixed'], [8, 'hint', 'pick-mixed']]);
 });
@@ -301,7 +302,7 @@ void test('補 ID 前後結果相同', () => {
     const text = deck(name, name.startsWith('寨') ? '寨' : name.startsWith('台') ? '台北' : 'borrow');
     const filled = assignIds(text, { taken: new Set(), random: () => 0.5 }).text;
     const [before, after] = [parseDeck(text), parseDeck(filled)];
-    assert.deepEqual(after.targets[0].group, before.targets[0].group, name);
+    assert.deepEqual(kindGroup(after.targets[0]), kindGroup(before.targets[0]), name);
     assert.deepEqual(after.problems.map(problem => problem.code), before.problems.map(problem => problem.code), name);
   }
 });

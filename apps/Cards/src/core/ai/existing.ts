@@ -1,5 +1,5 @@
 import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../deck/index.ts';
-import type { Deck, DeckProps, Item, Line, Prompt, Target } from '../deck/index.ts';
+import type { Deck, DeckProps, Item, Kind, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
 import { encode, indentOf } from './move.ts';
@@ -195,7 +195,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、第三輪）：加過去之後不能再用點選填空（同一句寫了兩次、配了兩個讀音，
   // 或句子不是純文字）就不寫，同一批的、和原本的句子都算。原本就照翻面出的（家長手改的）照一般的核對。
   const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
-  if (target.choice && now && !now.choice) return leave(EXISTING_WHY.choiceLost);
+  if (target.kind?.id === 'polyphone' && now && now.kind?.id !== 'polyphone') return leave(EXISTING_WHY.choiceLost);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 
@@ -239,6 +239,22 @@ function compose(lines: readonly Line[], root: Item, target: Target, missing: re
 }
 
 const content = (value: unknown): string => JSON.stringify(value, (key, each: unknown) => key === 'line' || key === 'targetLine' ? undefined : each);
+
+/**
+ * 加題核對比的卡型（題型模組任務說明 §1-4）：題型的內容跟著題目變，只比種類與組的身分。比較卡比組的身分；排序比樣子（全詩、句子）；
+ * 多音字（tasks/polyphone-pick.md §5）的答案與錨點跟著題目變，只比字與括號裡的讀音；文法與變化從名稱讀，整個比；接句只比是不是。
+ */
+function kindShape(kind: Kind | undefined): string | null {
+  if (!kind) return null;
+  switch (kind.id) {
+    case 'group': return content([kind.id, kind.group.key]);
+    case 'polyphone': return content([kind.id, kind.polyphone.word, kind.polyphone.optionKeys]);
+    case 'order': return content([kind.id, kind.order.style]);
+    case 'typing': return content([kind.id, kind.typing]);
+    case 'couplet': return content([kind.id]);
+    default: { const never: never = kind; return never; }
+  }
+}
 /** 多重集合：b 是 a 再加上 extra（順序不算）。 */
 function grows(a: readonly unknown[], b: readonly unknown[], extra: readonly unknown[]): boolean {
   const pool = b.map(content);
@@ -256,12 +272,10 @@ function verify(before: Deck, after: Deck, target: Target, block: readonly strin
   if (before.targets.length !== after.targets.length) return false;
   if (content(before.targets.filter((_, i) => i !== index)) !== content(after.targets.filter((_, i) => i !== index))) return false;
   const now = after.targets[index];
-  // 題型不變（比較卡的組、全詩、句子排序、接句、打字）；題型的內容跟著題目變，只比種類與組的身分。
-  const { prompts: p0, shared: s0, fields: f0, group: g0, order: o0, sentence: q0, couplet: c0, choice: h0, ...rest0 } = target;
-  const { prompts: p1, shared: s1, fields: f1, group: g1, order: o1, sentence: q1, couplet: c1, choice: h1, ...rest1 } = now;
-  // 多音字（tasks/polyphone-pick.md §5）：答案與錨點跟著題目變，只比是不是多音字與括號裡的讀音。
-  const choiceOf = (choice: typeof h0): string | null => choice ? content([choice.word, choice.optionKeys]) : null;
-  if (content(rest0) !== content(rest1) || g0?.key !== g1?.key || !o0 !== !o1 || !q0 !== !q1 || !c0 !== !c1 || choiceOf(h0) !== choiceOf(h1)) return false;
+  // 卡型不變（比較卡的組、全詩、句子排序、接句、多音字、打字）：照 kindShape 比。
+  const { prompts: p0, shared: s0, fields: f0, kind: t0, ...rest0 } = target;
+  const { prompts: p1, shared: s1, fields: f1, kind: t1, ...rest1 } = now;
+  if (content(rest0) !== content(rest1) || kindShape(t0) !== kindShape(t1)) return false;
   // 預期新增的題目與補充：目的地的名稱那一行接上實際插入的那幾行，單獨讀。
   // 最後補一題假的題目：只加補充（沒有題目）時解析器才會回傳目標；假的那一題不算。
   const alone = parseDeck([...block, '    - 甲 :: 乙'].join('\n') + '\n', { subject }).targets[0] as Target | undefined;

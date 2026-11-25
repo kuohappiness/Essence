@@ -10,16 +10,17 @@ import { setup, view } from './helpers/pick-session.ts';
 // 預期值逐格對過 syntax.md §2-3（中翻英、文法與變化、比較卡、全詩順序、句子排序）與接句的任務說明，不是用同樣的算法再算一次。
 // 加一種卡型（例如多音字）時：會變的格改掉，再加它自己的列；其他格變了就是互搶。之後把 Target 的卡型欄位併成一欄時，只改 kindOf。
 
-/** 現在的卡型：Target 上哪一個卡型欄位有值（Fable 審查 F4 的五個欄位、多音字，加上方向）。 */
+/** 現在的卡型：Target 的 kind（題型模組 A1 把六個卡型欄位併成一欄），排序照樣子分、文法與變化照種類分；沒有卡型時看方向。 */
 function kindOf(target: Target): string {
-  if (target.group) return 'group';
-  if (target.choice) return 'choice';
-  if (target.order) return 'poem-order';
-  if (target.sentence) return 'sentence-order';
-  if (target.couplet) return 'couplet';
-  if (target.typing) return 'typing-' + target.typing.kind;
-  if (target.direction) return target.direction;
-  return 'flip';
+  const kind = target.kind;
+  if (!kind) return target.direction ?? 'flip';
+  switch (kind.id) {
+    case 'group': return 'group';
+    case 'polyphone': return 'choice';
+    case 'order': return kind.order.style + '-order';
+    case 'couplet': return 'couplet';
+    case 'typing': return 'typing-' + kind.typing.style;
+  }
 }
 
 /** 一個目標底下一題，四種題目形狀；w 是這個名稱該填的字（比較句的答案、填空挖的字）。 */
@@ -37,7 +38,7 @@ function cell(subject: string, name: string, w: string, shape: Shape): string {
   const deck = parseDeck(`---\n科目: ${subject}\n---\n- ${name}\n    - ${SHAPES[shape](w)}\n`);
   assert.equal(deck.targets.length, 1, `${subject}｜${name}｜${shape}`);
   const target = deck.targets[0];
-  const types = target.prompts.map(prompt => target.group || target.choice ? 'pick' : questionType(cardOf({ lt: 'aaa111', deck: 'd', target, prompt, isNew: false, early: false })));
+  const types = target.prompts.map(prompt => target.kind?.id === 'group' || target.kind?.id === 'polyphone' ? 'pick' : questionType(cardOf({ lt: 'aaa111', deck: 'd', target, prompt, isNew: false, early: false })));
   return [kindOf(target), ...types, ...deck.problems.map(problem => problem.code)].join(' ');
 }
 
