@@ -1,7 +1,12 @@
 // 比較測試工具的設定（tasks/rule-test-tool.md §4-2）：範例照任務說明，錯誤要一次列完。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { lessonsOf, PLUGIN_TASK, readConfig } from '../tools/rule-test/config.ts';
+import { insideRepo, openFolder } from '../tools/rule-test/folder.ts';
+import { APP_ROOT, REPO_ROOT } from '../tools/rule-test/prompts.ts';
 
 const EXAMPLE = `
 名稱: 英文第二輪
@@ -137,4 +142,23 @@ void test('readConfig：門檻引用的組與生成器要有定義；同一種�
 void test('readConfig：YAML 本身讀不懂時說是 YAML 的問題', () => {
   assert.throws(() => readConfig('名稱: [沒關'), /測試\.yaml 讀不懂/);
   assert.throws(() => readConfig('- 一個清單'), /要是一個物件/);
+});
+
+void test('測試資料夾或課庫在 repo 裡就停下（repo 是公開的，§8 第 6 條）', () => {
+  assert.equal(insideRepo(join(APP_ROOT, '比較測試')), true);
+  assert.equal(insideRepo(REPO_ROOT), true);
+  assert.equal(insideRepo(tmpdir()), false);
+  assert.equal(insideRepo(`${REPO_ROOT}-rule-test`), false);
+  assert.throws(() => openFolder(join(REPO_ROOT, '比較測試')), /測試資料夾在 repo 裡/);
+  const root = mkdtempSync(join(tmpdir(), 'rule-test-repo-'));
+  writeFileSync(join(root, '測試.yaml'), `
+名稱: 課庫在 repo 裡
+課庫: ${JSON.stringify(join(REPO_ROOT, '課'))}
+課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
+組: [{ 名稱: 甲, 規則: { 外掛: english } }]
+生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
+評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
+門檻: { 基準: 甲, 候選: [甲], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+`);
+  assert.throws(() => openFolder(root), /課庫在 repo 裡/);
 });

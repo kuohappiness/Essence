@@ -1,16 +1,29 @@
 // 比較測試工具：測試資料夾的位置與「凍結過的檔不覆蓋」（任務說明 tasks/rule-test-tool.md §4-1、§5 開頭）。
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readConfig, type Config, type LessonConfig } from './config.ts';
+import { REPO_ROOT } from './prompts.ts';
 
 export interface Folder { root: string; config: Config; configText: string }
 
+/** 在 repo 裡（repo 是公開的，D-003）：測試資料夾與課庫都要放在使用者電腦的 repo 外面（§3、§8 第 6 條）。 */
+export function insideRepo(path: string, repo = REPO_ROOT): boolean {
+  const rel = relative(resolve(repo), resolve(path));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+const outside = (path: string, what: string): void => {
+  if (insideRepo(path)) throw Error(`${what}在 repo 裡（${path}）：教材、原稿與分數是私人資料，放到 repo 外面`);
+};
+
 export function openFolder(root: string): Folder {
+  outside(root, '測試資料夾');
   const file = join(root, '測試.yaml');
   if (!existsSync(file)) throw Error(`${root} 沒有 測試.yaml（先跑 init）`);
   const configText = readFileSync(file, 'utf8');
-  return { root, config: readConfig(configText), configText };
+  const folder = { root, config: readConfig(configText), configText };
+  outside(libraryOf(folder), '課庫');
+  return folder;
 }
 
 export const libraryOf = (folder: Folder): string => resolve(folder.root, folder.config.library);
