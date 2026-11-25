@@ -118,7 +118,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     if ('custom' in endpoint) {
       const custom = endpoint.custom;
       // 自訂服務和目錄的每一家用同一個驗法：送出時用到的欄位壞了，不送出（L2 第三輪 延續 R14）。
-      const problem = isPlain(custom) ? endpointProblem(custom, dialectIds) : 'custom 要是物件';
+      const problem = endpointProblem(custom, dialectIds);
       if (problem) throw fail('invalid_request', `custom endpoint: ${problem}`);
       const dialect = DIALECTS.get(custom.dialect) as Dialect;
       return {

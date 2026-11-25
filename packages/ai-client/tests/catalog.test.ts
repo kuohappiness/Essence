@@ -161,3 +161,30 @@ void test('服務端點整類：目錄的每一家與自訂服務用同一個驗
   const sent = JSON.parse(fetch.requests[0].body ?? '') as Record<string, unknown>;
   assert.deepEqual([sent.max_completion_tokens, sent.max_tokens, sent.model], [5, undefined, 'm']);
 });
+
+void test('自訂服務「是物件」和目錄同一個判斷：沒有原型的、凍結的、類別的都照用；陣列與非物件擋（L2 第四輪 第 10 項）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  const fields = { dialect: 'openai-chat', baseUrl: 'https://api.example.com/v1', headers: { 'x-extra': '1' } };
+  const bare = Object.assign(Object.create(null) as Record<string, unknown>, fields);
+  class Endpoint { dialect = fields.dialect; baseUrl = fields.baseUrl; headers = fields.headers; }
+  const outcome = async (custom: unknown) => {
+    const fetch = mockFetch([
+      { status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(chat, 'stream.sse')] },
+      { status: 200, headers: { 'content-type': 'application/json' }, chunks: ['{"data":[]}'] },
+    ]);
+    const client = createAiClient({ fetch, clock: instantClock() });
+    const endpoint = { custom } as never;
+    const generated = await client.generate({ endpoint, apiKey: KEY, model: 'm', input: [{ role: 'user', content: '你好' }] })
+      .then(r => r.text, (caught: unknown) => (isAiError(caught) ? caught.kind : String(caught)));
+    const checked = await client.check({ endpoint, apiKey: KEY });
+    return { generated, checked: checked.ok ? 'ok' : checked.error.kind, sent: fetch.requests.map(q => [q.url, q.headers['x-extra']]) };
+  };
+  const plain = await outcome(fields);
+  assert.equal(plain.generated, chat.stream.text);
+  for (const [label, custom] of [['Object.create(null)', bare], ['凍結的', Object.freeze({ ...fields })], ['類別', new Endpoint()]] as const) {
+    assert.deepEqual(await outcome(custom), plain, label);
+  }
+  for (const custom of [[], [fields], 'x', 7, null, true]) {
+    assert.deepEqual(await outcome(custom), { generated: 'invalid_request', checked: 'invalid_request', sent: [] }, JSON.stringify(custom));
+  }
+});

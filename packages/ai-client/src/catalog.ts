@@ -126,7 +126,9 @@ const MAX_TOKENS_FIELDS: readonly unknown[] = ['max_tokens', 'max_completion_tok
  * 一個服務端點的設定：目錄的每一家與呼叫端的自訂服務都用這一個驗（L2 第三輪 延續 R14）。
  * 送出時直接用到的欄位都在這裡驗，壞的不會走到組請求或 check() 才出錯。auth 沒寫的（自訂服務照方言的預設）不在這裡擋。
  */
-export function endpointProblem(p: Record<string, unknown>, dialects: ReadonlySet<string>): string | null {
+export function endpointProblem(p: unknown, dialects: ReadonlySet<string>): string | null {
+  // 「是物件」和目錄同一個判斷：沒有原型的（Object.create(null)）、凍結的都照收，只擋陣列與非物件（L2 第四輪 第 10 項）。
+  if (!isObject(p)) return '端點設定要是物件';
   if (typeof p.dialect !== 'string' || !dialects.has(p.dialect)) return `方言 ${typeof p.dialect === 'string' ? p.dialect : typeof p.dialect} 沒有登記`;
   if (typeof p.baseUrl !== 'string' || !isAllowedUrl(p.baseUrl)) return 'baseUrl 要是 https，或本機的 http';
   if (p.auth !== undefined && p.auth !== null && (!isObject(p.auth) || typeof p.auth.header !== 'string' || !p.auth.header)) return 'auth 要是 { header, scheme? } 或 null';
@@ -149,7 +151,7 @@ export function validateCatalog(input: unknown, dialects: ReadonlySet<string>): 
     if (id === '(沒有 id)') { fail('廠商沒有 id'); continue; }
     if (seen.has(id)) { fail('id 重複'); continue; }
     // 目錄的每一家都要寫 auth（不用金鑰的寫 null）；其餘和自訂服務同一個驗法。
-    const problem = p.auth === undefined ? 'auth 要是 { header, scheme? } 或 null' : endpointProblem(p as unknown as Record<string, unknown>, dialects);
+    const problem = p.auth === undefined ? 'auth 要是 { header, scheme? } 或 null' : endpointProblem(p, dialects);
     if (problem) { fail(problem); continue; }
     const models: ModelSpec[] = [];
     for (const m of Array.isArray(p.models) ? p.models : []) {
