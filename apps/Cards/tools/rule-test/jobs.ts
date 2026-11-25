@@ -1,5 +1,5 @@
 // 比較測試工具：生成的工作與事件檔（任務說明 tasks/rule-test-tool.md §5-4）。工作＝組 × 課 × 生成器 × 第幾份；
-// 事件.jsonl 只追加（開始、每一步、完成、無效、失敗、逾時、額度用完、中斷、停下），狀態都由事件推出，不另存一份會不同步的狀態。
+// 事件.jsonl 只追加（開始、每一步、完成、無效、失敗、逾時、額度用完、中斷、停下、重開），狀態都由事件推出，不另存一份會不同步的狀態。
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { lessonsOf, type AdapterKind } from './config.ts';
@@ -18,10 +18,10 @@ export interface Job {
   steps: FrozenStep[];
 }
 
-type EventType = 'start' | 'step' | 'done' | 'invalid' | 'fail' | 'timeout' | 'quota' | 'interrupted' | 'stop';
+type EventType = 'start' | 'step' | 'done' | 'invalid' | 'fail' | 'timeout' | 'quota' | 'interrupted' | 'stop' | 'reopen';
 export interface JobEvent { t: string; type: EventType; job?: string; attempt?: number; step?: number; detail?: Record<string, unknown> }
 
-/** 同一份工作最多試幾次（失敗、逾時、中斷都算一次）；之後停在 failed，由人決定。 */
+/** 同一份工作最多試幾次（失敗、逾時、中斷都算一次）；之後停在 failed，由人決定（再試用 reopenFailed）。 */
 const MAX_ATTEMPTS = 3;
 
 /** 事件檔：生成的在 生成/事件.jsonl；評分等其他步驟傳自己的檔（測試資料夾裡的相對路徑）。 */
@@ -47,14 +47,27 @@ export interface JobState { status: JobStatus; attempts: number; last: JobEvent 
 
 const TERMINAL: readonly EventType[] = ['done', 'invalid', 'fail', 'timeout', 'quota', 'interrupted'];
 
+/** attempts 是全部試過幾次（嘗試的號碼接著算）；放棄只看最後一次重開之後試了幾次。 */
 export function jobState(events: readonly JobEvent[], key: string): JobState {
-  const mine = events.filter(event => event.job === key && (event.type === 'start' || TERMINAL.includes(event.type)));
+  const mine = events.filter(event => event.job === key && (event.type === 'start' || event.type === 'reopen' || TERMINAL.includes(event.type)));
   const attempts = mine.filter(event => event.type === 'start').length;
-  const last = mine.at(-1) ?? null;
+  const since = mine.slice(mine.findLastIndex(event => event.type === 'reopen') + 1);
+  const last = since.at(-1) ?? mine.at(-1) ?? null;
   if (!last) return { status: 'pending', attempts, last };
   if (last.type === 'done' || last.type === 'invalid') return { status: last.type, attempts, last };
   if (last.type === 'start') return { status: 'running', attempts, last };
-  return { status: attempts >= MAX_ATTEMPTS ? 'failed' : 'retry', attempts, last };
+  return { status: since.filter(event => event.type === 'start').length >= MAX_ATTEMPTS ? 'failed' : 'retry', attempts, last };
+}
+
+/**
+ * 放棄的工作再給 MAX_ATTEMPTS 次（generate、judge 的 --retry）：操作的 Claude 看過放棄的原因、決定再試時用（§5-7「由操作的 Claude 決定」）。
+ * 記成一筆事件，看得出是人決定再試的；只重開放棄的，回傳重開了哪些。
+ */
+export function reopenFailed(folder: Folder, keys: readonly string[], log = GENERATE_LOG): string[] {
+  const events = readEvents(folder, log);
+  const failed = keys.filter(key => jobState(events, key).status === 'failed');
+  for (const key of failed) appendEvent(folder, { type: 'reopen', job: key }, log);
+  return failed;
 }
 
 const jobKey = (group: string, lesson: string, generator: string, copy: number): string => `${group}-${lesson}-${generator}-${String(copy)}`;

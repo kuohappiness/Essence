@@ -3,9 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { readEvents } from '../tools/rule-test/jobs.ts';
+import type { Adapter } from '../tools/rule-test/adapters.ts';
+import { jobState, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { judgePrompt, judgeSchema, rejudgeStats, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
 import { parseRubric } from '../tools/rule-test/rubric.ts';
+import { statusLines } from '../tools/rule-test/status.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
 void test('評分表：讀列號、類別與跨單元；列號重複、類別不對、跨單元的 ID 不在快照裡都列出來', () => {
@@ -95,6 +97,25 @@ void test('judge：格式不合就在同一個對話補正（只列問題、其�
   assert.ok(existsSync(join(folder.root, '評分', '批1', '結果', 'claude', 'L3-B01.json')));
   const steps = readEvents(folder, join('評分', '批1', '事件.jsonl')).filter(event => event.type === 'step' && event.job === 'L3-B01-claude');
   assert.deepEqual(steps.map(event => event.detail?.problems), [1, 0]);
+});
+
+void test('judge：試滿 3 次的放棄、這一批鎖不了；重開（--retry）後再評一次，交齊就鎖定', async () => {
+  const folder = await blinded();
+  const codex = fakeJudge();
+  const broken: Adapter = () => Promise.resolve({ kind: 'fail', message: '壞了' });
+  for (let i = 0; i < 3; i++) await runJudges(folder, { adapters: { claude: broken, codex: codex.adapter }, log: () => {} });
+  const log = join('評分', '批1', '事件.jsonl');
+  assert.equal(jobState(readEvents(folder, log), 'L3-B01-claude').status, 'failed');
+  const idle = fakeJudge();
+  await runJudges(folder, { adapters: { claude: idle.adapter, codex: idle.adapter }, log: () => {} });
+  assert.equal(idle.requests.length, 0);
+  assert.ok(!existsSync(join(folder.root, '評分', '批1', '鎖定.md')));
+  assert.ok(statusLines(folder).includes('  放棄：L3-B01-claude：壞了（看過原因要再試：judge --retry）'));
+  assert.deepEqual(reopenFailed(folder, ['L3-B01-claude', 'L3-B01-codex'], log), ['L3-B01-claude']);
+  const claude = fakeJudge();
+  await runJudges(folder, { adapters: { claude: claude.adapter, codex: idle.adapter }, log: () => {} });
+  assert.equal(claude.requests.length, 1);
+  assert.ok(existsSync(join(folder.root, '評分', '批1', '鎖定.md')));
 });
 
 void test('評審的提示：凍結的評分說明在前，附這個區組的卡組、列號與教材', async () => {

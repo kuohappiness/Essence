@@ -10,7 +10,7 @@ import { cutDeck, validity } from '../tools/rule-test/deck-cut.ts';
 import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { acquireLock, runQueue, savePasted, writeManual } from '../tools/rule-test/generate.ts';
-import { appendEvent, jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
+import { appendEvent, jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 
 const DECK = '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n<<<完>>>';
 
@@ -124,6 +124,30 @@ void test('斷路器：連續 3 份失敗就停；同一份最多試 3 次', asy
     appendEvent(folder, { type: 'timeout', job: '甲-L3-claude-2' });
   }
   assert.equal(jobState(readEvents(folder), '甲-L3-claude-2').status, 'failed');
+});
+
+void test('再試放棄的工作（--retry）：只重開放棄的、記一筆事件、再給 3 次；嘗試的號碼接著算，前幾次的紀錄留著', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  const failing = fake(() => ({ kind: 'timeout', message: '睡過頭' }));
+  for (let i = 0; i < 3; i++) await runQueue(folder, { adapters: { claude: failing.adapter }, log: () => {} });
+  assert.deepEqual(['甲-L3-claude-1', '乙-L3-claude-1'].map(key => jobState(readEvents(folder), key).status), ['failed', 'failed']);
+  appendEvent(folder, { type: 'start', job: '乙-L3-claude-1', attempt: 4 });
+  appendEvent(folder, { type: 'done', job: '乙-L3-claude-1', attempt: 4 });
+  assert.deepEqual(reopenFailed(folder, ['甲-L3-claude-1', '乙-L3-claude-1']), ['甲-L3-claude-1']);
+  assert.deepEqual(readEvents(folder).filter(event => event.type === 'reopen').map(event => event.job), ['甲-L3-claude-1']);
+  assert.equal(jobState(readEvents(folder), '甲-L3-claude-1').status, 'retry');
+  const { adapter, requests } = fake(() => ok(DECK));
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  assert.equal(requests.length, 1);
+  assert.equal(jobState(readEvents(folder), '甲-L3-claude-1').status, 'done');
+  assert.deepEqual(readdirSync(join(folder.root, '生成', '嘗試')).filter(name => name.startsWith('甲')).sort(), ['甲-L3-claude-1-1', '甲-L3-claude-1-2', '甲-L3-claude-1-3', '甲-L3-claude-1-4']);
+  // 重開後又試滿 3 次，再停在放棄。
+  appendEvent(folder, { type: 'reopen', job: '乙-L3-claude-1' });
+  for (let i = 0; i < 3; i++) {
+    appendEvent(folder, { type: 'start', job: '乙-L3-claude-1' });
+    appendEvent(folder, { type: 'fail', job: '乙-L3-claude-1' });
+  }
+  assert.deepEqual(jobState(readEvents(folder), '乙-L3-claude-1'), { status: 'failed', attempts: 7, last: readEvents(folder).at(-1) });
 });
 
 void test('行程鎖：另一個還在跑就停下；上一次的行程已經不在時，跑到一半的工作記成中斷、可以重跑', async () => {

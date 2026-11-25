@@ -41,7 +41,7 @@ export function statusLines(folder: Folder): string[] {
     lines.push(`上一次停下：${say(stop.detail?.reason)}（${stop.t}）${resets || (quota && typeof quota.detail?.resetsAt === 'number' ? `，額度約在 ${new Date(quota.detail.resetsAt * 1000).toISOString()} 重置` : '')}`);
   }
   const failed = jobs.filter(job => states.get(job.key)!.status === 'failed');
-  for (const job of failed) lines.push(`  放棄：${job.key}：${say(states.get(job.key)!.last?.detail?.message)}`);
+  for (const job of failed) lines.push(`  放棄：${job.key}：${say(states.get(job.key)!.last?.detail?.message)}（看過原因要再試：generate --retry）`);
 
   const finished = jobs.filter(job => ['done', 'invalid'].includes(states.get(job.key)!.status));
   const unchecked = finished.filter(job => readFormat(folder, job) === null);
@@ -60,6 +60,11 @@ export function statusLines(folder: Folder): string[] {
         : existsSync(join(dir, '鎖定.md')) ? '已鎖定（下一步：disputes）'
           : `評分 ${String(judged)}／${String(blocks.length * folder.config.judges.length)}（下一步：judge）`;
     lines.push(`批 ${String(n)}：${String(decks)} 份、${String(blocks.length)} 個區組｜${state}`);
+    const judging = readEvents(folder, join('評分', `批${String(n)}`, '事件.jsonl'));
+    for (const key of new Set(judging.flatMap(event => event.job ?? []))) {
+      const each = jobState(judging, key);
+      if (each.status === 'failed') lines.push(`  放棄：${key}：${say(each.last?.detail?.message)}（看過原因要再試：judge --retry）`);
+    }
   }
   return lines;
 }

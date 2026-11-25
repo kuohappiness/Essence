@@ -12,7 +12,7 @@ import type { Judge } from './config.ts';
 import { materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { readFrozenSnapshot, verifyLock } from './freeze.ts';
 import { acquireLock, detach } from './generate.ts';
-import { appendEvent, jobState, readEvents } from './jobs.ts';
+import { appendEvent, jobState, readEvents, reopenFailed } from './jobs.ts';
 import { countPdfPages } from './probe.ts';
 import { judgedRows, parseRubric, type RubricRow } from './rubric.ts';
 
@@ -217,21 +217,28 @@ export async function runJudges(folder: Folder, options: JudgeOptions = {}): Pro
   if (lockBatch(folder, batch, blocks)) log(`批 ${String(batch)} 兩位評審都交齊了，已鎖定（鎖定.md）。`);
 }
 
-/** `npm run rule-test -- judge <測試資料夾> [--confirmed] [--foreground]` */
+/** `npm run rule-test -- judge <測試資料夾> [--confirmed] [--foreground] [--retry]` */
 export async function judge(): Promise<void> {
   const [dir, ...flags] = process.argv.slice(3);
-  if (!dir) throw Error('用法：npm run rule-test -- judge <測試資料夾> [--confirmed] [--foreground]');
+  if (!dir) throw Error('用法：npm run rule-test -- judge <測試資料夾> [--confirmed] [--foreground] [--retry]');
   const folder = openFolder(cliPath(dir, 'rule-test'));
   if (flags.includes('--run')) { await runJudges(folder); return; }
   verifyLock(folder);
   const numbers = batchNumbers(folder);
   if (!numbers.length) throw Error('還沒匿名（先跑 blind）');
-  const batch = numbers.at(-1)!;
-  const todo = pendingTasks(folder, batch, readBlocks(folder, batch)).map(task => jobOf(task.block, task.judge, task.again));
+  const batch = numbers.at(-1)!, retry = flags.includes('--retry');
+  const events = readEvents(folder, LOG(batch));
+  const keys = pendingTasks(folder, batch, readBlocks(folder, batch)).map(task => jobOf(task.block, task.judge, task.again));
+  const failed = keys.filter(key => jobState(events, key).status === 'failed');
+  const todo = retry ? keys : keys.filter(key => !failed.includes(key));
+  // 放棄的不重開就鎖不了這一批（兩位都要交）。
+  if (failed.length && !retry) console.log(`放棄的 ${String(failed.length)} 個沒算進去，這一批要它們交了才能鎖定（原因看 評分/批${String(batch)}/事件.jsonl 與 紀錄/；決定再試就加 --retry）：${failed.join('、')}\n`);
   if (!flags.includes('--confirmed')) {
-    console.log(todo.length ? `批 ${String(batch)}：要開 ${String(todo.length)} 個評審對話（${folder.config.judges.map(each => `${each.name} ${each.model} ${each.effort}`).join('、')}）：${todo.join('、')}\n\n同意用量後加 --confirmed 開跑。` : `批 ${String(batch)} 都評完了。`);
+    console.log(todo.length ? `批 ${String(batch)}：要開 ${String(todo.length)} 個評審對話（${folder.config.judges.map(each => `${each.name} ${each.model} ${each.effort}`).join('、')}）：${todo.join('、')}\n\n同意用量後加 --confirmed 開跑。` : failed.length ? '' : `批 ${String(batch)} 都評完了。`);
     return;
   }
+  if (retry && failed.length) console.log(`重開放棄的：${reopenFailed(folder, failed, LOG(batch)).join('、')}`);
+  if (!todo.length) return;
   if (flags.includes('--foreground')) { await runJudges(folder); return; }
   const pid = detach(folder, 'judge', join('評分', `批${String(batch)}`, '執行.log'));
   console.log(`背景開始評分（行程 ${String(pid)}）；進度用 status 看。`);

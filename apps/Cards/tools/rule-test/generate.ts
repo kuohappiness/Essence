@@ -9,7 +9,7 @@ import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
 import { readFrozenSteps, verifyLock, type FrozenStep } from './freeze.ts';
-import { appendEvent, jobState, planJobs, readEvents, type Job } from './jobs.ts';
+import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
 import { fillReplies } from './prompts.ts';
 
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
@@ -170,16 +170,19 @@ export function writeManual(folder: Folder, job: Job): string {
   return file;
 }
 
-/** `npm run rule-test -- generate <測試資料夾> [--confirmed] [--foreground]`；--run 是背景行程自己用的。 */
+/** `npm run rule-test -- generate <測試資料夾> [--confirmed] [--foreground] [--retry]`；--run 是背景行程自己用的。 */
 export async function generate(): Promise<void> {
   const [dir, ...flags] = process.argv.slice(3);
-  if (!dir) throw Error('用法：npm run rule-test -- generate <測試資料夾> [--confirmed] [--foreground]');
+  if (!dir) throw Error('用法：npm run rule-test -- generate <測試資料夾> [--confirmed] [--foreground] [--retry]');
   const folder = openFolder(cliPath(dir, 'rule-test'));
   if (flags.includes('--run')) { await runQueue(folder); return; }
   verifyLock(folder);
-  const steps = readFrozenSteps(folder), events = readEvents(folder);
-  const todo = planJobs(folder, steps, events).filter(job => ['pending', 'retry'].includes(jobState(events, job.key).status));
+  const steps = readFrozenSteps(folder), events = readEvents(folder), retry = flags.includes('--retry');
+  const jobs = planJobs(folder, steps, events);
+  const failed = jobs.filter(job => jobState(events, job.key).status === 'failed');
+  const todo = jobs.filter(job => ['pending', 'retry'].includes(jobState(events, job.key).status) || (retry && failed.includes(job)));
   const auto = todo.filter(job => job.kind !== 'manual'), manual = todo.filter(job => job.kind === 'manual');
+  if (failed.length && !retry) console.log(`放棄的 ${String(failed.length)} 份沒算進去（原因用 status 看；決定再試就加 --retry）：${failed.map(job => job.key).join('、')}\n`);
   if (!flags.includes('--confirmed')) {
     for (const generator of folder.config.generators) {
       const mine = todo.filter(job => job.generator === generator.name);
@@ -190,6 +193,7 @@ export async function generate(): Promise<void> {
     console.log(todo.length ? '\n同意用量後加 --confirmed 開跑。' : '沒有要生成的了。');
     return;
   }
+  if (retry && failed.length) console.log(`重開放棄的：${reopenFailed(folder, failed.map(job => job.key)).join('、')}`);
   for (const job of manual) console.log(`手貼說明：${writeManual(folder, job)}`);
   if (!auto.length) return;
   if (flags.includes('--foreground')) { await runQueue(folder); return; }
