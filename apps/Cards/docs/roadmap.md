@@ -10,7 +10,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| 國小國語預設 | 實作中 | 跑 L8 測跨課比對與 v0.10、v0.11 的改動；v0.11 的多音字跟著外掛 0.7.0 上線（[任務說明](tasks/polyphone-pick.md)） | Claude | [預設草稿](card-rules/elementary-chinese.md) |
+| 國小國語預設 | 實作中 | 跑跨課比對（翰林五上 L9 的新舊兩版對照已做，[試用紀錄](card-rules/trials.md) 2026-11-25）；v0.11 的多音字與 v0.12 跟著外掛 0.7.0 上線（[任務說明](tasks/polyphone-pick.md)） | Claude | [預設草稿](card-rules/elementary-chinese.md) |
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
