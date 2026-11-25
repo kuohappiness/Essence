@@ -1,6 +1,6 @@
 # 製卡規則重整的比較測試（D-228、D-229，給 Claude）
 
-狀態：實作中｜下一步：社會 1-2 補跑 ChatGPT（現行、候選各一份，使用者貼）後判社會；外掛施工寫在[另一份任務說明](rule-restructure-plugin.md)；英文照 §7 維持現行，下一輪照 §9 改｜等誰：使用者、Claude
+狀態：實作中｜下一步：使用者決定國小社會換不換（〈結果〉門檻 3）；外掛施工寫在[另一份任務說明](rule-restructure-plugin.md)；英文照 §7 維持現行，下一版照 §9 與[三層架構檢討](<../Claude Codex Discussion/2026-11-25-three-layer-review.md>)測試 1 改，用[比較測試工具](rule-test-tool.md)跑｜等誰：使用者
 
 來自：[D-228](../../../../docs/decisions.md#d-228-製卡規則重整成核心任務模組科目模組先用比較測試判斷)
 
