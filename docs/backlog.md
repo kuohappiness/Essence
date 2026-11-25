@@ -43,6 +43,20 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 共用檢查的誤報 | 程式或 workflow 裡：路由與連結 `'/apps'`、介面文字 `'Apps'`、網址模板 `` `https://…/apps/${slug}` ``（組字串那條）；別的 repo 的網址、英文句子、`node_modules` 路徑碰到大小寫不符的 `apps/<軟體名>`（大小寫那條，查全部文字檔）；vault 路徑的正規式從 `configDir` 組（前面不是字面 `obsidian\/`）；任務標題寫了打錯的樣本，同步到 `docs/roadmap.md` 那一列 | 擋下引入那一行的 commit。避開：改寫法（路由字串拆開、vault 路徑從 `.obsidian\/plugins\/` 寫起或接 `essence-` ID），真的需要時加進例外表並寫明放行哪幾條；任務標題不寫打錯的樣本 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R4、第二輪 S1 |
 | 共用檢查的訊息在少數情況帶錯路 | `apps/` 正下方放檔（`apps/README.md`）；Portal 這類只有文件的軟體放 `.gitkeep`、PDF、CSV、txt；同一個資料夾有好幾個問題 | 前者報「不在表上」，看不出是「這一層不放檔」；後者算成程式被擋；同一個資料夾只報第一個，要一個一個修。等 Portal 的第一個任務碰到再調 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R9 |
 
+### AI 連線套件
+
+`packages/ai-client/`（[任務說明](tasks/ai-client.md)）第一步刻意不做的，各有觸發點（Claude 2026-11-25 規劃、Fable 審查時提的）：
+
+- 💡 **先上傳檔案再引用（各家的 Files API）**：教材重複送時省流量與時間。觸發點：同一份教材一學期送超過三次的情況變常見。
+- 💡 **可快取區塊的標記**：「到這個區塊為止可快取」，規則放 `instructions` 時連做幾課省錢；不做自動快取（PDF 在最後，等於每次多付寫入）。觸發點：Cards 的直接製作上線後，連做幾課的費用明顯偏高。
+- 💡 **送出前估費用**：回範圍與假設（頁數、預期輸出量由呼叫端給），畫面寫「照牌價估計，不含免費額度」。觸發點：Cards 要在送出前顯示預估。
+- 💡 **`gemini-interactions` 方言**：送 `store: false`。觸發點：Google 宣布 generateContent 要停，或 Interactions 轉成正式版。
+- 💡 **區網的本機模型**（`http://192.168.x.x` 的 Ollama）：要一個呼叫端明確打開的開關。觸發點：有人要用家裡另一台電腦跑的模型。
+- 💡 **`node:https` 傳輸層**：給不開 CORS 的端點，要放 Cards 的 `src/desktop/`（D-148）。觸發點：第三步的 CORS 實測有一家不通，或要接本機網路上的模型。
+- 💡 **錄下真的回應當範例**（冒煙測試加 `--record`，欄位走白名單，只存自編的內容）：觸發點：冒煙測試發現範例和真的回應對不上。
+- 💡 **多輪與工具呼叫**：助理訊息帶各方言的不透明區塊（thinking、thought signature、reasoning item）、錯誤帶已知用量。觸發點：要做「請 AI 修正」的多輪或工具呼叫。
+- 💡 **發布到 npm**：另外編譯成 `.js`（Node 不在 `node_modules` 裡執行 `.ts`）。觸發點：別的 repo 要用、又不方便複製資料夾。
+
 ### Essence Capture 與 Essence Mindboard
 
 其他軟體的工作各自一份，不和 Cards 的混在一起（使用者 2026-10-31）；和 Cards 共用的部分用連結。

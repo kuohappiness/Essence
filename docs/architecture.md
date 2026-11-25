@@ -103,9 +103,14 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
    ├─ Capture/                   AGENTS.md、CLAUDE.md、package.json 與鎖檔、.gitignore、docs/backlog.md
    ├─ Mindboard/                 同上（沒有 .gitignore）
    └─ Portal/                    入口網站；文件第一份出現時建、程式與檢查寫第一行程式前才建（D-218）
+└─ packages/
+   └─ ai-client/                 AI 連線套件：不認識呼叫它的軟體、零相依；README、CHANGELOG、catalog.json、src/、
+                                 fixtures/、tests/、tools/smoke.ts、package.json 與鎖檔（docs/tasks/ai-client.md）
 ```
 
 Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件出現才建，結構照 Cards。
+
+`packages/<套件>/` 放軟體共用的套件（[任務說明〈8〉](tasks/ai-client.md#8-repo-要改的地方)）：登記在 `tools/apps.ts` 的 `PACKAGES` 表；程式不跨出自己的資料夾、不 import 任何軟體；有自己的完整檢查與 CI job，改到它就跑它。軟體怎麼用套件，等第一個軟體接上時寫成決定。
 
 ### 每一類放哪裡
 
@@ -146,12 +151,12 @@ Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件
 
 分派表 `tools/dispatch.ts` 照改到的路徑決定檢查誰，commit 與 CI 讀同一份：
 
-檢查的對象是共用工具（`tools/` 自己的型別、lint、knip 與 `tools/tests/`）與三個外掛：
+檢查的對象是共用工具（`tools/` 自己的型別、lint、knip 與 `tools/tests/`）、三個外掛與 `packages/` 的套件：
 
-- 只改 `apps/<軟體>/`，就只裝、只檢查那個軟體；只有文件的軟體（現在是 Portal）只跑共用檢查。
+- 只改 `apps/<軟體>/`，就只裝、只檢查那個軟體；只有文件的軟體（現在是 Portal）只跑共用檢查。只改 `packages/<套件>/`，就只檢查那個套件。
 - 改到兩個軟體都讀的規格（登錄在分派表，現在是轉錄稿格式 `docs/transcript.md`），讀它的軟體都檢查。
 - 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查；寫到那個檔的共用工具測試也跑。
 - 改到其他共用工具（文件檢查、進度白板、Codex 包裝、雲端的 hook 等），只跑共用工具的完整檢查。
-- 改到決定檢查怎麼啟動、怎麼跑的檔（hook、CI、分派表與它們用到的工具），或判斷不了的路徑，共用工具與三個外掛都檢查。
+- 改到決定檢查怎麼啟動、怎麼跑的檔（hook、CI、分派表與它們用到的工具），或判斷不了的路徑，共用工具、三個外掛與套件都檢查。
 
 文件、金鑰、本機路徑、skill 一致、軟體之間不 import、`apps/` 的資料夾與寫死的路徑對得上表（大小寫照 git 追蹤的寫法，D-218），與 roadmap 讀得出來這幾項共用檢查每次都跑，只要在 `tools/` 裝過。commit 時外掛的檢查在只有暫存內容的副本跑，讀到的就是要 commit 的內容。CI 最後的 gate 分得出「照表跳過」與「漏跑」。細節見 [quality.md〈檢查指令〉](agents/quality.md#檢查指令)。
