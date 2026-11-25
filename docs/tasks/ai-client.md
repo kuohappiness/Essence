@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：待審｜下一步：合併前 L2 審共用檢查與 CI 的改動，使用者看〈13〉D-232 的內容｜等誰：使用者
+狀態：待審｜下一步：本機 Codex 照 [L2 請求](ai-client-l2.md) 審；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件｜等誰：Codex、使用者
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -203,6 +203,6 @@ packages/ai-client/
 - 共用檢查：`tools/` 的 `npm run self-check` 通過；分派、gate、hook、雲端設定、邊界的測試都補了套件的案例。
 - 真的連線（雲端，假金鑰，2026-11-25）：Anthropic 回 401 `authentication_error` 並帶 `request-id`，分類成 `auth`；Google 回 400 `API_KEY_INVALID`，分類成 `auth`；OpenAI 與 OpenRouter 被雲端的網路設定擋住，沒測到。
 - 改 `cloud-setup.mjs` 的第 ② 件（2026-11-25，這個雲端 session）：另開沒有 `node_modules` 的 worktree（`1c993b62`），PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑 hook，原文：「雲端環境設定：PATH 上的 Node 是 22.23.5；/opt/node24/bin 有 v24.22.3，但沒有 CLAUDE_ENV_FILE，之後的指令仍是舊版，跑指令前先 export PATH="/opt/node24/bin:$PATH"；core.hooksPath 已設為 .githooks；tools：npm ci 完成；apps/Cards：npm ci 完成；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：npm ci 完成」。
-- 還沒做：L2；第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
+- 還沒做：L2（使用者 2026-11-25 選本機 Codex，請求 [ai-client-l2.md](ai-client-l2.md)）；第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
 
 延後的測試：沒有。
