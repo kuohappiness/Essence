@@ -125,6 +125,22 @@ void test('extraBody 深層合併、extraHeaders 加上去，但蓋不掉認證'
   assert.equal(fetch.requests[0].headers.authorization, `Bearer ${KEY}`);
 });
 
+void test('extraBody 蓋掉推理參數：trace 記實際送出的值並記 warning（GitHub 審查 P2）', async () => {
+  const fetch = mockFetch([OK, OK, OK]);
+  const client = createAiClient({ fetch, clock: instantClock() });
+  const overridden = await client.generate(request({ reasoning: 'high', extraBody: { reasoning: { effort: 'low' } } }));
+  assert.deepEqual(bodyOf(fetch, 0).reasoning, { effort: 'low' });
+  assert.equal(overridden.trace.reasoningSent, 'low');
+  assert.ok(overridden.trace.warnings.some(w => /extraBody/.test(w)), overridden.trace.warnings.join(' / '));
+  // 沒指定等級、只用 extraBody 送：一樣照實記。
+  const onlyExtra = await client.generate(request({ extraBody: { reasoning: { effort: 'minimal' } } }));
+  assert.equal(onlyExtra.trace.reasoningSent, 'minimal');
+  // extraBody 沒碰推理參數：照原本的值，不記 warning。
+  const untouched = await client.generate(request({ reasoning: 'high', extraBody: { service_tier: 'flex' } }));
+  assert.equal(untouched.trace.reasoningSent, 'high');
+  assert.ok(!untouched.trace.warnings.some(w => /extraBody/.test(w)));
+});
+
 void test('連不上：等 2 秒、8 秒重送，加減 20%', async () => {
   const fetch = mockFetch([{ networkError: 'ECONNRESET' }, { networkError: 'ECONNRESET' }, OK]);
   const clock = { ...instantClock(), random: () => 1 };

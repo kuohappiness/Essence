@@ -151,8 +151,18 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       maxOutputTokens: request.maxOutputTokens ?? r.maxOutputTokens, options: r.options,
     });
     const body = call.body ?? {};
-    const reasoningSent = applyReasoning(body, r.reasoning, request.reasoning, warnings);
-    if (request.extraBody) deepMerge(body, request.extraBody);
+    let reasoningSent = applyReasoning(body, r.reasoning, request.reasoning, warnings);
+    if (request.extraBody) {
+      deepMerge(body, request.extraBody);
+      // trace 記實際送出的推理參數：extraBody 蓋掉或自己送了，就照合併後的本文（GitHub 審查 P2）。
+      if (r.reasoning) {
+        const actual = sentValue(getPath(body, r.reasoning.path));
+        if (actual !== reasoningSent) {
+          warnings.push(`reasoning set by extraBody: ${String(actual)}`);
+          reasoningSent = actual;
+        }
+      }
+    }
     const bytes = encodeBody(body);
     checkSize(r, input, bytes.length);
     const headers = headersFor(r, request.apiKey, call.headers, request.extraHeaders);
@@ -444,6 +454,21 @@ function lower(headers: Record<string, string> | undefined): Record<string, stri
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers ?? {})) out[k.toLowerCase()] = v;
   return out;
+}
+
+function getPath(target: Record<string, unknown>, path: string): unknown {
+  let node: unknown = target;
+  for (const key of path.split('.')) {
+    if (!isPlain(node)) return undefined;
+    node = node[key];
+  }
+  return node;
+}
+
+/** trace 能記的值：字串與數字照原樣，沒有是 null，其他型別寫成 JSON。 */
+function sentValue(value: unknown): string | number | null {
+  if (value === undefined || value === null) return null;
+  return typeof value === 'string' || typeof value === 'number' ? value : JSON.stringify(value);
 }
 
 function setPath(target: Record<string, unknown>, path: string, value: unknown): void {
