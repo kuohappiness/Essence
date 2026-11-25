@@ -2,6 +2,7 @@
 // 漏與部分的列、問題與裁定、評審 × 生成器的分項。摘要.md：只有數字（每組每份的平均），沒有教材、評分表與題目的原文，可以貼進 repo。
 import type { Folder } from './folder.ts';
 import { allGates, type GateResult } from './gates.ts';
+import { rejudgeStats } from './judge.ts';
 import type { BatchReport, DeckMetrics } from './unblind.ts';
 
 const one = (value: number): string => value.toFixed(1);
@@ -85,6 +86,10 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
       if (notes.length) lines.push(`### 批 ${String(deck.batch)} ${deck.block} ${deck.code}（${deck.group} 第 ${String(deck.copy)} 份）`, '', ...notes.map(each => `- ${each}`), '');
     }
   }
+  const again = reports.flatMap(report => rejudgeStats(folder, report.batch).map(each => ({ batch: report.batch, ...each })));
+  lines.push('## 評審重評（同一位評審另開對話再評一次；只報兩次的差，不進門檻）', '', ...again.length
+    ? [...head(['批', '評審', '區組', '判定不同的格', '問題（第一次／重評）']), ...again.map(each => row([each.batch, each.judge, each.block, `${String(each.changed)}／${String(each.cells)}`, `${String(each.issues[0])}／${String(each.issues[1])}`]))]
+    : ['（沒有做，或重評還沒交）'], '');
   const judges = [...new Set(all.flatMap(deck => Object.keys(deck.byJudge)))];
   lines.push('## 評審 × 生成器（各自的數，不合併）', '', ...head(['評審', '課', '生成器', '組', '份數', '漏的必備', '問題']));
   for (const judge of judges) {

@@ -1,5 +1,6 @@
 // 比較測試工具：judge（任務說明 tasks/rule-test-tool.md §5-7）。每個區組、每位評審一個新對話，只拿到那個區組資料夾的複本；
 // 交 JSON（schema 只用兩家 CLI 都收的寫法），工具驗列號、行號、頁數，格式不合就在同一個對話補正；一批全部交齊就鎖定（雜湊寫進 鎖定.md）。
+import { randomInt } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,7 +88,53 @@ export function validateResult(value: unknown, context: JudgeContext): string[] 
 
 const LOG = (batch: number): string => join('評分', `批${String(batch)}`, '事件.jsonl');
 export const resultFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '結果', judge, `${block}.json`);
-const jobOf = (block: Block, judge: Judge): string => `${block.name}-${judge.name}`;
+const jobOf = (block: Block, judge: Judge, again = false): string => `${block.name}-${judge.name}${again ? '-重評' : ''}`;
+const rejudgeFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '重評', judge, `${block}.json`);
+
+/**
+ * 評審重評（F20）：每位評審挑設定的幾個區組，另開對話再評一次，只報兩次的差、不進門檻。挑哪幾個第一次決定、存進 重評.json，之後照這一份。
+ */
+function rejudgePicks(folder: Folder, batch: number, blocks: readonly Block[]): Record<string, string[]> {
+  const count = Math.min(folder.config.rejudge, blocks.length);
+  if (count < 1) return {};
+  const file = join(batchDir(folder, batch), '重評.json');
+  if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>;
+  const picks = Object.fromEntries(folder.config.judges.map(judge => {
+    const names = blocks.map(block => block.name);
+    for (let i = names.length - 1; i > 0; i--) { const j = randomInt(i + 1); [names[i], names[j]] = [names[j], names[i]]; }
+    return [judge.name, names.slice(0, count)];
+  }));
+  writeOnce(file, JSON.stringify(picks, null, 2) + '\n');
+  return picks;
+}
+
+interface Task { block: Block; judge: Judge; again: boolean }
+const taskFile = (folder: Folder, batch: number, task: Task): string => (task.again ? rejudgeFile : resultFile)(folder, batch, task.judge.name, task.block.name);
+/** 還沒交的評分：先是每個區組兩位評審，再是重評。 */
+function pendingTasks(folder: Folder, batch: number, blocks: readonly Block[]): Task[] {
+  const picks = rejudgePicks(folder, batch, blocks);
+  const tasks = [
+    ...blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge, again: false }))),
+    ...folder.config.judges.flatMap(judge => (picks[judge.name] ?? []).map(name => ({ block: blocks.find(block => block.name === name)!, judge, again: true }))),
+  ];
+  return tasks.filter(task => !existsSync(taskFile(folder, batch, task)));
+}
+
+/** 重評和第一次的差（評審自己的雜訊）：逐列每份的判定有幾格不同、問題的筆數。兩次都交了才算。 */
+export function rejudgeStats(folder: Folder, batch: number): { judge: string; block: string; cells: number; changed: number; issues: [number, number] }[] {
+  const file = join(batchDir(folder, batch), '重評.json');
+  if (!existsSync(file)) return [];
+  const read = (path: string): JudgeResult => JSON.parse(readFileSync(path, 'utf8')) as JudgeResult;
+  return Object.entries(JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>).flatMap(([judge, names]) => names.flatMap(block => {
+    const [first, second] = [resultFile(folder, batch, judge, block), rejudgeFile(folder, batch, judge, block)];
+    if (!existsSync(first) || !existsSync(second)) return [];
+    const a = read(first), b = read(second);
+    const cells = a.rows.flatMap(row => row.decks.map(cell => ({ row: row.row, deck: cell.deck, verdict: cell.verdict })));
+    const changed = cells.filter(cell => b.rows.find(row => row.row === cell.row)?.decks.find(each => each.deck === cell.deck)?.verdict !== cell.verdict).length;
+    const count = (result: JudgeResult): number => result.issues.filter(issue => issue.kind !== '值得學').length;
+    return [{ judge, block, cells: cells.length, changed, issues: [count(a), count(b)] as [number, number] }];
+  }));
+}
 
 /** 給評審的提示：凍結的評分說明、科目口徑，加這個區組的代號、列號與頁數。 */
 export function judgePrompt(folder: Folder, block: Block, rows: readonly RubricRow[], pages: number | null, attached: boolean): string {
@@ -110,7 +157,8 @@ export function judgePrompt(folder: Folder, block: Block, rows: readonly RubricR
 export interface JudgeOptions { adapters?: Partial<Record<'claude' | 'codex', Adapter>>; log?: (line: string) => void; temp?: string; batch?: number }
 
 /** 跑一位評審評一個區組：驗結果，不合就在同一個對話補正。 */
-async function runOne(folder: Folder, batch: number, block: Block, judge: Judge, adapter: Adapter, temp: string): Promise<AskOutcome> {
+async function runOne(folder: Folder, batch: number, task: Task, adapter: Adapter, temp: string): Promise<AskOutcome> {
+  const { block, judge } = task;
   const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
   const rows = parseRubric(readFileSync(rubricOf(folder, lesson), 'utf8'), new Set(readFrozenSnapshot(folder, lesson.code)?.targets.map(t => t.id) ?? []));
   const pdf = readFileSync(materialOf(folder, lesson));
@@ -120,10 +168,10 @@ async function runOne(folder: Folder, batch: number, block: Block, judge: Judge,
   cpSync(join(batchDir(folder, batch), '區組', block.name), cwd, { recursive: true });
   try {
     return await askJson({
-      folder, log: LOG(batch), key: jobOf(block, judge), who: judge, adapter, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), pdf, cwd,
+      folder, log: LOG(batch), key: jobOf(block, judge, task.again), who: judge, adapter, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), pdf, cwd,
       schema: judgeSchema(block.codes), records: join(batchDir(folder, batch), '紀錄'),
       validate: value => validateResult(value, { rows, codes: block.codes, decks, pages }),
-      save: value => { writeOnce(resultFile(folder, batch, judge.name, block.name), JSON.stringify(value, null, 2) + '\n'); },
+      save: value => { writeOnce(taskFile(folder, batch, task), JSON.stringify(value, null, 2) + '\n'); },
     });
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
@@ -149,17 +197,17 @@ export async function runJudges(folder: Folder, options: JudgeOptions = {}): Pro
   const blocks = readBlocks(folder, batch);
   const adapters: Record<string, Adapter | undefined> = { claude: options.adapters?.claude ?? claudeAdapter(), codex: options.adapters?.codex ?? codexAdapter() };
   const release = acquireLock(folder, 'judge', LOG(batch));
-  const todo = blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge })))
-    .filter(({ block, judge }) => !existsSync(resultFile(folder, batch, judge.name, block.name)) && jobState(readEvents(folder, LOG(batch)), jobOf(block, judge)).status !== 'failed');
+  const todo = pendingTasks(folder, batch, blocks).filter(task => jobState(readEvents(folder, LOG(batch)), jobOf(task.block, task.judge, task.again)).status !== 'failed');
   let stopped: string | null = null;
   try {
     const worker = async (): Promise<void> => {
       for (let next = todo.shift(); next && !stopped; next = todo.shift()) {
-        log(`評分 ${jobOf(next.block, next.judge)}`);
-        const outcome = await runOne(folder, batch, next.block, next.judge, adapters[next.judge.kind]!, temp);
-        log(`${jobOf(next.block, next.judge)}：${outcome}`);
+        const key = jobOf(next.block, next.judge, next.again);
+        log(`評分 ${key}`);
+        const outcome = await runOne(folder, batch, next, adapters[next.judge.kind]!, temp);
+        log(`${key}：${outcome}`);
         if (outcome === 'quota' || outcome === 'fatal') {
-          stopped = outcome === 'quota' ? '額度用完' : `${jobOf(next.block, next.judge)} 碰到重試也沒用的錯誤`;
+          stopped = outcome === 'quota' ? '額度用完' : `${key} 碰到重試也沒用的錯誤`;
           appendEvent(folder, { type: 'stop', detail: { reason: stopped } }, LOG(batch));
         }
       }
@@ -179,7 +227,7 @@ export async function judge(): Promise<void> {
   const numbers = batchNumbers(folder);
   if (!numbers.length) throw Error('還沒匿名（先跑 blind）');
   const batch = numbers.at(-1)!;
-  const todo = readBlocks(folder, batch).flatMap(block => folder.config.judges.filter(each => !existsSync(resultFile(folder, batch, each.name, block.name))).map(each => `${block.name}-${each.name}`));
+  const todo = pendingTasks(folder, batch, readBlocks(folder, batch)).map(task => jobOf(task.block, task.judge, task.again));
   if (!flags.includes('--confirmed')) {
     console.log(todo.length ? `批 ${String(batch)}：要開 ${String(todo.length)} 個評審對話（${folder.config.judges.map(each => `${each.name} ${each.model} ${each.effort}`).join('、')}）：${todo.join('、')}\n\n同意用量後加 --confirmed 開跑。` : `批 ${String(batch)} 都評完了。`);
     return;

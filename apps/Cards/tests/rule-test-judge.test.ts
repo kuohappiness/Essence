@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readEvents } from '../tools/rule-test/jobs.ts';
-import { judgePrompt, judgeSchema, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
+import { judgePrompt, judgeSchema, rejudgeStats, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
 import { parseRubric } from '../tools/rule-test/rubric.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
@@ -102,4 +102,24 @@ void test('評審的提示：凍結的評分說明在前，附這個區組的卡
   const text = judgePrompt(folder, { name: 'L3-B01', lesson: 'L3', generator: 'claude', codes: ['S2', 'S1'] }, parseRubric(RUBRIC), 12, false);
   assert.ok(text.startsWith(readFileSync(join(folder.root, '凍結', '範本', '評分說明.md'), 'utf8').trim()));
   assert.ok(text.endsWith('## 這一次\n\n- 卡組：卡組/S2.md、卡組/S1.md（共 2 份）\n- 要逐列判的列（2 列）：R1、R2\n- 教材：資料夾裡的 教材.pdf，共 12 頁'));
+});
+
+void test('評審重評：每位評審挑設定的幾個區組另開對話再評一次，只報兩次的差；不影響鎖定', async () => {
+  const folder = await blinded({}, '評審重評: 1');
+  let calls = 0;
+  const claude = fakeJudge({ shape: result => { if (++calls === 2) result.rows[0].decks[0].verdict = '部分'; } }), codex = fakeJudge();
+  await runJudges(folder, { adapters: { claude: claude.adapter, codex: codex.adapter }, log: () => {} });
+  assert.deepEqual([claude.requests.length, codex.requests.length], [2, 2]);
+  assert.deepEqual([claude.requests[1].resume, claude.requests[1].text], [null, claude.requests[0].text]);
+  const dir = join(folder.root, '評分', '批1');
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, '重評.json'), 'utf8')), { codex: ['L3-B01'], claude: ['L3-B01'] });
+  assert.ok(existsSync(join(dir, '鎖定.md')));
+  assert.ok(!readFileSync(join(dir, '鎖定.md'), 'utf8').includes('重評'));
+  assert.deepEqual(rejudgeStats(folder, 1), [
+    { judge: 'codex', block: 'L3-B01', cells: 4, changed: 0, issues: [0, 0] },
+    { judge: 'claude', block: 'L3-B01', cells: 4, changed: 1, issues: [0, 0] },
+  ]);
+  assert.equal(readEvents(folder, join('評分', '批1', '事件.jsonl')).filter(event => event.job === 'L3-B01-claude-重評' && event.type === 'done').length, 1);
+  await runJudges(folder, { adapters: { claude: claude.adapter, codex: codex.adapter }, log: () => {} });
+  assert.deepEqual([claude.requests.length, codex.requests.length], [2, 2]);
 });
