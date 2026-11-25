@@ -89,6 +89,8 @@ void test('choice-no-anchor（不符）：有讀音在記憶錨點沒有子項�
   // 同一讀音的第二行（對照沒用、接在後面的）也檢查（L2 R8）；兩個冒號的不算。
   assert.deepEqual(found(draft(NAME, SIX, [...ANCHOR, '        - ㄓㄤˇ：甲：乙：丙'])), [['提醒', 3, 'choice-anchor-colon']]);
   assert.deepEqual(found(draft(NAME, SIX, [...ANCHOR, '        - ㄓㄤˇ：第二行：常用詞'])), []);
+  // 寫在「記憶錨點」同一行的說明不是子項目，冒號再多也不提醒（L2 第二輪 5）。
+  assert.deepEqual(found(draft(NAME, SIX, ['    - 記憶錨點：先想：看前面：再看後面：慢慢選', ...ANCHOR.slice(1)])), []);
 });
 
 void test('choice-word（提醒，只在國語）：括號前面不是一個漢字', () => {
