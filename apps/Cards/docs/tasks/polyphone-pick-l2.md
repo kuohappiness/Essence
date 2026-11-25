@@ -1,8 +1,20 @@
 # 多音字的點選填空（D-230 第 4 點，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第二輪（只審修正），第一輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
+狀態：待審｜下一步：Codex 審第三輪（只審修正），前兩輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
+
+## 第三輪（只審修正）
+
+- **待審**：`23753ff1`（第二輪審的 commit）到這份請求所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/polyphone-pick-l2.md`）的差異，範圍：`src/core/deck/question-types.ts`（`choiceStem`、`HTML_TAG`、`isChoiceSentence`、`readChoice` 的 `stems`）、`src/core/deck/types.ts` 的 `Choice.stems`、`src/core/ai/existing.ts`（`readingsBySentence`、`newlyAmbiguous`）、`src/core/ai/check.ts`（句數、錨點的冒號）、`src/core/study/compose.ts`（`distinctSentences`、`choicePrompts`、`choicePreviewCards`）、`apps/Cards/docs/syntax.md` §2-3、§2-8，以及它們的呼叫端與測試。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第二輪）〉。前四項是第一輪 R1～R3 的第二代，這一輪把「同一句」定在一處（`choiceStem`／`Choice.stems`）、多音字句的認法收窄。同一條鏈再有發現就是第三代：照 D-197 先寫前提哪裡不對，不用給逐點的修法。
+- **請特別試**：
+  - `Choice.stems` 和指紋分開之後：只差底線數的兩句在紀錄裡是兩個指紋，輪流出題（`rotation`）時會不會有一句一直出不到；預覽的張數；三個讀音的字。
+  - `newlyAmbiguous`：原本就配兩個讀音的那一句又多配一個讀音（三個讀音的字）、同一批好幾句的組合。
+  - 句子裡有 HTML 標籤就照翻面：舊卡組裡原本認成點選、現在變翻面的（例如有 `<br>`），同一個 `lt` 的紀錄從點選變翻面，排程與紀錄重播對不對（同第二輪 R4 試過的路徑）。整個包在連結裡的 `[[長（＿＿）]]`、`[長（＿＿）](…)` 照舊認、選項放在連結裡，點了會不會跳到連結（比較卡原本也一樣）。
+  - 錨點的冒號：讀音對不到的行、半形冒號的行不提醒，這樣可不可以。
+- **驗證**：同第二輪。
+- 報告接在 `Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md` 的後面，標「第三輪」。延續第二輪的發現標「延續第二輪 n」，修正帶出的標「第二輪 n 修正引入」。
 
 ## 第二輪（只審修正）
 
