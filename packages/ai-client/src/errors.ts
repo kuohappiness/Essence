@@ -92,10 +92,26 @@ export const isAiError = (value: unknown): value is AiError => value instanceof 
  */
 function sanitizeCause(cause: unknown, secrets: readonly string[]): unknown {
   if (cause === undefined || usable(secrets).length === 0) return cause;
-  const text = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : JSON.stringify(cause) ?? '';
-  const copy = new Error(redact(text, secrets));
-  if (cause instanceof Error) copy.name = redact(cause.name, secrets);
+  const copy = new Error(redact(describeThrown(cause), secrets));
+  if (cause instanceof Error) copy.name = redact(describeThrown(cause.name), secrets);
   return copy;
+}
+
+/**
+ * 任何丟出來的值都轉得成字串、不會再丟例外：循環物件、BigInt、沒有原型的物件、getter 會丟的都算（L2 第二輪 R1 修正引入）。
+ */
+export function describeThrown(value: unknown): string {
+  try {
+    if (value instanceof Error) return String(value.message);
+    if (typeof value === 'string') return value;
+    try {
+      const json = JSON.stringify(value);
+      if (json !== undefined) return json;
+    } catch { /* 循環或 BigInt：改用 String */ }
+    return String(value);
+  } catch {
+    return '[unprintable]';
+  }
 }
 
 /**

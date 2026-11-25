@@ -540,6 +540,10 @@ void test('金鑰不出現在任何公開的出口：傳輸層丟的各種例外
   const nested = new Error('outer', { cause: new Error(`inner ${KEY}`) });
   const adapterError = new AiError({ kind: 'network', message: `adapter ${KEY}`, requestId: `req_${KEY}`, providerCode: `code_${KEY}`, partialText: `part ${KEY}` });
   const throws: unknown[] = [withName, nested, adapterError, `plain ${KEY}`];
+  // 轉不成 JSON 或字串的值：清理例外時不能再丟一次（L2 第二輪 R1 修正引入）。
+  const circular: Record<string, unknown> = { note: KEY };
+  circular.self = circular;
+  throws.push(circular, { big: 10n, note: KEY }, Object.create(null) as object);
   // 錯誤物件上看得到的每一個字串：訊息、堆疊、JSON、cause 的名稱與訊息與堆疊。
   const surface = (error: AiError): string => {
     const cause = error.cause as { name?: unknown; message?: unknown; stack?: unknown } | undefined;
@@ -565,4 +569,16 @@ void test('短於 8 個字的金鑰不遮（不是真的金鑰，遮了會改掉
   // 「光合作用把」是 5 個字。
   assert.equal((await local('光合作用把')).text, chat.stream.text);
   assert.equal((await local('光合作用把光能轉')).text, '***成化學能。');
+});
+
+void test('遮蔽只動服務回的字串：金鑰剛好等於固定的值時，結構照舊、可以原樣放回下一輪（L2 第二輪 R1 修正引入）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  for (const apiKey of ['assistant', 'openai-chat', 'localhost:11434']) {
+    const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(chat, chat.stream.file)] }]);
+    const result = await createAiClient({ fetch, clock: instantClock() }).generate(request({
+      apiKey, endpoint: { custom: { dialect: 'openai-chat', baseUrl: 'http://localhost:11434/v1' } }, model: 'llama',
+    }));
+    assert.deepEqual(result.message, { role: 'assistant', content: [{ type: 'text', text: chat.stream.text }] }, apiKey);
+    assert.deepEqual([result.trace.dialect, result.trace.host, result.trace.provider], ['openai-chat', 'localhost:11434', 'custom'], apiKey);
+  }
 });

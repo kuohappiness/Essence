@@ -3,7 +3,7 @@ import { encodeBody } from './body.ts';
 import { BUILTIN_CATALOG, isAllowedUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
-import { AiError, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
+import { AiError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
 import { redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
@@ -152,7 +152,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       return await generateOnce(request);
     } catch (caught) {
       const secrets = request.apiKey ? [request.apiKey] : [];
-      throw isAiError(caught) ? withSecrets(caught, secrets) : fail('unknown', String(caught), { secrets, cause: caught });
+      throw isAiError(caught) ? withSecrets(caught, secrets) : fail('unknown', describeThrown(caught), { secrets, cause: caught });
     }
   }
 
@@ -219,7 +219,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         }
         progress({ type: 'done' });
         // 服務回送的字串裡有金鑰就遮掉（L2 R1）：文字、編號、模型名稱、warnings 都在這一處。
-        return redactDeep<GenerateResult>({
+        return redactResult({
           text: output.text,
           stopReason: output.stopReason,
           usage: output.usage,
@@ -236,7 +236,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           },
         }, secrets);
       } catch (caught) {
-        const error = isAiError(caught) ? caught : fail('unknown', String(caught), { secrets, cause: caught, provider: r.providerId });
+        const error = isAiError(caught) ? caught : fail('unknown', describeThrown(caught), { secrets, cause: caught, provider: r.providerId });
         error.attempts = attempt;
         // 只在還沒拿到成功的回應時自動重送：拿到 200 之後才斷，推理可能已經算錢了，交給呼叫端問使用者。
         if (!error.retryable || error.afterResponse || attempt >= maxAttempts) throw error;
@@ -375,7 +375,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           // 請求已經送出、服務可能已經在做（或中間的代理把串流整段收完才交），重送可能讓同一件事做兩次、付兩次錢（L2 R7）。
           : reason === 'response' ? fail('timeout', `no response headers within ${responseTimeoutMs} ms`, meta())
           : isAiError(caught) ? caught
-          : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta(), cause: caught });
+          : fail('network', describeThrown(caught), { ...meta(), cause: caught });
         log.error = error.kind;
         throw error;
       } finally {
@@ -437,7 +437,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta)
         : reason === 'timeout' ? fail('timeout', 'timed out', meta)
         : isAiError(caught) ? caught
-        : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta, cause: caught });
+        : fail('network', describeThrown(caught), { ...meta, cause: caught });
       return { ok: false, error: withSecrets(error, secrets) };
     } finally {
       clearTimeout(timer);
@@ -447,6 +447,27 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
   }
 
   return { generate, check, providers: () => catalog.providers, catalogProblems: problems };
+}
+
+/**
+ * 結果裡服務回的字串才遮：文字、模型名稱、編號、停止原因、warnings。結構與固定的值（role、type、方言、主機）不動，
+ * 金鑰剛好等於那些字時，message 仍能原樣放回下一輪（L2 第二輪 R1 修正引入）。
+ */
+function redactResult(result: GenerateResult, secrets: readonly string[]): GenerateResult {
+  const r = (s: string) => redactText(s, secrets);
+  const maybe = (s: string | null) => (s === null ? null : r(s));
+  const text = r(result.text);
+  return {
+    ...result,
+    text,
+    message: { role: 'assistant', content: [{ type: 'text', text }] },
+    trace: {
+      ...result.trace,
+      resolvedModel: maybe(result.trace.resolvedModel), requestId: maybe(result.trace.requestId), responseId: maybe(result.trace.responseId),
+      rawStopReason: maybe(result.trace.rawStopReason), warnings: result.trace.warnings.map(r),
+      attempts: result.trace.attempts.map(a => ({ ...a, requestId: maybe(a.requestId) })),
+    },
+  };
 }
 
 // ── 送出前 ──
