@@ -175,6 +175,29 @@ void test('readConfig：收益與不能變差只收學習面的指標（D-236 �
   });
 });
 
+void test('readConfig：加深、加深規則與對照（rule-test-d236.md §2、§6-1、§8）', () => {
+  const withDeepen = EXAMPLE
+    .replace('      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }', '      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }\n    加深規則: { commit: 288ba1ef, 檔案: [apps/Cards/docs/card-rules/next/core.md] }')
+    + '加深: { 生成器: [claude] }\n對照: [{ 名稱: 換規則的效果, 甲: 候選, 乙: 現行 }]\n';
+  const config = readConfig(withDeepen);
+  assert.deepEqual(config.deepen, { generators: ['claude'] });
+  assert.deepEqual(config.contrasts, [{ name: '換規則的效果', a: '候選', b: '現行' }]);
+  assert.deepEqual(config.groups.map(group => group.deepenRules), [null, { commit: '288ba1ef', files: ['apps/Cards/docs/card-rules/next/core.md'] }, null, null]);
+  assert.equal(readConfig(EXAMPLE).deepen, null);
+  // 檔案來源的組跑加深卻沒寫加深規則；手貼的生成器；對照的組不在、甲乙同一組。
+  const broken = EXAMPLE + '加深: { 生成器: [claude, ChatGPT, gemini] }\n對照: [{ 名稱: 甲乙, 甲: 分段送出, 乙: 分段送出 }, { 名稱: 不在, 甲: 丙, 乙: 現行 }]\n';
+  assert.throws(() => readConfig(broken), (error: Error) => {
+    assert.match(error.message, /組「候選」：跑加深的組，規則不是同一科的「外掛」來源時，要寫「加深規則: \{ commit, 檔案 \}」/);
+    assert.match(error.message, /組「分段送出」：跑加深的組/);
+    assert.doesNotMatch(error.message, /組「現行」：/);
+    assert.match(error.message, /加深：「ChatGPT」是手貼的生成器，不跑加深/);
+    assert.match(error.message, /加深：沒有叫「gemini」的生成器/);
+    assert.match(error.message, /對照 第 1 項：甲和乙是同一組/);
+    assert.match(error.message, /對照 第 2 項：沒有叫「丙」的組/);
+    return true;
+  });
+});
+
 void test('readConfig：YAML 本身讀不懂時說是 YAML 的問題', () => {
   assert.throws(() => readConfig('名稱: [沒關'), /測試\.yaml 讀不懂/);
   assert.throws(() => readConfig('- 一個清單'), /要是一個物件/);

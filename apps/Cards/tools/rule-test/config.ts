@@ -22,7 +22,9 @@ export type RuleSource =
   | { kind: 'own'; files: Record<string, string> };
 
 interface Step { conversation: string; rules: RuleSource; deck: boolean }
-interface Group { name: string; steps: Step[] }
+/** 加深規則（rule-test-d236.md §6-1 第 5 點）：「檔案」與「自備」來源的組跑加深時一定要寫，送這幾個檔的送給 AI 段加上加深段。 */
+interface DeepenRules { commit: string; files: string[] }
+interface Group { name: string; steps: Step[]; deepenRules: DeepenRules | null }
 
 export interface LessonConfig {
   code: string;
@@ -90,6 +92,10 @@ export interface Config {
   gates: Gates;
   /** 錯誤分級（rule-test-d236.md §3-1）。 */
   levels: Levels;
+  /** 模擬首次加深（§6-1）：跑哪幾個生成器；沒寫是不跑。 */
+  deepen: { generators: string[] } | null;
+  /** 對照（§8）：甲對乙，只報告。 */
+  contrasts: { name: string; a: string; b: string }[];
 }
 
 type Raw = Record<string, unknown>;
@@ -197,6 +203,14 @@ function count(value: unknown, fallback: number, where: string, errors: Errors):
   return number;
 }
 
+function deepenRules(raw: unknown, where: string, errors: Errors): DeepenRules | null {
+  if (raw === undefined) return null;
+  const item = isRaw(raw) ? raw : (errors.add(where, '要寫成 { commit, 檔案 }'), {});
+  const files = list(item['檔案'], `${where} 檔案`, errors).map(String);
+  if (!files.length) errors.add(where, '少了「檔案」');
+  return { commit: need(item, 'commit', where, errors), files };
+}
+
 function levels(raw: unknown, errors: Errors): Levels {
   if (raw === undefined) return { ...DEFAULT_LEVELS };
   if (!isRaw(raw)) { errors.add('錯誤分級', '要寫成 { 種類: 傷到學習 或 小問題 }'); return { ...DEFAULT_LEVELS }; }
@@ -245,7 +259,7 @@ export function readConfig(source: string): Config {
       });
     if (steps.some(step => step.rules === null)) errors.add(where, '少了「規則」（組或每一步要有一個）');
     if (!steps.some(step => step.deck)) errors.add(where, '至少要有一步「卡組: 是」');
-    return { name, steps };
+    return { name, steps, deepenRules: deepenRules(raw['加深規則'], `${where} 加深規則`, errors) };
   });
   const names = pending.map(each => each.name);
   names.forEach((name, i) => { if (name && names.indexOf(name) !== i) errors.add('組', `名稱「${name}」重複`); });
@@ -260,7 +274,7 @@ export function readConfig(source: string): Config {
     return { ...resolved, ...rules.files ? { files: rules.files } : {}, ...rules.task === undefined ? {} : { task: taskOptions(rules.task, `${where} 任務段`, errors) } };
   };
   const groups: Group[] = pending.map(group => ({
-    name: group.name,
+    name: group.name, deepenRules: group.deepenRules ?? null,
     steps: group.steps.map((step, j) => {
       const rules = step.rules ? resolve(step.rules, `組「${group.name}」步驟 ${String(j + 1)}`, [group.name]) : { kind: 'plugin' as const, subject: '' };
       if (rules.kind === 'own') for (const code of codes) if (code && !rules.files[code]) errors.add(`組「${group.name}」步驟 ${String(j + 1)}`, `自備少了課「${code}」的檔`);
@@ -353,6 +367,35 @@ export function readConfig(source: string): Config {
   if (rawGates['近義重複多出'] !== undefined) errors.add('門檻 近義重複多出', '改成「多餘的題多出」（每組題數減一加總，rule-test-d236.md §4）');
   if (!gates.benefits.length) errors.add('門檻', '少了「收益」');
 
+  // 加深與對照（rule-test-d236.md §2、§6-1、§8）。
+  let deepen: Config['deepen'] = null;
+  if (doc['加深'] !== undefined) {
+    const raw = isRaw(doc['加深']) ? doc['加深'] : (errors.add('加深', '要寫成 { 生成器: [...] }'), {});
+    const chosen = list(raw['生成器'], '加深 生成器', errors).map(String);
+    for (const name of chosen) {
+      const generator = generators.find(each => each.name === name);
+      if (!generator) errors.add('加深', `沒有叫「${name}」的生成器`);
+      else if (generator.kind === 'manual') errors.add('加深', `「${name}」是手貼的生成器，不跑加深（rule-test-d236.md §2）`);
+    }
+    if (!chosen.length) errors.add('加深', '少了「生成器」');
+    deepen = { generators: chosen };
+  }
+  const contrasts = list(doc['對照'], '對照', errors).map((raw, i) => {
+    const where = `對照 第 ${String(i + 1)} 項`;
+    const item = isRaw(raw) ? raw : (errors.add(where, '要寫成 { 名稱, 甲, 乙 }'), {});
+    const contrast = { name: need(item, '名稱', where, errors), a: need(item, '甲', where, errors), b: need(item, '乙', where, errors) };
+    for (const name of [contrast.a, contrast.b]) if (name && !names.includes(name)) errors.add(where, `沒有叫「${name}」的組`);
+    if (contrast.a && contrast.a === contrast.b) errors.add(where, '甲和乙是同一組');
+    return contrast;
+  });
+  if (deepen) {
+    const compared = new Set([baseline, ...candidates, ...contrasts.flatMap(each => [each.a, each.b])]);
+    for (const group of groups.filter(each => compared.has(each.name) && !each.deepenRules)) {
+      const subjects = new Set(group.steps.filter(step => step.deck).map(step => step.rules.kind === 'plugin' ? step.rules.subject : null));
+      if (subjects.has(null) || subjects.size > 1) errors.add(`組「${group.name}」`, '跑加深的組，規則不是同一科的「外掛」來源時，要寫「加深規則: { commit, 檔案 }」（rule-test-d236.md §6-1 第 5 點）');
+    }
+  }
+
   // 算門檻的組份數相同（F11）：份數與跑哪幾課都寫在生成器上、每一組照跑，所以讀設定時一定成立；補跑時由 extend 檢查（§5-10）。
   const config: Config = {
     name: need(doc, '名稱', '設定', errors),
@@ -366,6 +409,7 @@ export function readConfig(source: string): Config {
     rubric,
     gates,
     levels: levels(doc['錯誤分級'], errors),
+    deepen, contrasts,
   };
   if (!(config.timeoutMinutes > 0)) errors.add('逾時分鐘', '要大於 0');
   if (!Number.isInteger(config.concurrency) || config.concurrency < 1) errors.add('同時', '要是 1 以上的整數');

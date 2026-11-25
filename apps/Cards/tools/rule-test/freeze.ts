@@ -8,6 +8,7 @@ import { cliPath } from '../cli-path.ts';
 import type { RuleSource } from './config.ts';
 import { lessonDir, libraryOf, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { checkInherited, templateHashes } from './init.ts';
+import { EVALUATION } from './levels.ts';
 import { APP_ROOT, buildFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
 import { checkRubricFile } from './rubric.ts';
 import { parseSnapshotFile, readSnapshot, type Snapshot } from './snapshot.ts';
@@ -38,6 +39,8 @@ export interface Lock {
   /** 凍結時 repo 有沒 commit 的修改（只記錄；外掛來源用到的檔有修改時不會走到這裡）。 */
   dirty: boolean;
   version: string;
+  /** 評估版本（rule-test-d236.md §2）：之後每一步都核對，和工具的不同就停下。 */
+  evaluation: string;
   /** 檔案 → SHA-256。測試資料夾裡的寫相對路徑；課庫的檔寫 `<課庫>/<課>/<檔>`。 */
   files: Record<string, string>;
 }
@@ -62,6 +65,7 @@ export function readLock(folder: Folder): Lock | null {
 export function verifyLock(folder: Folder): Lock {
   const lock = readLock(folder);
   if (!lock) throw Error('還沒凍結（先跑 freeze）');
+  if (lock.evaluation !== EVALUATION) throw Error(`這個資料夾是用舊的評估版本（${lock.evaluation ?? 'D-236 以前'}）凍結的，現在的工具是 ${EVALUATION}：用凍結時的 commit（${lock.commit.slice(0, 8)}）跑`);
   const changed = Object.entries(lock.files).filter(([key, hash]) => {
     const path = located(folder, key);
     return !existsSync(path) || sha256File(path) !== hash;
@@ -176,7 +180,7 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   }
   record(join(folder.root, '測試.yaml'));
 
-  const lock: Lock = { time: new Date().toISOString(), commit: git(['rev-parse', 'HEAD'], root), dirty: git(['status', '--porcelain'], root) !== '', version, files };
+  const lock: Lock = { time: new Date().toISOString(), commit: git(['rev-parse', 'HEAD'], root), dirty: git(['status', '--porcelain'], root) !== '', version, evaluation: EVALUATION, files };
   writeOnce(join(folder.root, '凍結', '鎖.json'), JSON.stringify(lock, null, 2) + '\n');
 
   for (const lesson of config.lessons) {

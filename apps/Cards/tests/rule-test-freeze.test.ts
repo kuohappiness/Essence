@@ -178,7 +178,7 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
 `);
   const lines: string[] = [];
   const lock = await freezeFolder(openFolder(folder), { root, log: line => lines.push(line) });
-  assert.equal(lock.commit, commit);
+  assert.deepEqual([lock.commit, lock.evaluation], [commit, 'D-236 v1']);
   const steps = readFrozenSteps(openFolder(folder));
   assert.deepEqual(steps.map(s => [s.file, s.deck, s.threeSections, s.pending]), [
     ['現行-英文L3.md', true, false, []],
@@ -207,6 +207,13 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
   // 凍結的檔被改：停下並說是哪個。
   writeFileSync(join(folder, '凍結', '提示', '現行-英文L3.md'), '改過');
   assert.throws(() => verifyLock(openFolder(folder)), /凍結之後改過或不見了：凍結\/提示\/現行-英文L3\.md/);
+  // 評估版本不同（rule-test-d236.md §2）：每一步都停下，說用凍結時的 commit 跑。
+  const lockFile = join(folder, '凍結', '鎖.json');
+  const { evaluation: _, ...old } = JSON.parse(readFileSync(lockFile, 'utf8')) as Record<string, unknown>;
+  writeFileSync(lockFile, JSON.stringify(old));
+  assert.throws(() => verifyLock(openFolder(folder)), new RegExp(`舊的評估版本（D-236 以前）凍結的，現在的工具是 D-236 v1：用凍結時的 commit（${commit.slice(0, 8)}）跑`));
+  writeFileSync(lockFile, JSON.stringify({ ...old, evaluation: 'D-236 v0' }));
+  assert.throws(() => verifyLock(openFolder(folder)), /舊的評估版本（D-236 v0）/);
 });
 
 void test('freeze：教材、自備提示檔、commit 裡的規則檔不在就停下，說是哪一個，什麼都不寫（§4-2 設定的檢查）', async () => {
