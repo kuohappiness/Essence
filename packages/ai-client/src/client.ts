@@ -141,12 +141,22 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     };
   }
 
-  /** 標頭：方言的、目錄的、呼叫端加的，最後是認證（蓋不掉）。 */
-  function headersFor(r: Resolved, apiKey: string | undefined, dialectHeaders: Record<string, string> | undefined, extra: Record<string, string> | undefined): Record<string, string> {
-    const headers: Record<string, string> = { ...lower(r.headers), ...lower(extra), ...lower(dialectHeaders) };
+  /**
+   * 標頭：目錄的、呼叫端加的、方言的，再來是套件固定的（fixed），最後是認證（蓋不掉）。
+   * 組好之後整份驗一次（L2 第四輪 第 9 項）：每個來源的壞名稱或壞值都在這裡擋，不送出、不進重試；訊息只寫名稱，不寫值。
+   */
+  function headersFor(r: Resolved, apiKey: string | undefined, dialectHeaders: Record<string, string> | undefined, extra: Record<string, string> | undefined, fixed: Record<string, string>): Record<string, string> {
+    const headers: Record<string, string> = { ...lower(r.headers), ...lower(extra), ...lower(dialectHeaders), ...fixed };
     if (r.auth) {
       if (!apiKey) throw fail('auth', 'no API key given', { provider: r.providerId });
-      headers[r.auth.header.toLowerCase()] = r.auth.scheme ? `${r.auth.scheme} ${apiKey}` : apiKey;
+      const name = r.auth.header.toLowerCase();
+      // 認證用了套件固定的名稱，請求會沒帶認證（或固定的值被換掉）。
+      if (FIXED_HEADERS.includes(name)) throw fail('invalid_request', `auth header cannot be ${name}`, { provider: r.providerId });
+      headers[name] = r.auth.scheme ? `${r.auth.scheme} ${apiKey}` : apiKey;
+    }
+    for (const [name, value] of Object.entries(headers)) {
+      if (!HEADER_NAME.test(name)) throw fail('invalid_request', `invalid header name: ${JSON.stringify(name)}`, { provider: r.providerId });
+      if (!isHeaderValue(value)) throw fail('invalid_request', `header ${name} has a value that cannot be sent`, { provider: r.providerId });
     }
     return headers;
   }
@@ -204,9 +214,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     }
     const bytes = encodeBody(body);
     checkSize(r, input, bytes.length);
-    const headers = headersFor(r, request.apiKey, call.headers, request.extraHeaders);
-    headers['content-type'] = 'application/json';
-    headers.accept = 'text/event-stream';
+    const headers = headersFor(r, request.apiKey, call.headers, request.extraHeaders, { 'content-type': 'application/json', accept: 'text/event-stream' });
 
     const timeoutMs = givenTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     // 期限從開始算一次、照計時器上限：每一次重送都用剩下的，不重新給滿（L2 第三輪 延續 R6）。
@@ -460,8 +468,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     try {
       if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending');
       if (limit <= 0) throw fail('timeout', 'timed out before sending', { provider: r.providerId, secrets });
-      const headers = headersFor(r, request.apiKey, call.headers, undefined);
-      headers.accept = 'application/json';
+      const headers = headersFor(r, request.apiKey, call.headers, undefined, { accept: 'application/json' });
       const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
       requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
       if (response.status < 200 || response.status >= 300) {
@@ -608,6 +615,18 @@ function applyReasoning(body: Record<string, unknown>, spec: ReasoningSpec | und
 }
 
 // ── 小工具 ──
+
+/** 套件自己定的標頭：生成與測試連線都不讓認證用這些名稱。 */
+const FIXED_HEADERS: readonly string[] = ['content-type', 'accept'];
+/** HTTP 標頭名稱（RFC 9110 的 token）。 */
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+/** 標準的 Headers 收得下的值：字串、沒有換行與 NUL、每個字都在 0～255（L2 第四輪 第 9 項）。 */
+function isHeaderValue(value: unknown): boolean {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
+  for (let i = 0; i < value.length; i++) if (value.charCodeAt(i) > 0xff) return false;
+  return true;
+}
 
 function lower(headers: Record<string, string> | undefined): Record<string, string> {
   const out: Record<string, string> = {};

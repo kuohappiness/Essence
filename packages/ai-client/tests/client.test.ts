@@ -2,7 +2,7 @@
 // 各家格式的部分在 conformance.test.ts；這裡用 openai-responses 的範例當代表。
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AiError, createAiClient, isAiError, type FetchLike, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
+import { AiError, createAiClient, isAiError, type AiClientOptions, type FetchLike, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
 import { mockFetch, sse, type MockReply } from '../src/testing.ts';
 import { KEY, instantClock, loadCases, readSse } from './helpers.ts';
 
@@ -25,6 +25,17 @@ async function rejects(promise: Promise<unknown>): Promise<AiError> {
 }
 
 const bodyOf = (fetch: ReturnType<typeof mockFetch>, i = 0) => JSON.parse(fetch.requests[i].body ?? '') as Record<string, unknown>;
+
+/**
+ * OpenAI 相容服務的串流：每段文字一個事件，再來是停止原因與用量；done 是 false 時不送 [DONE]（做完沒關）。
+ * 要讓服務回的文字裡出現金鑰時用它：金鑰只能是標頭收得下的字，不能拿中文的範例文字當金鑰（L2 第四輪 第 9 項）。
+ */
+const chatStream = (deltas: string[], done = true): string => sse([
+  ...deltas.map(content => ({ data: { id: 'x', model: 'openai/gpt-5.6-terra', choices: [{ index: 0, delta: { content } }] } })),
+  { data: { id: 'x', model: 'openai/gpt-5.6-terra', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] } },
+  { data: { id: 'x', model: 'openai/gpt-5.6-terra', choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } } },
+  ...(done ? ['[DONE]'] : []),
+]);
 
 void test('網址只准 https 或本機的 http；帳密與假的 localhost 都擋', async () => {
   const fetch = mockFetch([OK]);
@@ -780,14 +791,13 @@ void test('丟出來的值整類：每一個讀取都會丟（getter、轉字串
 });
 
 void test('短於 8 個字的金鑰不遮（不是真的金鑰，遮了會改掉正常的字），8 個字以上的照遮（L2 第二輪 延續 R1）', async () => {
-  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
-  const reply = (): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(chat, chat.stream.file)] });
+  const reply = (): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [chatStream(['photosynthesis ', 'makes sugar.'])] });
   const local = (apiKey: string) => createAiClient({ fetch: mockFetch([reply()]), clock: instantClock() }).generate(request({
     apiKey, endpoint: { custom: { dialect: 'openai-chat', baseUrl: 'http://localhost:11434/v1' } }, model: 'llama',
   }));
-  // 「光合作用把」是 5 個字。
-  assert.equal((await local('光合作用把')).text, chat.stream.text);
-  assert.equal((await local('光合作用把光能轉')).text, '***成化學能。');
+  // 「photo」是 5 個字。
+  assert.equal((await local('photo')).text, 'photosynthesis makes sugar.');
+  assert.equal((await local('photosyn')).text, '***thesis makes sugar.');
 });
 
 void test('金鑰整類：短於 8 個字的只送本機、不遮；送到遠端的一律 8 個字以上，回來的每個出口都遮（L2 第三輪 延續 R1）', async () => {
@@ -838,10 +848,9 @@ void test('遮蔽只動服務回的字串：金鑰剛好等於固定的值時，
 void test('進度回呼裡取消，每一種事件、每一條路都停：cancelled、不再送、已交出的文字留在 partialText（L2 第二輪 R8、R10 修正交互）', async () => {
   const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
   // 最後一段文字以金鑰的開頭結尾：遮蔽器扣住它，串流做完卻沒關，閒置逾時後才補交（R10 的路）。
-  const heldKey = '能。這不是真的金鑰';
+  const heldKey = 'sk-held-not-a-real-key';
   const lingering = (): MockReply => ({
-    status: 200, headers: { 'content-type': 'text/event-stream' }, keepOpen: true,
-    chunks: [readSse(chat, chat.stream.file).split(/\n\n/).filter(e => !e.includes('[DONE]')).map(e => `${e}\n\n`).join('')],
+    status: 200, headers: { 'content-type': 'text/event-stream' }, keepOpen: true, chunks: [chatStream(['photosynthesis ', 'makes sugar. sk-'], false)],
   });
   const routes: { name: string; reply: () => MockReply; extra: Partial<GenerateRequest> }[] = [
     { name: 'SSE', reply: () => OK, extra: {} },
@@ -890,7 +899,6 @@ void test('sent 的回呼拖過整體期限：不送出，丟 timeout（L2 第�
 void test('取消之後一個事件都不再交：每一條路的每一個事件，在回呼裡取消或排到下一步才取消，都是 cancelled，partialText 包含已交出的文字（L2 第三輪 延續 R8）', async () => {
   const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
   const stream = (chunks: string[], extra: Partial<MockReply> = {}): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks, ...extra });
-  const chatEvents = readSse(chat, chat.stream.file).split(/\n\n/).filter(Boolean).map(e => `${e}\n\n`);
   const routes: { name: string; replies: () => MockReply[]; extra: Partial<GenerateRequest> }[] = [
     { name: 'SSE', replies: () => [OK], extra: {} },
     { name: 'JSON', replies: () => [{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(openai.json.body)] }], extra: {} },
@@ -908,8 +916,8 @@ void test('取消之後一個事件都不再交：每一條路的每一個事件
     // 做完卻沒關：閒置逾時後才補交扣住的尾段（R10 的路）。
     {
       name: '做完沒關',
-      replies: () => [stream([chatEvents.filter(e => !e.includes('[DONE]')).join('')], { keepOpen: true })],
-      extra: { endpoint: { provider: 'openrouter' }, model: chat.model, apiKey: '能。這不是真的金鑰', idleTimeoutMs: 30 },
+      replies: () => [stream([chatStream(['photosynthesis ', 'makes sugar. sk-'], false)], { keepOpen: true })],
+      extra: { endpoint: { provider: 'openrouter' }, model: chat.model, apiKey: 'sk-held-not-a-real-key', idleTimeoutMs: 30 },
     },
   ];
   for (const route of routes) {
@@ -1097,4 +1105,44 @@ void test('請求物件用 getter 提供欄位（類別）整類：每一個欄�
     assert.deepEqual(await outcome(viaGetters(plain), replies), await outcome(plain, replies), label);
   }
   assert.deepEqual((await outcome(viaGetters(request({ signal: cancelled.signal })), [OK])).sent, [], '取消了就不送');
+});
+
+void test('標頭整類：每個來源（目錄、自訂服務、extraHeaders、認證名稱與前綴、金鑰）的壞名稱或壞值，都不送出、回 invalid_request（L2 第四輪 第 9 項）', async () => {
+  const BAD_NAMES = ['bad header', 'x-a\n', 'x:a', '', '中文', 'x(a)'];
+  const BAD_VALUES = ['a\nb', 'a\rb', 'a\0b', '中', '😀', 7, null];
+  const outcome = async (given: Partial<GenerateRequest>, catalog?: AiClientOptions['catalog']) => {
+    const fetch = mockFetch([OK, { status: 200, headers: { 'content-type': 'application/json' }, chunks: ['{"data":[]}'] }]);
+    const client = createAiClient({ fetch, clock: instantClock(), catalog });
+    const plain = request(given);
+    const generated = await client.generate(plain).then(() => 'ok', (caught: unknown) => (isAiError(caught) ? caught.kind : String(caught)));
+    const checked = await client.check({ endpoint: plain.endpoint, apiKey: plain.apiKey });
+    return { generated, checked: checked.ok ? 'ok' : checked.error.kind, sent: fetch.requests.length };
+  };
+  const custom = (extra: Record<string, unknown>) => ({ endpoint: { custom: { dialect: 'openai-responses', baseUrl: 'https://api.example.com/v1', ...extra } } as never });
+  const cases: [string, Partial<GenerateRequest>, AiClientOptions['catalog']?][] = [];
+  for (const name of BAD_NAMES) {
+    cases.push([`自訂 headers 名稱 ${JSON.stringify(name)}`, custom({ headers: { [name]: 'v' } })]);
+    cases.push([`自訂 auth.header ${JSON.stringify(name)}`, custom({ auth: { header: name, scheme: 'Bearer' } })]);
+    cases.push([`目錄 headers 名稱 ${JSON.stringify(name)}`, { endpoint: { provider: 'openrouter' }, model: 'x' }, { providers: [{ id: 'openrouter', headers: { [name]: 'v' } }] }]);
+  }
+  for (const value of BAD_VALUES) {
+    cases.push([`自訂 headers 值 ${JSON.stringify(value)}`, custom({ headers: { 'x-a': value } })]);
+    if (typeof value === 'string') cases.push([`auth.scheme ${JSON.stringify(value)}`, custom({ auth: { header: 'authorization', scheme: `Bearer${value}` } })]);
+    if (typeof value === 'string') cases.push([`金鑰 ${JSON.stringify(value)}`, { apiKey: `${KEY}${value}tail` }]);
+  }
+  // 認證不能用套件固定的標頭：會被 accept、content-type 蓋掉，請求就沒帶認證。
+  for (const header of ['Accept', 'accept', 'Content-Type']) cases.push([`auth.header ${header}`, custom({ auth: { header, scheme: 'Bearer' } })]);
+  for (const [label, given, catalog] of cases) {
+    assert.deepEqual(await outcome(given, catalog), { generated: 'invalid_request', checked: 'invalid_request', sent: 0 }, label);
+  }
+  // extraHeaders 只有 generate 用。
+  for (const extraHeaders of [...BAD_NAMES.map(name => ({ [name]: 'v' })), ...BAD_VALUES.map(value => ({ 'x-a': value }))]) {
+    const result = await outcome({ extraHeaders: extraHeaders as Record<string, string> });
+    assert.deepEqual([result.generated, result.sent], ['invalid_request', 1], `extraHeaders ${JSON.stringify(extraHeaders)}（只有 check 送出）`);
+  }
+  // 合法的照送：Latin-1 的值、各種 token 字元、自訂的認證標頭名稱。
+  const allowed: Partial<GenerateRequest>[] = [{ extraHeaders: { 'x-a': 'café' } }, { extraHeaders: { "x-a!#$%&'*+.^_`|~1": 'v' } }, custom({ auth: { header: 'X-Api-Key' } })];
+  for (const given of allowed) {
+    assert.deepEqual(await outcome(given), { generated: 'ok', checked: 'ok', sent: 2 }, JSON.stringify(given));
+  }
 });
