@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
+import { allowedTools } from './adapters.ts';
 import { borrowClipboard, readClipboard, writeClipboard } from './clipboard.ts';
 import { findClaude, findCodex, type Cli } from './clis.ts';
 import { runProcess, type RunResult } from './proc.ts';
@@ -171,9 +172,12 @@ export async function probe(): Promise<void> {
       secondRows = rows(second.run.result?.structured);
       resumeExit = second.result.code;
     }
-    record({ id: 'P4', ok: firstRows.length === 120 && secondRows.length === 120 && secondRows[0]?.verdict === '沒有',
-      summary: `第一次 ${String(firstRows.length)} 列；--resume 後 ${String(secondRows.length)} 列、R001＝${secondRows[0]?.verdict ?? '?'}（exit ${String(resumeExit)}）`,
-      details: { resultKeys: first.run.result ? Object.keys(first.run.result.raw) : [], session } });
+    // 照 schema 交時 CLI 自己多開 StructuredOutput；轉接器的隔離檢查用同一份清單（allowedTools），多了別的就是隔離沒生效。
+    const tools = first.run.init?.tools ?? [];
+    const isolated = first.run.init !== null && tools.every(tool => allowedTools('', true).includes(tool)) && first.run.init.mcpServers.length === 0;
+    record({ id: 'P4', ok: isolated && firstRows.length === 120 && secondRows.length === 120 && secondRows[0]?.verdict === '沒有',
+      summary: `第一次 ${String(firstRows.length)} 列；--resume 後 ${String(secondRows.length)} 列、R001＝${secondRows[0]?.verdict ?? '?'}（exit ${String(resumeExit)}）；開頭事件的工具：${tools.join('、') || '無'}`,
+      details: { resultKeys: first.run.result ? Object.keys(first.run.result.raw) : [], session, tools, mcp: first.run.init?.mcpServers } });
   });
 
   // P5：訂閱登入時可以換系統提示。

@@ -39,6 +39,12 @@ export type Adapter = (request: StepRequest) => Promise<StepResult>;
 const QUOTA_TEXT = /usage limit|limit reached|rate limit|額度/i;
 const LOGIN_TEXT = /not logged in|please run \/login/i;
 
+/**
+ * 開頭事件裡可以有的工具：評審開的 Read，加上照 schema 交時 CLI 自己多開的 StructuredOutput
+ * （探針 P4；2026-11-25 使用者電腦的 judge：開頭事件是 Read、StructuredOutput，沒列進來時每位 claude 評審交完都被判 fatal）。
+ */
+export const allowedTools = (tools: '' | 'Read' | undefined, jsonSchema: boolean): string[] => [...tools === 'Read' ? ['Read'] : [], ...jsonSchema ? ['StructuredOutput'] : []];
+
 /** claude -p：safe-mode、不開工具與 MCP、stream-json 進出（PDF 當附件），探針 P1～P5 驗過的參數。 */
 export function claudeAdapter(find: () => Cli = findClaude): Adapter {
   let cli: Cli | null = null;
@@ -60,7 +66,7 @@ export function claudeAdapter(find: () => Cli = findClaude): Adapter {
     const text = run.result?.text ?? '';
     if (run.rateLimit?.status === 'rejected') return { kind: 'quota', message: text.slice(0, 200) || '額度用完', resetsAt: run.rateLimit.resetsAt };
     if (LOGIN_TEXT.test(text)) return { kind: 'fatal', message: 'claude 沒有登入（在終端機執行 claude 登入）' };
-    const allowed = request.tools === 'Read' ? ['Read'] : [];
+    const allowed = allowedTools(request.tools, Boolean(request.jsonSchema));
     if (run.init && (run.init.tools.some(tool => !allowed.includes(tool)) || run.init.mcpServers.length)) return { kind: 'fatal', message: `隔離沒生效：工具 ${String(run.init.tools.length)} 個、MCP ${String(run.init.mcpServers.length)} 個` };
     if (!run.result) return { kind: 'fail', message: `沒有 result（exit ${String(result.code)}）：${result.stderr.slice(0, 300)}` };
     if (run.result.isError) return QUOTA_TEXT.test(text) ? { kind: 'quota', message: text.slice(0, 200) } : { kind: 'fail', message: `${run.result.subtype ?? 'error'}：${text.slice(0, 300)}` };
