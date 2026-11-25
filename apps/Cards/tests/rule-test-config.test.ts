@@ -50,6 +50,7 @@ const EXAMPLE = `
   傷到學習容許: { 百分比: 10%, 下限: 0.5 }
   次要: [{ 指標: token, 至少: 10%, 容許: 10% }]
   打平較省: 只報告
+  時間預算: 算門檻
 錯誤分級: { 一題多事: 傷到學習 }
 `;
 
@@ -84,7 +85,7 @@ void test('readConfig：任務說明的範例讀得出來，同 沿用被指的�
       判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.15, floor: 0.3 }, 多餘的題: { percent: 0, floor: 0.5 },
       地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
     },
-    secondary: [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }], tieMinCopies: 3, tieCheaper: 'report',
+    secondary: [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }], tieMinCopies: 3, tieCheaper: 'report', timeBudget: 'gate',
   });
   assert.deepEqual(config.levels, { 一題多事: '傷到學習', 池裡判準不同: '小問題', 跨單元去向: '小問題' });
 });
@@ -155,7 +156,7 @@ void test('readConfig：收益與不能變差只收學習面的指標（D-236 �
   const config = EXAMPLE
     .replace('收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 每個必備平均幾題, 至少: 10% }]', '收益: [{ 指標: 規則字數, 至少: 20% }, { 指標: token, 至少: 10% }]\n  近義重複多出: 1')
     .replace('不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]', '不能變差: [{ 指標: 生成時間, 容許: 10% }, { 指標: 傷到學習, 容許: 10% }]')
-    .replace('打平較省: 只報告', '打平較省: 看情況\n  收益校正: 也許')
+    .replace('打平較省: 只報告', '打平較省: 看情況\n  收益校正: 也許').replace('時間預算: 算門檻', '時間預算: 看看')
     .replace('錯誤分級: { 一題多事: 傷到學習 }', '錯誤分級: { 重大錯誤: 小問題, 存不了: 小問題, 池裡判準不同: 重大 }');
   assert.throws(() => readConfig(config), (error: Error) => {
     const lines = error.message.split('\n').slice(1);
@@ -168,6 +169,7 @@ void test('readConfig：收益與不能變差只收學習面的指標（D-236 �
     assert.match(at('門檻 近義重複多出')[0], /多餘的題多出/);
     assert.match(at('門檻 打平較省')[0], /「過」或「只報告」/);
     assert.match(at('門檻 收益校正')[0], /「要」或「不要」/);
+    assert.match(at('門檻 時間預算')[0], /「只報告」或「算門檻」/);
     assert.match(at('錯誤分級 重大錯誤')[0], /只能調 一題多事、池裡判準不同、跨單元去向/);
     assert.match(at('錯誤分級 存不了')[0], /只能調/);
     assert.match(at('錯誤分級 池裡判準不同')[0], /「傷到學習」或「小問題」/);

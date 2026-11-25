@@ -121,7 +121,7 @@ function gateLines(folder: Folder, reports: readonly BatchReport[]): string[] {
       `### ${gate.lesson}｜${gate.generator}｜${gate.candidate} 對 ${gate.baseline}：${gate.verdict}`, '',
       `- ${gate.basis}`,
       `- 份數：候選 ${String(gate.counts.candidate)}、基準 ${String(gate.counts.baseline)}${gate.counts.unpaired ? `；候選另有 ${String(gate.counts.unpaired)} 份的區組沒有基準，不進門檻` : ''}${gate.counts.candidate < 3 || gate.counts.baseline < 3 ? '（不到 3 份：不判明顯）' : ''}`,
-      ...[gate.major, gate.rows, gate.total, gate.extra, gate.harm, ...gate.benefits, ...gate.noWorse, ...gate.secondary].map(check => `- ${MARK(check.pass)} ${check.text}`),
+      ...[gate.major, gate.rows, gate.total, gate.extra, gate.harm, gate.budget, ...gate.benefits, ...gate.noWorse, ...gate.secondary].map(check => `- ${MARK(check.pass)} ${check.text}`),
       `- 收益至少要一項明顯：${gate.benefits.some(each => each.pass === true) ? '有' : '沒有'}`,
       ...Object.keys(gate.chance).length ? [`- 隨便各抽一份，候選比較好的機會：${Object.entries(gate.chance).map(([metric, value]) => `${metric} ${String(Math.round((value ?? 0) * 100))}%`).join('、')}`] : [],
       ...verdicts.length ? [`- 各批：${verdicts.join('、')}${flipped ? '（結果翻轉：照 D-228 維持現行、再加一課）' : ''}`] : [],

@@ -25,7 +25,7 @@ const many = (group: string, values: number[], pick: (value: number) => Partial<
 const same = (group: string, n: number, more: Partial<DeckMetrics> = {}): DeckMetrics[] => many(group, Array.from({ length: n }, () => 0), () => more);
 const GATES: Gates = {
   baseline: '現行', candidates: ['候選'], generators: ['claude'], majorErrors: 'zero', rowMissGap: 0.5, missedRows: 1, extraPrompts: 0,
-  harm: { percent: 0, floor: 0 }, benefits: [{ metric: '判錯', atLeast: 0.2 }], correction: true, noWorse: NO_WORSE_DEFAULTS, secondary: [], tieMinCopies: 3, tieCheaper: 'report',
+  harm: { percent: 0, floor: 0 }, benefits: [{ metric: '判錯', atLeast: 0.2 }], correction: true, noWorse: NO_WORSE_DEFAULTS, secondary: [], tieMinCopies: 3, tieCheaper: 'report', timeBudget: 'report',
 };
 const wrong = (value: number): Partial<DeckMetrics> => ({ harm: harm({ 判錯: value, total: value }) });
 
@@ -162,4 +162,19 @@ void test('配對：只收和基準同一個區組的候選份，混在一起比
   assert.deepEqual(results.map(each => [each.lesson, each.generator, each.candidate, each.counts, each.verdict, each.basis]), [
     ['L3', 'claude', '候選', { candidate: 1, baseline: 1, unpaired: 1 }, '未定', '候選有 1 份的區組沒有基準，配對的份數不夠'],
   ]);
+});
+
+void test('時間預算（檢查表課 3，rule-test-d236.md §16）：目標多超過 15% 而確定考到的必備沒多，標出來；設定算門檻時沒過，只報告時照樣過', () => {
+  const candidate = many('候選', [0, 0, 0], () => ({ targets: 12, sureRequired: 3 })), baseline = many('現行', [0, 0, 0], () => ({ targets: 10, sureRequired: 3 }));
+  const report = judgeGates(GATES, candidate, baseline);
+  assert.deepEqual([report.budget.pass, report.budget.text], [true, '時間預算：候選每份 12.0 個目標、基準 10.0（多 20%）；確定考到的必備候選 3.0、基準 3.0（多 0.0 列）→ 目標多超過 15%、必備沒多，標出來（設定只報告）']);
+  assert.notEqual(report.verdict, '沒過');
+  const gate = judgeGates({ ...GATES, timeBudget: 'gate' }, candidate, baseline);
+  assert.deepEqual([gate.budget.pass, gate.verdict], [false, '沒過']);
+  // 多考到必備：多出來的目標對得上，不標。
+  const more = judgeGates({ ...GATES, timeBudget: 'gate' }, many('候選', [0, 0, 0], () => ({ targets: 12, sureRequired: 4 })), baseline);
+  assert.deepEqual([more.budget.pass, more.budget.text], [true, '時間預算：候選每份 12.0 個目標、基準 10.0（多 20%）；確定考到的必備候選 4.0、基準 3.0（多 1.0 列）→ 過']);
+  // 多 15% 剛好不標（「多超過」）。
+  const edge = judgeGates({ ...GATES, timeBudget: 'gate' }, many('候選', [0], () => ({ targets: 11.5 })), many('現行', [0], () => ({ targets: 10 })));
+  assert.equal(edge.budget.pass, true);
 });

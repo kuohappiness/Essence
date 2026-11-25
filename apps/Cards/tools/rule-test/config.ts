@@ -73,6 +73,8 @@ export interface Gates {
   tieMinCopies: number;
   /** 「打平，候選較省」工具直接標過，或只報告（§12 第 2 題）。 */
   tieCheaper: 'pass' | 'report';
+  /** 時間預算（檢查表課 3，rule-test-d236.md §16）：目標多超過 15% 而必備沒多時只標出來，或算沒過。 */
+  timeBudget: 'report' | 'gate';
 }
 
 export interface Config {
@@ -340,6 +342,7 @@ export function readConfig(source: string): Config {
     noWorse[key] = { percent: item['容許'] === undefined ? noWorse[key].percent : percent(item['容許'], `${where} 容許`, errors), floor: count(item['下限'], noWorse[key].floor, `${where} 下限`, errors) };
   });
   const tieText = text(rawGates['打平較省']) ?? '過';
+  const budgetText = text(rawGates['時間預算']) ?? '只報告';
   const gates: Gates = {
     baseline, candidates, generators: gateGenerators,
     majorErrors: majorText === '零' ? 'zero' : majorText === '不比基準多' ? 'notMore' : (errors.add('門檻 重大錯誤', '要寫「零」或「不比基準多」'), 'zero'),
@@ -363,6 +366,7 @@ export function readConfig(source: string): Config {
     }),
     tieMinCopies: count(rawGates['打平最少份數'], 3, '門檻 打平最少份數', errors),
     tieCheaper: tieText === '過' ? 'pass' : tieText === '只報告' ? 'report' : (errors.add('門檻 打平較省', '要寫「過」或「只報告」'), 'pass'),
+    timeBudget: budgetText === '只報告' ? 'report' : budgetText === '算門檻' ? 'gate' : (errors.add('門檻 時間預算', '要寫「只報告」或「算門檻」'), 'report'),
   };
   if (rawGates['近義重複多出'] !== undefined) errors.add('門檻 近義重複多出', '改成「多餘的題多出」（每組題數減一加總，rule-test-d236.md §4）');
   if (!gates.benefits.length) errors.add('門檻', '少了「收益」');
