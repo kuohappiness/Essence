@@ -20,11 +20,11 @@ export const RUBRIC = [
 const GOOD_REPLY = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 
 /** 凍結、每組生成一份（replies 可以照組換回覆）、匿名做完的測試資料夾。 */
-export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = ''): Promise<Folder> {
+export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = '', rubric = RUBRIC.replace(' 加題 aaaaa2 ', ' ')): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
-  writeFileSync(join(root, '課', 'L3', '評分表.md'), RUBRIC.replace(' 加題 aaaaa2 ', ' '));
+  writeFileSync(join(root, '課', 'L3', '評分表.md'), rubric);
   mkdirSync(join(root, '提示'));
   for (const name of ['甲', '乙']) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
   writeFileSync(join(root, '測試.yaml'), `

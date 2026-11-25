@@ -1,6 +1,6 @@
 // 比較測試工具：合併兩位評審（任務說明 tasks/rule-test-tool.md §6-1、§6-2）。逐列照合併表（一有一沒有、一有一部分都算部分，只數歧見）；
 // 問題兩位聯集去重：行號用 parseDeck 歸到題，同一份、同一題、同一種算一筆（目標名稱行和那個目標的題算同一題），另記兩位都記或只有一位記。
-import { parseDeck } from '../../src/core/deck/index.ts';
+import { parseDeck, type Prompt } from '../../src/core/deck/index.ts';
 import type { JudgeResult } from './judge.ts';
 
 export type Verdict = '有' | '部分' | '沒有';
@@ -44,7 +44,7 @@ function same(a: Unit, b: Unit): boolean {
 
 const unitName = (unit: Unit): string => unit.target === null ? `第 ${String(unit.line)} 行` : `目標 ${String(unit.target + 1)}${unit.prompt === null ? '' : ` 第 ${String(unit.prompt + 1)} 題`}`;
 
-interface MergedIssue { kind: Issue['kind']; at: string[]; lines: number[]; judges: string[]; rubric: string; notes: string[] }
+export interface MergedIssue { kind: Issue['kind']; at: string[]; lines: number[]; judges: string[]; rubric: string; notes: string[] }
 export interface MergedDeck {
   /** 逐列合併後的判定。 */
   rows: Record<string, Verdict>;
@@ -87,4 +87,37 @@ export function mergeDeck(code: string, deck: string, results: ReadonlyMap<strin
     }
   }
   return { rows, disagreements, issues: merged.map(({ units: _units, ...rest }) => rest), worthLearning };
+}
+
+/** 一題的答案：問答題取答案裡的粗體字，沒有粗體時整個答案（`|` 分開的各算一個）；填空題取挖空的字。 */
+function answersOf(prompt: Prompt): string[] {
+  if (prompt.kind === 'cloze') return prompt.blanks.map(blank => prompt.text.slice(blank.start + 2, blank.end - 2).trim());
+  const bold = [...prompt.answer.matchAll(/\*\*(.+?)\*\*/g)].map(match => match[1].trim());
+  return bold.length ? bold : prompt.answer.split('|').map(each => each.trim());
+}
+/** 一題的題幹：問答題是問題；填空題是挖掉空格之後的句子。 */
+function stemOf(prompt: Prompt): string {
+  if (prompt.kind === 'qa') return prompt.question;
+  let text = prompt.text;
+  for (const blank of [...prompt.blanks].sort((a, b) => b.start - a.start)) text = text.slice(0, blank.start) + '＿' + text.slice(blank.end);
+  return text;
+}
+
+/**
+ * 程式找的洩漏候選（§5-8，照第一輪 cross.py）：同一個目標裡，一張卡的答案出現在另一張卡的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
+ * 那張卡兩位評審都沒記洩漏的才算；一張卡算一筆。只比字面，換句話說的會漏；另列一個數，不進門檻。
+ */
+export function leakCandidates(deck: string, issues: readonly MergedIssue[]): string[] {
+  const recorded = new Set(issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at));
+  const found = new Map<string, number[]>();
+  [...parseDeck(deck).targets].sort((a, b) => a.line - b.line).forEach((target, t) => {
+    const answers = target.prompts.map(prompt => answersOf(prompt).map(each => each.toLowerCase()).filter(each => [...each].length >= 2));
+    target.prompts.forEach((prompt, to) => {
+      const stem = stemOf(prompt).toLowerCase();
+      const from = answers.flatMap((list, i) => i !== to && list.some(answer => stem.includes(answer)) ? [i + 1] : []);
+      const at = unitName({ target: t, prompt: to, line: prompt.line + 1 });
+      if (from.length && !recorded.has(at) && !recorded.has(unitName({ target: t, prompt: null, line: target.line + 1 }))) found.set(at, from);
+    });
+  });
+  return [...found].map(([at, from]) => `${at}的題幹有第 ${from.join('、')} 題的答案`);
 }

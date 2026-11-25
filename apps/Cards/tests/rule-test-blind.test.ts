@@ -109,7 +109,7 @@ void test('status：凍結、生成、格式、匿名各做到哪裡', async () 
   blindFolder(folder, { log: () => {} });
   const lines = statusLines(folder);
   assert.ok(lines.includes('格式：2／2 份檢查過'));
-  assert.ok(lines.includes('批 1：2 份、1 個區組｜評分中或還沒評（下一步：judge）'));
+  assert.ok(lines.includes('批 1：2 份、1 個區組｜評分 0／2（下一步：judge）'));
   assert.ok(!lines.some(line => line.startsWith('上一次停下')));
   assert.ok(!existsSync(join(folder.root, '生成', '執行中.json')));
 });

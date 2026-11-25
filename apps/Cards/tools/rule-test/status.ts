@@ -6,6 +6,8 @@ import { batchDir, batchNumbers, readBlocks } from './blind.ts';
 import { readFormat } from './check.ts';
 import { openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
+import { resultFile } from './judge.ts';
+import { readReports } from './unblind.ts';
 import { jobState, planJobs, readEvents, type JobState } from './jobs.ts';
 
 export function statusLines(folder: Folder): string[] {
@@ -46,13 +48,17 @@ export function statusLines(folder: Folder): string[] {
 
   const batches = batchNumbers(folder);
   if (!batches.length) lines.push('匿名：還沒（生成都完成後：blind）');
+  const unblinded = new Set(readReports(folder).map(report => report.batch));
   for (const n of batches) {
     const blocks = readBlocks(folder, n);
     const decks = new Set(blocks.flatMap(block => block.codes.map(code => `${block.lesson}/${code}`))).size;
     const dir = batchDir(folder, n);
-    const locked = existsSync(join(dir, '鎖定.md'));
-    const unblinded = existsSync(join(folder.root, '結果', `批${String(n)}`));
-    lines.push(`批 ${String(n)}：${String(decks)} 份、${String(blocks.length)} 個區組｜${unblinded ? '已解開' : locked ? '已鎖定（下一步：disputes、unblind）' : '評分中或還沒評（下一步：judge）'}`);
+    const judged = blocks.flatMap(block => folder.config.judges.filter(judge => existsSync(resultFile(folder, n, judge.name, block.name)))).length;
+    const state = unblinded.has(n) ? '已解開（結果/）'
+      : existsSync(join(dir, '裁定.md')) ? '已裁定（教學選擇填好後：unblind）'
+        : existsSync(join(dir, '鎖定.md')) ? '已鎖定（下一步：disputes）'
+          : `評分 ${String(judged)}／${String(blocks.length * folder.config.judges.length)}（下一步：judge）`;
+    lines.push(`批 ${String(n)}：${String(decks)} 份、${String(blocks.length)} 個區組｜${state}`);
   }
   return lines;
 }

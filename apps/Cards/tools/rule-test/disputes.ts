@@ -17,8 +17,8 @@ import { jobState, readEvents } from './jobs.ts';
 import { mergeDeck, type MergedDeck } from './merge.ts';
 import { countPdfPages } from './probe.ts';
 
-const QUALITY_KINDS = ['洩漏', '多解', '一題多事', '池裡判準不同', '其他品質'] as const;
-type QualityKind = (typeof QUALITY_KINDS)[number];
+export const QUALITY_KINDS = ['洩漏', '多解', '一題多事', '池裡判準不同', '其他品質'] as const;
+export type QualityKind = (typeof QUALITY_KINDS)[number];
 
 interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck }
 interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>> }

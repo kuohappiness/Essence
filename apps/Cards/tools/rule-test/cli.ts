@@ -9,6 +9,7 @@ import { judge } from './judge.ts';
 import { paste } from './paste.ts';
 import { probe } from './probe.ts';
 import { status } from './status.ts';
+import { unblind } from './unblind.ts';
 
 const COMMANDS: Record<string, () => Promise<void>> = {
   probe,
@@ -19,6 +20,7 @@ const COMMANDS: Record<string, () => Promise<void>> = {
   blind,
   judge,
   disputes,
+  unblind,
   status,
 };
 
