@@ -19,3 +19,11 @@ for (const [type, text] of Object.entries(SAMPLES)) {
     assert.equal(questionType(view(s).card), type);
   });
 }
+
+// 多音字（tasks/polyphone-pick.md）也是點選填空，只是選項寫在目標自己的名稱：同一個 pick，另走一條組卡的路，所以另外測一次。
+void test('pick（多音字）：從筆記的文字經過解析、組卡、作答流程，出來就是點選填空', async t => {
+  const h = await setup(t, { [DECK]: '---\n科目: 國語\n---\n- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^aaa111\n    - 他長（＿＿）高了。 :: ㄓㄤˇ\n    - 路很長（＿＿）。 :: ㄔㄤˊ\n' });
+  const s = await h.open({ subject: '國語' });
+  assert.equal(questionType(view(s).card), 'pick');
+  assert.equal(view(s).card.blanks.length, 2);
+});

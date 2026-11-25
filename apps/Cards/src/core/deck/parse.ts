@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { pairWordOf, readCouplet, readOrder, readPick, readSentence, readTyping, typedAnswer } from './question-types.ts';
+import { pairWordOf, readChoice, readCouplet, readOrder, readPick, readSentence, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -360,8 +360,12 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
       continue;
     }
-    const pick = readPick(target);
-    if (pick.group) target.group = pick.group;
+    // 多音字（tasks/polyphone-pick.md §1-2）：比較卡先認，認不成又沒有提示時才看；兩種的提示一個目標只有一種。
+    const read = readPick(target);
+    const choice = read.group || read.problems.length ? null : readChoice(target, notes ?? []);
+    const pick = choice ?? read;
+    if (read.group) target.group = read.group;
+    if (choice?.choice) target.choice = choice.choice;
     const order = readOrder(target, notes ?? [], english);
     if (order) target.order = order;
     const sentence = english && !order ? readSentence(target) : null;

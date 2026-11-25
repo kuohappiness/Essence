@@ -48,6 +48,9 @@
 .ec-cmp-why .ec-markdown p { margin: 0; }
 .ec-cmp-why strong { font-weight: 400; color: var(--ec-key); }
 .ec-cmp-words { display: block; font-size: 15px; line-height: 1.5; color: var(--ec-muted); }
+/* 多音字的記憶錨點裡對不到讀音的行（tasks/polyphone-pick.md §4-2）：接在對照後面，淡色。 */
+.ec-cmp-rest { display: grid; gap: 4px; padding: 0 2px; font-size: 15px; line-height: 1.5; color: var(--ec-muted); }
+.ec-cmp-rest .ec-markdown p { margin: 0; }
 
 /* 全詩順序卡（D-187 第 7 點、D-204）：一句一列，第二聯起多一點空隙；空格先撐到最長那一句；填了就不留底線，待答的那一格照樣紫色粗線；
    句子一直是一般文字的顏色，對錯只看左邊的打勾 */

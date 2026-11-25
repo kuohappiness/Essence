@@ -10,7 +10,7 @@ export type { Mastery } from './mastery.ts';
 export type { DuplicateId, DuplicateTarget } from './duplicates.ts';
 export { nextCard, progress, scopeCount, todayLeft, checkTyped, typedKey, typedUnits } from './session.ts';
 export { memoryColors } from './practice.ts';
-export { cardOf, pickPreviewCards, questionType } from './compose.ts';
+export { cardOf, choiceCardOf, choicePreviewCards, pickPreviewCards, questionType } from './compose.ts';
 export type { QuestionType } from './compose.ts';
 export type { Rating, PickCell, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, QueuedLine, History, Memory } from './types.ts';
 export type { TypedUnit } from './session.ts';

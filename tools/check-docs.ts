@@ -85,7 +85,6 @@ export const FROZEN_RULES = {
   before: 'docs/card-rules/',
   marker: '<!-- 以下送給 AI -->',
   links: {
-    'apps/Cards/docs/card-rules/elementary-chinese.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
     'apps/Cards/docs/card-rules/elementary-social.md': ['../../experiments/t4/arch/短規則.md', '../../experiments/t4/arch/第二輪/判斷邊界.md', '../../experiments/t4/arch/第二輪/五步.md', '../../experiments/t4/arch/第二輪/格式.md', '../decisions.md'],
     'apps/Cards/docs/card-rules/english.md': ['../decisions.md'],
   } as Record<string, string[]>,
