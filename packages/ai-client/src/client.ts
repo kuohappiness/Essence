@@ -1,0 +1,517 @@
+// createAiClient：找端點 → 檢查輸入與大小 → 組請求 → 送出 → 串流與逾時 → 重試 → 結果（docs/tasks/ai-client.md〈5〉〈7〉）。
+import { encodeBody } from './body.ts';
+import { BUILTIN_CATALOG, isAllowedUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
+import { DIALECTS } from './dialects/index.ts';
+import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
+import { AiError, isAiError, type AiErrorKind } from './errors.ts';
+import { costOf } from './pricing.ts';
+import { SseDecoder, type SseEvent } from './sse.ts';
+import { bodyChunks, defaultFetch, readText, type FetchLike } from './transport.ts';
+import {
+  REASONING_LEVELS,
+  type AttemptTrace, type AuthSpec, type ContentPart, type EndpointRef, type GenerateRequest, type GenerateResult, type InputKind,
+  type ModelInfo, type ModelSpec, type ProgressEvent, type ProviderOptions, type ProviderSpec, type ReasoningLevel, type ReasoningSpec,
+} from './types.ts';
+
+const DEFAULT_TIMEOUT_MS = 30 * 60_000;
+const CHECK_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+/** 第 n 次失敗後等多久（再加減 20%）。 */
+const BACKOFF_MS = [2_000, 8_000];
+/** 服務要求等超過這個時間就不重試，把等待時間交給呼叫端（錯誤的 retryAfterMs）。 */
+const MAX_RETRY_AFTER_MS = 60_000;
+const ERROR_BODY_MAX_BYTES = 64 * 1024;
+/** 預設的回應標頭逾時：120 秒，加上每 100 KB 本文 1 秒的上傳時間。 */
+const RESPONSE_TIMEOUT_BASE_MS = 120_000;
+const UPLOAD_BYTES_PER_SECOND = 100_000;
+
+export interface Clock {
+  now(): number;
+  /** 等 ms 毫秒；signal 中止時立刻結束（丟例外）。 */
+  sleep(ms: number, signal: AbortSignal): Promise<void>;
+  random(): number;
+}
+
+export interface AiClientOptions {
+  /** 和標準 fetch 同形狀的函式；不給就用執行環境的 fetch。 */
+  fetch?: FetchLike;
+  /**
+   * 送出後多久沒拿到回應標頭就算連不上（會自動重試）。預設 120 秒加每 100 KB 本文 1 秒。
+   * 傳輸層要等整段本文收完才交出 Response 的（例如 Obsidian 的 requestUrl）要設 null。
+   */
+  responseTimeoutMs?: number | null;
+  /** 加廠商或蓋掉目錄的欄位（例如更新價格），格式同 catalog.json；每筆只寫要改的欄位。 */
+  catalog?: CatalogOverrides;
+  /** 測試用：時間、等待與隨機。 */
+  clock?: Partial<Clock>;
+}
+
+export interface CheckRequest {
+  endpoint: EndpointRef;
+  apiKey?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+/** models：服務列得出來的模型；用 checkPath 測的服務是 null。 */
+export type CheckResult = { ok: true; models: ModelInfo[] | null } | { ok: false; error: AiError };
+
+export interface AiClient {
+  generate(request: GenerateRequest): Promise<GenerateResult>;
+  /** 測試連線：讀模型清單（或目錄的 checkPath）確認金鑰，不產生內容、不花錢。 */
+  check(request: CheckRequest): Promise<CheckResult>;
+  /** 目錄裡的廠商與模型（設定頁的選單用）。 */
+  providers(): readonly ProviderSpec[];
+  /** 目錄裡被跳過的資料。 */
+  readonly catalogProblems: readonly CatalogProblem[];
+}
+
+interface Resolved {
+  providerId: string;
+  dialect: Dialect;
+  baseUrl: string;
+  auth: AuthSpec | null;
+  headers: Record<string, string>;
+  options: ProviderOptions;
+  limits: NonNullable<ProviderSpec['limits']>;
+  model: ModelSpec | undefined;
+  inputs: InputKind[] | undefined;
+  reasoning: ReasoningSpec | undefined;
+  maxOutputTokens: number | undefined;
+}
+
+const defaultClock: Clock = {
+  now: () => Date.now(),
+  sleep: (ms, signal) => new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error('aborted')); return; }
+    const onAbort = () => { clearTimeout(timer); reject(new Error('aborted')); };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  }),
+  random: () => Math.random(),
+};
+
+type Init = ConstructorParameters<typeof AiError>[0];
+const fail = (kind: AiErrorKind, message: string, extra: Partial<Init> = {}) => new AiError({ kind, message, ...extra });
+
+export function createAiClient(options: AiClientOptions = {}): AiClient {
+  const doFetch = options.fetch ?? defaultFetch;
+  const clock: Clock = { ...defaultClock, ...options.clock };
+  const dialectIds = new Set(DIALECTS.keys());
+  const base = validateCatalog(BUILTIN_CATALOG, dialectIds);
+  const merged = validateCatalog(mergeCatalog(base.catalog, options.catalog), dialectIds);
+  const catalog = merged.catalog;
+  const problems = [...base.problems, ...merged.problems.filter(p => !base.problems.some(b => b.provider === p.provider && b.model === p.model))];
+
+  function resolve(endpoint: EndpointRef, modelId: string | null): Resolved {
+    if ('custom' in endpoint) {
+      const custom = endpoint.custom;
+      const dialect = DIALECTS.get(custom.dialect);
+      if (!dialect) throw fail('invalid_request', `unknown dialect: ${custom.dialect}`);
+      if (!isAllowedUrl(custom.baseUrl)) throw fail('invalid_request', 'baseUrl must be https, or http on localhost');
+      return {
+        providerId: 'custom', dialect, baseUrl: custom.baseUrl.replace(/\/+$/, ''),
+        auth: custom.auth === undefined ? dialect.defaultAuth : custom.auth,
+        headers: custom.headers ?? {}, options: custom.options ?? {}, limits: {},
+        model: undefined, inputs: undefined, reasoning: undefined, maxOutputTokens: undefined,
+      };
+    }
+    const provider = catalog.providers.find(p => p.id === endpoint.provider);
+    if (!provider) throw fail('invalid_request', `unknown provider: ${endpoint.provider}`);
+    const dialect = DIALECTS.get(provider.dialect) as Dialect;
+    const model = modelId === null ? undefined : provider.models.find(m => m.id === modelId);
+    return {
+      providerId: provider.id, dialect, baseUrl: provider.baseUrl.replace(/\/+$/, ''), auth: provider.auth,
+      headers: provider.headers ?? {}, options: provider.options ?? {}, limits: provider.limits ?? {}, model,
+      inputs: model?.inputs ?? provider.defaults?.inputs,
+      reasoning: model?.reasoning ?? provider.defaults?.reasoning,
+      maxOutputTokens: model?.maxOutputTokens ?? provider.defaults?.maxOutputTokens,
+    };
+  }
+
+  /** 標頭：方言的、目錄的、呼叫端加的，最後是認證（蓋不掉）。 */
+  function headersFor(r: Resolved, apiKey: string | undefined, dialectHeaders: Record<string, string> | undefined, extra: Record<string, string> | undefined): Record<string, string> {
+    const headers: Record<string, string> = { ...lower(r.headers), ...lower(extra), ...lower(dialectHeaders) };
+    if (r.auth) {
+      if (!apiKey) throw fail('auth', 'no API key given', { provider: r.providerId });
+      headers[r.auth.header.toLowerCase()] = r.auth.scheme ? `${r.auth.scheme} ${apiKey}` : apiKey;
+    }
+    return headers;
+  }
+
+  async function generate(request: GenerateRequest): Promise<GenerateResult> {
+    const secrets = request.apiKey ? [request.apiKey] : [];
+    const startedAt = clock.now();
+    const r = resolve(request.endpoint, request.model);
+    const input = normalize(request.input);
+    checkInputs(r, input, request.checkInputs !== false);
+    const warnings: string[] = [];
+    const call = r.dialect.buildGenerate({
+      baseUrl: r.baseUrl, model: request.model, instructions: request.instructions, input,
+      maxOutputTokens: request.maxOutputTokens ?? r.maxOutputTokens, options: r.options,
+    });
+    const body = call.body ?? {};
+    const reasoningSent = applyReasoning(body, r.reasoning, request.reasoning, warnings);
+    if (request.extraBody) deepMerge(body, request.extraBody);
+    const bytes = encodeBody(body);
+    checkSize(r, input, bytes.length);
+    const headers = headersFor(r, request.apiKey, call.headers, request.extraHeaders);
+    headers['content-type'] = 'application/json';
+    headers.accept = 'text/event-stream';
+
+    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const deadline = startedAt + timeoutMs;
+    const responseTimeoutMs = options.responseTimeoutMs === undefined
+      ? RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000
+      : options.responseTimeoutMs;
+    const maxAttempts = Math.max(1, request.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+    const attempts: AttemptTrace[] = [];
+    const progress = (event: ProgressEvent) => {
+      try {
+        request.onProgress?.(event);
+      } catch {
+        if (!warnings.includes('onProgress threw; ignored')) warnings.push('onProgress threw; ignored');
+      }
+    };
+    if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending', { provider: r.providerId });
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { output, requestId } = await runAttempt(attempt);
+        if (!output.text && (output.stopReason === 'content_filter' || output.stopReason === 'refusal')) {
+          throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets });
+        }
+        progress({ type: 'done' });
+        return {
+          text: output.text,
+          stopReason: output.stopReason,
+          usage: output.usage,
+          cost: output.reportedCost !== null
+            ? { amount: output.reportedCost, currency: 'USD', estimated: false, pricesAsOf: null }
+            : costOf(output.usage, r.model, dayOf(startedAt)),
+          message: { role: 'assistant', content: [{ type: 'text', text: output.text }] },
+          trace: {
+            provider: r.providerId, dialect: r.dialect.id, host: new URL(call.url).host, requestedModel: request.model,
+            resolvedModel: output.resolvedModel, requestId, responseId: output.responseId,
+            reasoningSent, rawStopReason: output.rawStopReason,
+            startedAt: new Date(startedAt).toISOString(), finishedAt: new Date(clock.now()).toISOString(),
+            attempts, warnings: [...warnings, ...output.warnings],
+          },
+        };
+      } catch (caught) {
+        const error = isAiError(caught) ? caught : fail('unknown', String(caught), { secrets, cause: caught, provider: r.providerId });
+        error.attempts = attempt;
+        // 只在還沒拿到成功的回應時自動重送：拿到 200 之後才斷，推理可能已經算錢了，交給呼叫端問使用者。
+        if (!error.retryable || error.afterResponse || attempt >= maxAttempts) throw error;
+        if (error.retryAfterMs !== null && error.retryAfterMs > MAX_RETRY_AFTER_MS) throw error;
+        const backoff = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)];
+        const delayMs = error.retryAfterMs ?? Math.round(backoff * (0.8 + 0.4 * clock.random()));
+        if (clock.now() + delayMs >= deadline) throw error;
+        progress({ type: 'retrying', attempt: attempt + 1, delayMs, reason: error.kind });
+        const waitAbort = new AbortController();
+        const onCancel = () => waitAbort.abort();
+        request.signal?.addEventListener('abort', onCancel, { once: true });
+        try {
+          await clock.sleep(delayMs, waitAbort.signal);
+        } catch {
+          const cancelled = fail('cancelled', 'cancelled while waiting to retry', { provider: r.providerId });
+          cancelled.attempts = attempt;
+          throw cancelled;
+        } finally {
+          request.signal?.removeEventListener('abort', onCancel);
+        }
+      }
+    }
+
+    async function runAttempt(attempt: number): Promise<{ output: Output; requestId: string | null }> {
+      const log: AttemptTrace = { startedAt: new Date(clock.now()).toISOString(), status: null, requestId: null, error: null };
+      attempts.push(log);
+      const controller = new AbortController();
+      let reason: 'timeout' | 'idle' | 'response' | 'cancelled' | null = null;
+      const abort = (why: NonNullable<typeof reason>) => {
+        if (reason) return;
+        reason = why;
+        controller.abort();
+      };
+      const onCancel = () => abort('cancelled');
+      request.signal?.addEventListener('abort', onCancel, { once: true });
+      const remaining = deadline - clock.now();
+      const overall = setTimeout(() => abort('timeout'), Math.max(0, remaining));
+      const waitHeaders = responseTimeoutMs === null ? undefined : setTimeout(() => abort('response'), responseTimeoutMs);
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      const touch = () => {
+        if (request.idleTimeoutMs === undefined) return;
+        clearTimeout(idle);
+        idle = setTimeout(() => abort('idle'), request.idleTimeoutMs);
+      };
+      let text = '';
+      let gotResponse = false;
+      const meta = () => ({ provider: r.providerId, requestId: log.requestId, secrets, partialText: text || null, afterResponse: gotResponse });
+      try {
+        if (remaining <= 0) abort('timeout');
+        progress({ type: 'sent', attempt });
+        const response = await untilAbort(
+          doFetch(call.url, { method: 'POST', headers, body: bytes, signal: controller.signal, redirect: 'error' }), controller.signal);
+        clearTimeout(waitHeaders);
+        log.status = response.status;
+        log.requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
+        if (response.status < 200 || response.status >= 300) {
+          const errorBody = await untilAbort(readText(abortable(bodyChunks(response), controller.signal), ERROR_BODY_MAX_BYTES), controller.signal);
+          throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta());
+        }
+        gotResponse = true;
+        touch();
+        progress({ type: 'waiting', attempt });
+        const chunks = abortable(bodyChunks(response), controller.signal);
+        if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+          // 服務沒照要求串流。
+          const raw = await readText(chunks);
+          let json: unknown;
+          try {
+            json = JSON.parse(raw) as unknown;
+          } catch {
+            throw fail('server', 'response is not JSON', meta());
+          }
+          const parsed = r.dialect.parseResponse(json);
+          if ('error' in parsed) throw toError(parsed.error, response.status, null, meta());
+          if (parsed.text) progress({ type: 'text', delta: parsed.text, totalChars: parsed.text.length });
+          return { output: parsed, requestId: log.requestId };
+        }
+        const decoder = new SseDecoder();
+        const parser = r.dialect.createStreamParser();
+        const handle = (event: SseEvent) => {
+          let step: ReturnType<typeof parser.push>;
+          try {
+            step = parser.push(event);
+          } catch {
+            throw fail('server', `malformed stream event: ${event.data.slice(0, 100)}`, meta());
+          }
+          if (step.error) throw toError(step.error, null, null, meta());
+          if (step.delta && !reason) {
+            text += step.delta;
+            progress({ type: 'text', delta: step.delta, totalChars: text.length });
+          }
+        };
+        for await (const chunk of chunks) {
+          touch();
+          for (const event of decoder.push(chunk)) handle(event);
+        }
+        for (const event of decoder.end()) handle(event);
+        if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
+        return { output: parser.result(), requestId: log.requestId };
+      } catch (caught) {
+        const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
+          : reason === 'timeout' ? fail('timeout', `timed out after ${timeoutMs} ms`, meta())
+          : reason === 'idle' ? fail('timeout', `no data for ${request.idleTimeoutMs} ms`, meta())
+          : reason === 'response' ? fail('network', `no response within ${responseTimeoutMs} ms`, meta())
+          : isAiError(caught) ? caught
+          : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta(), cause: caught });
+        log.error = error.kind;
+        throw error;
+      } finally {
+        clearTimeout(overall);
+        clearTimeout(waitHeaders);
+        clearTimeout(idle);
+        request.signal?.removeEventListener('abort', onCancel);
+        // 不論成功或失敗都放掉連線；之後才到的資料不會交給呼叫端。
+        controller.abort();
+      }
+    }
+  }
+
+  async function check(request: CheckRequest): Promise<CheckResult> {
+    const secrets = request.apiKey ? [request.apiKey] : [];
+    let r: Resolved;
+    try {
+      r = resolve(request.endpoint, null);
+    } catch (caught) {
+      if (isAiError(caught)) return { ok: false, error: caught };
+      throw caught;
+    }
+    const usePath = r.options.checkPath;
+    const call = usePath ? { url: `${r.baseUrl}/${usePath.replace(/^\/+/, '')}`, headers: r.dialect.buildListModels(r.baseUrl).headers } : r.dialect.buildListModels(r.baseUrl);
+    const controller = new AbortController();
+    let reason: 'timeout' | 'cancelled' | null = null;
+    const onCancel = () => { reason = 'cancelled'; controller.abort(); };
+    request.signal?.addEventListener('abort', onCancel, { once: true });
+    const timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, request.timeoutMs ?? CHECK_TIMEOUT_MS);
+    let requestId: string | null = null;
+    try {
+      if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending');
+      const headers = headersFor(r, request.apiKey, call.headers, undefined);
+      headers.accept = 'application/json';
+      const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal);
+      requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
+      const raw = await untilAbort(readText(abortable(bodyChunks(response), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
+      const meta = { provider: r.providerId, requestId, secrets };
+      if (response.status < 200 || response.status >= 300) {
+        throw toError(r.dialect.classifyError(response.status, raw), response.status, retryAfterOf(response.headers), meta);
+      }
+      if (usePath) return { ok: true, models: null };
+      let json: unknown;
+      try {
+        json = JSON.parse(raw) as unknown;
+      } catch {
+        throw fail('server', 'response is not JSON', meta);
+      }
+      return { ok: true, models: r.dialect.parseModels(json) };
+    } catch (caught) {
+      const meta = { provider: r.providerId, requestId, secrets };
+      const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta)
+        : reason === 'timeout' ? fail('timeout', 'timed out', meta)
+        : isAiError(caught) ? caught
+        : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta, cause: caught });
+      return { ok: false, error };
+    } finally {
+      clearTimeout(timer);
+      request.signal?.removeEventListener('abort', onCancel);
+      controller.abort();
+    }
+  }
+
+  return { generate, check, providers: () => catalog.providers, catalogProblems: problems };
+}
+
+// ── 送出前 ──
+
+function normalize(input: GenerateRequest['input']): NormalizedMessage[] {
+  if (!Array.isArray(input) || input.length === 0) throw fail('invalid_request', 'input must have at least one message');
+  return input.map(m => ({ role: m.role, content: typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content }));
+}
+
+const kindOf = (part: ContentPart): InputKind => (part.type === 'file' ? 'pdf' : part.type);
+
+function checkInputs(r: Resolved, input: NormalizedMessage[], useCatalog: boolean): void {
+  for (const message of input) {
+    for (const part of message.content) {
+      if (part.type === 'file' && part.mediaType !== 'application/pdf') throw fail('unsupported_input', `only PDF files are supported, got ${part.mediaType}`, { provider: r.providerId });
+      if (part.type === 'image' && !part.mediaType.startsWith('image/')) throw fail('unsupported_input', `not an image type: ${part.mediaType}`, { provider: r.providerId });
+      if (useCatalog && r.inputs && !r.inputs.includes(kindOf(part))) throw fail('unsupported_input', `this model does not accept ${kindOf(part)}`, { provider: r.providerId });
+    }
+  }
+}
+
+function checkSize(r: Resolved, input: NormalizedMessage[], bodyBytes: number): void {
+  const files = input.flatMap(m => m.content).filter(p => p.type === 'file');
+  const fileBytes = files.reduce((sum, p) => sum + p.data.byteLength, 0);
+  if (r.limits.maxFileBytes !== undefined && fileBytes > r.limits.maxFileBytes) {
+    throw fail('input_too_large', `files are ${fileBytes} bytes; the limit is ${r.limits.maxFileBytes}`, { provider: r.providerId });
+  }
+  const pages = files.reduce((sum, p) => sum + (p.pages ?? 0), 0);
+  if (r.limits.maxPdfPages !== undefined && pages > r.limits.maxPdfPages) {
+    throw fail('input_too_large', `PDF has ${pages} pages; the limit is ${r.limits.maxPdfPages}`, { provider: r.providerId });
+  }
+  if (r.limits.maxRequestBytes !== undefined && bodyBytes > r.limits.maxRequestBytes) {
+    throw fail('input_too_large', `request is ${bodyBytes} bytes; the limit is ${r.limits.maxRequestBytes}`, { provider: r.providerId });
+  }
+}
+
+/** 推理等級寫進請求；那一家沒有這個等級時用最接近的（一樣近取高的），記一則 warning。回傳送出的原值。 */
+function applyReasoning(body: Record<string, unknown>, spec: ReasoningSpec | undefined, level: ReasoningLevel | undefined, warnings: string[]): string | number | null {
+  if (level === undefined) return null;
+  if (!spec) {
+    warnings.push(`reasoning '${level}' not sent: no mapping for this model`);
+    return null;
+  }
+  let chosen: ReasoningLevel | undefined = level in spec.values ? level : undefined;
+  if (!chosen) {
+    const target = REASONING_LEVELS.indexOf(level);
+    let best = Number.POSITIVE_INFINITY;
+    for (const candidate of REASONING_LEVELS) {
+      if (!(candidate in spec.values)) continue;
+      const index = REASONING_LEVELS.indexOf(candidate);
+      const distance = Math.abs(index - target);
+      if (distance < best || (distance === best && index > target)) {
+        best = distance;
+        chosen = candidate;
+      }
+    }
+    if (!chosen) {
+      warnings.push(`reasoning '${level}' not sent: no levels mapped`);
+      return null;
+    }
+    warnings.push(`reasoning '${level}' not available; used '${chosen}'`);
+  }
+  const value = spec.values[chosen];
+  if (value === null || value === undefined) return null;
+  setPath(body, spec.path, value);
+  return value;
+}
+
+// ── 小工具 ──
+
+function lower(headers: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers ?? {})) out[k.toLowerCase()] = v;
+  return out;
+}
+
+function setPath(target: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split('.');
+  let node = target;
+  for (const key of keys.slice(0, -1)) {
+    const next = node[key];
+    if (!isPlain(next)) node[key] = {};
+    node = node[key] as Record<string, unknown>;
+  }
+  node[keys[keys.length - 1]] = value;
+}
+
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(source)) {
+    const current = target[key];
+    if (isPlain(value) && isPlain(current)) deepMerge(current, value);
+    else target[key] = value;
+  }
+}
+
+const isPlain = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype;
+
+const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+function retryAfterOf(headers: Headers): number | null {
+  const msHeader = headers.get('retry-after-ms');
+  if (msHeader !== null && Number.isFinite(Number(msHeader)) && Number(msHeader) >= 0) return Math.round(Number(msHeader));
+  const value = headers.get('retry-after');
+  if (value === null) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+}
+
+function toError(parsed: ParsedError, status: number | null, retryAfterMs: number | null, meta: Partial<Init>): AiError {
+  return new AiError({
+    kind: parsed.kind, message: parsed.message, status, providerCode: parsed.providerCode ?? null,
+    retryAfterMs: retryAfterMs ?? parsed.retryAfterMs ?? null, ...meta,
+  });
+}
+
+/** 傳輸層不能中止時（例如 requestUrl），至少讓這邊在中止時立刻停下。 */
+function untilAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    promise.catch(() => undefined);
+    return Promise.reject(new Error('aborted'));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error('aborted'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      value => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(error instanceof Error ? error : new Error(String(error))); },
+    );
+  });
+}
+
+async function* abortable(chunks: AsyncGenerator<Uint8Array>, signal: AbortSignal): AsyncGenerator<Uint8Array> {
+  try {
+    for (;;) {
+      const step = await untilAbort(chunks.next(), signal);
+      if (step.done) return;
+      yield step.value;
+    }
+  } finally {
+    chunks.return(undefined).catch(() => undefined);
+  }
+}

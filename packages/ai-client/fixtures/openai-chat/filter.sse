@@ -1,0 +1,4 @@
+data: {"id":"gen-flt","object":"chat.completion.chunk","model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}
+
+data: [DONE]
+

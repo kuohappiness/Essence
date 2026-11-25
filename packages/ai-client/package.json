@@ -1,0 +1,32 @@
+{
+  "name": "essence-ai-client",
+  "version": "0.1.0",
+  "description": "Provider-neutral client for AI text generation APIs (OpenAI Responses, OpenAI-compatible Chat Completions, Gemini generateContent, Anthropic Messages). Zero runtime dependencies.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
+    "./catalog.json": "./catalog.json"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "knip": "knip",
+    "check": "npm run typecheck && npm run lint && npm run knip && npm test",
+    "smoke": "node tools/smoke.ts"
+  },
+  "devDependencies": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.13.0",
+    "knip": "^6.42.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

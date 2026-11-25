@@ -1,0 +1,54 @@
+{
+  "dialect": "anthropic-messages",
+  "source": "官方文件",
+  "docs": [
+    "https://platform.claude.com/docs/en/build-with-claude/streaming",
+    "https://platform.claude.com/docs/en/build-with-claude/pdf-support.md",
+    "https://platform.claude.com/docs/en/api/errors"
+  ],
+  "checkedOn": "2026-11-25",
+  "endpoint": { "provider": "anthropic" },
+  "model": "claude-sonnet-5-5",
+  "request": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "authHeader": "x-api-key",
+    "authValue": "{key}",
+    "headers": { "anthropic-version": "2026-10-21" },
+    "textBody": { "model": "claude-sonnet-5-5", "max_tokens": 128000, "stream": true, "system": "只用繁體中文。", "messages": [{ "role": "user", "content": [{ "type": "text", "text": "你好" }] }] },
+    "imagePart": { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "AAEC" } },
+    "pdfPart": { "type": "document", "source": { "type": "base64", "media_type": "application/pdf", "data": "JVBERi0xLjQ=" } },
+    "maxOutputTokens": { "max_tokens": 1000 },
+    "reasoningHigh": { "output_config": { "effort": "high" } }
+  },
+  "stream": {
+    "file": "stream.sse",
+    "headers": { "request-id": "req_011abc" },
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end",
+    "rawStopReason": "end_turn",
+    "usage": { "inputTokens": 1200, "cachedInputTokens": 1000, "cacheWriteInputTokens": 0, "outputTokens": 350, "reasoningTokens": null },
+    "resolvedModel": "claude-sonnet-5-5",
+    "requestId": "req_011abc",
+    "responseId": "msg_abc123"
+  },
+  "json": {
+    "body": { "id": "msg_abc123", "type": "message", "role": "assistant", "model": "claude-sonnet-5-5", "content": [{ "type": "thinking", "thinking": "", "signature": "sig" }, { "type": "text", "text": "光合作用把光能轉成化學能。" }], "stop_reason": "end_turn", "stop_sequence": null, "usage": { "input_tokens": 200, "cache_read_input_tokens": 1000, "cache_creation_input_tokens": 0, "output_tokens": 350 } },
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end"
+  },
+  "length": { "file": "length.sse", "text": "寫到一半", "stopReason": "length", "rawStopReason": "max_tokens" },
+  "filter": { "file": "filter.sse", "stopReason": "refusal" },
+  "streamError": { "file": "stream-error.sse", "kind": "overloaded", "providerCode": "overloaded_error" },
+  "errors": [
+    { "status": 401, "body": { "type": "error", "error": { "type": "authentication_error", "message": "invalid x-api-key" } }, "kind": "auth" },
+    { "status": 402, "body": { "type": "error", "error": { "type": "billing_error", "message": "Your credit balance is too low to access the Anthropic API." } }, "kind": "quota" },
+    { "status": 429, "headers": { "retry-after": "4" }, "body": { "type": "error", "error": { "type": "rate_limit_error", "message": "Number of request tokens has exceeded your per-minute rate limit." } }, "kind": "rate_limit", "retryAfterMs": 4000 },
+    { "status": 429, "body": { "type": "error", "error": { "type": "rate_limit_error", "message": "You have reached your specified API usage limits.", "details": { "error_code": "enforced_spend_limit_reached" } } }, "kind": "quota" },
+    { "status": 400, "body": { "type": "error", "error": { "type": "invalid_request_error", "message": "prompt is too long: 1200000 tokens > 1000000 maximum" } }, "kind": "input_too_large" },
+    { "status": 413, "body": { "type": "error", "error": { "type": "request_too_large", "message": "Request exceeds the maximum allowed number of bytes." } }, "kind": "input_too_large" },
+    { "status": 404, "body": { "type": "error", "error": { "type": "not_found_error", "message": "model: claude-9" } }, "kind": "model_not_found" },
+    { "status": 500, "body": { "type": "error", "error": { "type": "api_error", "message": "Internal server error" } }, "kind": "server" },
+    { "status": 529, "body": { "type": "error", "error": { "type": "overloaded_error", "message": "Overloaded" } }, "kind": "overloaded" }
+  ],
+  "check": { "status": 200, "body": { "data": [{ "id": "claude-sonnet-5-5", "type": "model", "display_name": "Claude Sonnet 5.5" }], "has_more": false }, "models": ["claude-sonnet-5-5"] }
+}
