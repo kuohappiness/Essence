@@ -36,9 +36,9 @@ export interface Generator { name: string; kind: AdapterKind; model: string; eff
 export interface Judge { name: string; kind: 'claude' | 'codex'; model: string; effort: string }
 
 const METRICS = ['規則字數', '整份提示字數', '孩子會碰到的錯', '孩子會碰到的錯（不算多解）', '重大錯誤', '題目品質', '近義重複', '漏的必備', '部分的必備', '題數', '目標數', '生成時間'] as const;
-type Metric = (typeof METRICS)[number];
+export type Metric = (typeof METRICS)[number];
 
-interface Gates {
+export interface Gates {
   baseline: string;
   candidates: string[];
   generators: string[];

@@ -13,6 +13,7 @@ import { jobState, planJobs, readEvents } from './jobs.ts';
 import { leakCandidates, type MergedIssue, type Verdict } from './merge.ts';
 import { parseRubric, type RubricRow } from './rubric.ts';
 import type { JudgeResult } from './judge.ts';
+import { allGates } from './gates.ts';
 import { summaryLines } from './report.ts';
 
 interface Effect { row: string; to: '拿掉' | '加分' | '必備' }
@@ -231,7 +232,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
 /** 從解開過的每一批重寫 明細.json、明細.md 與 摘要.md。 */
 function writeReports(folder: Folder): void {
   const reports = readReports(folder);
-  writeFileSync(join(resultsDir(folder), '明細.json'), JSON.stringify({ name: folder.config.name, batches: reports }, null, 2) + '\n', 'utf8');
+  writeFileSync(join(resultsDir(folder), '明細.json'), JSON.stringify({ name: folder.config.name, batches: reports, gates: allGates(folder.config.gates, reports.flatMap(report => report.decks)) }, null, 2) + '\n', 'utf8');
   writeFileSync(join(resultsDir(folder), '摘要.md'), summaryLines(folder, reports, 'summary').join('\n') + '\n', 'utf8');
   writeFileSync(join(resultsDir(folder), '明細.md'), summaryLines(folder, reports, 'detail').join('\n') + '\n', 'utf8');
 }

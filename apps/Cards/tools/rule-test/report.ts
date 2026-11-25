@@ -1,6 +1,7 @@
 // 比較測試工具：結果的兩份報告（任務說明 tasks/rule-test-tool.md §5-9）。明細.md（私人）：逐課、逐生成器、逐份的指標，
 // 漏與部分的列、問題與裁定、評審 × 生成器的分項。摘要.md：只有數字（每組每份的平均），沒有教材、評分表與題目的原文，可以貼進 repo。
 import type { Folder } from './folder.ts';
+import { allGates, type GateResult } from './gates.ts';
 import type { BatchReport, DeckMetrics } from './unblind.ts';
 
 const one = (value: number): string => value.toFixed(1);
@@ -59,6 +60,7 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
   for (const section of sections(folder, unique)) {
     lines.push(`## ${section.lesson}｜${section.generator}`, '', ...head(AVERAGE_HEAD), ...section.groups.map(each => row([each.group, ...averages(each.decks)])), '');
   }
+  lines.push(...gateLines(folder, reports), '');
   if (mode === 'summary') return lines;
 
   for (const report of reports) {
@@ -91,5 +93,33 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
     }
   }
   lines.push('');
+  return lines;
+}
+
+const MARK = (pass: boolean | null): string => pass === true ? '［過］' : pass === false ? '［沒過］' : '［未定］';
+const key = (gate: GateResult): string => `${gate.lesson}｜${gate.generator}｜${gate.candidate}`;
+
+/** 門檻（§6-3）：逐課、逐生成器、逐候選組；另標補跑的結果和前一批相反（結果翻轉）、含後補的份。 */
+function gateLines(folder: Folder, reports: readonly BatchReport[]): string[] {
+  const all = reports.flatMap(report => report.decks);
+  const gates = allGates(folder.config.gates, all);
+  const byBatch = reports.length > 1 ? reports.map(report => ({ batch: report.batch, gates: allGates(folder.config.gates, report.decks) })) : [];
+  const lines = ['## 門檻', '', `基準：${folder.config.gates.baseline}；算門檻的生成器：${folder.config.gates.generators.join('、')}（其他生成器只報告）。逐課、逐生成器判，怎麼合由人寫；結果翻轉或裁定解不開時，照 D-228 那一科維持現行、再加一課（§6-3）。`, ''];
+  if (!gates.length) return [...lines, '（還沒有可以比的份）'];
+  for (const gate of gates) {
+    const late = [...new Set(all.filter(deck => deck.late && deck.lesson === gate.lesson && deck.generator === gate.generator && [gate.candidate, gate.baseline].includes(deck.group)).map(deck => deck.batch))];
+    const verdicts = byBatch.flatMap(each => each.gates.filter(other => key(other) === key(gate)).map(other => `批 ${String(each.batch)} ${other.verdict}`));
+    const flipped = verdicts.some(each => each.endsWith('過') && !each.endsWith('沒過')) && verdicts.some(each => each.endsWith('沒過'));
+    lines.push(
+      `### ${gate.lesson}｜${gate.generator}｜${gate.candidate} 對 ${gate.baseline}：${gate.verdict}`, '',
+      `- 份數：候選 ${String(gate.counts.candidate)}、基準 ${String(gate.counts.baseline)}${gate.counts.candidate < 3 || gate.counts.baseline < 3 ? '（不到 3 份：會變的指標只看平均，變差超過容許量算未定）' : ''}`,
+      ...[gate.major, gate.rows, gate.total, gate.nearDuplicates, ...gate.benefits, ...gate.noWorse].map(check => `- ${MARK(check.pass)} ${check.text}`),
+      `- 收益至少要一項達到：${gate.benefits.some(each => each.pass === true) ? '有' : '沒有'}`,
+      ...Object.keys(gate.chance).length ? [`- 隨便各抽一份，候選比較好的機會：${Object.entries(gate.chance).map(([metric, value]) => `${metric} ${String(Math.round(value * 100))}%`).join('、')}`] : [],
+      ...verdicts.length ? [`- 各批：${verdicts.join('、')}${flipped ? '（結果翻轉：照 D-228 維持現行、再加一課）' : ''}`] : [],
+      ...late.length ? [`- 含看過前一批結果才決定加跑的份（批 ${late.join('、')}）`] : [],
+      '',
+    );
+  }
   return lines;
 }
