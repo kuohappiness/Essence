@@ -1011,3 +1011,27 @@ void test('測試連線拿到 2xx 之後的每一種失敗都標 afterResponse�
     if (c.after) assert.equal(retryable, false, c.name);
   }
 });
+
+void test('數字欄位給 null 整類：每一個都和沒給一樣；整體期限從開始算一次，重送不會重新起算（L2 第三輪 延續 R6）', async () => {
+  const fail500: MockReply = { status: 500, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"boom"}}'] };
+  const slow: MockReply = { ...OK, chunks: readSse(openai, openai.stream.file).split(/\n\n/).filter(Boolean).map(e => `${e}\n\n`), delayMs: 5 };
+  const outcome = async (extra: Partial<GenerateRequest>) => {
+    const fetch = mockFetch([fail500, slow]);
+    const events: string[] = [];
+    const result = await createAiClient({ fetch, clock: instantClock() }).generate(request({ ...extra, onProgress: e => events.push(e.type) }))
+      .then(r => r.text, (error: unknown) => (isAiError(error) ? `${error.kind}: ${error.message}` : String(error)));
+    return { result, events, sent: fetch.requests.map(q => q.body) };
+  };
+  const omitted = await outcome({});
+  assert.equal(omitted.result, openai.stream.text);
+  for (const field of ['timeoutMs', 'idleTimeoutMs', 'maxAttempts', 'maxOutputTokens'] as const) {
+    assert.deepEqual(await outcome({ [field]: null }), omitted, `${field}: null`);
+  }
+
+  // 每一次送出都過 15 億 ms：期限照計時器上限（約 24.8 天）從開始算，第二次之後就到了，不會每一次重送都重新給滿。
+  let now = Date.parse('2026-11-25T00:00:00Z');
+  const fetch = mockFetch(() => { now += 1_500_000_000; return fail500; });
+  const clock = { now: () => now, sleep: () => Promise.resolve(), random: () => 0.5 };
+  const error = await rejects(createAiClient({ fetch, clock }).generate(request({ timeoutMs: 1e10 })));
+  assert.deepEqual([error.kind, fetch.requests.length], ['server', 2]);
+});

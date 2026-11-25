@@ -161,7 +161,12 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     }
   }
 
-  async function generateOnce(request: GenerateRequest): Promise<GenerateResult> {
+  async function generateOnce(given: GenerateRequest): Promise<GenerateResult> {
+    // 數字欄位在入口正規化一次：null 和沒給一樣（照預設；閒置逾時是關），之後每一處讀到的都是這一份（L2 第三輪 延續 R6）。
+    const request: GenerateRequest = {
+      ...given, timeoutMs: given.timeoutMs ?? undefined, idleTimeoutMs: given.idleTimeoutMs ?? undefined,
+      maxAttempts: given.maxAttempts ?? undefined, maxOutputTokens: given.maxOutputTokens ?? undefined,
+    };
     const secrets = request.apiKey ? [request.apiKey] : [];
     checkNumbers({
       maxAttempts: request.maxAttempts, timeoutMs: request.timeoutMs, idleTimeoutMs: request.idleTimeoutMs,
@@ -207,7 +212,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     headers.accept = 'text/event-stream';
 
     const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const deadline = startedAt + timeoutMs;
+    // 期限從開始算一次、照計時器上限：每一次重送都用剩下的，不重新給滿（L2 第三輪 延續 R6）。
+    const deadline = startedAt + Math.min(timeoutMs, MAX_TIMER_MS);
     const responseTimeoutMs = options.responseTimeoutMs === undefined
       ? RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000
       : options.responseTimeoutMs;
