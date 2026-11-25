@@ -23,6 +23,7 @@ import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
 import { deepenSectionText } from '../tools/rule-test/prompts.ts';
+import { statusLines } from '../tools/rule-test/status.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
@@ -335,4 +336,12 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   assert.ok(summary.includes('| 甲 | 0.0 | 1.0 | 1.0 | 0.0 | 2.0 | 2.0 | 0／1 | 1.0（0） | 3.0 | 33% | 0.0 |'));
   assert.ok(!summary.includes('兩種讀法'));
   assert.match(detail, /### 地圖與加深的拿不準（不送裁定，只列出來）\n\n- L3-B01 加深，claude：1-3 是換句話問，還是往下一層，兩種讀法都說得通\n/);
+});
+
+void test('status 顯示加深做到哪裡：還沒算計畫的份、篇數與完成數、存不了不能加深的份', async () => {
+  const broken = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>';
+  const folder = await generated({ 乙: broken });
+  assert.ok(statusLines(folder).includes('加深：2 份、0 篇｜完成 0、跑中 0、待跑 0、放棄 0；還沒算計畫 2 份（生成完成後：deepen）'));
+  await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
+  assert.ok(statusLines(folder).includes('加深：2 份、1 篇｜完成 1、跑中 0、待跑 0、放棄 0；卡組存不了、不能加深 1 份'));
 });

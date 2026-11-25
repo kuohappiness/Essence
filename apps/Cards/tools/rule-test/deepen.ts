@@ -171,6 +171,22 @@ export function deepenUnfinished(folder: Folder, jobs: readonly Job[]): string[]
   });
 }
 
+/** status 用（§6-2）：加深做到哪裡；沒設定加深是空的。 */
+export function deepenStatus(folder: Folder, jobs: readonly Job[]): string[] {
+  if (!folder.config.deepen) return [];
+  const events = readEvents(folder, LOG), mine = deepenJobs(folder, jobs);
+  const plans = mine.map(job => readPlan(folder, job.key));
+  const pieces = plans.flatMap(plan => plan?.pieces ?? []);
+  const count = (status: string): number => pieces.filter(piece => jobState(events, piece.key).status === status).length;
+  const unplanned = plans.filter(plan => !plan).length, unsavable = plans.filter(plan => plan && !plan.savable).length;
+  const lines = [`加深：${String(mine.length)} 份、${String(pieces.length)} 篇｜完成 ${String(count('done'))}、跑中 ${String(count('running'))}、待跑 ${String(count('pending') + count('retry'))}、放棄 ${String(count('failed'))}${unsavable ? `；卡組存不了、不能加深 ${String(unsavable)} 份` : ''}${unplanned ? `；還沒算計畫 ${String(unplanned)} 份（生成完成後：deepen）` : ''}`];
+  for (const piece of pieces.filter(each => jobState(events, each.key).status === 'failed')) {
+    const detail = jobState(events, piece.key).last?.detail?.message;
+    lines.push(`  放棄：${piece.key}：${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}（看過原因要再試：deepen --retry）`);
+  }
+  return lines;
+}
+
 interface Todo { job: Job; plan: DeepenPlan; piece: DeepenPiece }
 
 function todos(folder: Folder, plans: readonly DeepenPlan[]): Todo[] {

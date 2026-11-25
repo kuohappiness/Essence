@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
 import { batchDir, batchNumbers, readBlocks } from './blind.ts';
 import { readFormat } from './check.ts';
+import { deepenStatus } from './deepen.ts';
 import { openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
 import { resultFile, stagesOf } from './judge.ts';
@@ -46,6 +47,7 @@ export function statusLines(folder: Folder): string[] {
   const finished = jobs.filter(job => ['done', 'invalid'].includes(states.get(job.key)!.status));
   const unchecked = finished.filter(job => readFormat(folder, job) === null);
   lines.push(`格式：${String(finished.length - unchecked.length)}／${String(finished.length)} 份檢查過${unchecked.length ? '（下一步：check）' : ''}`);
+  lines.push(...deepenStatus(folder, jobs));
 
   const batches = batchNumbers(folder);
   if (!batches.length) lines.push('匿名：還沒（生成都完成後：blind）');
