@@ -582,3 +582,55 @@ void test('遮蔽只動服務回的字串：金鑰剛好等於固定的值時，
     assert.deepEqual([result.trace.dialect, result.trace.host, result.trace.provider], ['openai-chat', 'localhost:11434', 'custom'], apiKey);
   }
 });
+
+void test('進度回呼裡取消，每一種事件、每一條路都停：cancelled、不再送、已交出的文字留在 partialText（L2 第二輪 R8、R10 修正交互）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  // 最後一段文字以金鑰的開頭結尾：遮蔽器扣住它，串流做完卻沒關，閒置逾時後才補交（R10 的路）。
+  const heldKey = '能。這不是真的金鑰';
+  const lingering = (): MockReply => ({
+    status: 200, headers: { 'content-type': 'text/event-stream' }, keepOpen: true,
+    chunks: [readSse(chat, chat.stream.file).split(/\n\n/).filter(e => !e.includes('[DONE]')).map(e => `${e}\n\n`).join('')],
+  });
+  const routes: { name: string; reply: () => MockReply; extra: Partial<GenerateRequest> }[] = [
+    { name: 'SSE', reply: () => OK, extra: {} },
+    { name: 'JSON', reply: () => ({ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(openai.json.body)] }), extra: {} },
+    { name: '做完沒關', reply: lingering, extra: { endpoint: { provider: 'openrouter' }, model: chat.model, apiKey: heldKey, idleTimeoutMs: 30 } },
+  ];
+  const pickers: { name: string; pick: (e: ProgressEvent, seen: ProgressEvent[]) => boolean; sends: number; hasText: boolean }[] = [
+    { name: 'sent', pick: e => e.type === 'sent', sends: 0, hasText: false },
+    { name: 'waiting', pick: e => e.type === 'waiting', sends: 1, hasText: false },
+    { name: '第一段 text', pick: (e, seen) => e.type === 'text' && !seen.some(s => s.type === 'text'), sends: 1, hasText: true },
+  ];
+  for (const route of routes) {
+    for (const picker of pickers) {
+      const controller = new AbortController();
+      const seen: ProgressEvent[] = [];
+      const fetch = mockFetch([route.reply()]);
+      const error = await rejects(createAiClient({ fetch, clock: instantClock() }).generate(request({
+        ...route.extra, signal: controller.signal,
+        onProgress: e => { if (picker.pick(e, seen)) controller.abort(); seen.push(e); },
+      })));
+      const label = `${route.name}／${picker.name}`;
+      assert.deepEqual([error.kind, fetch.requests.length], ['cancelled', picker.sends], label);
+      assert.equal(error.partialText !== null, picker.hasText, `${label}：${String(error.partialText)}`);
+    }
+    // 最後一段 text：先跑一次數出有幾段，再在最後一段取消。
+    let texts = 0;
+    await createAiClient({ fetch: mockFetch([route.reply()]), clock: instantClock() }).generate(request({ ...route.extra, onProgress: e => { if (e.type === 'text') texts++; } }));
+    const controller = new AbortController();
+    let at = 0;
+    const last = await rejects(createAiClient({ fetch: mockFetch([route.reply()]), clock: instantClock() }).generate(request({
+      ...route.extra, signal: controller.signal, onProgress: e => { if (e.type === 'text' && ++at === texts) controller.abort(); },
+    })));
+    assert.equal(last.kind, 'cancelled', `${route.name}／最後一段 text`);
+    assert.ok(last.partialText, `${route.name}／最後一段 text 的 partialText`);
+  }
+});
+
+void test('sent 的回呼拖過整體期限：不送出，丟 timeout（L2 第二輪 R8）', async () => {
+  let now = Date.parse('2026-11-25T00:00:00Z');
+  const fetch = mockFetch([OK]);
+  const clock = { now: () => now, sleep: () => Promise.resolve(), random: () => 0.5 };
+  const error = await rejects(createAiClient({ fetch, clock }).generate(request({ timeoutMs: 10, onProgress: e => { if (e.type === 'sent') now += 25; } })));
+  assert.deepEqual([error.kind, fetch.requests.length], ['timeout', 0]);
+});

@@ -289,14 +289,20 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       let gotResponse = false;
       let response: Response | undefined;
       const meta = () => ({ provider: r.providerId, requestId: log.requestId, secrets, partialText: text || null, afterResponse: gotResponse });
-      /** 進度回呼裡取消、或已經逾時：不再往下（L2 R8）。丟的例外由 catch 照 reason 換成 cancelled 或 timeout。 */
+      /**
+       * 每個進度回呼之後：呼叫端取消了就停，取消優先於其他原因；已經逾時也停（L2 R8、第二輪）。
+       * 丟的例外由 catch 換成 cancelled 或 timeout。
+       */
       const stopIfAborted = () => {
+        if (request.signal?.aborted) abort('cancelled');
         if (reason) throw new Error(`stopped: ${reason}`);
       };
       try {
         if (remaining <= 0) abort('timeout');
         stopIfAborted();
         progress({ type: 'sent', attempt });
+        // 同步的回呼可能拖過整體期限，計時器在送出前沒機會跑：送出前再看一次時間（L2 第二輪 R8）。
+        if (clock.now() >= deadline) abort('timeout');
         stopIfAborted();
         response = await untilAbort(
           doFetch(call.url, { method: 'POST', headers, body: bytes, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
@@ -325,6 +331,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           }
           const parsed = r.dialect.parseResponse(json);
           if ('error' in parsed) throw toError(parsed.error, response.status, null, meta());
+          // 交出去的文字也算收到了：之後取消，partialText 帶著它（L2 第二輪 R8）。
+          text = parsed.text;
           const shown = redactText(parsed.text, secrets);
           if (shown) progress({ type: 'text', delta: shown, totalChars: shown.length });
           stopIfAborted();
@@ -366,10 +374,11 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
         const tail = visible.end();
         if (tail) progress({ type: 'text', delta: tail, totalChars: visible.length });
-        if (!lingered) stopIfAborted();
+        // 已經逾時（做完沒關）的照已收到的交回；但補交最後一段時呼叫端取消了，仍是取消（L2 第二輪 R8、R10）。
+        if (!lingered || request.signal?.aborted) stopIfAborted();
         return { output: parser.result(), requestId: log.requestId };
       } catch (caught) {
-        const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
+        const error = reason === 'cancelled' || request.signal?.aborted ? fail('cancelled', 'cancelled', meta())
           : reason === 'timeout' ? fail('timeout', `timed out after ${timeoutMs} ms`, meta())
           : reason === 'idle' ? fail('timeout', `no data for ${request.idleTimeoutMs} ms`, meta())
           // 請求已經送出、服務可能已經在做（或中間的代理把串流整段收完才交），重送可能讓同一件事做兩次、付兩次錢（L2 R7）。
