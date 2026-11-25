@@ -121,7 +121,10 @@ function groupBy<T>(list: readonly T[], key: (item: T) => string): Map<string, T
   return groups;
 }
 
-/** 只有一邊的版本有、所以沒比的欄位（今天的份的題型、格數與同一張卡的目標），給報告看；兩邊都有或都沒有是空的。 */
+/**
+ * 只有一邊的版本有、所以沒比的欄位（今天的份的題型、格數與同一張卡的目標），給報告看；兩邊都有或都沒有是空的。
+ * 有卡（prompt 不是 null）而這一欄是 null 才是那一版沒有；今天已經答對、這次沒有卡的不算，兩版一邊有卡一邊沒有由 prompt 報（L2 第一輪 R2）。
+ */
 export function uncomparedLines(before: Snapshot, after: Snapshot): string[] {
   const todayA = new Map(before.today.map(item => [item.lt, item]));
   const out: string[] = [];
@@ -129,7 +132,7 @@ export function uncomparedLines(before: Snapshot, after: Snapshot): string[] {
     let older = 0, newer = 0;
     for (const item of after.today) {
       const old = todayA.get(item.lt);
-      if (!old || (old[field] === null) === (item[field] === null)) continue;
+      if (!old || old.prompt === null || item.prompt === null || (old[field] === null) === (item[field] === null)) continue;
       if (old[field] === null) older++; else newer++;
     }
     if (older) out.push(`今天的份的${label}：舊版沒有這一欄，${older} 張沒比`);

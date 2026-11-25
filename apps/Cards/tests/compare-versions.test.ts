@@ -141,7 +141,7 @@ void test('比較：卡型摘要改了報得出來，兩個方向都要（題型
 
 void test('比較：今天的份的題型與格數，有一邊是 null（那一版沒有）就不比，報告列出沒比的張數；兩邊都有就比（題型模組任務說明 §1-7）', () => {
   const today = (...items: [string, string | null, number | null][]): Snapshot => ({ ...base(), today: items.map(([lt, type, cells]) =>
-    ({ list: 'share', lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: null, direction: null, type, cells, lts: null })) });
+    ({ list: 'share', lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: '11111111', direction: null, type, cells, lts: null })) });
   const old = today(['a', null, null], ['b', null, null], ['c', 'flip', 1]);
   const now = today(['a', 'pick', 2], ['b', 'flip', 1], ['c', 'flip', 1]);
   assert.deepEqual(diffSnapshots(old, now, time), []);
@@ -152,6 +152,18 @@ void test('比較：今天的份的題型與格數，有一邊是 null（那一�
   const changed = today(['a', 'order', 3], ['b', 'flip', 1], ['c', 'typed', 2]);
   assert.deepEqual(diffSnapshots(now, changed, time), [
     '今天的份裡 a 的 type："pick" → "order"', '今天的份裡 a 的 cells：2 → 3', '今天的份裡 c 的 type："flip" → "typed"', '今天的份裡 c 的 cells：1 → 2']);
+});
+
+void test('比較：今天已經答對、這次沒有卡（prompt 是 null）不是那一版沒有這一欄；兩版一邊出卡一邊沒有，報的是 prompt（L2 第一輪 R2）', () => {
+  const item = (prompt: string | null, type: string | null, cells: number | null, lts: string[] | null): TodaySnap =>
+    ({ list: 'share', lt: 'a', deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt, direction: null, type, cells, lts });
+  const shown = { ...base(), today: [item('11111111', 'flip', 1, ['a'])] }, done = { ...base(), today: [item(null, null, null, null)] };
+  for (const [before, after] of [[shown, done], [done, shown]]) assert.deepEqual(uncomparedLines(before, after), []);
+  assert.deepEqual(diffSnapshots(shown, done, time), ['今天的份裡 a 的 prompt："11111111" → null']);
+  // 那一版沒有 questionType（0.3.0）：有卡、題型是 null，才是沒有這一欄。
+  const old = { ...base(), today: [item('11111111', null, null, null)] };
+  assert.deepEqual(uncomparedLines(old, shown), ['今天的份的題型：舊版沒有這一欄，1 張沒比', '今天的份的格數：舊版沒有這一欄，1 張沒比', '今天的份的同一張卡的目標：舊版沒有這一欄，1 張沒比']);
+  assert.deepEqual(uncomparedLines(old, done), []);
 });
 
 void test('比較：單元與問題的切法不同就是不同，接起來的字串一樣也要報', () => {
