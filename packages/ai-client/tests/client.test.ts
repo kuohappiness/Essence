@@ -478,3 +478,21 @@ void test('OpenAI 相容服務有 finish_reason 卻沒有 [DONE] 就關了：文
   assert.deepEqual([result.usage.inputTokens, result.cost], [null, null]);
   assert.ok(result.trace.warnings.some(w => w.includes('[DONE]')), result.trace.warnings.join('; '));
 });
+
+void test('Gemini 最後一塊只有用量：前面的停止原因、模型、回應編號不被蓋掉（L2 R11）', async () => {
+  const gemini = { endpoint: { provider: 'google' }, model: 'gemini-3.8-flash' } as const;
+  const reply = (events: unknown[]): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [sse(events.map(data => ({ data })))] });
+  const usageOnly = { usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 } };
+  const safety = { candidates: [{ content: { parts: [], role: 'model' }, finishReason: 'SAFETY' }], modelVersion: 'gemini-3.8-flash-001', responseId: 'gem-1' };
+
+  const blocked = await rejects(createAiClient({ fetch: mockFetch([reply([safety, usageOnly])]), clock: instantClock() }).generate(request(gemini)));
+  assert.deepEqual([blocked.kind, blocked.providerCode], ['content_blocked', 'SAFETY']);
+
+  const partial = { candidates: [{ content: { parts: [{ text: '光合作用' }], role: 'model' } }], modelVersion: 'gemini-3.8-flash-001', responseId: 'gem-2' };
+  const stop = { candidates: [{ content: { parts: [], role: 'model' }, finishReason: 'SAFETY' }] };
+  const result = await createAiClient({ fetch: mockFetch([reply([partial, stop, usageOnly])]), clock: instantClock() }).generate(request(gemini));
+  assert.deepEqual(
+    [result.text, result.stopReason, result.trace.rawStopReason, result.trace.resolvedModel, result.trace.responseId, result.usage.inputTokens],
+    ['光合作用', 'content_filter', 'SAFETY', 'gemini-3.8-flash-001', 'gem-2', 10],
+  );
+});

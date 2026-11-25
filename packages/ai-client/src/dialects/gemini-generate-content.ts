@@ -116,7 +116,11 @@ export const geminiGenerateContent: Dialect = {
 
   createStreamParser(): StreamParser {
     let text = '';
-    let last: Json = {};
+    // 每一欄留最後一個有值的：轉接服務可能把用量另外放在最後一塊，不能只看最後一塊（L2 R11）。
+    let finishReason: string | null = null;
+    let blockReason: string | null = null;
+    let modelVersion: string | null = null;
+    let responseId: string | null = null;
     let usage: Json | null = null;
     let finished = false;
     return {
@@ -128,9 +132,12 @@ export const geminiGenerateContent: Dialect = {
       push(event) {
         const data = obj(JSON.parse(event.data));
         if (data.error) return { error: errorOf(obj(data.error), null) };
-        last = data;
+        finishReason = str(obj(arr(data.candidates)[0]).finishReason) ?? finishReason;
+        blockReason = str(obj(data.promptFeedback).blockReason) ?? blockReason;
+        modelVersion = str(data.modelVersion) ?? modelVersion;
+        responseId = str(data.responseId) ?? responseId;
         if (data.usageMetadata) usage = obj(data.usageMetadata);
-        if (str(obj(arr(data.candidates)[0]).finishReason) || str(obj(data.promptFeedback).blockReason)) finished = true;
+        if (finishReason || blockReason) finished = true;
         const delta = textOf(data);
         if (delta) {
           text += delta;
@@ -139,9 +146,9 @@ export const geminiGenerateContent: Dialect = {
         return {};
       },
       result() {
-        const out = outputOf(last, text);
-        if (usage) out.usage = usageOf(usage);
-        return out;
+        return outputOf({
+          candidates: [{ finishReason }], promptFeedback: { blockReason }, usageMetadata: usage ?? {}, modelVersion, responseId,
+        }, text);
       },
     };
   },
