@@ -86,6 +86,8 @@ void test('readConfig：沒寫的照外掛的預設（任務段、補充與點�
   assert.deepEqual(config.lessons[1].form, { subject: 'social', term: '五上', unit: '1-2 地形', purpose: '準備段考', supplement: true, pick: false, adjust: '', material: '' });
   assert.deepEqual(config.adjudicator, { name: 'claude', kind: 'claude', model: 'claude-opus-5-5', effort: 'high' });
   assert.equal(config.timeoutMinutes, 40);
+  // 重大錯誤的門檻沒寫時是「不比基準多」（D-234）。
+  assert.equal(readConfig(EXAMPLE.replace(/\n {2}重大錯誤: .*/, '')).gates.majorErrors, 'notMore');
 });
 
 void test('readConfig：錯誤一次列完，每一條說是哪一項', () => {

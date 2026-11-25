@@ -259,7 +259,7 @@ export function readConfig(source: string): Config {
   if (!gateGenerators.length) errors.add('門檻', '少了「生成器」（哪幾個生成器算門檻，第一輪沒寫這一項）');
   for (const name of [baseline, ...candidates]) if (name && !names.includes(name)) errors.add('門檻', `沒有叫「${name}」的組`);
   for (const name of gateGenerators) if (!generatorNames.includes(name)) errors.add('門檻', `沒有叫「${name}」的生成器`);
-  const majorText = text(rawGates['重大錯誤']) ?? '零';
+  const majorText = text(rawGates['重大錯誤']) ?? '不比基準多';
   const gates: Gates = {
     baseline, candidates, generators: gateGenerators,
     majorErrors: majorText === '零' ? 'zero' : majorText === '不比基準多' ? 'notMore' : (errors.add('門檻 重大錯誤', '要寫「零」或「不比基準多」'), 'zero'),

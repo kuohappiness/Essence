@@ -115,7 +115,7 @@ void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀
   assert.match(summary, /\| 乙 \| 1 \| 0\.0 \| 1\.0 \| 0\.0 \| 2\.0 \| 0\.0 \| 2\.0 \| 1\.0 \| 0\.667 \| 2\.0 \| 3\.0 \| 0／1 \|/);
   // 門檻：規則字數一樣，收益沒達到。
   assert.match(summary, /### L3｜claude｜乙 對 甲：沒過\n\n- 份數：候選 1、基準 1（不到 3 份/);
-  assert.match(summary, /- ［過］ 重大錯誤：候選 1 份都是 0\n/);
+  assert.match(summary, /- ［過］ 重大錯誤：候選每份平均 0.0、基準 0.0，不比基準多\n/);
   assert.match(summary, /- ［沒過］ 收益 規則字數：.*少 0%（設定至少 1%）→ 沒達到\n/);
   const detail = readFileSync(join(folder.root, '結果', '明細.md'), 'utf8');
   assert.match(detail, /多解 目標 1 第 1 題，codex、claude：借入、借用都對/);
