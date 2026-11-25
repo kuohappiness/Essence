@@ -15,7 +15,7 @@ import { fillReplies } from './prompts.ts';
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
 const BREAKER = 3;
 
-const rawName = (job: Job, step: FrozenStep): string => `${job.key}${job.steps.length > 1 ? `-${String(step.step)}` : ''}.md`;
+export const rawName = (job: Job, step: FrozenStep): string => `${job.key}${job.steps.length > 1 ? `-${String(step.step)}` : ''}.md`;
 const attemptDir = (folder: Folder, job: Job, attempt: number): string => join(folder.root, '生成', '嘗試', `${job.key}-${String(attempt)}`);
 const lockFile = (folder: Folder): string => join(folder.root, '生成', '執行中.json');
 

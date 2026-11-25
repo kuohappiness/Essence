@@ -41,7 +41,7 @@ export interface Lock {
 }
 
 const LIBRARY = '<課庫>';
-const git = (args: string[], root = REPO_ROOT): string => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+export const git = (args: string[], root = REPO_ROOT): string => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const portable = (path: string): string => path.split(sep).join('/');
 
 const promptFile = (group: string, lesson: string, step: number, steps: number): string => `${group}-${lesson}${steps > 1 ? `-${String(step)}` : ''}.md`;
@@ -51,7 +51,7 @@ function located(folder: Folder, key: string): string {
   return key.startsWith(`${LIBRARY}/`) ? join(libraryOf(folder), key.slice(LIBRARY.length + 1)) : join(folder.root, key);
 }
 
-function readLock(folder: Folder): Lock | null {
+export function readLock(folder: Folder): Lock | null {
   const path = join(folder.root, '凍結', '鎖.json');
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as Lock : null;
 }
@@ -70,6 +70,11 @@ export function verifyLock(folder: Folder): Lock {
 
 export function readFrozenSteps(folder: Folder): FrozenStep[] {
   return JSON.parse(readFileSync(join(folder.root, '凍結', '提示.json'), 'utf8')) as FrozenStep[];
+}
+
+export function readFrozenSnapshot(folder: Folder, lesson: string): Snapshot | null {
+  const path = join(folder.root, '凍結', '已有目標', `${lesson}.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as Snapshot : null;
 }
 
 const threeSectionsOf = (source: RuleSource, r3: boolean, text: string): boolean =>

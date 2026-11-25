@@ -1,15 +1,21 @@
 // 製卡規則的比較測試工具（任務說明 apps/Cards/docs/tasks/rule-test-tool.md）。
 // 用法：npm run rule-test -- <指令> …；指令與步驟見同一個資料夾的 README.md。
+import { blind } from './blind.ts';
+import { check } from './check.ts';
 import { freeze } from './freeze.ts';
 import { generate } from './generate.ts';
 import { paste } from './paste.ts';
 import { probe } from './probe.ts';
+import { status } from './status.ts';
 
 const COMMANDS: Record<string, () => Promise<void>> = {
   probe,
   freeze,
   generate,
   paste,
+  check,
+  blind,
+  status,
 };
 
 const name = process.argv[2];
