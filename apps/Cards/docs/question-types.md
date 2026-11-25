@@ -110,7 +110,7 @@
 | 作答 | [`review/flow.ts`](../src/review/flow.ts) | `FLOWS`、`PREVIEWS`：判定、評分與紀錄 |
 | 畫面 | [`ui/screens.tsx`](../src/ui/screens.tsx) | `SCREENS`：題目區、底部那一排、點卡片做什麼 |
 
-`QuestionType` 多一個值時，TypeScript 會指出 `FLOWS`、`PREVIEWS`、`SCREENS` 和 [`tests/question-types.test.ts`](../tests/question-types.test.ts) 的範例表缺哪一列。範例從筆記的文字跑到題型，解析或組卡沒接上，測試不過。
+`QuestionType` 多一個值時，TypeScript 會指出 `FLOWS`、`PREVIEWS`、`SCREENS` 和 [`tests/question-types.test.ts`](../tests/question-types.test.ts) 的範例表缺哪一列。範例從筆記的文字跑到題型，解析或組卡沒接上，測試不過。卡型（孩子看到的那一種卡，例如比較卡、全詩順序、中翻英）之間會不會互搶，由 [`tests/card-kinds.test.ts`](../tests/card-kinds.test.ts) 的分類表擋：名稱 × 題目形狀 × 科目認成哪一種卡型、每一題用哪個題型；加卡型時改會變的格、加自己的列（[題型模組討論稿](<Claude Codex Discussion/2026-11-25-question-type-modules.md>) §5 第 0 段）。
 
 ## v1 分段
 
