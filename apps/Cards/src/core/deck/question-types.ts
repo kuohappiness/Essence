@@ -188,7 +188,24 @@ export function readChoice(target: Target, notes: readonly string[]): ChoiceRead
   if (!good.length) return fail([target.line], 'pick-not-recognized', `沒有一題是多音字句：字後面緊接（＿＿），答案是括號裡的一個讀音。${how}`);
   const bad = target.prompts.filter(prompt => !valid(prompt));
   if (bad.length) return fail(bad.map(prompt => prompt.line), 'pick-mixed', `這一題不是多音字句（字後面緊接（＿＿），答案是括號裡的一個讀音），所以這個目標照原題型出`);
-  return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, notes }, problems: [] };
+  const answers = target.prompts.map(prompt => prompt.kind === 'qa' ? optionKeys.indexOf(pickKey(prompt.answer)) : -1);
+  return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, answers, ...anchorsOf(notes, optionKeys) }, problems: [] };
+}
+
+/**
+ * 記憶錨點對到讀音（§4-2）：每一行照第一個全形冒號切開，前面對到讀音的（同一個讀音只用第一行）是那個讀音的說明與常用詞；
+ * 對不到的（同一行的錨點、同一讀音的第二行、未知的讀音、半形冒號）照原本的順序留在 rest，不丟字。
+ */
+function anchorsOf(notes: readonly string[], optionKeys: readonly string[]): Pick<Choice, 'anchors' | 'rest'> {
+  const found = new Map<string, string>();
+  const rest: string[] = [];
+  for (const note of notes) {
+    const at = note.indexOf('：');
+    const key = at < 0 ? '' : pickKey(note.slice(0, at));
+    if (key && optionKeys.includes(key) && !found.has(key)) found.set(key, note.slice(at + 1).trim());
+    else rest.push(note);
+  }
+  return { anchors: optionKeys.map(key => found.get(key) || null), rest };
 }
 
 // ── 全詩順序卡（D-187 第 3、10 點、D-204）：點選填空的一種，用填空寫，從名稱最後的「排序」認；和比較卡不互搶（比較卡的題目都是問答）。 ──

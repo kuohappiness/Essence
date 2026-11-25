@@ -1,4 +1,4 @@
-import type { PickGroup, PoemOrder, Prompt, SentenceOrder, Target } from '../deck/index.ts';
+import type { Choice, PickGroup, PoemOrder, Prompt, SentenceOrder, Target } from '../deck/index.ts';
 import type { Blank, Card, CardGroup, Shown } from './types.ts';
 
 // 題型接點的第二個（D-181）：這張卡是哪一種題型、有哪幾格。其他三個在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
@@ -116,6 +116,68 @@ export function pickCardOf(fields: { deck: string; isNew: boolean; early: boolea
     cells.push(cellOf(group, extra.mate, extra.prompt));
   }
   return assembled(fields, chosen, cells, deckTargets);
+}
+
+// ── 多音字（tasks/polyphone-pick.md §3、§4）：選項是這個目標自己的讀音，一個目標一張卡、好幾格；純計算，同一張卡重來不變。 ──
+
+/** 一格：答案照括號的寫法（解析時已經確認每一句的答案都在括號裡，choice.answers 對齊題目）。 */
+function choiceCell(lt: string, target: Target, choice: Choice, prompt: Prompt): Blank {
+  const answer = choice.options.at(choice.answers[target.prompts.indexOf(prompt)] ?? -1);
+  if (answer === undefined) throw TypeError('多音字的答案不在括號裡：' + target.name);
+  return { lt, target, prompt, answer };
+}
+
+/**
+ * 這一張出的句子（§3-1）：照出題順序（指紋相同的算一句），每個讀音先挑順序最前面的一句（照括號的順序），再照順序補到讀音數加一；
+ * 池裡不夠就全出。回傳照出題順序，畫面的順序由 choiceAssembled 打亂。
+ */
+function choicePrompts(target: Target, choice: Choice, shown: Shown): Prompt[] {
+  const order = rotation(target, shown);
+  const optionOf = (prompt: Prompt): number => choice.answers[target.prompts.indexOf(prompt)] ?? -1;
+  const picked = new Set<Prompt>();
+  choice.options.forEach((_, option) => {
+    const first = order.find(prompt => optionOf(prompt) === option);
+    if (first) picked.add(first);
+  });
+  for (const prompt of order) {
+    if (picked.size >= choice.options.length + 1) break;
+    picked.add(prompt);
+  }
+  return order.filter(prompt => picked.has(prompt));
+}
+
+/** 格子定了之後的一張多音字卡：打散格子與字鍵（字鍵三個以上時順序一定和括號不同，同比較卡）。 */
+function choiceAssembled(fields: ChoiceFields, choice: Choice, cells: readonly Blank[]): Card {
+  const random = seeded(seedOf(cells));
+  const blanks = shuffled(cells, random);
+  const keys = shuffled(choice.options, random);
+  if (keys.length >= 3 && keys.every((key, i) => key === choice.options[i])) keys.push(keys.shift() as string);
+  // 對照（§4-2）：每個讀音一行，錨點在解析時已經對好；對不到的行接在後面。
+  const rows = choice.options.map((member, i) => ({ member, lt: fields.lt, anchor: choice.anchors[i] ?? null }));
+  return { ...fields, prompt: blanks[0].prompt, typed: false, blanks, group: { title: `${choice.title}：${choice.word}`, members: choice.options, keys, rows, choice: { rest: choice.rest } } };
+}
+
+/** 一張多音字卡需要的欄位：和翻面卡相同，只是題目由這裡挑。 */
+type ChoiceFields = Omit<Card, 'typed' | 'blanks' | 'prompt' | 'group'>;
+
+/** 一張多音字卡（§3）：今天的份、全部卡的一輪與小考共用；shown 是這個目標的出題歷史。 */
+export function choiceCardOf(fields: ChoiceFields, shown: Shown): Card {
+  const { lt, target } = fields;
+  const choice = target.choice;
+  if (!choice) throw TypeError('不是多音字：' + target.name);
+  return choiceAssembled(fields, choice, choicePrompts(target, choice, shown).map(prompt => choiceCell(lt, target, choice, prompt)));
+}
+
+/** 預覽（§3-4）：一張「第一次」的卡，其餘不同指紋的句子各一張（一格，字鍵照樣是全部讀音）。 */
+export function choicePreviewCards(deck: string, target: Target): Card[] {
+  const choice = target.choice;
+  if (!choice) throw TypeError('不是多音字：' + target.name);
+  const fields: ChoiceFields = { lt: target.id ?? '', deck, target, isNew: false, early: false };
+  const first = choiceCardOf(fields, new Map());
+  const rest = rotation(target, new Map())
+    .filter(prompt => !first.blanks.some(blank => blank.prompt === prompt))
+    .map(prompt => choiceAssembled(fields, choice, [choiceCell(fields.lt, target, choice, prompt)]));
+  return [first, ...rest];
 }
 
 /**

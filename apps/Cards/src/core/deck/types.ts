@@ -94,7 +94,11 @@ export interface PickGroup { word: string; members: readonly string[]; key: stri
  * 選項屬於這個目標的點選填空（tasks/polyphone-pick.md §1-5）：括號前面的字、選項（照括號裡的寫法，字鍵照它顯示）、正規化後的選項（和 options 對齊）、
  * 結尾（卡片的標題）、記憶錨點的每一行（同一行寫的與子項目，照解析器分好的結構，對照用）。不放進 group：group.key 是好幾個目標的組。
  */
-export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; notes: readonly string[] }
+/**
+ * 多音字（tasks/polyphone-pick.md §1、§4-2）：選項是名稱最後一個括號裡的讀音。answers 對齊 prompts，是每一題的答案在 options 的位置；
+ * anchors 對齊 options，是記憶錨點裡那個讀音的說明與常用詞（第一個全形冒號後面，沒有是 null）；rest 是對不到讀音的錨點行，照原本的順序。
+ */
+export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; anchors: readonly (string | null)[]; rest: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;
