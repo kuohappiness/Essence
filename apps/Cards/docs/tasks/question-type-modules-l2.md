@@ -1,6 +1,6 @@
 # 題型模組第 A 步（A1、A2，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 第三輪（只審修正，在使用者的電腦），Claude 核對｜等誰：Codex
+狀態：已結案 → [任務說明](question-type-modules.md)｜完成：三輪審完，第三輪只剩限制文字、修完不再送審（[報告與核對](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md>)）｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
