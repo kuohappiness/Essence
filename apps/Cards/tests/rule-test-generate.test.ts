@@ -275,16 +275,20 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   const mode = ${JSON.stringify(mode)};
   const say = event => process.stdout.write(JSON.stringify(event) + '\\n');
-  say({ type: 'system', subtype: 'init', model: 'claude-opus-5-5', tools: mode === 'tools' ? ['Bash'] : [], mcp_servers: [] });
+  // 和真的 CLI 一樣（2026-11-25 使用者電腦的 judge）：--tools Read 開 Read，加 --json-schema 會自己多一個 StructuredOutput。
+  const args = process.argv.slice(2);
+  const schema = args.includes('--json-schema');
+  const tools = [...args[args.indexOf('--tools') + 1] === 'Read' ? ['Read'] : [], ...schema ? ['StructuredOutput'] : [], ...mode === 'tools' ? ['Bash'] : []];
+  say({ type: 'system', subtype: 'init', model: 'claude-opus-5-5', tools, mcp_servers: [] });
   if (mode === 'quota') say({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1800000000 } });
   const text = mode === 'login' ? 'Not logged in · Please run /login' : JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) });
-  say({ type: 'result', subtype: 'success', is_error: mode === 'login' || mode === 'quota', result: text, session_id: 'sess-1', duration_ms: 7, modelUsage: { 'claude-opus-5-5': {} } });
+  say({ type: 'result', subtype: 'success', is_error: mode === 'login' || mode === 'quota', result: text, session_id: 'sess-1', duration_ms: 7, modelUsage: { 'claude-opus-5-5': {} }, ...schema ? { structured_output: { rows: [] } } : {} });
 });
 `);
   return { command: process.execPath, prefix: [script], found: script };
 }
 
-void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PDF 當附件；沒登入、隔離沒生效、額度用完分得出來', async () => {
+void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PDF 當附件；照 schema 交時 StructuredOutput 不算破壞隔離；沒登入、隔離沒生效、額度用完分得出來', async () => {
   const records: string[] = [];
   const request = (over: Partial<StepRequest> = {}): StepRequest => ({ text: '提示', pdf: Buffer.from('%PDF'), resume: null, model: 'claude-opus-5-5', effort: 'high', systemPrompt: null, cwd: tmpdir(), timeoutMs: 20_000, record: out => { records.push(out); }, ...over });
   const result = await claudeAdapter(() => fakeCli('ok'))(request());
@@ -300,6 +304,11 @@ void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PD
   assert.ok(resumed.kind === 'ok' && (JSON.parse(resumed.reply) as { args: string[] }).args.join(' ').endsWith('--tools  --resume sess-1 --system-prompt 系統'));
   assert.deepEqual(await claudeAdapter(() => fakeCli('login'))(request()), { kind: 'fatal', message: 'claude 沒有登入（在終端機執行 claude 登入）' });
   assert.deepEqual(await claudeAdapter(() => fakeCli('tools'))(request()), { kind: 'fatal', message: '隔離沒生效：工具 1 個、MCP 0 個' });
+  // 評審：只開 Read 又照 schema 交，CLI 自己多開的 StructuredOutput 不算破壞隔離；其他多出來的照樣停下。
+  const judged = await claudeAdapter(() => fakeCli('ok'))(request({ tools: 'Read', jsonSchema: '{"type":"object"}' }));
+  assert.ok(judged.kind === 'ok', JSON.stringify(judged));
+  assert.deepEqual(judged.structured, { rows: [] });
+  assert.deepEqual(await claudeAdapter(() => fakeCli('tools'))(request({ tools: 'Read', jsonSchema: '{"type":"object"}' })), { kind: 'fatal', message: '隔離沒生效：工具 3 個、MCP 0 個' });
   assert.equal((await claudeAdapter(() => fakeCli('quota'))(request())).kind, 'quota');
   assert.deepEqual(await claudeAdapter(() => { throw Error('找不到 claude'); })(request()), { kind: 'fatal', message: '找不到 claude' });
 });
