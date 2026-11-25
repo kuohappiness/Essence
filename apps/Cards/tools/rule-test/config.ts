@@ -15,7 +15,7 @@ export interface TaskOptions {
 }
 export const PLUGIN_TASK: TaskOptions = { pickRules: true, existingRules: 'plugin', threeSections: false, existingList: 'plugin' };
 
-type RuleSource =
+export type RuleSource =
   | { kind: 'plugin'; subject: string }
   | { kind: 'files'; commit: string; files: string[]; task: TaskOptions }
   | { kind: 'own'; files: Record<string, string> };
