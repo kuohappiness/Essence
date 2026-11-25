@@ -133,8 +133,19 @@ export const openaiResponses: Dialect = {
         if (type === 'response.completed' || type === 'response.incomplete') {
           // 結束事件少了 response：不知道停止原因與用量，不算做完（L2 第二輪 R12）。
           if (!isObject(data.response)) return badShape(type);
+          // 結束事件帶著完整的文字（代理合併事件、只送結束事件）：已交的是它的開頭，補交剩下的、以它為準；
+          // 尾段照一般的 delta 交出，金鑰跨在交界也遮得到。其餘不一致的照已交的文字，記一則 warning：交出去的字收不回來（L2 第四輪 第 7 項）。
+          const full = outputOf(data.response).text;
+          let tail = '';
+          let note: string | null = null;
+          if (full !== text) {
+            if (full.startsWith(text)) tail = full.slice(text.length);
+            else note = full ? 'final response text differs from the streamed text; kept the streamed text' : 'final response has no text; kept the streamed text';
+          }
+          text += tail;
           final = outputOf(data.response, text);
-          return {};
+          if (note) final.warnings.push(note);
+          return tail ? { delta: tail } : {};
         }
         if (type === 'response.failed') return { error: errorOf(obj(obj(data.response).error)) };
         if (type === 'error') return { error: errorOf(isNested(data) ? obj(data.error) : data) };

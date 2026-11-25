@@ -1215,3 +1215,33 @@ void test('check() 送出前的錯誤和 generate 一樣：再遮一次金鑰、
     assert.equal(fetch.requests.length, 0, label);
   }
 });
+
+void test('Responses 結束事件裡的完整文字：已交的是它的開頭就補交剩下的、以它為準；不一致的照已交的、記 warning；進度接起來一定等於結果（L2 第四輪 第 7 項）', async () => {
+  const stream = (deltas: string[], final: string) => sse([
+    { event: 'response.created', data: { type: 'response.created', response: { id: 'resp_1', model: 'gpt-5.6-terra', status: 'in_progress' } } },
+    ...deltas.map(delta => ({ event: 'response.output_text.delta', data: { type: 'response.output_text.delta', delta } })),
+    { event: 'response.completed', data: { type: 'response.completed', response: {
+      id: 'resp_1', model: 'gpt-5.6-terra', status: 'completed', usage: { input_tokens: 5, output_tokens: 3 },
+      output: final ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: final }] }] : [],
+    } } },
+  ]);
+  const cases: [string, string[], string, string, RegExp | null][] = [
+    ['沒有 delta', [], 'one two', 'one two', null],
+    ['已交的是開頭', ['one'], 'one two', 'one two', null],
+    ['一樣', ['one ', 'two'], 'one two', 'one two', null],
+    ['不是開頭', ['one'], 'xyz', 'one', /differs/],
+    ['結束事件沒文字', ['one'], '', 'one', /no text/],
+    ['金鑰跨在交界', ['before test-key-'], `before ${KEY} after`, 'before *** after', null],
+  ];
+  for (const [label, deltas, final, expected, warning] of cases) {
+    let shown = '';
+    const result = await createAiClient({ fetch: mockFetch([{ ...OK, chunks: [stream(deltas, final)] }]), clock: instantClock() })
+      .generate(request({ onProgress: e => { if (e.type === 'text') shown += e.delta; } }));
+    assert.equal(result.text, expected, label);
+    assert.equal(shown, result.text, `${label}：進度接起來要等於結果`);
+    assert.ok(!shown.includes(KEY), label);
+    const notes = result.trace.warnings.filter(w => /final response/.test(w));
+    if (warning) assert.ok(notes.length === 1 && warning.test(notes[0]), `${label}：${JSON.stringify(result.trace.warnings)}`);
+    else assert.deepEqual(notes, [], label);
+  }
+});
