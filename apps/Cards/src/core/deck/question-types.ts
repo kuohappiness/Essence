@@ -1,5 +1,5 @@
 import { maskInline } from './markdown.ts';
-import type { Couplet, PickGroup, PoemOrder, ProblemCode, Prompt, SentenceCells, SentenceOrder, Target, Typing } from './types.ts';
+import type { Choice, Couplet, PickGroup, PoemOrder, ProblemCode, Prompt, SentenceCells, SentenceOrder, Target, Typing } from './types.ts';
 
 // 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
@@ -143,6 +143,52 @@ export function readPick(target: Target): PickReading {
   const outside = prompts.filter(prompt => isSentence(prompt) && !members.includes(answerOf(prompt)));
   if (outside.length) return notRecognized(outside.map(prompt => prompt.line), '答案不在組裡，所以這個目標不是比較卡');
   return notRecognized([target.line], '題目沒有剛好一個空格（＿＿），所以這個目標不是比較卡');
+}
+
+// ── 多音字（D-230 第 4 點、tasks/polyphone-pick.md §1）：選項是這個目標自己的，寫在名稱最後一個括號，名稱最後是「讀音」。比較卡先認。 ──
+
+const CHOICE_ENDING = '讀音';
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * 多音字句（§1-2）：問答題、答案單行，題幹剛好一個空格，而且是緊接名稱的字（可以有粗體或螢光筆）的 `（＿…）`：左右括號全半形都算，
+ * 裡面只有全形底線。行內程式碼、公式裡的不算（和數空格同一個遮罩）。
+ */
+function isChoiceSentence(prompt: Prompt, word: string): boolean {
+  if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || countBlanks(prompt.question) !== 1) return false;
+  return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(maskInline(prompt.question));
+}
+
+export interface ChoiceReading {
+  choice: Choice | null;
+  problems: PickReading['problems'];
+}
+
+/**
+ * 這個目標是不是多音字的點選填空（§1-2、§1-3）：名稱照 unbold 之後，最後一個括號之後剛好是「讀音」，那個括號是選項。選項讀不出、一題都不是
+ * 多音字句時提示 pick-not-recognized，有的是有的不是時提示 pick-mixed；名稱沒有括號（現在的讀音卡、沒勾點選填空）或結尾不是單獨的讀音時不提示。
+ * notes 是記憶錨點的每一行。呼叫的一方先認比較卡，認不成又沒有提示才來這裡。
+ */
+export function readChoice(target: Target, notes: readonly string[]): ChoiceReading {
+  const none: ChoiceReading = { choice: null, problems: [] };
+  if (target.implicit || target.direction !== null || countBlanks(target.name) > 0) return none;
+  const name = unbold(target.name).trim();
+  if (endingOf(name) !== CHOICE_ENDING || !/[（(]/.test(name)) return none;
+  const fail = (lines: readonly number[], code: 'pick-not-recognized' | 'pick-mixed', message: string): ChoiceReading => ({ choice: null, problems: lines.map(line => ({ line, level: 'hint', code, message })) });
+  const how = '多音字的名稱寫成「長（ㄓㄤˇ、ㄔㄤˊ） 讀音」，題目寫成「他長（＿＿）得比哥哥高。 :: ㄓㄤˇ」';
+  const split = splitName(name);
+  if (!split || split.rest !== CHOICE_ENDING) return fail([target.line], 'pick-not-recognized', `括號後面要剛好是「讀音」。${how}`);
+  const last = split.brackets[split.brackets.length - 1];
+  const options = LIST_SHAPE.test(last) ? membersOf(last).filter(option => pickKey(option) !== '') : [];
+  const optionKeys = options.map(pickKey);
+  if (options.length < 2 || options.some(option => /[`$[\]<>]/.test(foldWidth(option)))) return fail([target.line], 'pick-not-recognized', `最後一個括號讀不出選項：至少兩個，用頓號隔開，不能有連結、程式碼或公式。${how}`);
+  if (optionKeys.includes(pickKey(split.word))) return fail([target.line], 'pick-not-recognized', `名稱的字在括號裡是相似字的寫法，不是多音字。${how}`);
+  const valid = (prompt: Prompt): boolean => isChoiceSentence(prompt, split.word) && prompt.kind === 'qa' && optionKeys.includes(pickKey(prompt.answer));
+  const good = target.prompts.filter(valid);
+  if (!good.length) return fail([target.line], 'pick-not-recognized', `沒有一題是多音字句：字後面緊接（＿＿），答案是括號裡的一個讀音。${how}`);
+  const bad = target.prompts.filter(prompt => !valid(prompt));
+  if (bad.length) return fail(bad.map(prompt => prompt.line), 'pick-mixed', `這一題不是多音字句（字後面緊接（＿＿），答案是括號裡的一個讀音），所以這個目標照原題型出`);
+  return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, notes }, problems: [] };
 }
 
 // ── 全詩順序卡（D-187 第 3、10 點、D-204）：點選填空的一種，用填空寫，從名稱最後的「排序」認；和比較卡不互搶（比較卡的題目都是問答）。 ──

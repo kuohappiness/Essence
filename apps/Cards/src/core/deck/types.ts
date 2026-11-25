@@ -49,6 +49,8 @@ export interface Target {
   idCandidates?: string[];
   /** 只有點選填空的目標才有（D-182、tasks/question-type-seam.md §3）。 */
   group?: PickGroup;
+  /** 只有多音字的點選填空才有（D-230 第 4 點、tasks/polyphone-pick.md §1）：選項是這個目標自己的，寫在名稱最後一個括號。 */
+  choice?: Choice;
   /** 只有全詩順序卡才有（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。 */
   order?: PoemOrder;
   /** 只有英文的句子排序卡才有（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。 */
@@ -88,6 +90,11 @@ export interface Couplet { title: string | null; index: number | null; lines: re
  * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。
  */
 export interface PickGroup { word: string; members: readonly string[]; key: string; title: string; wordKey: string; memberKeys: readonly string[] }
+/**
+ * 選項屬於這個目標的點選填空（tasks/polyphone-pick.md §1-5）：括號前面的字、選項（照括號裡的寫法，字鍵照它顯示）、正規化後的選項（和 options 對齊）、
+ * 結尾（卡片的標題）、記憶錨點的每一行（同一行寫的與子項目，照解析器分好的結構，對照用）。不放進 group：group.key 是好幾個目標的組。
+ */
+export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; notes: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;
