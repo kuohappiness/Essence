@@ -21,6 +21,7 @@ export const EXISTING_WHY = {
   sameQuestion: '目的地已經有同一題，但補充不一樣，請自己看',
   qaConflict: (deck: string): string => `「${deck}」已經有同一個問題、答案不一樣：可能是改過的答案，也可能這題本來就有好幾個答案（例如舉一種會導電的金屬）。請打開對照；要加就改寫題目或手動貼上`,
   verify: '加過去會改到別的內容，請手動搬',
+  choiceLost: '加過去之後這個多音字不能再用點選填空：有一句不是多音字句，或和別句在畫面上是同一句（只差粗體、底線數或註解也算）。請改好再手動貼上',
   sources: SOURCE_WHY,
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
@@ -190,7 +191,12 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   if (sources.kind === 'leave') return leave(sources.why);
   const text = sources.text;
   if (text === destText) return { kind: 'plan', text: null };
-  return verify(deck, parseDeck(text), target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
+  const after = parseDeck(text);
+  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、第三輪）：加過去之後不能再用點選填空（同一句寫了兩次、配了兩個讀音，
+  // 或句子不是純文字）就不寫，同一批的、和原本的句子都算。原本就照翻面出的（家長手改的）照一般的核對。
+  const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
+  if (target.choice && now && !now.choice) return leave(EXISTING_WHY.choiceLost);
+  return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 
 /**
@@ -251,9 +257,11 @@ function verify(before: Deck, after: Deck, target: Target, block: readonly strin
   if (content(before.targets.filter((_, i) => i !== index)) !== content(after.targets.filter((_, i) => i !== index))) return false;
   const now = after.targets[index];
   // 題型不變（比較卡的組、全詩、句子排序、接句、打字）；題型的內容跟著題目變，只比種類與組的身分。
-  const { prompts: p0, shared: s0, fields: f0, group: g0, order: o0, sentence: q0, couplet: c0, ...rest0 } = target;
-  const { prompts: p1, shared: s1, fields: f1, group: g1, order: o1, sentence: q1, couplet: c1, ...rest1 } = now;
-  if (content(rest0) !== content(rest1) || g0?.key !== g1?.key || !o0 !== !o1 || !q0 !== !q1 || !c0 !== !c1) return false;
+  const { prompts: p0, shared: s0, fields: f0, group: g0, order: o0, sentence: q0, couplet: c0, choice: h0, ...rest0 } = target;
+  const { prompts: p1, shared: s1, fields: f1, group: g1, order: o1, sentence: q1, couplet: c1, choice: h1, ...rest1 } = now;
+  // 多音字（tasks/polyphone-pick.md §5）：答案與錨點跟著題目變，只比是不是多音字與括號裡的讀音。
+  const choiceOf = (choice: typeof h0): string | null => choice ? content([choice.word, choice.optionKeys]) : null;
+  if (content(rest0) !== content(rest1) || g0?.key !== g1?.key || !o0 !== !o1 || !q0 !== !q1 || !c0 !== !c1 || choiceOf(h0) !== choiceOf(h1)) return false;
   // 預期新增的題目與補充：目的地的名稱那一行接上實際插入的那幾行，單獨讀。
   // 最後補一題假的題目：只加補充（沒有題目）時解析器才會回傳目標；假的那一題不算。
   const alone = parseDeck([...block, '    - 甲 :: 乙'].join('\n') + '\n', { subject }).targets[0] as Target | undefined;

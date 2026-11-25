@@ -1,5 +1,5 @@
 import type { Prompt } from '../deck/index.ts';
-import { cardOf, pickCardOf } from './compose.ts';
+import { cardOf, choiceCardOf, pickCardOf } from './compose.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { shownWith } from './shown.ts';
@@ -128,6 +128,8 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if (!item) return { kind: 'done' };
   const slot = slotOf(today, item.lt);
   if (slot.target.group) return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
+  // 多音字（tasks/polyphone-pick.md §3）：一個目標一張、好幾格，題目照出題歷史挑；不併別的目標。
+  if (slot.target.choice) return { kind: 'card', card: choiceCardOf({ lt: item.lt, deck: item.deck, target: slot.target, isNew: slot.memory === null && !any.has(item.lt), early }, shownWith(slot.seen, valid.get(item.lt) ?? [])) };
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);
   return { kind: 'card', card: cardOf({
     lt: item.lt, deck: item.deck, target: slot.target, prompt,

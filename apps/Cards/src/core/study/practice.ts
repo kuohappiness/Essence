@@ -1,5 +1,5 @@
 import type { Target } from '../deck/index.ts';
-import { cardOf, pickCardOf } from './compose.ts';
+import { cardOf, choiceCardOf, pickCardOf } from './compose.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { compareText, firstAtOrAfter, retentionOf } from './plan.ts';
 import { choosePrompt, joins, wrong } from './session.ts';
@@ -218,6 +218,10 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   }
   const prior = priorOf(item.id);
   const seen = shownWith(new Map(), prior);
+  // 多音字（tasks/polyphone-pick.md §3）：出題歷史是本輪以前加上這一輪，和今天的份同一種組法。
+  if (item.target.choice) {
+    return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early: !ready.length && !fresh.length }, shownWith(seen, valid.get(item.id) ?? [])) };
+  }
   const slot: Slot = {
     target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention: retentionOf(input, item.entry, item.target), inExam: input.exam?.contains(item.entry, item.target) ?? false,
     correct: prior.some(entry => entry.r === 'good' || entry.r === 'easy'), seen,

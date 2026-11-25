@@ -174,6 +174,26 @@ void test('提醒（退出碼 0）：認得的比較卡結尾不是相似字、�
   }
 });
 
+void test('相似詞（tasks/polyphone-pick.md §2）：正式寫法沒有提醒；寫壞、保留寫法是錯誤，名稱不用寫成「能……」', t => {
+  const words = (word: string): string[] => ['    - 第一句＿＿。', '    - 第二句＿＿。', '    - 第三句＿＿。'].map(line => `${line} :: ${word}`);
+  const fine = run(t, '## 相似詞\n\n' + card('反映（反應、反映） 相似詞', ...words('反映')) + '\n' + card('反應（反應、反映） 相似詞', ...words('反應')));
+  assert.deepEqual(fine.all, []);
+  assert.equal(fine.exit, 0);
+  for (const name of ['反映 相似詞', '反映和反應是不是 相似詞', '反映和反應（近義）相似詞']) {
+    const { exit, all } = run(t, '## 相似詞\n\n' + card(name, ...words('反映')));
+    assert.deepEqual(all, [['錯誤', 3, 'pick-not-recognized']], name);
+    assert.equal(exit, 1, name);
+  }
+  const mixed = run(t, card('反映（反應、反映） 相似詞', '    - 大家向老師＿＿意見。 :: 反映', '    - 反映是什麼意思？ :: 把意見說出來'));
+  assert.deepEqual(mixed.pick, [['錯誤', 4, 'pick-mixed']]);
+  // 有組、結尾前多了別的字（L2 R6）：一樣是錯誤。
+  assert.deepEqual(run(t, '## 相似詞\n\n' + card('反映（反應、反映） 字義 相似詞', '    - 反映是什麼意思？ :: 把意見說出來')).pick, [['錯誤', 3, 'pick-not-recognized']]);
+  const cloze = run(t, card('==反映==和反應 相似詞', '    - 意思一樣嗎？ :: 不一樣'));
+  assert.ok(cloze.pick.some(each => each[0] === '錯誤' && each[2] === 'pick-name-cloze'), JSON.stringify(cloze.pick));
+  // 沒有分開的「相似詞」是一般問答：照一般目標檢查。
+  assert.deepEqual(run(t, '## 相似詞\n\n' + card('反映和反應是不是相似詞', '    - 兩個詞差在哪裡？ :: 反映是說出來，反應是回應')).all, [['不符', 3, 'target-name']]);
+});
+
 void test('提醒：有頓號的組裡，項目中間有漢字夾空白；英文和 A 型不算', t => {
   const typo = run(t, card('寨（寨,塞，寒 賽） 相似字', '    - 一＿＿。 :: 寨', '    - 二＿＿。 :: 寨'));
   assert.deepEqual(typo.pick.filter(each => each[2] === 'pick-member-space'), [['提醒', 1, 'pick-member-space']]);
