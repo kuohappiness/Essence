@@ -39,6 +39,22 @@ void test('評分表的加深機會（rule-test-d236.md §6-3）：用到哪幾�
   });
 });
 
+void test('評分表的依據欄（rule-test-d236.md §16，檢查表課 2、1a）：第七欄；必備寫正文、提問、後面要靠它、容易混、規律之一，其他類別空著；表頭要照兩種寫法之一', () => {
+  const header = '| 列 | 類別 | 要考的知識或判準 | 頁碼 | 可以接受的等價做法 | 跨單元 | 依據 |\n|---|---|---|---|---|---|---|\n';
+  const rows = parseRubric(`${header}| R1 | 必備 | borrow 的字義 | p.3 | | | 正文 |\n| R2 | 必備 | 借入與借出的方向 | p.3 | | | 容易混 |\n| R3 | 加分 | lend 的片語 | p.3 | | | |`);
+  assert.deepEqual(rows.map(row => [row.id, row.basis]), [['R1', '正文'], ['R2', '容易混'], ['R3', '']]);
+  // 沒有依據欄的舊表（第一輪的評分表）照樣讀得懂，依據是 null。
+  assert.deepEqual(parseRubric(RUBRIC).map(row => row.basis), [null, null, null]);
+  assert.throws(() => parseRubric(`${header}| R1 | 必備 | a | | | | |\n| R2 | 必備 | b | | | | 重要 |\n| R3 | 加分 | c | | | | 正文 |`), (error: Error) => {
+    assert.match(error.message, /列「R1」是必備，依據要寫 正文、提問、後面要靠它、容易混、規律 之一/);
+    assert.match(error.message, /列「R2」是必備，依據要寫 正文、提問、後面要靠它、容易混、規律 之一/);
+    assert.match(error.message, /列「R3」不是必備，依據要空著/);
+    return true;
+  });
+  assert.throws(() => parseRubric('| 列 | 類別 | 頁碼 | 要考的知識或判準 | 可以接受的等價做法 | 跨單元 |\n|---|---|---|---|---|---|\n| R1 | 必備 | p.3 | borrow | | |'), /表頭要是「\| 列 \| 類別 \| 要考的知識或判準 \| 頁碼 \| 可以接受的等價做法 \| 跨單元 \|」（可以在最後加「依據」）/);
+  assert.throws(() => parseRubric('| R1 | 必備 | borrow | p.3 | | |'), /少了表頭/);
+});
+
 void test('評審的 schema：全部必填、不用動態鍵；卡組代號是 enum', () => {
   const schema = judgeSchema(['S1', 'S2']) as { required: string[]; additionalProperties: boolean; properties: { issues: { items: { properties: { deck: { enum: string[] } } } } } };
   assert.deepEqual(schema.required, ['pages', 'rows', 'issues', 'unsure']);

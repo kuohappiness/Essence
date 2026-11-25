@@ -26,9 +26,9 @@ void test('anonymousMap：只把兩個標記行換成標題', () => {
 });
 
 const ROWS: RubricRow[] = [
-  { id: 'R1', kind: '必備', text: '借入', pages: 'p.1', equivalents: '', cross: '' },
-  { id: 'R2', kind: '加分', text: '借出', pages: 'p.1', equivalents: '', cross: '加題 aaaaa2' },
-  { id: 'M1', kind: '重大錯誤', text: '字義', pages: 'p.1', equivalents: '', cross: '' },
+  { id: 'R1', kind: '必備', text: '借入', pages: 'p.1', equivalents: '', cross: '', basis: null },
+  { id: 'R2', kind: '加分', text: '借出', pages: 'p.1', equivalents: '', cross: '加題 aaaaa2', basis: null },
+  { id: 'M1', kind: '重大錯誤', text: '字義', pages: 'p.1', equivalents: '', cross: '', basis: null },
 ];
 const MAP = ['## 全貌', '- 這一課學借與還', '', '## 架構', '- 能分辨 borrow 與 lend', '    - 判準：誰是給的人', '      東西從誰手上出去'];
 const result = (verdicts: ('有' | '部分' | '沒有')[], issues: MapResult['issues'] = []): MapResult => ({
