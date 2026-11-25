@@ -432,3 +432,39 @@ void test('在進度回呼裡取消或逾時是 0：不再送出、不再重送�
   const checked = await createAiClient({ fetch: checkZero, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 0 });
   assert.deepEqual([checked.ok ? 'ok' : checked.error.kind, checkZero.requests.length], ['timeout', 0]);
 });
+
+void test('停下來時本文的讀取也停：卡住的本文、晚到的回應、錯誤本文卡住都會被取消（L2 R9）', async () => {
+  // 像不理 signal 的傳輸層：交回標準 Response，本文送一段之後就不再送。
+  const stalled = (status: number, contentType: string, first: string) => {
+    let cancels = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode(first)); },
+      pull: () => new Promise<void>(() => undefined),
+      cancel: () => { cancels++; },
+    });
+    return { response: new Response(body, { status, headers: { 'content-type': contentType } }), cancels: () => cancels };
+  };
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const sseStall = stalled(200, 'text/event-stream', ': ping\n\n');
+  const idle = await rejects(createAiClient({ fetch: () => Promise.resolve(sseStall.response), clock: instantClock() }).generate(request({ idleTimeoutMs: 20 })));
+  await wait(10);
+  assert.deepEqual([idle.kind, sseStall.cancels()], ['timeout', 1]);
+
+  const checkStall = stalled(200, 'application/json', '{"data":[');
+  const checked = await createAiClient({ fetch: () => Promise.resolve(checkStall.response), clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 20 });
+  await wait(10);
+  assert.deepEqual([checked.ok ? 'ok' : checked.error.kind, checkStall.cancels()], ['timeout', 1]);
+
+  const lateStall = stalled(200, 'text/event-stream', ': ping\n\n');
+  const late = await rejects(createAiClient({ fetch: () => wait(40).then(() => lateStall.response), clock: instantClock(), responseTimeoutMs: 10 }).generate(request()));
+  await wait(60);
+  assert.deepEqual([late.kind, lateStall.cancels()], ['timeout', 1]);
+
+  const errorStall = stalled(429, 'application/json', '{"error":');
+  const started = Date.now();
+  const limited = await rejects(createAiClient({ fetch: () => Promise.resolve(errorStall.response), clock: instantClock() }).generate(request({ idleTimeoutMs: 15, timeoutMs: 2_000, maxAttempts: 1 })));
+  await wait(10);
+  assert.deepEqual([limited.kind, errorStall.cancels()], ['rate_limit', 1]);
+  assert.ok(Date.now() - started < 1_000, `錯誤本文卡住時等了 ${Date.now() - started} ms`);
+});

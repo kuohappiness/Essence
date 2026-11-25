@@ -16,18 +16,26 @@ export type FetchLike = (url: string, init: FetchInit) => Promise<Response>;
 
 export const defaultFetch: FetchLike = (url, init) => globalThis.fetch(url, init as RequestInit);
 
-/** 回應本文一段一段讀；呼叫端提早停止時放掉連線。 */
-export async function* bodyChunks(response: Response): AsyncGenerator<Uint8Array> {
+/**
+ * 回應本文一段一段讀；呼叫端提早停止時放掉連線。
+ * signal 中止時直接取消 reader：卡在 read() 的讀取會立刻結束，不留著沒停的讀取（L2 R9）。
+ * 只靠 finally 不夠：產生器卡在 await 時，外面的 return() 要等這次 read() 回來才會執行。
+ */
+export async function* bodyChunks(response: Response, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
   if (!response.body) return;
   const reader = response.body.getReader();
+  const cancel = () => { reader.cancel().catch(() => undefined); };
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
+    if (signal?.aborted) return;
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) return;
+      if (done || signal?.aborted) return;
       yield value;
     }
   } finally {
-    reader.cancel().catch(() => undefined);
+    signal?.removeEventListener('abort', cancel);
+    cancel();
   }
 }
 

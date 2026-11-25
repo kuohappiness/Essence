@@ -23,6 +23,8 @@ const BACKOFF_MS = [2_000, 8_000];
 /** 服務要求等超過這個時間就不重試，把等待時間交給呼叫端（錯誤的 retryAfterMs）。 */
 const MAX_RETRY_AFTER_MS = 60_000;
 const ERROR_BODY_MAX_BYTES = 64 * 1024;
+/** 錯誤本文多久沒資料就不等了（呼叫端設了閒置逾時就用它）：照狀態碼分類，不等到整體逾時（L2 R9）。 */
+const ERROR_BODY_IDLE_MS = 30_000;
 /** 預設的回應標頭逾時：120 秒，加上每 100 KB 本文 1 秒的上傳時間。 */
 const RESPONSE_TIMEOUT_BASE_MS = 120_000;
 const UPLOAD_BYTES_PER_SECOND = 100_000;
@@ -265,6 +267,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       };
       let text = '';
       let gotResponse = false;
+      let response: Response | undefined;
       const meta = () => ({ provider: r.providerId, requestId: log.requestId, secrets, partialText: text || null, afterResponse: gotResponse });
       /** 進度回呼裡取消、或已經逾時：不再往下（L2 R8）。丟的例外由 catch 照 reason 換成 cancelled 或 timeout。 */
       const stopIfAborted = () => {
@@ -275,13 +278,13 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         stopIfAborted();
         progress({ type: 'sent', attempt });
         stopIfAborted();
-        const response = await untilAbort(
-          doFetch(call.url, { method: 'POST', headers, body: bytes, signal: controller.signal, redirect: 'error' }), controller.signal);
+        response = await untilAbort(
+          doFetch(call.url, { method: 'POST', headers, body: bytes, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
         clearTimeout(waitHeaders);
         log.status = response.status;
         log.requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
         if (response.status < 200 || response.status >= 300) {
-          const errorBody = await untilAbort(readText(abortable(bodyChunks(response), controller.signal), ERROR_BODY_MAX_BYTES), controller.signal);
+          const errorBody = await readErrorBody(response, controller.signal, request.idleTimeoutMs ?? ERROR_BODY_IDLE_MS);
           throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta());
         }
         gotResponse = true;
@@ -289,7 +292,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         progress({ type: 'waiting', attempt });
         stopIfAborted();
         // 每收到一段本文就重設閒置計時：串流與服務改回 JSON 時都一樣（GitHub 審查 P2）。
-        const chunks = touching(abortable(bodyChunks(response), controller.signal), touch);
+        const chunks = touching(abortable(bodyChunks(response, controller.signal), controller.signal), touch);
         if ((response.headers.get('content-type') ?? '').includes('application/json')) {
           // 服務沒照要求串流。
           const raw = await readText(chunks);
@@ -347,8 +350,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         clearTimeout(waitHeaders);
         clearTimeout(idle);
         request.signal?.removeEventListener('abort', onCancel);
-        // 不論成功或失敗都放掉連線；之後才到的資料不會交給呼叫端。
+        // 不論成功或失敗都放掉連線；之後才到的資料不會交給呼叫端。還沒開始讀的本文也取消（L2 R9）。
         controller.abort();
+        if (response) cancelBody(response);
       }
     }
   }
@@ -376,9 +380,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       if (limit <= 0) throw fail('timeout', 'timed out before sending', { provider: r.providerId, secrets });
       const headers = headersFor(r, request.apiKey, call.headers, undefined);
       headers.accept = 'application/json';
-      const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal);
+      const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
       requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
-      const raw = await untilAbort(readText(abortable(bodyChunks(response), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
+      const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
       const meta = { provider: r.providerId, requestId, secrets };
       if (response.status < 200 || response.status >= 300) {
         throw toError(r.dialect.classifyError(response.status, raw), response.status, retryAfterOf(response.headers), meta);
@@ -549,19 +553,57 @@ function toError(parsed: ParsedError, status: number | null, retryAfterMs: numbe
 }
 
 /** 傳輸層不能中止時（例如 requestUrl），至少讓這邊在中止時立刻停下。 */
-function untilAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+/** 等到 promise 或 signal 先到。signal 先到之後才交回的值交給 onLate（例如晚到的 Response 要取消本文，L2 R9）。 */
+function untilAbort<T>(promise: Promise<T>, signal: AbortSignal, onLate?: (value: T) => void): Promise<T> {
   if (signal.aborted) {
-    promise.catch(() => undefined);
+    promise.then(value => onLate?.(value), () => undefined);
     return Promise.reject(new Error('aborted'));
   }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new Error('aborted'));
+    let stopped = false;
+    const onAbort = () => { stopped = true; reject(new Error('aborted')); };
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
-      value => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        if (stopped) onLate?.(value);
+        else resolve(value);
+      },
       (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(error instanceof Error ? error : new Error(String(error))); },
     );
   });
+}
+
+/** 放掉沒有人讀的本文；已經有人在讀的（被鎖住），由讀的那一邊取消。 */
+function cancelBody(response: Response): void {
+  if (response.body && !response.body.locked) response.body.cancel().catch(() => undefined);
+}
+
+/** 讀錯誤本文：最多 ERROR_BODY_MAX_BYTES，idleMs 沒有新資料就用已經收到的（之後照狀態碼分類）；整體逾時與取消照樣丟出。 */
+async function readErrorBody(response: Response, signal: AbortSignal, idleMs: number): Promise<string> {
+  const stop = new AbortController();
+  const onAbort = () => stop.abort();
+  signal.addEventListener('abort', onAbort, { once: true });
+  let timer = setTimeout(() => stop.abort(), idleMs);
+  const decoder = new TextDecoder('utf-8');
+  let out = '';
+  let size = 0;
+  try {
+    for await (const chunk of abortable(bodyChunks(response, stop.signal), stop.signal)) {
+      clearTimeout(timer);
+      timer = setTimeout(() => stop.abort(), idleMs);
+      if (size >= ERROR_BODY_MAX_BYTES) continue;
+      const take = chunk.subarray(0, ERROR_BODY_MAX_BYTES - size);
+      size += take.byteLength;
+      out += decoder.decode(take, { stream: true });
+    }
+  } catch (caught) {
+    if (signal.aborted) throw caught;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', onAbort);
+  }
+  return out + decoder.decode();
 }
 
 async function* touching(chunks: AsyncGenerator<Uint8Array>, touch: () => void): AsyncGenerator<Uint8Array> {
