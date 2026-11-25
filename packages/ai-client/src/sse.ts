@@ -20,7 +20,10 @@ export class SseDecoder {
     return this.#feed(this.#decoder.decode(chunk, { stream: true }));
   }
 
-  /** 串流結束：把最後沒有空行結尾的事件也交出（寬鬆處理，有些服務最後不送空行）。 */
+  /**
+   * 串流結束：把最後沒有空行結尾的事件也交出。這是刻意比 WHATWG 寬鬆的地方（規格是丟掉）：
+   * 有些相容服務最後不送空行；被截斷的串流仍要靠各方言的「做完」訊號判斷，事件本身不完整時 JSON 解不開，算 server（〈7〉第 3 點）。
+   */
   end(): SseEvent[] {
     const events = this.#feed(this.#decoder.decode());
     if (this.#buffer) {
@@ -38,6 +41,8 @@ export class SseDecoder {
       if (input.charCodeAt(0) === 0xfeff) input = input.slice(1);
       this.#first = false;
     }
+    // 空的片段（或只有半個字、解不出字的片段）不算「下一段」：CR 後面的 \n 還沒到，等著（L2 R16）。
+    if (!input) return events;
     if (this.#pendingCr && input.startsWith('\n')) input = input.slice(1);
     this.#pendingCr = false;
     this.#buffer += input;

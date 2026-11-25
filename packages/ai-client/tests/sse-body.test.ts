@@ -23,6 +23,10 @@ void test('SSE：CR 和 LF 被切在兩段之間，不會多出一個空行', ()
   assert.deepEqual(decodeAll(['data: 1\r', '\ndata: 2\r\n\r\n']), [{ event: 'message', data: '1\n2' }]);
 });
 
+void test('SSE：CR 與 LF 之間夾著空的片段，仍是同一個換行（L2 R16）', () => {
+  assert.deepEqual(decodeAll(['data: 1\r', '', '', '\ndata: 2\r\n\r\n']), [{ event: 'message', data: '1\n2' }]);
+});
+
 void test('SSE：註解行、BOM、多行 data、冒號後沒有空白、沒有冒號的欄位', () => {
   assert.deepEqual(decodeAll(['\ufeff: keepalive\n\ndata:a\ndata: b\nretry: 5\nid: 3\ndata\n\n']), [{ event: 'message', data: 'a\nb\n' }]);
 });
