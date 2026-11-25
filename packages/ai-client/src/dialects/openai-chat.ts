@@ -4,7 +4,7 @@
 // （maxTokensField、streamUsage、systemRole，見 types.ts 的 ProviderOptions）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { dataUrl } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -69,8 +69,13 @@ export const openaiChat: Dialect = {
     const r = obj(json);
     if (r.error) return { error: errorOf(obj(r.error), null) };
     if (!Array.isArray(r.choices)) return badShape('response');
-    const choice = obj(arr(r.choices)[0]);
-    const message = obj(choice.message);
+    // 成功的那一項要在：相容服務把錯誤包在 choices 裡、或少了 message，不當成空白的成功（L2 第二輪 R12）。
+    const first: unknown = r.choices[0];
+    if (!isObject(first)) return badShape('choice');
+    if (first.error) return { error: errorOf(obj(first.error), null) };
+    if (!isObject(first.message)) return badShape('message');
+    const choice = first;
+    const message = first.message;
     const raw = str(choice.finish_reason);
     const u = obj(r.usage);
     const output: Output = {
@@ -158,11 +163,5 @@ export const openaiChat: Dialect = {
     return { url: `${baseUrl}/models` };
   },
 
-  parseModels(json) {
-    const data = obj(json).data;
-    if (!Array.isArray(data)) return null;
-    return data
-      .map(m => ({ id: str(obj(m).id) ?? '', label: str(obj(m).name) }))
-      .filter(m => m.id);
-  },
+  parseModels: json => modelList(obj(json).data, m => ({ id: str(m.id) ?? '', label: str(m.name) })),
 };

@@ -29,6 +29,26 @@ const sseReply = (body: string, headers: Record<string, string> = {}): MockReply
   status: 200, headers: { 'content-type': 'text/event-stream', ...headers }, chunks: [body],
 });
 
+// 成功的回應裡，成功的那一項放在哪裡（各家官方格式）：換成別的值就不是成功的回應（L2 第二輪 R12）。
+// lists：裝成功項的陣列；items：一定要是物件的那一項；models：測試連線的模型清單。
+const SUCCESS_SHAPE: Record<string, { lists: (string | number)[][]; items: (string | number)[][]; models: string; terminal?: { type: string; field: string } }> = {
+  'openai-responses': { lists: [['output']], items: [], models: 'data', terminal: { type: 'response.completed', field: 'response' } },
+  'openai-chat': { lists: [['choices']], items: [['choices', 0], ['choices', 0, 'message']], models: 'data' },
+  'anthropic-messages': { lists: [['content']], items: [], models: 'data' },
+  'gemini-generate-content': { lists: [['candidates']], items: [['candidates', 0]], models: 'models' },
+};
+const NOT_LIST = [null, 0, 'x', {}];
+const NOT_OBJECT = [null, 0, 'x', []];
+const ERROR_ITEM = { error: { message: 'upstream failed', code: 502 } };
+
+function replaced(body: unknown, path: (string | number)[], value: unknown): unknown {
+  const copy = structuredClone(body) as Record<string | number, unknown>;
+  let at = copy;
+  for (const key of path.slice(0, -1)) at = at[key] as Record<string | number, unknown>;
+  at[path[path.length - 1]] = value;
+  return copy;
+}
+
 for (const c of cases) {
   void describe(`${c.dialect}（${c.source}）`, () => {
     const base = (extra: Partial<GenerateRequest> = {}): GenerateRequest => ({
@@ -141,6 +161,55 @@ for (const c of cases) {
         const result = await createAiClient({ fetch }).check({ endpoint: c.endpoint, apiKey: KEY });
         assert.ok(!result.ok, `${c.dialect}：${body}`);
       }
+    });
+
+    void test('200 的回應不是成功的形狀，整類都不算成功：成功的那一項換成別的值、不是串流的本文、模型清單裡沒有模型（L2 第二輪 R12）', async () => {
+      const shape = SUCCESS_SHAPE[c.dialect];
+      assert.ok(shape, `${c.dialect} 要在 SUCCESS_SHAPE 登記成功項的位置`);
+      const bodies: [string, unknown][] = [
+        ...shape.lists.flatMap(path => NOT_LIST.map(v => [`${path.join('.')} = ${JSON.stringify(v)}`, replaced(c.json.body, path, v)] as [string, unknown])),
+        ...shape.items.flatMap(path => NOT_OBJECT.map(v => [`${path.join('.')} = ${JSON.stringify(v)}`, replaced(c.json.body, path, v)] as [string, unknown])),
+        ...shape.items.slice(0, 1).map(path => [`${path.join('.')} = 錯誤物件`, replaced(c.json.body, path, ERROR_ITEM)] as [string, unknown]),
+      ];
+      for (const [label, body] of bodies) {
+        const { fetch, promise } = run([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(body)] }]);
+        const error = await rejects(promise);
+        assert.deepEqual([error.afterResponse, error.retryable, fetch.requests.length], [true, false, 1], `${c.dialect} ${label}`);
+        if (!label.endsWith('錯誤物件')) assert.equal(error.kind, 'server', `${c.dialect} ${label}`);
+      }
+
+      if (shape.terminal) {
+        const { type, field } = shape.terminal;
+        for (const v of NOT_OBJECT) {
+          const events = readSse(c, c.stream.file).split(/\n\n/).filter(Boolean).map(e => {
+            const data = e.split('\n').find(line => line.startsWith('data: '))?.slice(6);
+            if (!data || data === '[DONE]') return `${e}\n\n`;
+            const json = JSON.parse(data) as Record<string, unknown>;
+            if (json.type !== type) return `${e}\n\n`;
+            return `${e.split('\n').filter(line => !line.startsWith('data: ')).join('\n')}\ndata: ${JSON.stringify({ ...json, [field]: v })}\n\n`;
+          });
+          const { promise } = run([sseReply(events.join(''))]);
+          const error = await rejects(promise);
+          assert.deepEqual([error.kind, error.afterResponse], ['server', true], `${c.dialect} ${type}.${field} = ${JSON.stringify(v)}`);
+        }
+      }
+
+      for (const [type, body] of [['text/html', '<html>login</html>'], ['text/plain', 'OK'], ['', '']]) {
+        const { fetch, promise } = run([{ status: 200, headers: { 'content-type': type }, chunks: [body] }]);
+        const error = await rejects(promise);
+        assert.deepEqual([error.kind, error.afterResponse, fetch.requests.length], ['server', true, 1], `${c.dialect} 200 ${type || '沒有 Content-Type'}`);
+      }
+
+      // 自訂的服務沒有 checkPath，一定讀模型清單。
+      const listed = { custom: { dialect: c.dialect, baseUrl: 'https://api.example.com/v1' } };
+      for (const entries of [[null], [0], ['x'], [{}], [ERROR_ITEM]]) {
+        const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ [shape.models]: entries })] }]);
+        const result = await createAiClient({ fetch, clock: instantClock() }).check({ endpoint: listed, apiKey: KEY });
+        assert.ok(!result.ok, `${c.dialect} 模型清單 ${JSON.stringify(entries)}`);
+        assert.deepEqual([result.error.kind, result.error.afterResponse, result.error.retryable], ['server', true, false], `${c.dialect} 模型清單 ${JSON.stringify(entries)}`);
+      }
+      const none = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ [shape.models]: [] })] }]);
+      assert.deepEqual(await createAiClient({ fetch: none, clock: instantClock() }).check({ endpoint: listed, apiKey: KEY }), { ok: true, models: [] });
     });
 
     void test('輸出上限到了：算結果，停止原因 length', async () => {

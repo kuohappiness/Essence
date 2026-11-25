@@ -1,11 +1,11 @@
 // 方言共用的小工具：base64、讀 JSON 欄位、依狀態碼的預設分類。
 import type { AiErrorKind } from '../errors.ts';
-import type { Usage } from '../types.ts';
+import type { ModelInfo, Usage } from '../types.ts';
 import type { ParsedError } from './types.ts';
 
 export type Json = Record<string, unknown>;
 
-const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
 export const obj = (value: unknown): Json => (isObject(value) ? value : {});
 export const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 export const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -23,6 +23,13 @@ export function parseJson(text: string): unknown {
 export const badShape = (what: string): { error: ParsedError } => ({
   error: { kind: 'server', message: `unexpected ${what} shape`, providerCode: null },
 });
+
+/** 測試連線的模型清單：有東西卻一筆模型都讀不出來（例如包著錯誤物件）不算清單，空的清單算（L2 第二輪 R12）。 */
+export function modelList(list: unknown, read: (model: Json) => ModelInfo): ModelInfo[] | null {
+  if (!Array.isArray(list)) return null;
+  const models = list.map(m => read(obj(m))).filter(m => m.id);
+  return list.length > 0 && models.length === 0 ? null : models;
+}
 
 export const emptyUsage = (): Usage => ({
   inputTokens: null, cachedInputTokens: null, cacheWriteInputTokens: null, outputTokens: null, reasoningTokens: null,

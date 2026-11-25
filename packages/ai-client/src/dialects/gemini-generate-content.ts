@@ -6,7 +6,7 @@
 // 先用它，之後另加 gemini-interactions 方言（docs/tasks/ai-client.md〈6〉）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { Binary } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -113,6 +113,9 @@ export const geminiGenerateContent: Dialect = {
     if (r.error) return { error: errorOf(obj(r.error), null) };
     // 提示被擋時沒有 candidates，只有 promptFeedback。
     if (!Array.isArray(r.candidates) && !r.promptFeedback) return badShape('response');
+    // 有 candidates 時，第一個要是帶著 content 或 finishReason 的物件（L2 第二輪 R12）。
+    const first: unknown = arr(r.candidates)[0];
+    if (Array.isArray(r.candidates) && r.candidates.length > 0 && !(isObject(first) && (isObject(first.content) || str(first.finishReason)))) return badShape('candidate');
     return outputOf(r, textOf(r));
   },
 
@@ -165,11 +168,5 @@ export const geminiGenerateContent: Dialect = {
     return { url: `${baseUrl}/models?pageSize=1000` };
   },
 
-  parseModels(json) {
-    const models = obj(json).models;
-    if (!Array.isArray(models)) return null;
-    return models
-      .map(m => ({ id: (str(obj(m).name) ?? '').replace(/^models\//, ''), label: str(obj(m).displayName) }))
-      .filter(m => m.id);
-  },
+  parseModels: json => modelList(obj(json).models, m => ({ id: (str(m.name) ?? '').replace(/^models\//, ''), label: str(m.displayName) })),
 };

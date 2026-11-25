@@ -341,7 +341,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const decoder = new SseDecoder();
         const parser = r.dialect.createStreamParser();
         const visible = new StreamRedactor(secrets);
+        let events = 0;
         const handle = (event: SseEvent) => {
+          events++;
           let step: ReturnType<typeof parser.push>;
           try {
             step = parser.push(event);
@@ -371,6 +373,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           lingered = true;
           warnings.push(`stream stayed open after the response was complete; stopped by the ${reason === 'idle' ? 'idle' : 'overall'} timeout`);
         }
+        // 本文好好結束卻一個事件都沒有：不是串流斷了，是收到別的東西（代理的登入頁、純文字），算 server（L2 第二輪 R12）。
+        if (!parser.complete && events === 0) throw fail('server', 'response is not an event stream', meta());
         if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
         const tail = visible.end();
         if (tail) progress({ type: 'text', delta: tail, totalChars: visible.length });
@@ -431,17 +435,19 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta);
       }
       const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
+      // 已經拿到 2xx：形狀不對時不是「可以安全重送」（L2 第二輪 R12）。
+      const after = { ...meta, afterResponse: true };
       let json: unknown;
       try {
         json = JSON.parse(raw) as unknown;
       } catch {
         // 代理的登入頁這類 200 HTML 不算連上了（L2 R12）。
-        throw fail('server', 'response is not JSON', meta);
+        throw fail('server', 'response is not JSON', after);
       }
-      if (typeof json !== 'object' || json === null || Array.isArray(json) || 'error' in json) throw fail('server', 'unexpected check response shape', meta);
+      if (typeof json !== 'object' || json === null || Array.isArray(json) || 'error' in json) throw fail('server', 'unexpected check response shape', after);
       if (usePath) return { ok: true, models: null };
       const models = r.dialect.parseModels(json);
-      if (!models) throw fail('server', 'unexpected model list shape', meta);
+      if (!models) throw fail('server', 'unexpected model list shape', after);
       return { ok: true, models: redactDeep(models, secrets) };
     } catch (caught) {
       const meta = { provider: r.providerId, requestId, secrets };
