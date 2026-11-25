@@ -39,16 +39,16 @@ export async function* bodyChunks(response: Response, signal?: AbortSignal): Asy
   }
 }
 
-/** 把本文讀成字串。maxBytes 以上的部分丟掉（錯誤頁可能很大）。 */
+/** 把本文讀成字串。收滿 maxBytes 就不再讀（錯誤頁可能很大，也可能一直送，L2 第二輪 R9）。 */
 export async function readText(chunks: AsyncIterable<Uint8Array>, maxBytes = Number.POSITIVE_INFINITY): Promise<string> {
   const decoder = new TextDecoder('utf-8');
   let out = '';
   let size = 0;
   for await (const chunk of chunks) {
-    if (size >= maxBytes) continue;
     const take = size + chunk.byteLength > maxBytes ? chunk.subarray(0, maxBytes - size) : chunk;
     size += take.byteLength;
     out += decoder.decode(take, { stream: true });
+    if (size >= maxBytes) break;
   }
   return out + decoder.decode();
 }

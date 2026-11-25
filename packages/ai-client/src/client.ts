@@ -424,11 +424,13 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       headers.accept = 'application/json';
       const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
       requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
-      const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
       const meta = { provider: r.providerId, requestId, secrets };
       if (response.status < 200 || response.status >= 300) {
-        throw toError(r.dialect.classifyError(response.status, raw), response.status, retryAfterOf(response.headers), meta);
+        // 和生成共用讀錯誤本文的方式：一樣的上限，一樣照狀態碼分類（L2 第二輪 R9）。
+        const errorBody = await readErrorBody(response, controller.signal, ERROR_BODY_IDLE_MS);
+        throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta);
       }
+      const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), ERROR_BODY_MAX_BYTES * 64), controller.signal);
       let json: unknown;
       try {
         json = JSON.parse(raw) as unknown;
@@ -653,8 +655,13 @@ function cancelBody(response: Response): void {
   if (response.body && !response.body.locked) response.body.cancel().catch(() => undefined);
 }
 
-/** 讀錯誤本文：最多 ERROR_BODY_MAX_BYTES，idleMs 沒有新資料就用已經收到的（之後照狀態碼分類）；整體逾時與取消照樣丟出。 */
+/** 讀錯誤本文：收滿 ERROR_BODY_MAX_BYTES 就不再讀，idleMs 沒有新資料就用已經收到的（之後照狀態碼分類）；整體逾時與取消照樣丟出。 */
 async function readErrorBody(response: Response, signal: AbortSignal, idleMs: number): Promise<string> {
+  // 標頭交回之後、開始讀之前就停了：之後不會再有 abort 事件，要先看一次（L2 第二輪 R9）。
+  if (signal.aborted) {
+    cancelBody(response);
+    throw new Error('aborted');
+  }
   const stop = new AbortController();
   const onAbort = () => stop.abort();
   signal.addEventListener('abort', onAbort, { once: true });
@@ -666,10 +673,11 @@ async function readErrorBody(response: Response, signal: AbortSignal, idleMs: nu
     for await (const chunk of abortable(bodyChunks(response, stop.signal), stop.signal)) {
       clearTimeout(timer);
       timer = setTimeout(() => stop.abort(), idleMs);
-      if (size >= ERROR_BODY_MAX_BYTES) continue;
       const take = chunk.subarray(0, ERROR_BODY_MAX_BYTES - size);
       size += take.byteLength;
       out += decoder.decode(take, { stream: true });
+      // 收滿就停：代理一直送資料也不會讀到整體逾時，失去狀態碼的分類（L2 第二輪 R9）。
+      if (size >= ERROR_BODY_MAX_BYTES) break;
     }
   } catch (caught) {
     if (signal.aborted) throw caught;

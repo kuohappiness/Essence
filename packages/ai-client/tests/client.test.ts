@@ -469,6 +469,83 @@ void test('停下來時本文的讀取也停：卡住的本文、晚到的回應
   assert.ok(Date.now() - started < 1_000, `錯誤本文卡住時等了 ${Date.now() - started} ms`);
 });
 
+void test('讀錯誤本文整類：開始讀之前就取消，立刻停；本文超過上限還一直來，照狀態碼分類，不讀到逾時（L2 第二輪 R9）', async () => {
+  const encoder = new TextEncoder();
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  // 先送 first，之後每 2 ms 送 1 byte，直到被取消；約 2 秒後才自己結束，修好之前的失敗也會停下來。
+  const endless = (first: Uint8Array) => {
+    let cancelled = false;
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (pulls++ === 0) { controller.enqueue(first); return; }
+        await wait(2);
+        if (cancelled) return;
+        if (pulls > 1_000) controller.close();
+        else controller.enqueue(encoder.encode(' '));
+      },
+      cancel: () => { cancelled = true; },
+    });
+    return { body, cancelled: () => cancelled };
+  };
+  const reply = (status: number, contentType: string, first: Uint8Array, onStatus?: () => void) => {
+    const stream = endless(first);
+    const response = new Response(stream.body, { status, headers: { 'content-type': contentType } });
+    // 標頭交回之後、開始讀本文之前的空隙：第一次讀狀態碼時做 onStatus。
+    if (onStatus) {
+      let fired = false;
+      Object.defineProperty(response, 'status', { get: () => { if (!fired) { fired = true; onStatus(); } return status; } });
+    }
+    return { response, cancelled: stream.cancelled };
+  };
+  const overCap = encoder.encode(' '.repeat(64 * 1024));
+  const kindOf = async (promise: Promise<unknown>) => (await rejects(promise)).kind;
+  const checkKind = async (promise: Promise<Awaited<ReturnType<ReturnType<typeof createAiClient>['check']>>>) => {
+    const result = await promise;
+    return result.ok ? 'ok' : result.error.kind;
+  };
+
+  for (const c of loadCases()) {
+    for (const status of [400, 429, 503]) {
+      const label = `${c.dialect} ${String(status)}`;
+      const base = { endpoint: c.endpoint, model: c.model, maxAttempts: 1 };
+      const empty = mockFetch([{ status, headers: { 'content-type': 'application/json' }, chunks: [] }]);
+      const expected = await kindOf(createAiClient({ fetch: empty, clock: instantClock() }).generate(request(base)));
+      const expectedCheck = await checkKind(createAiClient({ fetch: empty, clock: instantClock() }).check({ endpoint: c.endpoint, apiKey: KEY }));
+
+      const caller = new AbortController();
+      const gap = reply(status, 'application/json', encoder.encode('{"error":'), () => caller.abort());
+      let started = Date.now();
+      const cancelled = await kindOf(createAiClient({ fetch: () => Promise.resolve(gap.response), clock: instantClock() })
+        .generate(request({ ...base, signal: caller.signal, idleTimeoutMs: 1_000, timeoutMs: 1_500 })));
+      await wait(10);
+      assert.deepEqual([cancelled, gap.cancelled()], ['cancelled', true], `${label} 讀本文前取消`);
+      assert.ok(Date.now() - started < 300, `${label} 讀本文前取消等了 ${String(Date.now() - started)} ms`);
+
+      const long = reply(status, 'application/json', overCap);
+      started = Date.now();
+      const classified = await kindOf(createAiClient({ fetch: () => Promise.resolve(long.response), clock: instantClock() })
+        .generate(request({ ...base, idleTimeoutMs: 1_000, timeoutMs: 1_500 })));
+      await wait(10);
+      assert.deepEqual([classified, long.cancelled()], [expected, true], `${label} 本文超過上限`);
+      assert.ok(Date.now() - started < 500, `${label} 本文超過上限等了 ${String(Date.now() - started)} ms`);
+
+      const checkLong = reply(status, 'application/json', overCap);
+      const checked = await checkKind(createAiClient({ fetch: () => Promise.resolve(checkLong.response), clock: instantClock() })
+        .check({ endpoint: c.endpoint, apiKey: KEY, timeoutMs: 1_500 }));
+      await wait(10);
+      assert.deepEqual([checked, checkLong.cancelled()], [expectedCheck, true], `${label} 測試連線的本文超過上限`);
+    }
+  }
+
+  // 成功的測試連線本文也有上限：超過就不再讀，算形狀不對。
+  const huge = reply(200, 'application/json', encoder.encode(`{"data":[${' '.repeat(4 * 1024 * 1024)}`));
+  const checked = await checkKind(createAiClient({ fetch: () => Promise.resolve(huge.response), clock: instantClock() })
+    .check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 1_500 }));
+  await wait(10);
+  assert.deepEqual([checked, huge.cancelled()], ['server', true]);
+});
+
 void test('OpenAI 相容服務有 finish_reason 卻沒有 [DONE] 就關了：文字照交、用量不明時記 warning（L2 R10）', async () => {
   const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
   const cut = readSse(chat, chat.stream.file).split(/\n\n/).filter(e => !e.includes('"usage"') && !e.includes('[DONE]')).map(e => `${e}\n\n`).join('');
