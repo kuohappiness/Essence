@@ -262,7 +262,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         gotResponse = true;
         touch();
         progress({ type: 'waiting', attempt });
-        const chunks = abortable(bodyChunks(response), controller.signal);
+        // 每收到一段本文就重設閒置計時：串流與服務改回 JSON 時都一樣（GitHub 審查 P2）。
+        const chunks = touching(abortable(bodyChunks(response), controller.signal), touch);
         if ((response.headers.get('content-type') ?? '').includes('application/json')) {
           // 服務沒照要求串流。
           const raw = await readText(chunks);
@@ -293,7 +294,6 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           }
         };
         for await (const chunk of chunks) {
-          touch();
           for (const event of decoder.push(chunk)) handle(event);
         }
         for (const event of decoder.end()) handle(event);
@@ -502,6 +502,13 @@ function untilAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
       (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(error instanceof Error ? error : new Error(String(error))); },
     );
   });
+}
+
+async function* touching(chunks: AsyncGenerator<Uint8Array>, touch: () => void): AsyncGenerator<Uint8Array> {
+  for await (const chunk of chunks) {
+    touch();
+    yield chunk;
+  }
 }
 
 async function* abortable(chunks: AsyncGenerator<Uint8Array>, signal: AbortSignal): AsyncGenerator<Uint8Array> {

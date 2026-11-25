@@ -191,6 +191,15 @@ void test('閒置逾時：太久沒資料就丟 timeout', async () => {
   assert.match(error.message, /no data/);
 });
 
+void test('閒置逾時：服務改回 JSON 時，本文一段段到也算有資料（GitHub 審查 P2）', async () => {
+  const json = JSON.stringify(openai.json.body);
+  const quarter = Math.ceil(json.length / 4);
+  const pieces = [0, 1, 2, 3].map(i => json.slice(i * quarter, (i + 1) * quarter));
+  const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: pieces, delayMs: 25 }]);
+  const result = await createAiClient({ fetch, clock: instantClock() }).generate(request({ idleTimeoutMs: 60 }));
+  assert.equal(result.text, openai.json.text);
+});
+
 void test('fetch 停不下來（像 requestUrl）：取消時這邊仍立刻結束', async () => {
   const controller = new AbortController();
   const fetch = mockFetch([{ ...OK, headersDelayMs: 500 }], { abortable: false });
