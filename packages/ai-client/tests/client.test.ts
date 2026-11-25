@@ -270,3 +270,20 @@ void test('目錄：內建的沒有問題；呼叫端加的壞資料跳過並回
   assert.ok(openaiSpec.models.some(m => m.id === 'fine'));
   assert.ok(openaiSpec.models.some(m => m.id === 'gpt-5.6-terra'));
 });
+
+void test('OpenAI 相容服務在串流裡拒答（delta.refusal）：沒有文字算 content_blocked，有部分文字時 stopReason 是 refusal（GitHub 審查 P2）', async () => {
+  const chunk = (delta: Record<string, unknown>, finish: string | null = null) => ({ data: { id: 'gen-1', model: 'x/y', choices: [{ index: 0, delta, finish_reason: finish }] } });
+  const reply = (events: Parameters<typeof sse>[0]): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [sse(events)] });
+  const fetch = mockFetch([
+    reply([chunk({ role: 'assistant', refusal: '我不能' }), chunk({ refusal: '幫這個忙。' }), chunk({}, 'stop'), '[DONE]']),
+    reply([chunk({ content: '光合作用' }), chunk({ refusal: '後面不能說。' }), chunk({}, 'stop'), '[DONE]']),
+  ]);
+  const client = createAiClient({ fetch, clock: instantClock() });
+  const ask = () => client.generate({ endpoint: { provider: 'openrouter' }, apiKey: KEY, model: 'x/y', input: [{ role: 'user', content: '你好' }] });
+  const blocked = await rejects(ask());
+  assert.equal(blocked.kind, 'content_blocked');
+  const partial = await ask();
+  assert.equal(partial.text, '光合作用');
+  assert.equal(partial.stopReason, 'refusal');
+  assert.ok(partial.trace.warnings.some(w => w.includes('後面不能說')), partial.trace.warnings.join(' / '));
+});

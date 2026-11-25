@@ -88,6 +88,8 @@ export const openaiChat: Dialect = {
 
   createStreamParser(): StreamParser {
     let text = '';
+    // 拒答在串流裡是 delta.refusal，最後的 finish_reason 仍是 stop：累積起來，結果和非串流的 parseResponse 一樣算 refusal。
+    let refusal = '';
     let raw: string | null = null;
     let done = false;
     let usage = emptyUsage();
@@ -115,6 +117,7 @@ export const openaiChat: Dialect = {
         const reason = str(choice.finish_reason);
         if (reason === 'error') return { error: { kind: 'server', message: 'stream ended with finish_reason error', providerCode: reason } };
         if (reason) raw = reason;
+        refusal += str(obj(choice.delta).refusal) ?? '';
         const delta = str(obj(choice.delta).content);
         if (delta) {
           text += delta;
@@ -123,7 +126,12 @@ export const openaiChat: Dialect = {
         return {};
       },
       result() {
-        return { text, stopReason: stopOf(raw), rawStopReason: raw, usage, resolvedModel: model, responseId: id, reportedCost: cost, warnings: [] };
+        const output: Output = { text, stopReason: stopOf(raw), rawStopReason: raw, usage, resolvedModel: model, responseId: id, reportedCost: cost, warnings: [] };
+        if (refusal) {
+          output.warnings.push(`refusal: ${refusal.slice(0, 200)}`);
+          output.stopReason = 'refusal';
+        }
+        return output;
       },
     };
   },
