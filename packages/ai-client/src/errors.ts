@@ -1,6 +1,6 @@
 // 中立的錯誤：每種錯誤有固定的種類、能不能重試、給使用者看的預設說明（docs/tasks/ai-client.md〈7〉第 7 點）。
 // 金鑰不進錯誤：訊息與細節在建立時就遮掉（〈3〉第 4 點）。
-import { redactText as redact } from './redact.ts';
+import { redactText as redact, usable } from './redact.ts';
 
 export type AiErrorKind =
   | 'auth'
@@ -87,14 +87,29 @@ export class AiError extends Error {
 export const isAiError = (value: unknown): value is AiError => value instanceof AiError;
 
 /**
- * 傳輸層的例外可能帶著請求的細節：有金鑰要遮時，換成只留名稱與遮過的訊息的 Error（L2 R1）。
- * 沒有要遮的就原樣保留，方便除錯。
+ * 傳輸層的例外可能帶著請求的細節：有金鑰要遮時，換成只留遮過的名稱與訊息的 Error（L2 R1）；
+ * 裡面再包的 cause 不留。沒有要遮的就原樣保留，方便除錯。
  */
 function sanitizeCause(cause: unknown, secrets: readonly string[]): unknown {
-  if (cause === undefined || secrets.length === 0) return cause;
+  if (cause === undefined || usable(secrets).length === 0) return cause;
   const text = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : JSON.stringify(cause) ?? '';
   const copy = new Error(redact(text, secrets));
-  if (cause instanceof Error) copy.name = cause.name;
+  if (cause instanceof Error) copy.name = redact(cause.name, secrets);
+  return copy;
+}
+
+/**
+ * 交給呼叫端之前再遮一次：傳輸層自己丟的 AiError 建立時沒有金鑰可遮，訊息、編號、partialText、cause 都可能帶著（L2 第二輪 延續 R1）。
+ * generate 與 check 的每個錯誤出口都經過這裡。
+ */
+export function withSecrets(error: AiError, secrets: readonly string[]): AiError {
+  if (usable(secrets).length === 0) return error;
+  const copy = new AiError({
+    kind: error.kind, message: error.message, status: error.status, providerCode: error.providerCode, requestId: error.requestId,
+    retryAfterMs: error.retryAfterMs, partialText: error.partialText, provider: error.provider, afterResponse: error.afterResponse,
+    secrets, cause: error.cause,
+  });
+  copy.attempts = error.attempts;
   return copy;
 }
 

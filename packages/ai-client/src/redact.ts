@@ -1,8 +1,12 @@
 // 金鑰的遮蔽（docs/tasks/ai-client.md〈3〉第 4 點、〈7〉第 8 點，L2 R1）：服務回送的字串裡出現金鑰就換成 ***。
 // 結果、錯誤與進度事件共用這裡；串流的文字結尾像金鑰的開頭時先扣住，金鑰被切在兩段之間也接得起來。
 
-/** 長度 4 以上的才遮（太短的字串到處都是）。 */
-const usable = (secrets: readonly string[]): string[] => secrets.filter(s => s && s.length >= 4);
+/**
+ * 8 個字以上的才遮（〈3〉第 4 點）：各家真的金鑰都是幾十個字；更短的是本機服務的假金鑰（例如 ollama），
+ * 遮了會把模型回的正常文字改掉（L2 第二輪 延續 R1）。
+ */
+const MIN_SECRET_LENGTH = 8;
+export const usable = (secrets: readonly string[]): string[] => secrets.filter(s => typeof s === 'string' && s.length >= MIN_SECRET_LENGTH);
 
 export function redactText(text: string, secrets: readonly string[]): string {
   let out = text;

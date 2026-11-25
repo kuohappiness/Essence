@@ -2,7 +2,7 @@
 // 各家格式的部分在 conformance.test.ts；這裡用 openai-responses 的範例當代表。
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createAiClient, isAiError, type AiError, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
+import { AiError, createAiClient, isAiError, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
 import { mockFetch, sse, type MockReply } from '../src/testing.ts';
 import { KEY, instantClock, loadCases, readSse } from './helpers.ts';
 
@@ -532,4 +532,37 @@ void test('目錄的形狀壞掉：跳過那一筆、回報，不讓整個 clien
   // 其他廠商照常能用。
   assert.ok(client.providers().some(p => p.id === 'openrouter'));
   assert.ok(!createAiClient({ catalog: { providers: 'nope' } as unknown as typeof overrides }).catalogProblems.some(p => p.provider === 'openai'));
+});
+
+void test('金鑰不出現在任何公開的出口：傳輸層丟的各種例外（含 AiError、名稱、包在裡面的 cause），generate 與 check 都一樣（L2 第二輪 延續 R1）', async () => {
+  const withName = new Error(`failed ${KEY}`);
+  withName.name = `Name_${KEY}`;
+  const nested = new Error('outer', { cause: new Error(`inner ${KEY}`) });
+  const adapterError = new AiError({ kind: 'network', message: `adapter ${KEY}`, requestId: `req_${KEY}`, providerCode: `code_${KEY}`, partialText: `part ${KEY}` });
+  const throws: unknown[] = [withName, nested, adapterError, `plain ${KEY}`];
+  // 錯誤物件上看得到的每一個字串：訊息、堆疊、JSON、cause 的名稱與訊息與堆疊。
+  const surface = (error: AiError): string => {
+    const cause = error.cause as { name?: unknown; message?: unknown; stack?: unknown } | undefined;
+    return [error.message, error.stack, JSON.stringify(error), String(error), cause?.name, cause?.message, cause?.stack].map(String).join('\n');
+  };
+  for (const thrown of throws) {
+    // 同步丟（不是回傳被拒絕的 promise）也一樣。
+    const fetch = () => { throw thrown; };
+    const generated = await rejects(createAiClient({ fetch, clock: instantClock() }).generate(request({ maxAttempts: 1 })));
+    assert.ok(!surface(generated).includes(KEY), surface(generated));
+    const checked = await createAiClient({ fetch, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY });
+    assert.ok(!checked.ok);
+    assert.ok(!surface(checked.error).includes(KEY), surface(checked.error));
+  }
+});
+
+void test('短於 8 個字的金鑰不遮（不是真的金鑰，遮了會改掉正常的字），8 個字以上的照遮（L2 第二輪 延續 R1）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  const reply = (): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(chat, chat.stream.file)] });
+  const local = (apiKey: string) => createAiClient({ fetch: mockFetch([reply()]), clock: instantClock() }).generate(request({
+    apiKey, endpoint: { custom: { dialect: 'openai-chat', baseUrl: 'http://localhost:11434/v1' } }, model: 'llama',
+  }));
+  // 「光合作用把」是 5 個字。
+  assert.equal((await local('光合作用把')).text, chat.stream.text);
+  assert.equal((await local('光合作用把光能轉')).text, '***成化學能。');
 });

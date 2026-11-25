@@ -3,7 +3,7 @@ import { encodeBody } from './body.ts';
 import { BUILTIN_CATALOG, isAllowedUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
-import { AiError, isAiError, type AiErrorKind } from './errors.ts';
+import { AiError, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
 import { redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
@@ -146,7 +146,17 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     return headers;
   }
 
+  /** 唯一的錯誤出口：每個丟給呼叫端的錯誤都再遮一次金鑰（L2 第二輪 延續 R1）。 */
   async function generate(request: GenerateRequest): Promise<GenerateResult> {
+    try {
+      return await generateOnce(request);
+    } catch (caught) {
+      const secrets = request.apiKey ? [request.apiKey] : [];
+      throw isAiError(caught) ? withSecrets(caught, secrets) : fail('unknown', String(caught), { secrets, cause: caught });
+    }
+  }
+
+  async function generateOnce(request: GenerateRequest): Promise<GenerateResult> {
     const secrets = request.apiKey ? [request.apiKey] : [];
     const startedAt = clock.now();
     const r = resolve(request.endpoint, request.model);
@@ -428,7 +438,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         : reason === 'timeout' ? fail('timeout', 'timed out', meta)
         : isAiError(caught) ? caught
         : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta, cause: caught });
-      return { ok: false, error };
+      return { ok: false, error: withSecrets(error, secrets) };
     } finally {
       clearTimeout(timer);
       request.signal?.removeEventListener('abort', onCancel);
