@@ -222,12 +222,15 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const backoff = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)];
         const delayMs = error.retryAfterMs ?? Math.round(backoff * (0.8 + 0.4 * clock.random()));
         if (clock.now() + delayMs >= deadline) throw error;
-        progress({ type: 'retrying', attempt: attempt + 1, delayMs, reason: error.kind });
         const waitAbort = new AbortController();
         const onCancel = () => waitAbort.abort();
         request.signal?.addEventListener('abort', onCancel, { once: true });
+        progress({ type: 'retrying', attempt: attempt + 1, delayMs, reason: error.kind });
         try {
+          // 回呼裡取消的，不等、不再送（L2 R8）。
+          if (request.signal?.aborted) throw new Error('cancelled');
           await clock.sleep(delayMs, waitAbort.signal);
+          if (request.signal?.aborted) throw new Error('cancelled');
         } catch {
           const cancelled = fail('cancelled', 'cancelled while waiting to retry', { provider: r.providerId });
           cancelled.attempts = attempt;
@@ -250,6 +253,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       };
       const onCancel = () => abort('cancelled');
       request.signal?.addEventListener('abort', onCancel, { once: true });
+      if (request.signal?.aborted) abort('cancelled');
       const remaining = deadline - clock.now();
       const overall = setTimeout(() => abort('timeout'), Math.max(0, remaining));
       const waitHeaders = responseTimeoutMs === null ? undefined : setTimeout(() => abort('response'), responseTimeoutMs);
@@ -262,9 +266,15 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       let text = '';
       let gotResponse = false;
       const meta = () => ({ provider: r.providerId, requestId: log.requestId, secrets, partialText: text || null, afterResponse: gotResponse });
+      /** 進度回呼裡取消、或已經逾時：不再往下（L2 R8）。丟的例外由 catch 照 reason 換成 cancelled 或 timeout。 */
+      const stopIfAborted = () => {
+        if (reason) throw new Error(`stopped: ${reason}`);
+      };
       try {
         if (remaining <= 0) abort('timeout');
+        stopIfAborted();
         progress({ type: 'sent', attempt });
+        stopIfAborted();
         const response = await untilAbort(
           doFetch(call.url, { method: 'POST', headers, body: bytes, signal: controller.signal, redirect: 'error' }), controller.signal);
         clearTimeout(waitHeaders);
@@ -277,6 +287,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         gotResponse = true;
         touch();
         progress({ type: 'waiting', attempt });
+        stopIfAborted();
         // 每收到一段本文就重設閒置計時：串流與服務改回 JSON 時都一樣（GitHub 審查 P2）。
         const chunks = touching(abortable(bodyChunks(response), controller.signal), touch);
         if ((response.headers.get('content-type') ?? '').includes('application/json')) {
@@ -292,6 +303,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           if ('error' in parsed) throw toError(parsed.error, response.status, null, meta());
           const shown = redactText(parsed.text, secrets);
           if (shown) progress({ type: 'text', delta: shown, totalChars: shown.length });
+          stopIfAborted();
           return { output: parsed, requestId: log.requestId };
         }
         const decoder = new SseDecoder();
@@ -318,6 +330,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
         const tail = visible.end();
         if (tail) progress({ type: 'text', delta: tail, totalChars: visible.length });
+        stopIfAborted();
         return { output: parser.result(), requestId: log.requestId };
       } catch (caught) {
         const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
@@ -355,10 +368,12 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     let reason: 'timeout' | 'cancelled' | null = null;
     const onCancel = () => { reason = 'cancelled'; controller.abort(); };
     request.signal?.addEventListener('abort', onCancel, { once: true });
-    const timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, request.timeoutMs ?? CHECK_TIMEOUT_MS);
+    const limit = request.timeoutMs ?? CHECK_TIMEOUT_MS;
+    const timer = setTimeout(() => { reason = 'timeout'; controller.abort(); }, Math.max(0, limit));
     let requestId: string | null = null;
     try {
       if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending');
+      if (limit <= 0) throw fail('timeout', 'timed out before sending', { provider: r.providerId, secrets });
       const headers = headersFor(r, request.apiKey, call.headers, undefined);
       headers.accept = 'application/json';
       const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal);

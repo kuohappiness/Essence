@@ -113,7 +113,7 @@ packages/ai-client/
 4. **逾時的結局**：
    - 整體逾時預設 30 分鐘、可改；閒置逾時預設關（推理模型思考時可能好幾分鐘沒有資料），呼叫端可以開。
    - 回應標頭逾時：送出後 120 秒加每 100 KB 本文 1 秒還沒拿到狀態碼，算 `timeout`、不自動重送：請求已經送出，服務可能已經在做（或中間的代理把串流整段收完才交），重送可能做兩次、付兩次錢（L2 R7）；`responseTimeoutMs: null` 關掉。
-   - 逾時或取消時：中止底層請求、丟 `timeout` 或 `cancelled`、不開下一次重試。傳輸層不理 `signal` 的，照樣立刻交回錯誤，之後才到的資料丟掉（請求可能還在跑、仍會計費）。
+   - 逾時或取消時：中止底層請求、丟 `timeout` 或 `cancelled`、不開下一次重試。傳輸層不理 `signal` 的，照樣立刻交回錯誤，之後才到的資料丟掉（請求可能還在跑、仍會計費）。進度回呼裡取消的，回呼一結束就停：不送出、不重送，最後一段文字之後取消也是 `cancelled`；`timeoutMs` 是 0 或負數時不送出、直接 `timeout`（L2 R8）。
 5. **重試**：只在還沒拿到成功的回應時（連不上、408、429、5xx、529）；共最多 3 次（`maxAttempts` 只能調少，L2 R6）；等 2 秒、8 秒，各加減 20% 的隨機；服務給 `Retry-After` 或 `retry-after-ms` 照它，要等超過 60 秒就不重試，秒數放在錯誤的 `retryAfterMs`。拿到 200 之後才出錯（串流中斷、沒有結束事件、串流裡的錯誤）一律不自動重試，錯誤標 `afterResponse: true`、帶 `partialText`，由呼叫端問家長（推理模型想了十分鐘才斷，自動重送就多付一次）。等待中取消就立刻停。
 6. **停止原因**：各家的結束原因對應成 `end`、`length`、`content_filter`、`refusal`、`other`，原文放在 `trace.rawStopReason`。完全沒有輸出又被擋（內容過濾、拒答、Gemini 的 `promptFeedback.blockReason`）算錯誤 `content_blocked`；有部分輸出算結果。
 7. **錯誤種類**：

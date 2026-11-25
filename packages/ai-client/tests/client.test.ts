@@ -404,3 +404,31 @@ void test('重送的規則一致：maxAttempts 最多 3 次；408 照 5xx 重送
   const cut = await rejects(createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: events.slice(0, 3) }]), clock: instantClock() }).generate(request()));
   assert.deepEqual([cut.kind, cut.afterResponse, cut.retryable], ['network', true, false]);
 });
+
+void test('在進度回呼裡取消或逾時是 0：不再送出、不再重送，最後一段文字之後取消也不算成功（L2 R8）', async () => {
+  const fail500: MockReply = { status: 500, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"boom"}}'] };
+  const cancelOn = (type: ProgressEvent['type']) => {
+    const controller = new AbortController();
+    return { signal: controller.signal, onProgress: (e: ProgressEvent) => { if (e.type === type) controller.abort(); } };
+  };
+
+  const retry = mockFetch([fail500, OK]);
+  const onRetry = await rejects(createAiClient({ fetch: retry, clock: instantClock() }).generate(request(cancelOn('retrying'))));
+  assert.deepEqual([onRetry.kind, retry.requests.length], ['cancelled', 1]);
+
+  const sent = mockFetch([OK]);
+  const onSent = await rejects(createAiClient({ fetch: sent, clock: instantClock() }).generate(request(cancelOn('sent'))));
+  assert.deepEqual([onSent.kind, sent.requests.length], ['cancelled', 0]);
+
+  const zero = mockFetch([OK]);
+  const noTime = await rejects(createAiClient({ fetch: zero, clock: instantClock() }).generate(request({ timeoutMs: 0 })));
+  assert.deepEqual([noTime.kind, zero.requests.length], ['timeout', 0]);
+
+  const json = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(openai.json.body)] }]);
+  const onText = await rejects(createAiClient({ fetch: json, clock: instantClock() }).generate(request(cancelOn('text'))));
+  assert.equal(onText.kind, 'cancelled');
+
+  const checkZero = mockFetch([OK]);
+  const checked = await createAiClient({ fetch: checkZero, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 0 });
+  assert.deepEqual([checked.ok ? 'ok' : checked.error.kind, checkZero.requests.length], ['timeout', 0]);
+});
