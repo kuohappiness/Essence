@@ -730,7 +730,7 @@ async function sessionSequence(seed: number): Promise<void> {
       stages.set(st, (stages.get(st) ?? 0) + 1);
       count('比過的元素樹');
     }
-    const bad = differ(label + '（回傳值）', json(results[0]), json(results[1] ?? results[0]))
+    const bad = differ(label + '（回傳值）', json(results[0]), json(results[1]))
       || differ(label + '（view）', json(mapOld(A.session.view())), json(B.session.view()))
       || differ(label + '（這一次做過的卡）', json(mapOld(A.session.history())), json(B.session.history()))
       || differ(label + '（每個檔）', json([...A.memory.texts]), json([...B.memory.texts]))
@@ -784,7 +784,7 @@ async function previewSequence(seed: number): Promise<void> {
       stages.set(st, (stages.get(st) ?? 0) + 1);
       count('預覽比過的元素樹');
     }
-    const bad = differ(label + '（回傳值）', json(results[0]), json(results[1] ?? results[0]))
+    const bad = differ(label + '（回傳值）', json(results[0]), json(results[1]))
       || differ(label + '（view）', json(mapOld(A.view())), json(B.view()))
       || sameType(label, A.view(), B.view());
     count('預覽比過的步');
