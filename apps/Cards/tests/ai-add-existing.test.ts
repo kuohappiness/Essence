@@ -163,6 +163,8 @@ void test('多音字（PR #53 的 Codex 審查）：加題後同一句配了兩�
   const choiceItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長（ㄓㄤˇ、ㄔㄤˊ） 讀音]]', ...body].join('\n');
   assert.equal(left(choiceItem('    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '    - 小樹苗慢慢長（＿＿）大了。 :: ㄔㄤˊ'), choice()), EXISTING_WHY.choiceAmbiguous);
   assert.equal(left(choiceItem('    - 他**長**（＿＿）得比哥哥高。 :: ㄔㄤˊ'), choice()), EXISTING_WHY.choiceAmbiguous);
+  // 底線數不同畫面上是同一句（L2 R2）。
+  assert.equal(left(choiceItem('    - 這條路很長（＿＿＿）。 :: ㄓㄤˇ'), choice()), EXISTING_WHY.choiceAmbiguous);
   // 同一句、同一個讀音只差粗體：不是兩個讀音，照常加。
   const bold = '    - 他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ';
   assert.equal(planned(choiceItem(bold), choice()), choice(bold));

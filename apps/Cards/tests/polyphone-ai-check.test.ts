@@ -37,12 +37,17 @@ void test('choice-ambiguous（錯誤）：加進已有的學習目標裡，同�
   const box = (...sentences: string[]): string => draft(NAME) + ['', '> [!note] 加進已有的學習目標', `> - q8z3ka ${NAME}`, '>     - 出處：p.21', ...sentences.map(each => '>' + each)].join('\n') + '\n';
   assert.deepEqual(found(box('     - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '     - 小樹苗慢慢**長**（＿＿）大了。 :: ㄔㄤˊ')), [['錯誤', 18, 'choice-ambiguous'], ['錯誤', 19, 'choice-ambiguous']]);
   assert.deepEqual(found(box('     - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '     - 這條路很長（＿＿）。 :: ㄔㄤˊ')), []);
+  // 底線數不同畫面上是同一句（L2 R2）。
+  assert.deepEqual(found(box('     - 小樹苗慢慢長（＿）大了。 :: ㄓㄤˇ', '     - 小樹苗慢慢長（＿＿＿）大了。 :: ㄔㄤˊ')), [['錯誤', 18, 'choice-ambiguous'], ['錯誤', 19, 'choice-ambiguous']]);
 });
 
 void test('choice-ambiguous（錯誤）：同一個題幹配兩個讀音；題幹不同不報', () => {
   const twice = [...SIX.slice(0, 5), '    - 他長（＿＿）得比哥哥高。 :: ㄔㄤˊ'];
   assert.deepEqual(found(draft(NAME, twice)), [['錯誤', 8, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);
   assert.deepEqual(found(draft(NAME)).filter(each => each[2] === 'choice-ambiguous'), []);
+  // 底線數不同的同一句畫面上一樣，也算同一句（L2 R2）。
+  const underscores = [...SIX.slice(0, 5), '    - 這條路很長（＿）。 :: ㄓㄤˇ'];
+  assert.deepEqual(found(draft(NAME, underscores)).filter(each => each[2] === 'choice-ambiguous'), [['錯誤', 11, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);
 });
 
 void test('choice-reading（錯誤，只在國語）：讀音不是注音；輕聲的 ˙ 在前面、聲調在後面都可以', () => {

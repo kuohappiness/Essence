@@ -1,4 +1,4 @@
-import { fieldStart, linesOf, listTree, parseDeck, pickKey, readProperties } from '../deck/index.ts';
+import { choiceStem, fieldStart, linesOf, listTree, parseDeck, readProperties } from '../deck/index.ts';
 import type { Deck, DeckProps, Item, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
@@ -192,7 +192,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   const text = sources.text;
   if (text === destText) return { kind: 'plan', text: null };
   const after = parseDeck(text);
-  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查）：合起來的池裡同一句（照 pickKey）配了兩個讀音就不寫，同一批的、和原本的句子都算。
+  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、R2）：合起來的池裡同一句（照 choiceStem）配了兩個讀音就不寫，同一批的、和原本的句子都算。
   const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
   if (now && ambiguous(now) && !ambiguous(target)) return leave(EXISTING_WHY.choiceAmbiguous);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
@@ -205,7 +205,7 @@ function ambiguous(target: Target): boolean {
   const stems = new Map<string, number>();
   return target.prompts.some((prompt, i) => {
     if (prompt.kind !== 'qa') return false;
-    const key = pickKey(prompt.question), seen = stems.get(key);
+    const key = choiceStem(prompt.question), seen = stems.get(key);
     stems.set(key, choice.answers[i]);
     return seen !== undefined && seen !== choice.answers[i];
   });

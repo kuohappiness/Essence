@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, choiceProblems, outsideSource, parseDeck, pickKey, splitSourceItems } from '../deck/index.ts';
+import { blanksIn, choiceProblems, choiceStem, outsideSource, parseDeck, pickKey, splitSourceItems } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -176,8 +176,8 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     if (!choice) continue;
     // 同一個題幹配兩個讀音：孩子分不出該念哪一個。
     const stems = new Map<string, Set<number>>();
-    t.prompts.forEach((p, i) => { if (p.kind === 'qa') stems.set(pickKey(p.question), (stems.get(pickKey(p.question)) ?? new Set()).add(choice.answers[i])); });
-    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(pickKey(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', AMBIGUOUS);
+    t.prompts.forEach((p, i) => { if (p.kind === 'qa') stems.set(choiceStem(p.question), (stems.get(choiceStem(p.question)) ?? new Set()).add(choice.answers[i])); });
+    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(choiceStem(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', AMBIGUOUS);
     if (subject === '國語') {
       const wrong = choice.options.filter(option => !BOPOMOFO.test(option.trim()));
       if (wrong.length) issue(line, '錯誤', 'choice-reading', `讀音照課本寫注音，聲調用 ˊ ˇ ˋ，輕聲的 ˙ 寫在前面：${wrong.join('、')}`);
@@ -205,8 +205,8 @@ function sameSentenceTwice(target: CheckedTarget, issue: Report): void {
   if (!/(^|[\s）)])讀音$/.test(target.name.replaceAll('**', '').trim())) return;
   const slot = target.questions.filter(q => q.kind === 'qa' && /[（(]＿+[)）]/.test(q.front));
   const answers = new Map<string, Set<string>>();
-  for (const q of slot) answers.set(pickKey(q.front), (answers.get(pickKey(q.front)) ?? new Set()).add(pickKey(q.back)));
-  for (const q of slot) if ((answers.get(pickKey(q.front))?.size ?? 0) > 1) issue(q.line, '錯誤', 'choice-ambiguous', AMBIGUOUS);
+  for (const q of slot) answers.set(choiceStem(q.front), (answers.get(choiceStem(q.front)) ?? new Set()).add(pickKey(q.back)));
+  for (const q of slot) if ((answers.get(choiceStem(q.front))?.size ?? 0) > 1) issue(q.line, '錯誤', 'choice-ambiguous', AMBIGUOUS);
 }
 
 function checkPick(text: string, deck: Deck, issue: Report, subject?: string): void {

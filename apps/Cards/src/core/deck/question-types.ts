@@ -35,6 +35,9 @@ export function pickKey(text: string): string {
   return foldWidth(bare).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/** 多音字的兩句是不是同一句（tasks/polyphone-pick.md §5、L2 R2）：照 pickKey，連續的底線當一個（畫面上空格都一樣長）。 */
+export const choiceStem = (question: string): string => pickKey(question).replace(/_+/g, '_');
+
 /**
  * 一段文字有幾個空格（§3〈空格怎麼數〉）：連續的 `＿` 算一格，半形 `__` 不算。不看行內程式碼、公式、整個圖片與嵌入、連結目的地、
  * HTML 標籤與 `%%` 註解；連結文字算，字元參照當一個 `＿`（渲染後就是）。隔開的內容換成 \0，渲染後它們也是不同的文字節點；
