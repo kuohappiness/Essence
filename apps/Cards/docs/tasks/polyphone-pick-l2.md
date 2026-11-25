@@ -1,6 +1,6 @@
 # 多音字的點選填空（D-230 第 4 點，Codex L2 審查請求）
 
-狀態：待審｜下一步：使用者選第四輪之後怎麼收尾（D-171 的上限，不自動送第五輪），四輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
+狀態：已結案 → [任務說明](polyphone-pick.md)｜完成：四輪審完，使用者 2026-11-25 選第四輪收窄修完、不再送審（[報告與核對](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)）｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -98,3 +98,9 @@
 照 code-quality 的 `review.md`〈審查請求範本〉的回報格式：每項發現寫觸發條件、預期／實際、影響、位置與證據，區分「已重現」「靜態推斷」「待驗證」，另標真實路徑會不會發生與發生機率。可以回報「規格本身有漏洞」。報告不逐段重述規格與差異；頭尾寫待審 commit、審查範圍、測試結果與沒驗的項目及原因。
 
 報告寫在 `Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md`，標題下第一行寫狀態。
+
+## 結果
+
+四輪審完，每一輪的發現與處理在[報告與核對](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)。使用者 2026-11-25 選第四輪收窄修完、不再送審。
+
+延後的測試：無（審查本身沒有延後的；Windows 版 Obsidian 的渲染與 iPhone 實機屬於[任務說明](polyphone-pick.md#結果)的驗收，記在那裡）。
