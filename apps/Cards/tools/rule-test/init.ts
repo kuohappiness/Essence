@@ -1,12 +1,12 @@
 // 比較測試工具：init（任務說明 tasks/rule-test-tool.md §5、§5-10）。建測試資料夾與 測試.yaml 範本；
 // --from 沿用另一輪的組、生成器、評審與門檻，只換課（補跑另一課用）：課庫與快照的路徑換成絕對路徑、自備提示檔整個複製，
 // 記下沿用哪一輪（沿用.json）；凍結時核對規則與範本的雜湊和那一輪相同、課不重複，不同就停下（checkInherited）。
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import { cliPath } from '../cli-path.ts';
 import type { Config } from './config.ts';
-import { insideRepo, libraryOf, openFolder, sha256File, type Folder } from './folder.ts';
+import { copyDir, insideRepo, libraryOf, openFolder, sha256File, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock, type FrozenStep } from './freeze.ts';
 
 const INHERITED = '沿用.json';
@@ -27,7 +27,7 @@ export function initFolder(root: string, options: { from?: string } = {}): strin
   for (const [i, lesson] of old.config.lessons.entries()) {
     if (lesson.existing && 'snapshot' in lesson.existing) doc.setIn(['課', i, '已有目標', '快照'], resolve(old.root, lesson.existing.snapshot));
   }
-  if (existsSync(join(old.root, '提示'))) cpSync(join(old.root, '提示'), join(root, '提示'), { recursive: true });
+  if (existsSync(join(old.root, '提示'))) copyDir(join(old.root, '提示'), join(root, '提示'));
   writeFileSync(join(root, '測試.yaml'), doc.toString(), { encoding: 'utf8', flag: 'wx' });
   writeFileSync(join(root, INHERITED), JSON.stringify({ from: old.root, time: new Date().toISOString() }, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
   return [

@@ -25,13 +25,13 @@ async function judged(): Promise<{ folder: Folder; codes: string[] }> {
   return { folder, codes };
 }
 
-/** 假的裁定者：記下每次的提示與當時資料夾裡的檔（對話結束就刪了）；拿不準第一次交的漏了一筆。 */
+/** 假的裁定者：記下每次的提示與當時資料夾裡的檔（對話結束就刪了；路徑一律用 /，Windows 上也一樣）；拿不準第一次交的漏了一筆。 */
 function fakeAdjudicator(): { adapter: Adapter; requests: { request: StepRequest; files: string[] }[] } {
   const requests: { request: StepRequest; files: string[] }[] = [];
   return {
     requests,
     adapter: request => {
-      requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(String).sort() });
+      requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(each => String(each).replaceAll('\\', '/')).sort() });
       request.record('{}', '');
       const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '多解', reason: 'p.3 寫的是借出' }
         : request.resume === null ? { items: [] } : { items: [{ notes: ['U1'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
@@ -82,4 +82,22 @@ void test('disputes：重大錯誤一筆一個隔離對話（只有那一份卡�
   await runDisputes(folder, { adapters: { claude: fake.adapter }, log: () => {} });
   assert.equal(fake.requests.length, 3);
   assert.match(readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8'), /\| 照原樣 \|/);
+});
+
+void test('disputes：五組拆成兩個區組、共用同一份基準稿時，拿不準照樣彙成一個對話，基準稿只放一份（§5-6）', async () => {
+  const folder = await blinded({}, '', undefined, ['甲', '乙', '丙', '丁', '戊']);
+  const codex = fakeJudge({ shape: result => { result.unsure = '列 R1 只考英翻中算不算有'; } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fakeJudge().adapter }, log: () => {} });
+  const decks: string[][] = [];
+  const adjudicator: Adapter = request => {
+    decks.push(readdirSync(join(request.cwd, '卡組', 'L3')).sort());
+    request.record('{}', '');
+    const value = { items: [{ notes: ['U1', 'U2'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
+    return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 'ruling-1', warnings: [], ms: 1, models: [], structured: value });
+  };
+  await runDisputes(folder, { adapters: { claude: adjudicator }, log: () => {} });
+  assert.deepEqual(decks, [['S1.md', 'S2.md', 'S3.md', 'S4.md', 'S5.md']]);
+  const rulings = readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8');
+  assert.ok(rulings.includes('| U1 | L3 | L3-B01 | codex | 列 R1 只考英翻中算不算有 |'));
+  assert.ok(rulings.includes('| U2 | L3 | L3-B02 | codex | 列 R1 只考英翻中算不算有 |'));
 });
