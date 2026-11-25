@@ -116,6 +116,22 @@ void test('多音字（L2 R3）：看不見的文字裡的「長（＿＿）」�
   assert.deepEqual(hints(note), []);
 });
 
+void test('多音字（L2 第二輪 4）：句子裡有 HTML 標籤的不算，照原題型出；連結在別的地方照樣算', () => {
+  // 畫面不在 <code> 這類受保護的內容裡放選項，選項會跑到句尾：寧可整個目標照原題型出。
+  for (const line of ['妹妹留著一頭<code>長（＿＿）</code>髮。 :: ㄔㄤˊ', '妹妹留著一頭長（＿＿）髮。<br> :: ㄔㄤˊ', '妹妹留著一頭<span>長</span>（＿＿）髮。 :: ㄔㄤˊ']) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), line]);
+    assert.equal(first(text).choice, undefined, line);
+    assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 6 }], line);
+  }
+  // 反引號的程式碼本來就看不到（＿＿），也不算。
+  assert.equal(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭`長（＿＿）`髮。 :: ㄔㄤˊ'])).choice, undefined);
+  for (const line of ['妹妹留著一頭長（＿＿）[[髮]]。 :: ㄔㄤˊ', '妹妹留著一頭長（＿＿）[髮](https://example.com)。 :: ㄔㄤˊ']) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), line]);
+    assert.ok(first(text).choice, line);
+    assert.deepEqual(hints(text), [], line);
+  }
+});
+
 void test('多音字：原本就停出的照舊', () => {
   const empty = parseDeck(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', ['他長（＿＿）得比哥哥高。 ::']));
   assert.equal(empty.targets[0].ok, false);

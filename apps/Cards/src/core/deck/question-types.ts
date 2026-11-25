@@ -41,6 +41,9 @@ export function pickKey(text: string): string {
  */
 export const choiceStem = (question: string): string => pickKey(visibleOf(question).replaceAll('\0', '')).replace(/_+/g, '_');
 
+/** 一個 HTML 標籤（開頭或結尾）。 */
+const HTML_TAG = /<\/?[a-zA-Z][^<>\n]*>/;
+
 /**
  * 畫面上看得到的文字（§3〈空格怎麼數〉）：不看行內程式碼、公式、整個圖片與嵌入、連結目的地、HTML 標籤與 `%%` 註解；連結文字算。
  * 隔開的內容換成 \0，渲染後它們也是不同的文字節點；註解渲染後不見了，直接拿掉。字元參照照原樣（數空格時才當成 `＿`）。
@@ -52,7 +55,7 @@ function visibleOf(text: string): string {
     .replace(/!\[[^\]\n]*\]\([^)\n]*\)/g, '\0')
     .replace(/\[\[[^\]\n|]*\|([^\]\n]*)\]\]/g, '\0$1\0')
     .replace(/\[([^\]\n]*)\]\([^)\n]*\)/g, '\0$1\0')
-    .replace(/<\/?[a-zA-Z][^<>\n]*>/g, '\0');
+    .replace(new RegExp(HTML_TAG.source, 'g'), '\0');
 }
 
 /** 一段文字有幾個空格：畫面上連續的 `＿` 算一格，半形 `__` 不算；字元參照當一個 `＿`（渲染後就是）。 */
@@ -162,9 +165,11 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 /**
  * 多音字句（§1-2）：問答題、答案單行，題幹剛好一個空格，而且是緊接名稱的字（可以有粗體或螢光筆）的 `（＿…）`：左右括號全半形都算，
  * 裡面只有全形底線。數空格和找位置都看畫面上的文字（visibleOf），註解、HTML 標籤裡的不算（L2 R3）。
+ * 畫面上的句子有 HTML 標籤的不算（L2 第二輪 4）：畫面不在 `<code>` 這類受保護的內容裡放選項，認了會把選項放到句尾；照原題型出比較保險。
  */
 function isChoiceSentence(prompt: Prompt, word: string): boolean {
   if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || countBlanks(prompt.question) !== 1) return false;
+  if (HTML_TAG.test(maskInline(prompt.question).replace(/%%[^]*?%%/g, ''))) return false;
   return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(visibleOf(prompt.question));
 }
 
