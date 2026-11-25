@@ -312,3 +312,19 @@ void test('OpenAI 相容服務在串流裡拒答（delta.refusal）：沒有文�
   assert.equal(partial.stopReason, 'refusal');
   assert.ok(partial.trace.warnings.some(w => w.includes('後面不能說')), partial.trace.warnings.join(' / '));
 });
+
+void test('providers() 交出的目錄改不動，呼叫端事後改自己傳的 catalog 也不影響送出的網址（L2 R2）', async () => {
+  const fetch = mockFetch([OK, OK]);
+  const extra = { providers: [{ id: 'mine', label: 'Mine', dialect: 'openai-responses', baseUrl: 'https://mine.example.com/v1', auth: { header: 'Authorization', scheme: 'Bearer' }, models: [] }] };
+  const client = createAiClient({ fetch, clock: instantClock(), catalog: extra });
+  const openaiSpec = client.providers().find(p => p.id === 'openai')!;
+  assert.throws(() => { (openaiSpec as { baseUrl: string }).baseUrl = 'http://evil.example.com/v1'; });
+  assert.throws(() => { (openaiSpec.auth as { header: string }).header = 'x-leak'; });
+  extra.providers[0].baseUrl = 'http://evil.example.com/v1';
+  extra.providers[0].auth.header = 'x-leak';
+  await client.generate(request());
+  await client.generate(request({ endpoint: { provider: 'mine' } }));
+  assert.deepEqual(fetch.requests.map(r => r.url), ['https://api.openai.com/v1/responses', 'https://mine.example.com/v1/responses']);
+  assert.equal(fetch.requests[1].headers['x-leak'], undefined);
+  assert.equal(fetch.requests[1].headers.authorization, `Bearer ${KEY}`);
+});

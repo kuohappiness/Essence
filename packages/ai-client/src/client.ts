@@ -60,7 +60,7 @@ export interface AiClient {
   generate(request: GenerateRequest): Promise<GenerateResult>;
   /** 測試連線：讀模型清單（或目錄的 checkPath）確認金鑰，不產生內容、不花錢。 */
   check(request: CheckRequest): Promise<CheckResult>;
-  /** 目錄裡的廠商與模型（設定頁的選單用）。 */
+  /** 目錄裡的廠商與模型（設定頁的選單用）。整份是凍結的，改了會丟例外；要加或改廠商用 createAiClient 的 catalog。 */
   providers(): readonly ProviderSpec[];
   /** 目錄裡被跳過的資料。 */
   readonly catalogProblems: readonly CatalogProblem[];
@@ -100,8 +100,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
   const dialectIds = new Set(DIALECTS.keys());
   const base = validateCatalog(BUILTIN_CATALOG, dialectIds);
   const merged = validateCatalog(mergeCatalog(base.catalog, options.catalog), dialectIds);
-  const catalog = merged.catalog;
-  const problems = [...base.problems, ...merged.problems.filter(p => !base.problems.some(b => b.provider === p.provider && b.model === p.model))];
+  // 送出端用的目錄是自己的一份、凍結的：providers() 交出去的改不動，呼叫端事後改自己傳的 catalog 也影響不到（L2 R2）。
+  const catalog = deepFreeze(structuredClone(merged.catalog));
+  const problems = deepFreeze(structuredClone([...base.problems, ...merged.problems.filter(p => !base.problems.some(b => b.provider === p.provider && b.model === p.model))]));
 
   function resolve(endpoint: EndpointRef, modelId: string | null): Resolved {
     if ('custom' in endpoint) {
@@ -488,6 +489,15 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
     if (isPlain(value) && isPlain(current)) deepMerge(current, value);
     else target[key] = value;
   }
+}
+
+/** 連同裡面的物件與陣列一起凍結。 */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
 }
 
 const isPlain = (value: unknown): value is Record<string, unknown> =>
