@@ -1,6 +1,6 @@
 # 多音字的點選填空（D-230 第 4 點，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第四輪（最後一輪，只審修正），前三輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
+狀態：待審｜下一步：使用者選第四輪之後怎麼收尾（D-171 的上限，不自動送第五輪），四輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
