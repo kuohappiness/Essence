@@ -25,6 +25,8 @@ function usageOf(u: Json) {
   usage.inputTokens = num(u.prompt_tokens);
   usage.outputTokens = num(u.completion_tokens);
   usage.cachedInputTokens = num(obj(u.prompt_tokens_details).cached_tokens);
+  // OpenRouter 的 prompt_tokens_details.cache_write_tokens（L2 R5；https://openrouter.ai/docs/guides/best-practices/prompt-caching，2026-11-25 查）。
+  usage.cacheWriteInputTokens = num(obj(u.prompt_tokens_details).cache_write_tokens);
   usage.reasoningTokens = num(obj(u.completion_tokens_details).reasoning_tokens);
   return usage;
 }

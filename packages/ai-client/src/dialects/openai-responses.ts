@@ -28,6 +28,8 @@ function usageOf(u: Json) {
   usage.inputTokens = num(u.input_tokens);
   usage.outputTokens = num(u.output_tokens);
   usage.cachedInputTokens = num(obj(u.input_tokens_details).cached_tokens);
+  // GPT-5.6 起寫進快取另外計價（L2 R5；https://developers.openai.com/api/docs/guides/prompt-caching，2026-11-25 查）。
+  usage.cacheWriteInputTokens = num(obj(u.input_tokens_details).cache_write_tokens);
   usage.reasoningTokens = num(obj(u.output_tokens_details).reasoning_tokens);
   return usage;
 }

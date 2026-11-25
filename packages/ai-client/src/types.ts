@@ -42,7 +42,7 @@ export interface PriceSpec {
   output: number;
   /** 從快取讀的輸入；沒寫時照 input 算（估計偏高）。 */
   cachedInput?: number;
-  /** 寫進快取的輸入（Anthropic）；沒寫時照 input 算。 */
+  /** 寫進快取的輸入（Anthropic、GPT-5.6 起的 OpenAI）；沒寫時照 input 算。 */
   cacheWrite?: number;
   /** 一次請求的輸入超過門檻時，整個請求改用這組價格。 */
   longContext?: { aboveInputTokens: number; input: number; output: number; cachedInput?: number };
@@ -165,7 +165,7 @@ export interface Usage {
   inputTokens: number | null;
   /** inputTokens 裡從快取讀的。 */
   cachedInputTokens: number | null;
-  /** inputTokens 裡寫進快取的（只有 Anthropic 回報）。 */
+  /** inputTokens 裡寫進快取的（Anthropic、OpenAI Responses 與 OpenRouter 有回報）。 */
   cacheWriteInputTokens: number | null;
   /** 全部計費的輸出，含推理（Gemini 的 candidatesTokenCount 不含思考，這裡加總）。 */
   outputTokens: number | null;

@@ -369,3 +369,23 @@ void test('服務把金鑰回送：跨事件切開、在回應編號與請求編
     .check({ endpoint: { provider: 'openai' }, apiKey: KEY });
   assert.ok(!leaks(listed), JSON.stringify(listed));
 });
+
+void test('寫進快取的輸入：OpenAI Responses 與 OpenRouter 的 cache_write_tokens 讀得到，Terra 照快取寫入價算（L2 R5）', async () => {
+  const json = (body: unknown): MockReply => ({ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(body)] });
+  const responses = (input: number) => json({
+    id: 'resp_1', model: 'gpt-5.6-terra', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }],
+    usage: { input_tokens: input, input_tokens_details: { cached_tokens: 0, cache_write_tokens: input }, output_tokens: 0 },
+  });
+  // 牌價（catalog.json，2026-11-25）：輸入 2、快取寫入 2.5；超過 272,000 輸入整個請求改長輸入價（輸入 4，寫入照比例 5）。
+  const small = await createAiClient({ fetch: mockFetch([responses(100_000)]), clock: instantClock() }).generate(request());
+  assert.equal(small.usage.cacheWriteInputTokens, 100_000);
+  assert.equal(small.cost?.amount, 0.25);
+  const large = await createAiClient({ fetch: mockFetch([responses(1_000_000)]), clock: instantClock() }).generate(request());
+  assert.equal(large.cost?.amount, 5);
+
+  const chat = await createAiClient({ fetch: mockFetch([json({
+    id: 'gen-1', model: 'openai/gpt-5.6-terra', choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 100, prompt_tokens_details: { cached_tokens: 10, cache_write_tokens: 90 }, completion_tokens: 1, cost: 0.01 },
+  })]), clock: instantClock() }).generate(request({ endpoint: { provider: 'openrouter' }, model: 'openai/gpt-5.6-terra' }));
+  assert.deepEqual([chat.usage.cachedInputTokens, chat.usage.cacheWriteInputTokens], [10, 90]);
+});
