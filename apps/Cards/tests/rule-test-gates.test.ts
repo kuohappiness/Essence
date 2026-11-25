@@ -152,6 +152,15 @@ void test('卡組存不了、不能加深的份（§2-1）：確定接錯不算�
   assert.match(result.noWorse.find(each => each.metric === '加深機會漏掉')?.text ?? '', /^不能變差 加深機會漏掉：候選 0\.5、基準 0\.0/);
 });
 
+void test('不算的份拿掉之後不到 3 份：份數不夠照實際留下的份算，不讓拿掉的份湊數；贏的比例也用留下的份算', () => {
+  const undeepened = deck('候選', { deepen: deepen({ undeepened: true, wrong: null, pieces: 0, items: 0 }) });
+  const candidate = [...same('候選', 2, { deepen: deepen({ wrong: 0 }) }), undeepened, undeepened, undeepened];
+  const result = judgeGates({ ...GATES, benefits: [{ metric: '確定接錯', atLeast: 0.2 }] }, candidate, same('現行', 5, { deepen: deepen({ wrong: 2 }) }));
+  assert.deepEqual([result.benefits[0].state, result.benefits[0].text], ['few', '收益 確定接錯：候選 0.0、基準 2.0，少 100%（設定至少少 20%）→ 平均達到，份數不夠']);
+  assert.deepEqual([result.verdict, result.basis], ['未定', '收益平均達到，但份數不夠']);
+  assert.equal(result.chance['確定接錯'], 1);
+});
+
 void test('配對：只收和基準同一個區組的候選份，混在一起比；沒有基準的區組不進門檻，總結果未定；不算門檻的生成器只報告', () => {
   const decks = [
     deck('候選', { code: 'S1' }), deck('現行', { code: 'S2', ...wrong(1) }),

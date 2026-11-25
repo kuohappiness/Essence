@@ -108,9 +108,11 @@ function ends(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[
 
 /** 一個候選組對基準的門檻。candidate、baseline 是同一課、同一個生成器、已經配好對的份。 */
 export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], unpaired = 0): Omit<GateResult, 'lesson' | 'generator' | 'candidate' | 'baseline'> {
-  const n = candidate.length, m = baseline.length, few = n < ENOUGH || m < ENOUGH;
+  const n = candidate.length, m = baseline.length;
+  // 份數夠不夠、贏的比例，照每個指標拿掉不算的份之後實際留下的份算（不讓存不了、不能加深的份湊數）。
+  const few = (s: { c: readonly number[]; b: readonly number[] }): boolean => s.c.length < ENOUGH || s.b.length < ENOUGH;
   const chance: GateResult['chance'] = {};
-  const note = (metric: string, s: Series): void => { chance[metric] = wins(s.c, s.b) / (n * m); };
+  const note = (metric: string, s: Series): void => { chance[metric] = wins(s.c, s.b) / (s.c.length * s.b.length); };
 
   // 第 1 道：重大（D-234）。
   const majors = (decks: readonly DeckMetrics[]): string[] => decks.flatMap(deck => deck.issues.filter(issue => issue.kind === '重大錯誤').map(issue => issue.rubric || '沒對到評分表的列'));
@@ -157,7 +159,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     note('傷到學習', s);
     const head = `傷到學習：候選每份 ${one(s.meanC)}、基準 ${one(s.meanB)}（容許多 ${one(limit)}）`;
     if (more <= limit + EPSILON) harm = { pass: true, text: `${head}→ 過` };
-    else if (few) harm = { pass: null, text: `${head}，多了→ 未定（份數不夠）` };
+    else if (few(s)) harm = { pass: null, text: `${head}，多了→ 未定（份數不夠）` };
     else {
       const p = permutationP(s.b, s.c);
       harm = p <= ALPHA + EPSILON ? { pass: false, text: `${head}，多了、明顯（${pText(p)}）→ 沒過` } : { pass: null, text: `${head}，多了、不明顯（${pText(p)}）→ 未定` };
@@ -176,7 +178,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
       if (sureC < sureB - EPSILON) return { metric, state: 'no', pass: false, text: `${head}，但確定考到的必備候選 ${one(sureC)}、基準 ${one(sureB)}，比較少→ 不算（題少是因為少考）` };
     }
     if (less < atLeast - EPSILON) return { metric, state: 'no', pass: false, text: `${head}→ 沒達到` };
-    if (few) return { metric, state: 'few', pass: false, text: `${head}→ 平均達到，份數不夠` };
+    if (few(s)) return { metric, state: 'few', pass: false, text: `${head}→ 平均達到，份數不夠` };
     const p = permutationP(s.c, s.b), limit = ALPHA / k;
     return p <= limit + EPSILON ? { metric, state: 'clear', pass: true, text: `${head}，${pText(p)}（門檻 ${percent(limit)}）→ 明顯達到` } : { metric, state: 'no', pass: false, text: `${head}，${pText(p)}（門檻 ${percent(limit)}）→ 不明顯` };
   };
@@ -194,7 +196,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     const tolerance = gates.noWorse[metric as keyof Gates['noWorse']], limit = allowed(tolerance, s.meanB), more = s.meanC - s.meanB;
     const head = `不能變差 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（容許多 ${limit.toFixed(2)}）`;
     if (more <= limit + EPSILON) return { metric, state: 'within', pass: true, text: `${head}→ 過` };
-    if (few) return { metric, state: 'more', pass: true, text: `${head}，多了（份數不夠，不判明顯）→ 過，標出來` };
+    if (few(s)) return { metric, state: 'more', pass: true, text: `${head}，多了（份數不夠，不判明顯）→ 過，標出來` };
     const p = permutationP(s.b, s.c);
     return p <= ALPHA + EPSILON ? { metric, state: 'worse', pass: false, text: `${head}，多了、明顯（${pText(p)}）→ 沒過` } : { metric, state: 'more', pass: true, text: `${head}，多了、不明顯（${pText(p)}）→ 過，標出來` };
   };
@@ -211,7 +213,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     if (!isSeries(s)) return { metric, pass: null, text: `次要 ${metric}：沒有資料` };
     const fixed = FIXED.includes(metric);
     const change = s.meanB === 0 ? 0 : (s.meanC - s.meanB) / s.meanB;
-    const clear = (a: number[], b: number[]): boolean => fixed || (!few && permutationP(a, b) <= ALPHA + EPSILON);
+    const clear = (a: number[], b: number[]): boolean => fixed || (!few(s) && permutationP(a, b) <= ALPHA + EPSILON);
     const head = `次要 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（${change <= 0 ? `少 ${percent(-change)}` : `多 ${percent(change)}`}；設定至少少 ${percent(atLeast)}、最多多 ${percent(tolerance)}）`;
     if (change > tolerance + EPSILON && clear(s.b, s.c)) return { metric, pass: false, text: `${head}→ 明顯比較多` };
     if (-change >= atLeast - EPSILON && clear(s.c, s.b)) return { metric, pass: true, text: `${head}→ 明顯比較省` };
