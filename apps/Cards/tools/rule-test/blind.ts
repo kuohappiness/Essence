@@ -61,11 +61,17 @@ function anonymousDeck(folder: Folder, job: Job): { deck: string } | { why: stri
   return { deck: parts.join('\n') };
 }
 
+/**
+ * 外掛規定的引言框標題（syntax.md §2-9，認法同外掛 check.ts 的 calloutHead）：標題字是格式，不是組名洩漏。
+ * 2026-11-25 使用者電腦：組名叫「候選」時，每一份的 `> [!note]- 候選卡片` 都被當成洩漏。
+ */
+const FORMAT_TITLE = /^\s{0,3}>\s?\[![^\]]+\][-+]?\s*(?:候選卡片|加進已有的學習目標)\s*$/;
+
 /** 洩漏字樣（§5-6）：組名、生成器與模型的名稱、`<<<` 標記。回傳每一處（給人看）。 */
 function leaks(folder: Folder, deck: string): string[] {
   const { config } = folder;
   const words = [...new Set([...config.groups.map(each => each.name), ...config.generators.flatMap(each => [each.name, each.model, ...each.service ? [each.service] : []]), ...MODEL_WORDS, '<<<'])].filter(Boolean);
-  return deck.split('\n').flatMap((line, i) => words.filter(word => line.toLowerCase().includes(word.toLowerCase())).map(word => `第 ${String(i + 1)} 行有「${word}」`));
+  return deck.split('\n').flatMap((line, i) => FORMAT_TITLE.test(line) ? [] : words.filter(word => line.toLowerCase().includes(word.toLowerCase())).map(word => `第 ${String(i + 1)} 行有「${word}」`));
 }
 
 const numbered = (deck: string): string => deck.split('\n').map((line, i) => line === '' && i === deck.split('\n').length - 1 ? '' : `${String(i + 1)}\t${line}`).join('\n');

@@ -140,3 +140,14 @@ void test('凍結與匿名：評分表格式不合就停下、不鎖（2026-11-2
   writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   assert.equal(blindFolder(folder, { log: () => {} }).entries.length, 2);
 });
+
+void test('blind：組名叫「候選」時，外掛規定的「候選卡片」框標題不算洩漏，其他地方的組名照樣停下（2026-11-25 使用者電腦）', async () => {
+  const gates = '{ 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }';
+  const boxed = GOOD.replace('<<<完>>>', '> [!note]- 候選卡片\n> - give 英翻中\n>     - 理由：課本 p.4 有\n>     - give :: v. 給\n<<<完>>>');
+  const folder = await folderWith(['現行', '候選'], 1, gates, RUBRIC);
+  await runQueue(folder, { adapters: { claude: reply(() => boxed) }, log: () => {} });
+  assert.equal(blindFolder(folder, { log: () => {} }).entries.length, 2);
+  const leaky = await folderWith(['現行', '候選'], 1, gates, RUBRIC);
+  await runQueue(leaky, { adapters: { claude: reply(() => boxed.replace('v. 給', 'v. 給（候選組的寫法）')) }, log: () => {} });
+  assert.throws(() => blindFolder(leaky, { log: () => {} }), /第 \d+ 行有「候選」/);
+});
