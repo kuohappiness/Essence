@@ -171,7 +171,7 @@ export interface ChoiceReading {
 
 /**
  * 這個目標是不是多音字的點選填空（§1-2、§1-3）：名稱照 unbold 之後，最後一個括號之後剛好是「讀音」，那個括號是選項。選項讀不出、一題都不是
- * 多音字句時提示 pick-not-recognized，有的是有的不是時提示 pick-mixed；名稱沒有括號（現在的讀音卡、沒勾點選填空）或結尾不是單獨的讀音時不提示。
+ * 多音字句、括號裡有讀音沒有句子時提示 pick-not-recognized，有的是有的不是時提示 pick-mixed；名稱沒有括號（現在的讀音卡、沒勾點選填空）或結尾不是單獨的讀音時不提示。
  * notes 是記憶錨點的每一行。呼叫的一方先認比較卡，認不成又沒有提示才來這裡。
  */
 export function readChoice(target: Target, notes: readonly string[]): ChoiceReading {
@@ -194,6 +194,9 @@ export function readChoice(target: Target, notes: readonly string[]): ChoiceRead
   const bad = target.prompts.filter(prompt => !valid(prompt));
   if (bad.length) return fail(bad.map(prompt => prompt.line), 'pick-mixed', `這一題不是多音字句（字後面緊接（＿＿），答案是括號裡的一個讀音），所以這個目標照原題型出`);
   const answers = target.prompts.map(prompt => prompt.kind === 'qa' ? optionKeys.indexOf(pickKey(prompt.answer)) : -1);
+  // 每個讀音至少一句（§3、L2 R4）：不然一張卡的答案都是同一個讀音，一直點同一個鍵就全對。
+  const unused = options.filter((_, i) => !answers.includes(i));
+  if (unused.length) return fail([target.line], 'pick-not-recognized', `括號裡的「${unused.join('、')}」沒有句子：每個讀音至少要有一句，所以這個目標照原題型出。罕用的讀音不放進括號，括號裡也不放錯的念法`);
   return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, answers, ...anchorsOf(notes, optionKeys) }, problems: [] };
 }
 

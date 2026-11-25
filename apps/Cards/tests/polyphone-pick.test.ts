@@ -95,6 +95,15 @@ void test('多音字：有的題是、有的不是：照翻面，pick-mixed 標�
   assert.deepEqual(hints(other), [{ code: 'pick-mixed', line: 6 }]);
 });
 
+void test('多音字（L2 R4）：括號裡有讀音沒有句子：照翻面，提示 pick-not-recognized（不然一直點同一個鍵就全對）', () => {
+  const one = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX.slice(0, 3));
+  assert.equal(first(one).choice, undefined);
+  assert.deepEqual(hints(one), [{ code: 'pick-not-recognized', line: 0 }]);
+  assert.match(parseDeck(one).problems[0].message, /「ㄔㄤˊ」沒有句子/);
+  // 每個讀音都有一句就認。
+  assert.ok(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [SIX[0], SIX[3]])).choice);
+});
+
 void test('多音字（L2 R3）：看不見的文字裡的「長（＿＿）」不算；空格要是畫面上那一個', () => {
   const hidden = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭＿髮。%% 長（＿＿） %% :: ㄔㄤˊ']);
   assert.equal(first(hidden).choice, undefined);

@@ -59,10 +59,10 @@ void test('choice-reading（錯誤，只在國語）：讀音不是注音；輕�
   assert.deepEqual(found(pinyin, '英文').filter(each => each[2] === 'choice-reading'), []);
 });
 
-void test('choice-unused（錯誤）：括號裡有讀音沒有句子', () => {
+void test('括號裡有讀音沒有句子：解析就不認（L2 R4），報 choice-invalid（錯誤）', () => {
   const three = draft('長（ㄓㄤˇ、ㄔㄤˊ、ㄓㄤ） 讀音', SIX, [...ANCHOR, '        - ㄓㄤ：沒有這個念法：無']);
-  assert.deepEqual(found(three).filter(each => each[2] === 'choice-unused'), [['錯誤', 3, 'choice-unused']]);
-  assert.deepEqual(found(draft(NAME)).filter(each => each[2] === 'choice-unused'), []);
+  assert.deepEqual(found(three), [['錯誤', 3, 'choice-invalid']]);
+  assert.deepEqual(found(draft(NAME)), []);
 });
 
 void test('choice-few-sentences（不符）：只有兩個讀音的每個讀音至少三句，三個以上的至少兩句；同一句寫兩次算一句', () => {

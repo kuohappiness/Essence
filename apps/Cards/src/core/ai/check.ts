@@ -186,8 +186,6 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     // 每個讀音幾句：指紋相同的算一句。
     const prints = new Map<number, Set<string>>();
     t.prompts.forEach((p, i) => { prints.set(choice.answers[i], (prints.get(choice.answers[i]) ?? new Set()).add(p.fingerprint)); });
-    const unused = choice.options.filter((_, i) => !prints.has(i));
-    if (unused.length) issue(line, '錯誤', 'choice-unused', `括號裡的「${unused.join('、')}」沒有句子；罕用的讀音不放進括號，括號裡也不放錯的念法`);
     const least = choice.options.length === 2 ? 3 : 2;
     const few = choice.options.filter((_, i) => (prints.get(i)?.size ?? 0) < least);
     if (few.length) issue(line, '不符', 'choice-few-sentences', `每個讀音至少兩句，只有兩個讀音的每個至少三句：${few.map(option => `${option} ${String(prints.get(choice.options.indexOf(option))?.size ?? 0)} 句`).join('、')}（D-182）`);
