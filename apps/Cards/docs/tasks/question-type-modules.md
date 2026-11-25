@@ -84,7 +84,7 @@ export type KindId = Kind['id'];
 | `kinds/order.ts` | `readOrder`、`readSentence`、`sentenceCells`、`plainBlock`、`visibleText` |
 | `kinds/typing.ts` | `readTyping`、`pairWordOf`、`mentions`、`splitMeaning`、`lastBracket`、`wordKey` |
 | `kinds/couplet.ts` | `readCouplet`、`coupletLines` |
-| `question-types.ts` | 認的先後（下面）、`KIND_NEEDS`（§1-5）；對外的匯出和現在一樣，`core/deck/index.ts` 照舊轉出 |
+| `question-types.ts` | 認的先後（下面）、`KIND_NEEDS`（§1-5）；`core/deck/index.ts` 轉出的照舊，只多 `needsOf`；從 `question-types.ts` 還 import 得到哪些照 §1-6 的表，表上寫「否」的改成直接 import 那個 `kinds/` 的檔（L2 第一輪 R5 改寫：原本寫「對外的匯出和現在一樣」，和 §1-6 矛盾） |
 
 `typedAnswer` 是打字題型的（中翻英也用），放 `src/core/deck/typed-answer.ts`，由 `question-types.ts` 轉出。
 
@@ -180,7 +180,7 @@ A1 合併時在這一節附一張「舊寫法 → 新寫法」的表（`target.g
   - 差異要逐項說明，不能略過；腳本與結果寫進 L2 請求。
 - **畫面**：卡型範例每一種，在作答中與結果兩個階段，新舊的元素樹相同（用 `tests/helpers/review-ui.ts`）。比的是每個元素的標籤、class、文字與非函式的 props，函式不比；`review-ui.ts` 的 Markdown 是替身，渲染後的處理（`postProcess`）不在這個比對裡，由 Windows 看一次畫面補（Fable G14）。
 - **兩個正式 vault**：
-  - **轉接器先改，自己一個 commit**（在 A1 的第一個 commit，照小步的失敗 → 通過寫測試；這是工具的新行為，不是純重構，Fable G2 c）：`tools/compare/adapter.ts` 的目標快照多一欄「卡型摘要」（卡型、樣子（全詩或句子）、內容的摘要：組員、選項、格子的字、句首），舊版從六個欄位推、新版讀 `kind`，先對成同一個形狀再比；今天的份每張卡多記題型與格數。舊版沒有 `questionType` 與格數（`v0.2.0`、`v0.3.0` 的卡沒有 `blanks`）時這兩欄都輸出 `null`，兩邊有一邊是 `null` 就不比那一欄，報告列出「這一欄沒比」。`compare-versions.test.ts` 跟著改的：`TodaySnap` 的字面值（第 124-125 行、`fakeSnapshot`）、假版本 `fakeGood` 的卡、逐位置換錯值的表（`WRONG`、`CAN_BE_NULL`、`NULLABLE`）、第 293 行跨版本的比較。比較測試工具那一串也改這個檔，開工前先對（〈排程與分支〉）。
+  - **轉接器先改，自己一個 commit**（在 A1 的第一個 commit，照小步的失敗 → 通過寫測試；這是工具的新行為，不是純重構，Fable G2 c）：`tools/compare/adapter.ts` 的目標快照多一欄「卡型摘要」（卡型、樣子（全詩或句子）、內容的摘要：組員、選項、格子的字、句首），舊版從六個欄位推、新版讀 `kind`，先對成同一個形狀再比；今天的份每張卡多記題型與格數（L2 第一輪 R1 之後：同一個佇列、同一篇的目標一起交給 `nextCard` 出卡，每個目標記它還沒作答時出現的那張卡，另記那張卡上的目標 `lts`，比較卡併了同組的目標才比得到）。舊版沒有 `questionType` 與格數（`v0.2.0`、`v0.3.0` 的卡沒有 `blanks`）時這兩欄都輸出 `null`，兩邊有一邊是 `null` 就不比那一欄，報告列出「這一欄沒比」。`compare-versions.test.ts` 跟著改的：`TodaySnap` 的字面值（第 124-125 行、`fakeSnapshot`）、假版本 `fakeGood` 的卡、逐位置換錯值的表（`WRONG`、`CAN_BE_NULL`、`NULLABLE`）、第 293 行跨版本的比較。比較測試工具那一串也改這個檔，開工前先對（〈排程與分支〉）。
   - **A 合併前跑一次**（Fable G4）：基準對 A1 的 commit 零差異；A1 對 A2 只有排序卡的題型不同（`pick` → `order`），其他零差異。在使用者的電腦用 Remote Control 跑。
 - **型別與檢查**：`npm run check` 通過；六個舊欄位拿掉了，`tsc` 擋。
 - **漏接**：先列出預期會報錯的檔與處數（§1-4 表裡用 `switch` 或 `Record` 的每一處），再在暫存的工作樹加一個假的 `KindId`，`tsc` 報錯的地方和預期逐一相同（結果貼進〈結果〉，不 commit）。
@@ -191,7 +191,7 @@ A1 合併時在這一節附一張「舊寫法 → 新寫法」的表（`target.g
 
 - `QuestionType` 加 `order`：`FLOWS.order = createPick`、`PREVIEWS.order` 同 `pick`；`SCREENS.order` 是排序的畫面：全詩與句子兩個 body 從 `PickCard.tsx` 搬到 `OrderCard.tsx`，class 不變所以 CSS 不動，照 `order.style` 選 body；`SCREENS.pick` 只剩比較卡與多音字。`questionType` 加一個分支：`card.group?.order ? 'order'`，仍只看卡片自己、不丟錯。`review/pick.ts` 的 `card.group.order !== undefined` 改成看 `questionType(card) === 'order'`。
 - 這是程式內部的名稱。題型專區的總表、家長看得到的名稱，以及「取消點選填空的勾選就不出排序」（D-187 第 8 點）都不改，等 §6 第 3 題。
-- **驗收**：只准改的測試斷言：`tests/english-order.test.ts:64`、`tests/poem-order-flow.test.ts:35`（`'pick'` → `'order'`）、`tests/question-types.test.ts` 的 `SAMPLES` 多一列、`tests/card-kinds.test.ts` 的排序那 5 格（A1 加了 `寨（寨、塞） 排序` 那一列，Fable G5）與兩個卡型範例的題型（`pick` → `order`）、A1 新增的「題型對得上」裡排序的那一項（改成卡型 `order` 對題型 `order`）。其他照 A1 的差分與元素樹比對，A1 對 A2 相同（`questionType` 的值除外）。
+- **驗收**：只准改的測試斷言：`tests/english-order.test.ts:64`、`tests/poem-order-flow.test.ts:35`（`'pick'` → `'order'`）、`tests/question-types.test.ts` 的 `SAMPLES` 多一列、`tests/card-kinds.test.ts` 的排序那 5 格（A1 加了 `寨（寨、塞） 排序` 那一列，Fable G5）與兩個卡型範例的題型（`pick` → `order`）、A1 新增的「題型對得上」裡排序的那一項（改成卡型 `order` 對題型 `order`）、`tests/compare-versions.test.ts` 卡型摘要那個測試裡排序的兩張卡（`poem00`、`order0`）的題型 `pick` → `order`（A1 才加的測試；L2 第一輪 R5 補列）。其他照 A1 的差分與元素樹比對，A1 對 A2 相同（`questionType` 的值除外）。
 
 ### 1-9 A 之後怎麼接配對、單選
 
