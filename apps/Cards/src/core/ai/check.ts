@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, outsideSource, parseDeck, splitSourceItems } from '../deck/index.ts';
+import { blanksIn, choiceProblems, outsideSource, parseDeck, pickKey, splitSourceItems } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -161,12 +161,51 @@ const spacedItem = (name: string): string | undefined => [...name.matchAll(/[（
 
 type Report = (line: number, level: CheckLevel, code: string, msg: string) => void;
 
-function checkPick(text: string, deck: Deck, issue: Report): void {
+// ── 多音字（tasks/polyphone-pick.md §5）：比解析嚴，本文與候選都檢查。 ──
+/** 注音的讀音：一到三個注音符號，前面可以有輕聲的 ˙，後面可以有 ˊ ˇ ˋ（國語才檢查，格式查核 2-4）。 */
+const BOPOMOFO = /^˙?[\u3105-\u3129]{1,3}[ˊˇˋ]?$/u;
+/** 照多音字讀的目標：讀成的，或讀音結尾、有括號卻讀不成的（名稱不用寫成「能……」、不算通用的三題上限）。 */
+const isChoice = (t: DeckTarget): boolean => t.choice !== undefined || choiceProblems(t).length > 0;
+
+function checkChoice(deck: Deck, issue: Report, subject: string | undefined): void {
+  for (const t of deck.targets) {
+    const line = t.line + 1;
+    for (const p of choiceProblems(t)) issue(p.line + 1, '錯誤', 'choice-invalid', p.message);
+    const choice = t.choice;
+    if (!choice) continue;
+    // 同一個題幹配兩個讀音：孩子分不出該念哪一個。
+    const stems = new Map<string, Set<number>>();
+    t.prompts.forEach((p, i) => { if (p.kind === 'qa') stems.set(pickKey(p.question), (stems.get(pickKey(p.question)) ?? new Set()).add(choice.answers[i])); });
+    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(pickKey(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', '同一句配了兩個讀音，孩子分不出該念哪一個；請換只有一種念法的句子');
+    if (subject === '國語') {
+      const wrong = choice.options.filter(option => !BOPOMOFO.test(option.trim()));
+      if (wrong.length) issue(line, '錯誤', 'choice-reading', `讀音照課本寫注音，聲調用 ˊ ˇ ˋ，輕聲的 ˙ 寫在前面：${wrong.join('、')}`);
+      if (!/^\p{Script=Han}$/u.test(choice.word.replaceAll('**', '').trim())) issue(line, '提醒', 'choice-word', `括號前面是一個字（現在是「${choice.word}」）`);
+    }
+    // 每個讀音幾句：指紋相同的算一句。
+    const prints = new Map<number, Set<string>>();
+    t.prompts.forEach((p, i) => { prints.set(choice.answers[i], (prints.get(choice.answers[i]) ?? new Set()).add(p.fingerprint)); });
+    const unused = choice.options.filter((_, i) => !prints.has(i));
+    if (unused.length) issue(line, '錯誤', 'choice-unused', `括號裡的「${unused.join('、')}」沒有句子；罕用的讀音不放進括號，括號裡也不放錯的念法`);
+    const least = choice.options.length === 2 ? 3 : 2;
+    const few = choice.options.filter((_, i) => (prints.get(i)?.size ?? 0) < least);
+    if (few.length) issue(line, '不符', 'choice-few-sentences', `每個讀音至少兩句，只有兩個讀音的每個至少三句：${few.map(option => `${option} ${String(prints.get(choice.options.indexOf(option))?.size ?? 0)} 句`).join('、')}（D-182）`);
+    const bare = choice.options.filter((_, i) => choice.anchors[i] === null);
+    if (bare.length) issue(line, '不符', 'choice-no-anchor', `記憶錨點沒有「${bare.join('、')}」的子項目：對答案後的對照只有讀音（預設〈讀音〉）`);
+    if (choice.anchors.some(anchor => anchor !== null && anchor.split('：').length > 2)) issue(line, '提醒', 'choice-anchor-colon', '記憶錨點的子項目有三個以上全形冒號；常用詞裡不要再用全形冒號');
+  }
+}
+
+function checkPick(text: string, deck: Deck, issue: Report, subject?: string): void {
   const lines = text.split(/\r?\n/);
   const targetAt = (line: number): DeckTarget | undefined => deck.targets.find(t => t.line === line || t.prompts.some(p => p.line === line));
   const unrecognized = new Set<DeckTarget | undefined>();
+  checkChoice(deck, issue, subject);
   for (const p of deck.problems) {
     const line = p.line + 1;
+    // 多音字讀不成的提示由 checkChoice 報成 choice-invalid（tasks/polyphone-pick.md §5）。
+    const owner = targetAt(p.line);
+    if ((p.code === 'pick-not-recognized' || p.code === 'pick-mixed') && owner && choiceProblems(owner).length) continue;
     if (p.code === 'pick-answer-invalid') issue(line, '錯誤', p.code, p.message);
     else if (p.code === 'pick-not-recognized') { issue(line, '錯誤', p.code, p.message); unrecognized.add(targetAt(p.line)); }
     else if (p.code === 'pick-mixed') issue(line, PICK_ENDING.test(targetAt(p.line)?.name ?? '') ? '錯誤' : '提醒', p.code, p.message);
@@ -267,7 +306,9 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const targets: CheckedTarget[] = [], candidates: CheckedTarget[] = [], existing: CheckedTarget[] = [], notes: string[] = [], headings: string[] = [];
   const deck = parseDeck(text, { subject });
   // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這三個詞的、認不得的也一樣，它們另外有比較卡的診斷。
-  const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name)).map(t => t.line + 1));
+  const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name) || isChoice(t)).map(t => t.line + 1));
+  // 多音字不算通用的三題上限（tasks/polyphone-pick.md §5）：句數照讀音數。
+  const choiceLines = new Set(deck.targets.filter(isChoice).map(t => t.line + 1));
 
   let start = 0;
   if (all[0]?.raw.trim() === '---') {
@@ -404,7 +445,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
       }
     });
     if (!target.questions.length) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
-    if (where !== 'existing' && target.questions.length > 3) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
+    if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
     if (where !== 'existing' && !target.data['出處']) issue(node.line, '不符', 'no-source', '沒有出處（通用規則 13）');
     if (UNDERSTANDING.includes(target.data['類型'])) for (const q of target.questions.filter(each => each.kind === 'qa')) {
       // 只有一個詞的短答案（例如「飽和溶液」）整個就是重點，不要求粗體。
@@ -451,7 +492,13 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         const boxText = inner.map(l => l.raw).join('\n');
         const boxDeck = parseDeck(boxText, { subject });
         const boxIssue: Report = (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); };
-        checkPick(boxText, boxDeck, boxIssue);
+        checkPick(boxText, boxDeck, boxIssue, subject);
+        // 候選裡的比較卡、多音字也一樣：名稱不用寫成「能……」，多音字不算三題上限。
+        for (const t of boxDeck.targets) {
+          const no = inner[t.line].no;
+          if (t.group || PICK_ENDING.test(t.name) || isChoice(t)) pickNames.add(no);
+          if (isChoice(t)) choiceLines.add(no);
+        }
         // 英文的規則候選也一樣（L2 R2）：候選搬出去就會出題。
         if (subject === '英文') checkEnglish(boxDeck, boxIssue);
         if (!head?.folded) issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
@@ -498,7 +545,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const n = targets.length;
   const understanding = targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${String(understanding)}/${String(n)}，少於三分之一（自然預設規則 1）`);
-  checkPick(text, deck, issue);
+  checkPick(text, deck, issue, subject);
   if (subject === '英文') checkEnglish(deck, issue);
   // 正式解析器判成 error 的目標（ok: false）複習時不會出：一律算錯誤，不靠這裡各讀各的（L2-3，例如中翻英的答案不是單行英文）。同一行這裡已經報過的不重複。
   const reported = new Set(issues.filter(each => each.level === '錯誤').map(each => each.line));

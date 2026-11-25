@@ -141,3 +141,19 @@ void test('§3-2 寫前寫後核對：比較卡混進普通問答（新的寫法
   const out = planned(item(Q2), two);
   assert.deepEqual(parseDeck(out).targets[1].prompts.map(p => p.fingerprint), parseDeck(two).targets[1].prompts.map(p => p.fingerprint));
 });
+
+void test('多音字（tasks/polyphone-pick.md §5）：加合規的句子照常、再算一次是已經在；括號外的讀音、空格不合規、普通問答不寫；翻面的讀音卡照原池加題', () => {
+  const choice = (...body: string[]): string => head('2-1 密度') + ['- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^q8z3ka', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 這條路很長（＿＿）。 :: ㄔㄤˊ', ...body].join('\n') + '\n';
+  const choiceItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長（ㄓㄤˇ、ㄔㄤˊ） 讀音]]', ...body].join('\n');
+  const more = '    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ';
+  const out = planned(choiceItem(more), choice());
+  assert.equal(out, choice(more));
+  assert.ok(parseDeck(out).targets[0].choice);
+  already(choiceItem(more), out);
+  for (const bad of ['    - 他長（＿＿）得很快。 :: ㄓㄤ', '    - 他長__得很快。 :: ㄓㄤˇ', '    - 「長」有幾種念法？ :: 兩種']) assert.equal(left(choiceItem(bad), choice()), EXISTING_WHY.verify, bad);
+  // 已有的翻面讀音卡（名稱沒有括號）：照原池的問句加題，還是翻面。
+  const flip = (...body: string[]): string => head('2-1 密度') + ['- 長 讀音 ^q8z3ka', '    - 「他長得比哥哥高」的長怎麼念？ :: ㄓㄤˇ', ...body].join('\n') + '\n';
+  const flipItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長 讀音]]', ...body].join('\n');
+  const asked = '    - 「這條路很長」的長怎麼念？ :: ㄔㄤˊ';
+  assert.equal(planned(flipItem(asked), flip()), flip(asked));
+});

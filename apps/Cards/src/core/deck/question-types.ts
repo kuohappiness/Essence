@@ -192,6 +192,12 @@ export function readChoice(target: Target, notes: readonly string[]): ChoiceRead
   return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, answers, ...anchorsOf(notes, optionKeys) }, problems: [] };
 }
 
+/** AI 草稿的檢查用（tasks/polyphone-pick.md §5）：這個目標照多音字讀、讀不成時的診斷；比較卡先讀，讀成或有診斷時是空的。 */
+export function choiceProblems(target: Target): ChoiceReading['problems'] {
+  const pick = readPick(target);
+  return pick.group || pick.problems.length ? [] : readChoice(target, []).problems;
+}
+
 /**
  * 記憶錨點對到讀音（§4-2）：每一行照第一個全形冒號切開，前面對到讀音的（同一個讀音只用第一行）是那個讀音的說明與常用詞；
  * 對不到的（同一行的錨點、同一讀音的第二行、未知的讀音、半形冒號）照原本的順序留在 rest，不丟字。

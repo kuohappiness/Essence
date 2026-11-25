@@ -1,5 +1,5 @@
 export { fieldStart, frontmatterLines, parseDeck, readProperties } from './parse.ts';
-export { blanksIn, pickKey, pickWord } from './question-types.ts';
+export { blanksIn, choiceProblems, pickKey, pickWord } from './question-types.ts';
 export { markNeed } from './need.ts';
 export { baseForm, learnedWord, typedHint } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';

@@ -251,9 +251,11 @@ function verify(before: Deck, after: Deck, target: Target, block: readonly strin
   if (content(before.targets.filter((_, i) => i !== index)) !== content(after.targets.filter((_, i) => i !== index))) return false;
   const now = after.targets[index];
   // 題型不變（比較卡的組、全詩、句子排序、接句、打字）；題型的內容跟著題目變，只比種類與組的身分。
-  const { prompts: p0, shared: s0, fields: f0, group: g0, order: o0, sentence: q0, couplet: c0, ...rest0 } = target;
-  const { prompts: p1, shared: s1, fields: f1, group: g1, order: o1, sentence: q1, couplet: c1, ...rest1 } = now;
-  if (content(rest0) !== content(rest1) || g0?.key !== g1?.key || !o0 !== !o1 || !q0 !== !q1 || !c0 !== !c1) return false;
+  const { prompts: p0, shared: s0, fields: f0, group: g0, order: o0, sentence: q0, couplet: c0, choice: h0, ...rest0 } = target;
+  const { prompts: p1, shared: s1, fields: f1, group: g1, order: o1, sentence: q1, couplet: c1, choice: h1, ...rest1 } = now;
+  // 多音字（tasks/polyphone-pick.md §5）：答案與錨點跟著題目變，只比是不是多音字與括號裡的讀音。
+  const choiceOf = (choice: typeof h0): string | null => choice ? content([choice.word, choice.optionKeys]) : null;
+  if (content(rest0) !== content(rest1) || g0?.key !== g1?.key || !o0 !== !o1 || !q0 !== !q1 || !c0 !== !c1 || choiceOf(h0) !== choiceOf(h1)) return false;
   // 預期新增的題目與補充：目的地的名稱那一行接上實際插入的那幾行，單獨讀。
   // 最後補一題假的題目：只加補充（沒有題目）時解析器才會回傳目標；假的那一題不算。
   const alone = parseDeck([...block, '    - 甲 :: 乙'].join('\n') + '\n', { subject }).targets[0] as Target | undefined;
