@@ -112,8 +112,13 @@ void test('相似詞（D-230 第 3 點、tasks/polyphone-pick.md §2）：正式
     assert.deepEqual(codes(text), ['pick-not-recognized'], text);
     assert.equal(parseDeck(text).targets[0].ok, true, text);
   }
+  // 有組、結尾前多了別的字（L2 R6）：看名稱最後單獨的一段，一樣提示；相似字也是。
+  for (const text of ['- 反映（反應、反映） 字義 相似詞\n    - 反映是什麼意思？ :: 把意見傳達出去\n', '- 寨（寨、塞） 字形 相似字\n    - 寨的部首是什麼？ :: 宀\n']) {
+    assert.equal(groupOf(text), undefined, text);
+    assert.deepEqual(codes(text), ['pick-not-recognized'], text);
+  }
   // 沒有分開的、沒勾點選填空的辨詞：一般問答，不提示。
-  for (const text of ['- 反映和反應是不是相似詞\n    - 意思一樣嗎？ :: 不一樣\n', '- 反映 辨詞\n    - 大家向老師＿＿意見。（反映、反應） :: 反映\n']) {
+  for (const text of ['- 反映（反應、反映） 字義相似詞\n    - 反映是什麼意思？ :: 把意見傳達出去\n', '- 反映和反應是不是相似詞\n    - 意思一樣嗎？ :: 不一樣\n', '- 反映 辨詞\n    - 大家向老師＿＿意見。（反映、反應） :: 反映\n']) {
     assert.equal(groupOf(text), undefined, text);
     assert.deepEqual(codes(text), [], text);
   }

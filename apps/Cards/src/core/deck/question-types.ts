@@ -131,7 +131,8 @@ export function readPick(target: Target): PickReading {
   const { name, prompts } = target;
   if (target.implicit || name.includes('==') || countBlanks(name) > 0 || target.direction !== null) return NOT_PICK;
   const group = readGroup(name);
-  const ending = group ? group.title : endingOf(name);
+  // 結尾照名稱最後單獨的一段（前面有空白或右括號）：有組時看組之後的標題的最後一段（L2 R6，`反映（…） 字義 相似詞` 也提示）。
+  const ending = group ? endingOf(' ' + group.title) : endingOf(name);
   const hinted = ending === '相似字' || ending === '相似詞' || ending === '比較'; // 相似詞：D-230 第 3 點、tasks/polyphone-pick.md §2
   const notRecognized = (lines: readonly number[], message: string): PickReading => hinted ? { group: null, problems: lines.map(line => ({ line, level: 'hint', code: 'pick-not-recognized', message })) } : NOT_PICK;
   if (prompts.every(prompt => prompt.kind === 'cloze')) return notRecognized([target.line], '填空題不會變成比較卡；比較卡的題目寫成「題幹有一個 ＿＿ :: 答案」');

@@ -186,6 +186,8 @@ void test('相似詞（tasks/polyphone-pick.md §2）：正式寫法沒有提醒
   }
   const mixed = run(t, card('反映（反應、反映） 相似詞', '    - 大家向老師＿＿意見。 :: 反映', '    - 反映是什麼意思？ :: 把意見說出來'));
   assert.deepEqual(mixed.pick, [['錯誤', 4, 'pick-mixed']]);
+  // 有組、結尾前多了別的字（L2 R6）：一樣是錯誤。
+  assert.deepEqual(run(t, '## 相似詞\n\n' + card('反映（反應、反映） 字義 相似詞', '    - 反映是什麼意思？ :: 把意見說出來')).pick, [['錯誤', 3, 'pick-not-recognized']]);
   const cloze = run(t, card('==反映==和反應 相似詞', '    - 意思一樣嗎？ :: 不一樣'));
   assert.ok(cloze.pick.some(each => each[0] === '錯誤' && each[2] === 'pick-name-cloze'), JSON.stringify(cloze.pick));
   // 沒有分開的「相似詞」是一般問答：照一般目標檢查。
