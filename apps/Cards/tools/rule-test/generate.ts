@@ -44,7 +44,10 @@ function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
 
-/** 行程鎖：已經有一個 generate、judge、disputes 或 rubric 在跑就停下（N4）；上一次的行程已經不在時，把它跑到一半的工作記成中斷。 */
+/**
+ * 行程鎖：已經有一個 generate、judge、disputes 或 rubric 在跑就停下（N4）；上一次的行程已經不在時，把它跑到一半的工作記成中斷。
+ * 生成的事件檔裡，手貼的工作貼了一步、等使用者貼下一步時也是「跑中」，那不是背景行程在跑的，不記成中斷。
+ */
 export function acquireLock(folder: Folder, command: string, log?: string): () => void {
   const file = lockFile(folder);
   if (existsSync(file)) {
@@ -55,8 +58,9 @@ export function acquireLock(folder: Folder, command: string, log?: string): () =
   mkdirSync(join(folder.root, '生成'), { recursive: true });
   writeFileSync(file, JSON.stringify({ pid: process.pid, command, started: new Date().toISOString() }) + '\n', { flag: 'wx' });
   const events = readEvents(folder, log);
+  const manual = new Set(log === undefined ? planJobs(folder, readFrozenSteps(folder), events).filter(job => job.kind === 'manual').map(job => job.key) : []);
   for (const key of new Set(events.flatMap(event => event.job ?? []))) {
-    if (jobState(events, key).status === 'running') appendEvent(folder, { type: 'interrupted', job: key, detail: { why: '上一次的行程已經不在' } }, log);
+    if (!manual.has(key) && jobState(events, key).status === 'running') appendEvent(folder, { type: 'interrupted', job: key, detail: { why: '上一次的行程已經不在' } }, log);
   }
   return () => { if (existsSync(file)) unlinkSync(file); };
 }

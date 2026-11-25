@@ -255,6 +255,10 @@ void test('手貼：說明寫清楚服務、模型、PDF 與順序；貼回一�
   const notes = savePasted(folder, job, 1, '第一步的清單');
   assert.equal(readFileSync(join(folder.root, '生成', '手貼', '乙-L3-ChatGPT-1-2.md'), 'utf8'), '組二第二步：前一步是「第一步的清單」');
   assert.match(notes[0], /第 2 步的提示/);
+  // 等使用者貼第二步時又開了一次自動的生成：手貼的不是背景行程在跑的，不記成中斷（PR #54 Codex P2）。
+  const release = acquireLock(folder, 'generate');
+  release();
+  assert.equal(jobState(readEvents(folder), job.key).status, 'running');
   assert.match(savePasted(folder, job, 2, DECK).join('\n'), /貼完了：有效原稿/);
   assert.throws(() => savePasted(folder, job, 2, DECK), /已經貼完了/);
   assert.equal(jobState(readEvents(folder), job.key).status, 'done');
