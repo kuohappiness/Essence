@@ -246,23 +246,43 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
 
   const today = state.today();
   const slots = map<SlotLike>(today.slots, 'today().slots');
-  const items: TodaySnap[] = [];
-  for (const list of ['share', 'more'] as const) {
-    for (const item of array<ItemLike>(today[list], 'today().' + list)) {
-      const lt = text(item.lt, 'today() 的 lt'), deck = text(item.deck, 'today() 的 deck');
-      const slot = slots.get(lt);
-      if (!slot) throw wrongType('today().slots');
-      // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
-      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck }) as { kind: string; card?: { prompt: { fingerprint: unknown }; blanks?: unknown } };
-      if (next.kind !== 'card' && next.kind !== 'done') throw wrongType('nextCard()');
-      const card = next.kind === 'card' ? fields(next.card, 'nextCard() 的 card') as { prompt: { fingerprint: unknown }; blanks?: unknown } : null;
-      items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
-        prompt: card ? text(card.prompt.fingerprint, 'nextCard() 的 fingerprint') : null,
-        direction: textOrNull(slot.target.direction, 'today().slots 的 direction'),
-        // 格數只數，不讀每一格的內容；那一版的卡沒有 blanks（0.3.0 以前）是 null。
-        type: card && questionType ? text(questionType(card), 'questionType()') : null,
-        cells: card && card.blanks !== undefined ? array(card.blanks, 'nextCard() 的 blanks').length : null });
+  const lists = (['share', 'more'] as const).map(list => ({ list, items: array<ItemLike>(today[list], 'today().' + list).map(item => {
+    const lt = text(item.lt, 'today() 的 lt'), slot = slots.get(lt);
+    if (!slot) throw wrongType('today().slots');
+    return { item, lt, deck: text(item.deck, 'today() 的 deck'), slot };
+  }) }));
+  // 每一張卡照那一版真的複習怎麼出（L2 第一輪 R1）：同一個佇列、同一篇的目標一起放進今天的份，nextCard 出一張，這張上的目標拿掉再出下一張。
+  // 比較卡併同組的目標看的是範圍，只放一個目標就併不到。不模擬作答：記的是每個目標還沒作答時出現在哪一張卡。今天已經答對的是 done；時間是固定的，不會是 stale。
+  const shown = new Map<string, Pick<TodaySnap, 'prompt' | 'type' | 'cells' | 'lts'>>();
+  for (const { items } of lists) for (const deck of new Set(items.map(each => each.deck))) {
+    let left = items.filter(each => each.deck === deck);
+    while (left.length) {
+      const next = nextCard({ ...today, share: left.map(each => each.item), more: [] }, todayInput, { deck }) as { kind: string; card?: unknown };
+      if (next.kind === 'done') break;
+      if (next.kind !== 'card') throw wrongType('nextCard()');
+      const card = fields(next.card, 'nextCard() 的 card');
+      const lead = text(card.lt, 'nextCard() 的 lt'), prompt = text(fields(card.prompt, 'nextCard() 的 prompt').fingerprint, 'nextCard() 的 fingerprint');
+      // 每一格只讀對哪個目標、哪一題；那一版的卡沒有 blanks（0.3.0 以前）只有選中的那個目標，題型、格數、同一張卡的目標都是 null。
+      const blanks = card.blanks === undefined ? null : array<unknown>(card.blanks, 'nextCard() 的 blanks').map(each => {
+        const blank = fields(each, 'nextCard() 的 blanks');
+        return { lt: text(blank.lt, 'blanks 的 lt'), prompt: text(fields(blank.prompt, 'blanks 的 prompt').fingerprint, 'blanks 的 fingerprint') };
+      });
+      const lts = blanks === null ? [lead] : [...new Set(blanks.map(blank => blank.lt))];
+      const type = questionType ? text(questionType(card), 'questionType()') : null;
+      const fresh = lts.filter(lt => left.some(each => each.lt === lt));
+      // 這張卡上沒有還沒出的目標：再叫一次也一樣，那一版的 nextCard 不對。
+      if (!fresh.length) throw wrongType('nextCard()');
+      for (const lt of fresh) {
+        shown.set(lt, { prompt: lt === lead ? prompt : blanks!.find(blank => blank.lt === lt)!.prompt, type, cells: blanks?.length ?? null, lts: blanks === null ? null : lts });
+      }
+      left = left.filter(each => !fresh.includes(each.lt));
     }
+  }
+  const items: TodaySnap[] = [];
+  for (const { list, items: each } of lists) for (const { item, lt, deck, slot } of each) {
+    const card = shown.get(lt) ?? { prompt: null, type: null, cells: null, lts: null };
+    items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
+      prompt: card.prompt, direction: textOrNull(slot.target.direction, 'today().slots 的 direction'), type: card.type, cells: card.cells, lts: card.lts });
   }
   return {
     gates: { decks: gated, held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),

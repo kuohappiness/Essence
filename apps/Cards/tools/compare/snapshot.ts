@@ -40,13 +40,15 @@ export interface TodaySnap {
   retention: number;
   /** 這張估的秒數（今天的份放得下幾張看它）：全放得下時順序不變，只比順序看不出來估得不一樣。 */
   seconds: number;
-  /** 這次出的那一題的指紋（還沒作答時的第一題）。 */
+  /** 這次出的那一題的指紋（還沒作答時出現的那張卡上，這個目標的第一格）；今天已經答對、不再出是 null。 */
   prompt: string | null;
   direction: string | null;
-  /** 這張卡的題型（flip、typed、pick…）；那一版沒有 questionType 是 null，比較時不比（uncomparedLines 列出來）。 */
+  /** 這個目標出現的那張卡的題型（flip、typed、pick…）；那一版沒有 questionType 是 null，比較時不比（uncomparedLines 列出來）。 */
   type: string | null;
-  /** 這張卡有幾格；那一版的卡沒有 blanks 是 null，同上。 */
+  /** 那張卡有幾格；那一版的卡沒有 blanks 是 null，同上。 */
   cells: number | null;
+  /** 那張卡上的學習目標，照畫面的順序、不重複（比較卡併同組的目標，L2 第一輪 R1）；那一版的卡沒有 blanks 是 null，同上。 */
+  lts: string[] | null;
 }
 /** 用了同一個學習目標 ID 的目標（D-157）；line 從 0 算。 */
 interface Conflict { id: string; targets: { path: string; line: number; name: string }[] }
@@ -119,11 +121,11 @@ function groupBy<T>(list: readonly T[], key: (item: T) => string): Map<string, T
   return groups;
 }
 
-/** 只有一邊的版本有、所以沒比的欄位（今天的份的題型與格數），給報告看；兩邊都有或都沒有是空的。 */
+/** 只有一邊的版本有、所以沒比的欄位（今天的份的題型、格數與同一張卡的目標），給報告看；兩邊都有或都沒有是空的。 */
 export function uncomparedLines(before: Snapshot, after: Snapshot): string[] {
   const todayA = new Map(before.today.map(item => [item.lt, item]));
   const out: string[] = [];
-  for (const [field, label] of [['type', '題型'], ['cells', '格數']] as const) {
+  for (const [field, label] of [['type', '題型'], ['cells', '格數'], ['lts', '同一張卡的目標']] as const) {
     let older = 0, newer = 0;
     for (const item of after.today) {
       const old = todayA.get(item.lt);
@@ -186,9 +188,9 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
   for (const item of after.today) {
     const old = todayA.get(item.lt);
     if (!old) continue;
-    for (const field of ['list', 'deck', 'lane', 'retention', 'seconds', 'prompt', 'direction', 'type', 'cells'] as const) {
-      // 題型與格數：一邊的版本沒有這一欄（null）時不比，uncomparedLines 列出來。
-      if ((field === 'type' || field === 'cells') && (old[field] === null || item[field] === null)) continue;
+    for (const field of ['list', 'deck', 'lane', 'retention', 'seconds', 'prompt', 'direction', 'type', 'cells', 'lts'] as const) {
+      // 題型、格數與同一張卡的目標：一邊的版本沒有這一欄（null）時不比，uncomparedLines 列出來。
+      if ((field === 'type' || field === 'cells' || field === 'lts') && (old[field] === null || item[field] === null)) continue;
       if (!same(old[field], item[field])) out.push(`今天的份裡 ${item.lt} 的 ${field}：${JSON.stringify(old[field])} → ${JSON.stringify(item[field])}`);
     }
   }
