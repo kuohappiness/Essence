@@ -40,13 +40,13 @@ const withoutComments = (text: string): string => text.replace(/%%[^]*?%%/g, '')
 
 /**
  * 多音字句只收純文字（tasks/polyphone-pick.md §1-2，L2 第三輪換的前提）：拿掉 `%%` 註解與成對的粗體、螢光筆之後，
- * 不能有其他 Markdown 或 HTML 的符號（連結、程式碼、公式、HTML 與註解、斜體、刪除線、跳脫、字元參照、沒結束的 `%%`）和看不見的格式字元，
+ * 不能有其他 Markdown 或 HTML 的符號（連結、程式碼、公式、HTML 與註解、斜體、刪除線、跳脫、字元參照、沒結束的 `%%`、標籤、區塊 ID）和看不見的格式字元，
  * 也不能分成兩行、用清單或標題的記號開頭。
  * 這樣畫面上的句子就是原文去掉粗體與螢光筆，同一句、空格的位置都直接從原文看，不必猜渲染的結果；全形的符號是一般的字。
  */
-const NOT_PLAIN = /[*_`$<>[\]&~\\%]|\p{Cf}/u;
-/** 開頭是清單或標題的記號（L2 第四輪 2、3）：`1.` 後面空四格以上是程式碼區塊，`-`、`+`、`1.` 起頭是清單，指紋也會把清單記號拿掉。 */
-const BLOCK_START = /^(?:[-+]|\d+[.)]|#{1,6})(?:\s|$)/;
+const NOT_PLAIN = /[*_`$<>[\]&~\\%#^]|\p{Cf}/u;
+/** 開頭是清單的記號（L2 第四輪 2、3）：`1.` 後面空四格以上是程式碼區塊，`-`、`+`、`1.` 起頭是清單，指紋也會把清單記號拿掉（標題的 `#` 由 NOT_PLAIN 擋）。 */
+const BLOCK_START = /^(?:[-+]|\d+[.)])(?:\s|$)/;
 const plainSentence = (text: string): boolean => !text.includes('\n') && !BLOCK_START.test(text.trim())
   && !NOT_PLAIN.test(text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1'));
 
