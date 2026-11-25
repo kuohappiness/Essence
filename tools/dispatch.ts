@@ -164,12 +164,17 @@ export function relativeImports(text: string): string[] {
 /**
  * 文字裡寫到的 tools/… 程式檔（前面可以有 ../），照 base 資料夾解開成 repo 相對的路徑；解開後不在最上層 tools/ 的不算。
  * 只認程式（.ts、.mts、.cts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
+ * 引號括住的整段都算檔名（可以有空白），沒有引號的到空白或 shell 的符號為止，中文也算檔名的字（L2 ai-client 第一輪 R3）。
  */
+const QUOTED_TOOL = /(["'])((?:\.\.\/)*tools\/[^\n"']*?\.(?:ts|mts|cts|mjs|cjs|js))\1/gu;
+const BARE_TOOL = /(?<![\p{L}\p{N}_.\/-])((?:\.\.\/)*tools\/[^\s"'`;&|<>()]*?\.(?:ts|mts|cts|mjs|cjs|js))(?![\p{L}\p{N}_.\/-])/gu;
+
 function toolPaths(text: string, base: string | undefined): string[] {
   const found = new Set<string>();
-  for (const match of text.matchAll(/(?<![\w./-])((?:\.\.\/)*tools\/[\w./-]*\.(?:ts|mts|cts|mjs|cjs|js))(?![\w.])/g)) {
+  const names = [...[...text.matchAll(QUOTED_TOOL)].map(m => m[2]), ...[...text.matchAll(BARE_TOOL)].map(m => m[1])];
+  for (const name of names) {
     // base 是 undefined：執行的資料夾不固定但都在 repo 裡（check.yml 的 job 可以設 working-directory），開頭的 ../ 一律回到 repo 的根。
-    const path = base === undefined ? posix.normalize(match[1].replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, match[1]));
+    const path = base === undefined ? posix.normalize(name.replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, name));
     if (path.startsWith('tools/') && !path.startsWith('tools/node_modules/')) found.add(path);
   }
   return [...found];

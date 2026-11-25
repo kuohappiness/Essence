@@ -236,6 +236,22 @@ const CASES: Case[] = [
     prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node ../../tools/y.ts" } }\n'),
     change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
   },
+  // L2（ai-client 第一輪）R3：引號括住、有空白或中文的檔名也算入口。
+  {
+    name: '套件的 scripts 跑 node "../../tools/check package.ts"（雙引號、有空白），這次只改它',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node \\"../../tools/check package.ts\\"" } }\n'),
+    change: edit('tools/check package.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: "外掛的 scripts 跑 node '../../tools/單引號 x.mjs'（單引號），這次只改它",
+    prepare: wire('apps/Capture/package.json', '{ "scripts": { "check": "node \'../../tools/單引號 x.mjs\'" } }\n'),
+    change: edit('tools/單引號 x.mjs'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: 'hook 跑 node tools/檢查.ts（沒有引號的中文檔名），這次只改它',
+    prepare: wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/檢查.ts && echo ok\n'),
+    change: edit('tools/檢查.ts'), preCommit: ALL, ci: ALL,
+  },
   {
     name: `改 ${SPEC}（登錄表；經 helper 的測試也選）`, change: edit(SPEC),
     preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'] },
