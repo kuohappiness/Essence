@@ -191,6 +191,8 @@ export function toolPaths(text: string, base: string | undefined, known: Iterabl
  * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
  * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json、packages/*\/package.json 的 scripts（從外掛或套件的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
+ * 只認字面寫出的路徑（`../../tools/x.ts`，加引號或跳脫都算）；指向同一個檔的其他拼法（`./`、`//`、大小寫不同、
+ * 先 cd 再叫、`npm --prefix`、shell 變數）認不到，記在 docs/backlog.md〈已知的限制〉，不再補拼法（L2 ai-client 第四輪 第 2 項）。
  */
 export function entryTools(root: string, compare: Dispatch['compare'], changed: readonly string[] = []): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
