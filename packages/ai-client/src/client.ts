@@ -5,6 +5,7 @@ import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
 import { AiError, isAiError, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
+import { redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
 import { bodyChunks, defaultFetch, readText, type FetchLike } from './transport.ts';
 import {
@@ -193,7 +194,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets });
         }
         progress({ type: 'done' });
-        return {
+        // 服務回送的字串裡有金鑰就遮掉（L2 R1）：文字、編號、模型名稱、warnings 都在這一處。
+        return redactDeep<GenerateResult>({
           text: output.text,
           stopReason: output.stopReason,
           usage: output.usage,
@@ -208,7 +210,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
             startedAt: new Date(startedAt).toISOString(), finishedAt: new Date(clock.now()).toISOString(),
             attempts, warnings: [...warnings, ...output.warnings],
           },
-        };
+        }, secrets);
       } catch (caught) {
         const error = isAiError(caught) ? caught : fail('unknown', String(caught), { secrets, cause: caught, provider: r.providerId });
         error.attempts = attempt;
@@ -286,11 +288,13 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           }
           const parsed = r.dialect.parseResponse(json);
           if ('error' in parsed) throw toError(parsed.error, response.status, null, meta());
-          if (parsed.text) progress({ type: 'text', delta: parsed.text, totalChars: parsed.text.length });
+          const shown = redactText(parsed.text, secrets);
+          if (shown) progress({ type: 'text', delta: shown, totalChars: shown.length });
           return { output: parsed, requestId: log.requestId };
         }
         const decoder = new SseDecoder();
         const parser = r.dialect.createStreamParser();
+        const visible = new StreamRedactor(secrets);
         const handle = (event: SseEvent) => {
           let step: ReturnType<typeof parser.push>;
           try {
@@ -301,7 +305,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           if (step.error) throw toError(step.error, null, null, meta());
           if (step.delta && !reason) {
             text += step.delta;
-            progress({ type: 'text', delta: step.delta, totalChars: text.length });
+            const shown = visible.push(step.delta);
+            if (shown) progress({ type: 'text', delta: shown, totalChars: visible.length });
           }
         };
         for await (const chunk of chunks) {
@@ -309,6 +314,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         }
         for (const event of decoder.end()) handle(event);
         if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
+        const tail = visible.end();
+        if (tail) progress({ type: 'text', delta: tail, totalChars: visible.length });
         return { output: parser.result(), requestId: log.requestId };
       } catch (caught) {
         const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
@@ -365,7 +372,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       } catch {
         throw fail('server', 'response is not JSON', meta);
       }
-      return { ok: true, models: r.dialect.parseModels(json) };
+      return { ok: true, models: redactDeep(r.dialect.parseModels(json), secrets) };
     } catch (caught) {
       const meta = { provider: r.providerId, requestId, secrets };
       const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta)

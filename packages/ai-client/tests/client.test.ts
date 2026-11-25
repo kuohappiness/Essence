@@ -328,3 +328,44 @@ void test('providers() 交出的目錄改不動，呼叫端事後改自己傳的
   assert.equal(fetch.requests[1].headers['x-leak'], undefined);
   assert.equal(fetch.requests[1].headers.authorization, `Bearer ${KEY}`);
 });
+
+void test('服務把金鑰回送：跨事件切開、在回應編號與請求編號、斷線前的文字、傳輸層的例外裡，都遮成 ***（L2 R1）', async () => {
+  const half = 10;
+  const completed = { type: 'response.completed', response: { id: `resp_${KEY}`, model: `m_${KEY}`, status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: `A${KEY}B` }] }], usage: { input_tokens: 1, output_tokens: 1 } } };
+  const events = [
+    { data: { type: 'response.created', response: { id: `resp_${KEY}`, model: `m_${KEY}` } } },
+    { data: { type: 'response.output_text.delta', delta: `A${KEY.slice(0, half)}` } },
+    { data: { type: 'response.output_text.delta', delta: `${KEY.slice(half)}B` } },
+  ];
+  const headers = { 'content-type': 'text/event-stream', 'x-request-id': `req_${KEY}` };
+  const leaks = (value: unknown) => JSON.stringify(value).includes(KEY);
+
+  // 成功：進度的 delta 接起來、結果與 trace 都沒有金鑰；文字照原樣，只有金鑰變 ***。
+  const deltas: string[] = [];
+  const ok = await createAiClient({ fetch: mockFetch([{ status: 200, headers, chunks: [sse([...events, { data: completed }])] }]), clock: instantClock() })
+    .generate(request({ onProgress: e => { if (e.type === 'text') deltas.push(e.delta); } }));
+  assert.equal(deltas.join(''), 'A***B');
+  assert.equal(ok.text, 'A***B');
+  assert.ok(!leaks(ok), JSON.stringify(ok));
+
+  // 服務改回 JSON。
+  const json = await createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'application/json', 'x-request-id': `req_${KEY}` }, chunks: [JSON.stringify(completed.response)] }]), clock: instantClock() })
+    .generate(request());
+  assert.equal(json.text, 'A***B');
+  assert.ok(!leaks(json), JSON.stringify(json));
+
+  // 拿到 200 後斷線：partialText 與請求編號。
+  const cut = await rejects(createAiClient({ fetch: mockFetch([{ status: 200, headers, chunks: [sse(events)] }]), clock: instantClock() }).generate(request()));
+  assert.equal(cut.partialText, 'A***B');
+  assert.ok(!leaks(cut), JSON.stringify(cut));
+
+  // 傳輸層丟的例外：message 與 cause 都沒有。
+  const thrown = await rejects(createAiClient({ fetch: mockFetch([{ networkError: `connect failed: ${KEY}` }]), clock: instantClock() }).generate(request({ maxAttempts: 1 })));
+  assert.ok(!thrown.message.includes(KEY));
+  assert.ok(!String((thrown.cause as Error | undefined)?.message ?? '').includes(KEY), String(thrown.cause));
+
+  // 測試連線列出的模型。
+  const listed = await createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'application/json', 'x-request-id': `req_${KEY}` }, chunks: [JSON.stringify({ data: [{ id: `m_${KEY}` }] })] }]), clock: instantClock() })
+    .check({ endpoint: { provider: 'openai' }, apiKey: KEY });
+  assert.ok(!leaks(listed), JSON.stringify(listed));
+});

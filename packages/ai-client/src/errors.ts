@@ -1,5 +1,6 @@
 // 中立的錯誤：每種錯誤有固定的種類、能不能重試、給使用者看的預設說明（docs/tasks/ai-client.md〈7〉第 7 點）。
 // 金鑰不進錯誤：訊息與細節在建立時就遮掉（〈3〉第 4 點）。
+import { redactText as redact } from './redact.ts';
 
 export type AiErrorKind =
   | 'auth'
@@ -57,15 +58,17 @@ export class AiError extends Error {
   attempts = 1;
 
   constructor(init: AiErrorInit) {
-    super(redact(init.message, init.secrets ?? []), init.cause === undefined ? undefined : { cause: init.cause });
+    const secrets = init.secrets ?? [];
+    const cause = sanitizeCause(init.cause, secrets);
+    super(redact(init.message, secrets), cause === undefined ? undefined : { cause });
     this.name = 'AiError';
     this.kind = init.kind;
     this.retryable = isRetryableKind(init.kind);
     this.status = init.status ?? null;
-    this.providerCode = init.providerCode ? redact(init.providerCode, init.secrets ?? []) : null;
-    this.requestId = init.requestId ?? null;
+    this.providerCode = init.providerCode ? redact(init.providerCode, secrets) : null;
+    this.requestId = init.requestId ? redact(init.requestId, secrets) : null;
     this.retryAfterMs = init.retryAfterMs ?? null;
-    this.partialText = init.partialText ?? null;
+    this.partialText = init.partialText ? redact(init.partialText, secrets) : null;
     this.provider = init.provider ?? null;
     this.afterResponse = init.afterResponse ?? false;
   }
@@ -82,11 +85,16 @@ export class AiError extends Error {
 
 export const isAiError = (value: unknown): value is AiError => value instanceof AiError;
 
-/** 把 secrets 裡每個長度 4 以上的字串換成 ***。 */
-function redact(text: string, secrets: readonly string[]): string {
-  let out = text;
-  for (const secret of secrets) if (secret && secret.length >= 4) out = out.split(secret).join('***');
-  return out;
+/**
+ * 傳輸層的例外可能帶著請求的細節：有金鑰要遮時，換成只留名稱與遮過的訊息的 Error（L2 R1）。
+ * 沒有要遮的就原樣保留，方便除錯。
+ */
+function sanitizeCause(cause: unknown, secrets: readonly string[]): unknown {
+  if (cause === undefined || secrets.length === 0) return cause;
+  const text = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : JSON.stringify(cause) ?? '';
+  const copy = new Error(redact(text, secrets));
+  if (cause instanceof Error) copy.name = cause.name;
+  return copy;
 }
 
 type Locale = 'zh-TW' | 'en';
