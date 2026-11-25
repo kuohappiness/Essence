@@ -1,8 +1,21 @@
 # 多音字的點選填空（D-230 第 4 點，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第三輪（只審修正），前兩輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
+狀態：待審｜下一步：Codex 審第四輪（最後一輪，只審修正），前三輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
+
+## 第四輪（只審修正，最後一輪）
+
+- **待審**：`32fb6afa`（第三輪審的 commit）到這份請求所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/polyphone-pick-l2.md`）的差異，範圍：`src/core/deck/question-types.ts`（`plainSentence`、`choiceStem`、`isChoiceSentence`、`readChoice` 的同一句）、`src/core/deck/types.ts` 的 `Choice`、`src/core/study/compose.ts`（`choicePrompts`、`choicePreviewCards` 回到第二輪之前）、`src/core/ai/check.ts` 的 `checkChoice`、`src/core/ai/existing.ts` 的 `choiceLost`、`apps/Cards/docs/syntax.md` §2-3、§2-8、§2-9、§2-10、國語預設〈讀音〉的題目一條，以及它們的呼叫端與測試。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第三輪）〉。第三代換了前提：多音字句只收純文字、畫面上同一句只寫一次，不符的整個目標照翻面出。請先判斷新前提本身守不守得住「點選填空的每一格，畫面上的句子分得出來、空格緊接在字後面、答對不會被記成差一點」，再看實作。
+- **請特別試**（附我跑過的測試）：
+  - 純文字的判斷有沒有漏掉會改變畫面的寫法：`tests/polyphone-pick.test.ts` 的「句子只收純文字」列了 20 種不認、5 種照認的。表上沒有的，例如 `#標籤`、裸網址、行尾的 `^` 區塊 ID、全形符號、表情符號。
+  - 同一句的判斷：同一個測試檔的「畫面上同一句寫了兩次」列了 7 種寫法（含配另一個讀音的）。`pickKey` 摺疊的大小寫、全半形、空白，在畫面上是不是真的分不出來；有沒有畫面上一樣、`pickKey` 卻分開的。
+  - 加進已有的學習目標：`tests/ai-add-existing.test.ts` 的「加過去之後不能再用點選填空就不寫」與原本就照翻面出的池（第三輪「其他指定查核」第一條的情況，現在是翻面）。
+  - 草稿：`tests/polyphone-ai-check.test.ts` 的「同一句配兩個讀音或寫了兩次」與 `choice-few-sentences`。
+  - 舊卡組裡原本認成點選、現在變翻面的（同一句寫兩次），同一個 `lt` 的紀錄重播：沒跑，和第三輪驗過的 `<br>` 是同一條路。
+- **驗證**：同第二輪。
+- 這是第四輪（D-171 的上限）。報告接在後面，標「第四輪」；延續第三輪的標「延續第三輪 n」，修正帶出的標「第三輪 n 修正引入」。
 
 ## 第三輪（只審修正）
 
