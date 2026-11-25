@@ -121,8 +121,13 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   const dirty = pluginDirty(folder, root);
   if (dirty.length) throw Error(`外掛來源用到的檔有沒 commit 的修改，先 commit 或還原：\n${dirty.join('\n')}`);
   const { config } = folder;
-  const missing = config.lessons.filter(lesson => !existsSync(materialOf(folder, lesson))).map(lesson => materialOf(folder, lesson));
-  if (missing.length) throw Error(`課庫少了教材：${missing.join('、')}`);
+  // 設定的檢查（§4-2）：教材與自備提示檔一次列完；commit 裡的規則檔讀不到時，組提示那一步說是哪一份。
+  const own = config.groups.flatMap(group => group.steps.flatMap(step => step.rules.kind === 'own' ? Object.values(step.rules.files) : []));
+  const missing = [
+    ...config.lessons.map(lesson => materialOf(folder, lesson)).filter(path => !existsSync(path)).map(path => `教材：${path}`),
+    ...[...new Set(own)].map(file => join(folder.root, '提示', file)).filter(path => !existsSync(path)).map(path => `自備提示：${path}`),
+  ];
+  if (missing.length) throw Error(`少了這些檔：\n${missing.map(each => `- ${each}`).join('\n')}`);
   // 外掛版本照這個工具所在的 Cards（和用來組提示、讀卡組的程式同一份）。
   const version = (JSON.parse(readFileSync(join(APP_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
 

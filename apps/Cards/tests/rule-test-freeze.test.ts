@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { RULE_SUBJECTS, taskSection, type CardForm, type ExistingTarget } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { embedRules } from '../tools/build.mjs';
 import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
 import { openFolder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps, verifyLock } from '../tools/rule-test/freeze.ts';
@@ -185,6 +186,12 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
     ['分段-英文L3-1.md', false, true, []],
     ['分段-英文L3-2.md', true, false, ['A.1']],
   ]);
+  // §8 第 1 條：外掛來源的規則部分就是建置嵌進外掛的那幾份（不拿 buildPrompt 自己比自己），任務段帶著凍結的已有目標。
+  const embedded = (await embedRules()).english;
+  assert.deepEqual(steps[0].parts.map(part => [part.name, part.version, part.sha256]), embedded.map(rule => [rule.name, rule.version, rule.sha256]));
+  const current = readFileSync(join(folder, '凍結', '提示', '現行-英文L3.md'), 'utf8');
+  assert.ok(embedded.every(rule => current.includes(rule.text)));
+  assert.ok(current.includes('  - aaaaa2 borrow 英翻中｜國二上 L1｜第一題：borrow :: v. 借入'));
   const candidate = readFileSync(join(folder, '凍結', '提示', '候選-英文L3.md'), 'utf8');
   assert.ok(candidate.startsWith('## 核心規則\n- 一\n\n## 英文規則\n- 二\n\n## 這一次的任務\n'));
   assert.ok(!candidate.includes('加深'));
@@ -200,6 +207,31 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
   // 凍結的檔被改：停下並說是哪個。
   writeFileSync(join(folder, '凍結', '提示', '現行-英文L3.md'), '改過');
   assert.throws(() => verifyLock(openFolder(folder)), /凍結之後改過或不見了：凍結\/提示\/現行-英文L3\.md/);
+});
+
+void test('freeze：教材、自備提示檔、commit 裡的規則檔不在就停下，說是哪一個，什麼都不寫（§4-2 設定的檢查）', async () => {
+  const { root, commit } = fixtureRepo();
+  const folder = mkdtempSync(join(tmpdir(), 'rule-test-folder-'));
+  mkdirSync(join(folder, '課', 'L3'), { recursive: true });
+  mkdirSync(join(folder, '提示'));
+  const yaml = (rules: string): string => `
+名稱: 少檔
+課庫: 課
+課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
+組: [{ 名稱: 甲, 規則: { 外掛: english } }, { 名稱: 乙, 規則: ${rules} }]
+生成: [{ 生成器: claude, 模型: claude-opus-5-5 }]
+評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+`;
+  writeFileSync(join(folder, '測試.yaml'), yaml('{ 自備: { L3: 沒有.md } }'));
+  await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), error => {
+    const message = (error as Error).message;
+    return message.includes(join(folder, '課', 'L3', '教材.pdf')) && message.includes(join(folder, '提示', '沒有.md'));
+  });
+  writeFileSync(join(folder, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
+  writeFileSync(join(folder, '測試.yaml'), yaml(`{ commit: ${commit}, 檔案: [apps/Cards/docs/card-rules/next/沒有.md] }`));
+  await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), new RegExp(`讀不到 ${commit}:apps/Cards/docs/card-rules/next/沒有\\.md`));
+  assert.ok(!existsSync(join(folder, '凍結')));
 });
 
 void test('freeze：外掛來源用到的檔有沒 commit 的修改就停下', async () => {
