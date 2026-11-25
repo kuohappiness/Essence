@@ -171,7 +171,8 @@ export function mergeCatalog(base: Catalog, extra: CatalogOverrides | undefined)
     const existing = isObject(add) ? (providers as ProviderSpec[]).find(p => isObject(p) && p.id === add.id) : undefined;
     if (!isObject(add) || !existing) {
       // 新的廠商原樣放進去：models 是 null 也交給 validateCatalog 回報，不默默變成空的（L2 第二輪 延續 R14）。
-      providers.push(isObject(add) ? { ...add } : add);
+      // 省略的 models 當成空的：同一家之後的筆數再加模型，才有地方放，不會被默默丟掉（L2 第三輪 R14 修正引入）。
+      providers.push(isObject(add) ? { ...add, models: add.models === undefined ? [] : add.models } : add);
       continue;
     }
     const { models, ...fields } = add;

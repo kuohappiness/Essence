@@ -83,3 +83,36 @@ void test('options.checkPath 不是字串：那一家跳過並回報，check() �
   const checked = await client.check({ endpoint: { provider: 'openrouter' }, apiKey: KEY });
   assert.ok(!checked.ok);
 });
+
+void test('合併整類：同一家分好幾筆寫、每一筆的 models 省略、空的、有模型或寫壞，給的每一個模型不是用上就是回報，不默默丟掉（L2 第三輪 R14 修正引入）', () => {
+  const choices: { name: string; models: (i: number) => unknown; bad?: boolean; omit?: boolean }[] = [
+    { name: '省略', models: () => undefined, omit: true },
+    { name: '[]', models: () => [] },
+    { name: '一個模型', models: i => [{ ...validModel, id: `m${String(i)}` }] },
+    { name: 'null', models: () => null, bad: true },
+    { name: '{}', models: () => ({}), bad: true },
+  ];
+  const fields = { dialect: 'openai-chat', baseUrl: 'https://x.example/v1', auth: { header: 'authorization', scheme: 'Bearer' } };
+  const combos = (n: number): number[][] => (n === 0 ? [[]] : combos(n - 1).flatMap(rest => choices.map((_, i) => [i, ...rest])));
+  for (const id of ['brand-new', 'openai']) {
+    for (const combo of [...combos(2), ...combos(3)]) {
+      const entries = combo.map((c, i) => {
+        const choice = choices[c];
+        const entry: Record<string, unknown> = { id, ...(i === 0 && id === 'brand-new' ? fields : {}) };
+        if (!choice.omit) entry.models = choice.models(i);
+        return entry;
+      });
+      const label = `${id}：${combo.map(c => choices[c].name).join(' → ')}`;
+      const client = createAiClient({ catalog: { providers: entries } as unknown as Overrides });
+      const reported = client.catalogProblems.some(p => p.provider === id);
+      if (combo.some(c => choices[c].bad)) {
+        assert.ok(reported, `${label}：寫壞的要回報`);
+        continue;
+      }
+      assert.ok(!reported, `${label}：${JSON.stringify(client.catalogProblems)}`);
+      const got = client.providers().find(p => p.id === id)?.models.map(m => m.id) ?? [];
+      const given = combo.flatMap((c, i) => (choices[c].name === '一個模型' ? [`m${String(i)}`] : []));
+      for (const model of given) assert.ok(got.includes(model), `${label}：${model} 不見了（拿到 ${JSON.stringify(got)}）`);
+    }
+  }
+});
