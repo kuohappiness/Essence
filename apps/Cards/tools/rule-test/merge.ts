@@ -14,13 +14,32 @@ export function mergeVerdict(a: Verdict, b: Verdict): Verdict {
 /** 一行歸到哪裡：target 是第幾個目標（不在目標裡的行是 null），prompt 是那個目標的第幾題（名稱與欄位行是 null；詳解等接在題目下的行歸那一題）。 */
 interface Unit { target: number | null; prompt: number | null; line: number }
 
+/**
+ * AI 回覆的卡組段裡，候選卡片與加進已有的學習目標寫在引言框（`> [!note]- 候選卡片`）裡，parseDeck 不讀框裡的行。
+ * 拿掉一層 `> `、框的標題行換成空行，一行對一行（行號不變），框裡的目標和題就和本文的一樣歸得到。
+ */
+function unquoted(deck: string): string[] {
+  return deck.split('\n').map(line => /^>\s*\[!/.test(line) ? '' : line.replace(/^> ?/, ''));
+}
+
+/** 目標照行號排好，每個目標到哪一行為止（不含）：下一個不是空行、也沒有縮排的行（下一個目標、篇名、框的標題、備註）之前，再去掉結尾的空行。 */
+function targetsOf(deck: string): { target: ReturnType<typeof parseDeck>['targets'][number]; end: number }[] {
+  const lines = unquoted(deck);
+  return [...parseDeck(lines.join('\n')).targets].sort((a, b) => a.line - b.line).map(target => {
+    let end = target.line + 1;
+    while (end < lines.length && (!lines[end].trim() || /^\s/.test(lines[end]))) end++;
+    while (end > target.line + 1 && !lines[end - 1].trim()) end--;
+    return { target, end };
+  });
+}
+
 function unitsOf(deck: string): (line: number) => Unit {
-  const targets = [...parseDeck(deck).targets].sort((a, b) => a.line - b.line);
+  const ranges = targetsOf(deck), targets = ranges.map(each => each.target);
   return line => {
     const at = line - 1;
     const index = targets.findLastIndex(target => target.line <= at);
     const target = targets.at(index);
-    if (index < 0 || !target || at >= (targets.at(index + 1)?.line ?? Infinity)) return { target: null, prompt: null, line };
+    if (index < 0 || !target || at >= ranges[index].end) return { target: null, prompt: null, line };
     const prompt = target.prompts.findLastIndex(each => each.line <= at);
     // 只有一題的目標，名稱行就是那一題（§8 第 11 條「同一題不同行（名稱行與題目行）」）。
     return { target: index, prompt: prompt >= 0 ? prompt : target.prompts.length === 1 ? 0 : null, line };
@@ -110,7 +129,7 @@ function stemOf(prompt: Prompt): string {
 export function leakCandidates(deck: string, issues: readonly MergedIssue[]): string[] {
   const recorded = new Set(issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at));
   const found = new Map<string, number[]>();
-  [...parseDeck(deck).targets].sort((a, b) => a.line - b.line).forEach((target, t) => {
+  targetsOf(deck).forEach(({ target }, t) => {
     const answers = target.prompts.map(prompt => answersOf(prompt).map(each => each.toLowerCase()).filter(each => [...each].length >= 2));
     target.prompts.forEach((prompt, to) => {
       const stem = stemOf(prompt).toLowerCase();

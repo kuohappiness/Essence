@@ -59,6 +59,24 @@ void test('有兩題的目標：名稱行和其中一題算同一筆；同一位
   assert.deepEqual(merged.issues.map(each => [each.kind, each.at.join('＋'), each.judges.join('、'), each.lines.join(',')]), [['一題多事', '目標 2', 'codex、fable', '5,6']]);
 });
 
+void test('引言框（候選卡片、加進已有的學習目標）裡的題分開算；目標範圍外的行（框的標題、備註）不歸給前一題（PR #54 Codex P2）', () => {
+  const boxed = [
+    '國二上英文 L3 單字', '- borrow 英翻中', '    - borrow :: v. 借入', '',
+    '> [!note]- 候選卡片', '> - lend 英翻中', '>     - 理由：課本只出現一次', '>     - lend :: 借出', '> - keep 英翻中', '>     - keep :: 保持', '',
+    '給家長：候選卡片是補充的',
+  ].join('\n');
+  // 第 8 行、第 10 行是框裡兩個不同的目標的題；第 5 行是框的標題，第 12 行是框外的備註。
+  const codex = result([], [issue('重大錯誤', [8]), issue('其他品質', [5])]);
+  const fable = result([], [issue('重大錯誤', [10]), issue('其他品質', [12])]);
+  const merged = mergeDeck('S1', boxed, new Map([['codex', codex], ['fable', fable]]));
+  assert.deepEqual(merged.issues.map(each => [each.kind, each.at, each.judges]), [
+    ['重大錯誤', ['目標 2 第 1 題'], ['codex']],
+    ['其他品質', ['第 5 行'], ['codex']],
+    ['重大錯誤', ['目標 3 第 1 題'], ['fable']],
+    ['其他品質', ['第 12 行'], ['fable']],
+  ]);
+});
+
 void test('兩兩比：數候選贏幾場（平手算半場）；明顯的門檻照兩組份數用精確分布現算（§6-3 的例子）', () => {
   assert.equal(wins([1, 2, 3], [2, 4, 4]), 7.5);
   assert.equal(winsNeeded(3, 3), 9);
