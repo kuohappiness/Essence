@@ -168,4 +168,9 @@ void test('多音字（PR #53 的 Codex 審查）：加題後同一句配了兩�
   // 同一句、同一個讀音只差粗體：不是兩個讀音，照常加。
   const bold = '    - 他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ';
   assert.equal(planned(choiceItem(bold), choice()), choice(bold));
+  // 原本就有一句配了兩個讀音（家長手改的）：另一句新配兩個讀音照樣擋，沒有新的矛盾照常加（L2 第二輪 1，延續 R1）。
+  const conflicted = '    - 他長（＿＿＿）得比哥哥高。 :: ㄔㄤˊ';
+  assert.equal(left(choiceItem('    - 這條路很長（＿＿＿）。 :: ㄓㄤˇ'), choice(conflicted)), EXISTING_WHY.choiceAmbiguous);
+  const fine = '    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ';
+  assert.equal(planned(choiceItem(fine), choice(conflicted)), choice(conflicted, fine));
 });

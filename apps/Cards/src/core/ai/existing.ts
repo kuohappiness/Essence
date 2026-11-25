@@ -194,21 +194,29 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   const after = parseDeck(text);
   // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、R2）：合起來的池裡同一句（照 choiceStem）配了兩個讀音就不寫，同一批的、和原本的句子都算。
   const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
-  if (now && ambiguous(now) && !ambiguous(target)) return leave(EXISTING_WHY.choiceAmbiguous);
+  if (now && newlyAmbiguous(target, now)) return leave(EXISTING_WHY.choiceAmbiguous);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 
-/** 多音字的池裡有沒有同一句配了兩個讀音（同 check.ts 的 choice-ambiguous）。 */
-function ambiguous(target: Target): boolean {
+/** 多音字的池：每一句（照 choiceStem）配了哪些讀音。 */
+function readingsBySentence(target: Target): Map<string, Set<number>> {
+  const out = new Map<string, Set<number>>();
   const choice = target.choice;
-  if (!choice) return false;
-  const stems = new Map<string, number>();
-  return target.prompts.some((prompt, i) => {
-    if (prompt.kind !== 'qa') return false;
-    const key = choiceStem(prompt.question), seen = stems.get(key);
-    stems.set(key, choice.answers[i]);
-    return seen !== undefined && seen !== choice.answers[i];
+  if (choice) target.prompts.forEach((prompt, i) => {
+    if (prompt.kind !== 'qa') return;
+    const key = choiceStem(prompt.question);
+    out.set(key, (out.get(key) ?? new Set()).add(choice.answers[i]));
   });
+  return out;
+}
+
+/**
+ * 加題之後有沒有哪一句多配了讀音（同 check.ts 的 choice-ambiguous）：逐句比加題前後，原本就配了兩個讀音的那一句（家長手改的）不算新的，
+ * 別句新配了兩個讀音照樣擋（L2 第二輪 1）。加題只會多不會少，所以比讀音數就夠了。
+ */
+function newlyAmbiguous(before: Target, after: Target): boolean {
+  const old = readingsBySentence(before);
+  return [...readingsBySentence(after)].some(([key, readings]) => readings.size > 1 && readings.size > (old.get(key)?.size ?? 0));
 }
 
 /**
