@@ -164,13 +164,19 @@ export function relativeImports(text: string): string[] {
 /**
  * 文字裡寫到的 tools/… 程式檔（前面可以有 ../），照 base 資料夾解開成 repo 相對的路徑；解開後不在最上層 tools/ 的不算。
  * 只認程式（.ts、.mts、.cts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
- * 引號括住的整段都算檔名（可以有空白），沒有引號的到空白或 shell 的符號為止，中文也算檔名的字（L2 ai-client 第一輪 R3）。
+ *
+ * 兩種一起算，寧可多算（L2 ai-client 第二輪 延續 R3，比照 relativeImports 換前提）：
+ * 1. known（repo 裡現有的 tools/ 程式檔）：文字裡出現那個路徑就算，不管怎麼加引號或跳脫（先拿掉反斜線再找一次）。
+ *    不解析 shell 的引號：第一輪、第二輪都是正規式在引號裡的特殊字元停下來漏算的。多算只會多跑檢查。
+ * 2. 正規式：給 known 裡沒有的（這次刪掉或還沒加的檔）。引號括住的整段算檔名，沒有引號的到空白或 shell 的符號為止。
  */
 const QUOTED_TOOL = /(["'])((?:\.\.\/)*tools\/[^\n"']*?\.(?:ts|mts|cts|mjs|cjs|js))\1/gu;
 const BARE_TOOL = /(?<![\p{L}\p{N}_.\/-])((?:\.\.\/)*tools\/[^\s"'`;&|<>()]*?\.(?:ts|mts|cts|mjs|cjs|js))(?![\p{L}\p{N}_.\/-])/gu;
 
-function toolPaths(text: string, base: string | undefined): string[] {
+export function toolPaths(text: string, base: string | undefined, known: Iterable<string> = []): string[] {
   const found = new Set<string>();
+  const unescaped = text.replace(/\\(.)/gsu, '$1');
+  for (const path of known) if (path.startsWith('tools/') && (text.includes(path) || unescaped.includes(path))) found.add(path);
   const names = [...[...text.matchAll(QUOTED_TOOL)].map(m => m[2]), ...[...text.matchAll(BARE_TOOL)].map(m => m[1])];
   for (const name of names) {
     // base 是 undefined：執行的資料夾不固定但都在 repo 裡（check.yml 的 job 可以設 working-directory），開頭的 ../ 一律回到 repo 的根。
@@ -190,13 +196,14 @@ export function entryTools(root: string, compare: Dispatch['compare']): Set<stri
   const texts = comparedTexts(root, compare, path =>
     path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^(?:apps|packages)\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
+  const known = [...texts.keys()].filter(isSource);
   for (const [path, text] of texts) {
-    if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);
-    else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined)) entries.add(tool);
+    if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.', known)) entries.add(tool);
+    else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined, known)) entries.add(tool);
     else if (path.endsWith('package.json')) {
       let scripts: Record<string, unknown> = {};
       try { scripts = (JSON.parse(text) as { scripts?: Record<string, unknown> }).scripts ?? {}; } catch { /* 壞掉的 package.json 由外掛的檢查擋 */ }
-      for (const script of Object.values(scripts)) if (typeof script === 'string') for (const tool of toolPaths(script, posix.dirname(path))) entries.add(tool);
+      for (const script of Object.values(scripts)) if (typeof script === 'string') for (const tool of toolPaths(script, posix.dirname(path), known)) entries.add(tool);
     }
   }
   const queue = [...entries];

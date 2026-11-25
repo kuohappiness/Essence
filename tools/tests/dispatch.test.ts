@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { CARDS, RULES, entryTools, relatedTests, relativeImports } from '../dispatch.ts';
+import { CARDS, RULES, entryTools, relatedTests, relativeImports, toolPaths } from '../dispatch.ts';
 import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
@@ -246,6 +246,12 @@ const CASES: Case[] = [
     name: "外掛的 scripts 跑 node '../../tools/單引號 x.mjs'（單引號），這次只改它",
     prepare: wire('apps/Capture/package.json', '{ "scripts": { "check": "node \'../../tools/單引號 x.mjs\'" } }\n'),
     change: edit('tools/單引號 x.mjs'), preCommit: ALL, ci: ALL,
+  },
+  // L2（ai-client 第二輪）延續 R3：雙引號裡的單引號是檔名的一部分。
+  {
+    name: '套件的 scripts 跑 node "../../tools/teacher\'s check.ts"（雙引號裡有單引號），這次只改它',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node \\"../../tools/teacher\'s check.ts\\"" } }\n'),
+    change: edit("tools/teacher's check.ts"), preCommit: ALL, ci: ALL,
   },
   {
     name: 'hook 跑 node tools/檢查.ts（沒有引號的中文檔名），這次只改它',
@@ -548,3 +554,22 @@ void test('§A3 分派表：import 的正規式涵蓋語法樹找到的每個相
     for (const name of astImports(text, file)) assert.ok(found.has(name), `${file}：${name}`);
   }
 });
+
+void test('§A3 分派表：入口寫到的 tools/ 檔，檔名有任何 shell 的特殊字元、怎麼加引號或跳脫都算到（L2 ai-client 第二輪 延續 R3）', () => {
+  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a;b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a#b.ts', 'a\\b.ts', '檢查 工具.mjs', '😀.cjs', 'sub dir/x.mts', 'x.js'];
+  const shellEscape = (name: string) => name.replace(/[^\p{L}\p{N}_./-]/gu, ch => `\\${ch}`);
+  for (const name of names) {
+    const path = `tools/${name}`;
+    const forms = [
+      `node ../../${shellEscape(path)}`,
+      `node "../../${path.replace(/["\\$`]/g, ch => `\\${ch}`)}"`,
+      ...(name.includes("'") ? [] : [`node '../../${path}'`]),
+      ...(/[\s"'`;&|<>()$#\\]/u.test(name) ? [] : [`node ../../${path} && echo ok`]),
+    ];
+    for (const script of forms) {
+      assert.ok(toolPaths(script, 'packages/ai-client', [path, 'tools/other.ts']).includes(path), script);
+      assert.ok(!toolPaths(script, 'packages/ai-client', [path, 'tools/other.ts']).includes('tools/other.ts'), script);
+    }
+  }
+});
+
