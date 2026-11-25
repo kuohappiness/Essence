@@ -3,7 +3,7 @@ import { posix } from 'node:path';
 import obsidianmd from 'eslint-plugin-obsidianmd';
 import tseslint from 'typescript-eslint';
 
-const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tools/compare/*.ts', 'tests/**/*.ts'];
+const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tools/compare/*.ts', 'tools/rule-test/*.ts', 'tests/**/*.ts'];
 const core = ['src/core/**/*.{ts,tsx}'];
 // state、dev 與 review（複習畫面的狀態，W6 §2）和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
 const state = ['src/state/**/*.{ts,tsx}'];
