@@ -985,3 +985,28 @@ void test('測試連線的成功本文超過 4 MiB 整類：讀到上限之外�
     }
   }
 });
+
+void test('測試連線拿到 2xx 之後的每一種失敗都標 afterResponse、不能自動重送；拿到之前的照舊（L2 第三輪 延續 R12）', async () => {
+  const json = { 'content-type': 'application/json' };
+  const list = JSON.stringify(openai.check.body);
+  const cases: { name: string; reply: MockReply; cancelAfterMs?: number; after: boolean; kind: string }[] = [
+    { name: '讀本文時斷線', reply: { status: 200, headers: json, chunks: [list.slice(0, 5), list.slice(5)], dropAfter: 1 }, after: true, kind: 'network' },
+    { name: '不是 JSON', reply: { status: 200, headers: json, chunks: ['<html>'] }, after: true, kind: 'server' },
+    { name: '包著錯誤', reply: { status: 200, headers: json, chunks: ['{"error":{"message":"x"}}'] }, after: true, kind: 'server' },
+    { name: '讀不出模型清單', reply: { status: 200, headers: json, chunks: ['{"data":[{"name":1}]}'] }, after: true, kind: 'server' },
+    { name: '讀本文時逾時', reply: { status: 200, headers: json, chunks: [list.slice(0, 5)], keepOpen: true }, after: true, kind: 'timeout' },
+    { name: '讀本文時取消', reply: { status: 200, headers: json, chunks: [list.slice(0, 5)], keepOpen: true }, cancelAfterMs: 10, after: true, kind: 'cancelled' },
+    { name: '連不上', reply: { networkError: 'connect ECONNREFUSED' }, after: false, kind: 'network' },
+    { name: '500', reply: { status: 500, headers: json, chunks: ['{"error":{"message":"boom"}}'] }, after: false, kind: 'server' },
+    { name: '標頭前逾時', reply: { status: 200, headers: json, chunks: [list], headersDelayMs: 500 }, after: false, kind: 'timeout' },
+  ];
+  for (const c of cases) {
+    const controller = new AbortController();
+    if (c.cancelAfterMs !== undefined) setTimeout(() => controller.abort(), c.cancelAfterMs);
+    const result = await createAiClient({ fetch: mockFetch([c.reply]), clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 50, signal: controller.signal });
+    assert.ok(!result.ok, c.name);
+    const { kind, afterResponse, retryable } = result.error;
+    assert.deepEqual([kind, afterResponse], [c.kind, c.after], c.name);
+    if (c.after) assert.equal(retryable, false, c.name);
+  }
+});

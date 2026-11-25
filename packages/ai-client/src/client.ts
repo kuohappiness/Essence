@@ -443,6 +443,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const limit = request.timeoutMs ?? CHECK_TIMEOUT_MS;
     const timer = later(() => { reason = 'timeout'; controller.abort(); }, limit);
     let requestId: string | null = null;
+    let gotResponse = false;
+    // 拿到 2xx 之後的失敗（讀本文時斷線、取消、逾時、形狀不對）都標 afterResponse，不是「可以安全重送」（L2 第二輪 R12、第三輪 延續 R12）。
+    const meta = () => ({ provider: r.providerId, requestId, secrets, afterResponse: gotResponse });
     try {
       if (request.signal?.aborted) throw fail('cancelled', 'cancelled before sending');
       if (limit <= 0) throw fail('timeout', 'timed out before sending', { provider: r.providerId, secrets });
@@ -450,34 +453,31 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       headers.accept = 'application/json';
       const response = await untilAbort(doFetch(call.url, { method: 'GET', headers, signal: controller.signal, redirect: 'error' }), controller.signal, cancelBody);
       requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
-      const meta = { provider: r.providerId, requestId, secrets };
       if (response.status < 200 || response.status >= 300) {
         // 和生成共用讀錯誤本文的方式：一樣的上限，一樣照狀態碼分類（L2 第二輪 R9）。
         const errorBody = await readErrorBody(response, controller.signal, ERROR_BODY_IDLE_MS);
-        throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta);
+        throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta());
       }
+      gotResponse = true;
       const raw = await untilAbort(readText(abortable(bodyChunks(response, controller.signal), controller.signal), CHECK_BODY_MAX_BYTES), controller.signal);
-      // 已經拿到 2xx：形狀不對時不是「可以安全重送」（L2 第二輪 R12）。
-      const after = { ...meta, afterResponse: true };
-      if (raw === null) throw fail('server', `response is larger than ${String(CHECK_BODY_MAX_BYTES)} bytes`, after);
+      if (raw === null) throw fail('server', `response is larger than ${String(CHECK_BODY_MAX_BYTES)} bytes`, meta());
       let json: unknown;
       try {
         json = JSON.parse(raw) as unknown;
       } catch {
         // 代理的登入頁這類 200 HTML 不算連上了（L2 R12）。
-        throw fail('server', 'response is not JSON', after);
+        throw fail('server', 'response is not JSON', meta());
       }
-      if (typeof json !== 'object' || json === null || Array.isArray(json) || 'error' in json) throw fail('server', 'unexpected check response shape', after);
+      if (typeof json !== 'object' || json === null || Array.isArray(json) || 'error' in json) throw fail('server', 'unexpected check response shape', meta());
       if (usePath) return { ok: true, models: null };
       const models = r.dialect.parseModels(json);
-      if (!models) throw fail('server', 'unexpected model list shape', after);
+      if (!models) throw fail('server', 'unexpected model list shape', meta());
       return { ok: true, models: redactDeep(models, secrets) };
     } catch (caught) {
-      const meta = { provider: r.providerId, requestId, secrets };
-      const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta)
-        : reason === 'timeout' ? fail('timeout', 'timed out', meta)
+      const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
+        : reason === 'timeout' ? fail('timeout', 'timed out', meta())
         : isAiError(caught) ? caught
-        : fail('network', describeThrown(caught), { ...meta, cause: caught });
+        : fail('network', describeThrown(caught), { ...meta(), cause: caught });
       return { ok: false, error: withSecrets(error, secrets) };
     } finally {
       clearTimeout(timer);
