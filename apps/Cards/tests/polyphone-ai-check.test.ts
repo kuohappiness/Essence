@@ -44,16 +44,16 @@ void test('choice-ambiguous（錯誤）：加進已有的學習目標裡，同�
   assert.deepEqual(found(box('     - 小樹苗慢慢長大了。%% （＿＿） %% :: ㄓㄤˇ', '     - 小樹苗慢慢長大了。%% （＿＿） %% :: ㄔㄤˊ')), []);
 });
 
-void test('choice-ambiguous（錯誤）：同一個題幹配兩個讀音；題幹不同不報', () => {
+void test('同一句配兩個讀音或寫了兩次：解析就不認（L2 第三輪 2、3），兩句都報 choice-invalid（錯誤）；題幹不同不報', () => {
+  const invalid = (sentences: readonly string[]): Found[] => found(draft(NAME, sentences)).filter(each => each[2] === 'choice-invalid');
   const twice = [...SIX.slice(0, 5), '    - 他長（＿＿）得比哥哥高。 :: ㄔㄤˊ'];
-  assert.deepEqual(found(draft(NAME, twice)), [['錯誤', 8, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);
-  assert.deepEqual(found(draft(NAME)).filter(each => each[2] === 'choice-ambiguous'), []);
-  // 底線數不同的同一句畫面上一樣，也算同一句（L2 R2）。
-  const underscores = [...SIX.slice(0, 5), '    - 這條路很長（＿）。 :: ㄓㄤˇ'];
-  assert.deepEqual(found(draft(NAME, underscores)).filter(each => each[2] === 'choice-ambiguous'), [['錯誤', 11, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);
-  // 只差看不見的註解也是同一句（L2 第二輪 2）。
-  const comment = [...SIX.slice(0, 5), '    - 這條路很長（＿＿）。%% 家長備註 %% :: ㄓㄤˇ'];
-  assert.deepEqual(found(draft(NAME, comment)).filter(each => each[2] === 'choice-ambiguous'), [['錯誤', 11, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);
+  assert.deepEqual(found(draft(NAME, twice)), [['錯誤', 8, 'choice-invalid'], ['錯誤', 13, 'choice-invalid']]);
+  assert.match(check(draft(NAME, twice), { subject: '國語' }).issues.find(each => each.code === 'choice-invalid')?.msg ?? '', /同一句/);
+  assert.deepEqual(invalid(SIX), []);
+  // 底線數不同（L2 R2）、只差看不見的註解（第二輪 2）、同一個讀音寫兩次（第三輪 3），畫面上都是同一句。
+  assert.deepEqual(invalid([...SIX.slice(0, 5), '    - 這條路很長（＿）。 :: ㄓㄤˇ']), [['錯誤', 11, 'choice-invalid'], ['錯誤', 13, 'choice-invalid']]);
+  assert.deepEqual(invalid([...SIX.slice(0, 5), '    - 這條路很長（＿＿）。%% 家長備註 %% :: ㄓㄤˇ']), [['錯誤', 11, 'choice-invalid'], ['錯誤', 13, 'choice-invalid']]);
+  assert.deepEqual(invalid([...SIX, SIX[1]]), [['錯誤', 9, 'choice-invalid'], ['錯誤', 14, 'choice-invalid']]);
 });
 
 void test('choice-reading（錯誤，只在國語）：讀音不是注音；輕聲的 ˙ 在前面、聲調在後面都可以', () => {
@@ -71,12 +71,9 @@ void test('括號裡有讀音沒有句子：解析就不認（L2 R4），報 cho
   assert.deepEqual(found(draft(NAME)), []);
 });
 
-void test('choice-few-sentences（不符）：只有兩個讀音的每個讀音至少三句，三個以上的至少兩句；同一句寫兩次算一句', () => {
+void test('choice-few-sentences（不符）：只有兩個讀音的每個讀音至少三句，三個以上的至少兩句', () => {
   assert.deepEqual(found(draft(NAME, SIX.slice(1))), [['不符', 3, 'choice-few-sentences']]);
-  assert.deepEqual(found(draft(NAME, [...SIX.slice(1), SIX[1]])), [['不符', 3, 'choice-few-sentences']]);
-  // 只差底線數的同一句也算一句（L2 第二輪 3）。
-  const copies = ['    - 他長（＿）得比哥哥高。 :: ㄓㄤˇ', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 他長（＿＿＿）得比哥哥高。 :: ㄓㄤˇ', ...SIX.slice(3)];
-  assert.deepEqual(found(draft(NAME, copies)), [['不符', 3, 'choice-few-sentences']]);
+  assert.match(check(draft(NAME, SIX.slice(1)), { subject: '國語' }).issues.find(each => each.code === 'choice-few-sentences')?.msg ?? '', /ㄓㄤˇ 2 句/);
   const three = ['    - 他行（＿＿）走得很快。 :: ㄒㄧㄥˊ', '    - 這樣做不行（＿＿）。 :: ㄒㄧㄥˊ', '    - 銀行（＿＿）在街角。 :: ㄏㄤˊ', '    - 他在家排行（＿＿）老二。 :: ㄏㄤˊ', '    - 道行（＿＿）很深。 :: ㄏㄥˋ', '    - 他的道行（＿＿）不夠。 :: ㄏㄥˋ'];
   const anchor = ['    - 記憶錨點：', '        - ㄒㄧㄥˊ：走：行走', '        - ㄏㄤˊ：行業：銀行', '        - ㄏㄥˋ：修行：道行'];
   assert.deepEqual(found(draft('行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音', three, anchor)), []);

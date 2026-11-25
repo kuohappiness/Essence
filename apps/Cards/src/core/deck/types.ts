@@ -92,11 +92,10 @@ export interface Couplet { title: string | null; index: number | null; lines: re
 export interface PickGroup { word: string; members: readonly string[]; key: string; title: string; wordKey: string; memberKeys: readonly string[] }
 /**
  * 多音字（tasks/polyphone-pick.md §1、§4-2）：選項屬於這個目標的點選填空，選項是名稱最後一個括號裡的讀音（optionKeys 是正規化後的，和 options 對齊）。
- * 不放進 group：group.key 是好幾個目標的組。answers 對齊 prompts，是每一題的答案在 options 的位置；stems 對齊 prompts，是每一題畫面上的句子
- * （choiceStem：只差粗體、底線數、註解的算同一句，L2 第二輪 3）；anchors 對齊 options，是記憶錨點裡那個讀音的說明與常用詞（第一個全形冒號後面，
- * 沒有是 null）；rest 是對不到讀音的錨點行，照原本的順序。
+ * 不放進 group：group.key 是好幾個目標的組。answers 對齊 prompts，是每一題的答案在 options 的位置（解析時已確認畫面上沒有同一句寫兩次，
+ * 所以指紋也不重複）；anchors 對齊 options，是記憶錨點裡那個讀音的說明與常用詞（第一個全形冒號後面，沒有是 null）；rest 是對不到讀音的錨點行，照原本的順序。
  */
-export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; stems: readonly string[]; anchors: readonly (string | null)[]; rest: readonly string[] }
+export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; anchors: readonly (string | null)[]; rest: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;

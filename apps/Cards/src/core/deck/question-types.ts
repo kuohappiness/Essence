@@ -209,13 +209,16 @@ export function readChoice(target: Target, notes: readonly string[]): ChoiceRead
   const good = target.prompts.filter(valid);
   if (!good.length) return fail([target.line], 'pick-not-recognized', `沒有一題是多音字句：字後面緊接（＿＿），答案是括號裡的一個讀音。${how}`);
   const bad = target.prompts.filter(prompt => !valid(prompt));
-  if (bad.length) return fail(bad.map(prompt => prompt.line), 'pick-mixed', `這一題不是多音字句（字後面緊接（＿＿），答案是括號裡的一個讀音），所以這個目標照原題型出`);
+  if (bad.length) return fail(bad.map(prompt => prompt.line), 'pick-mixed', `這一題不是多音字句（純文字、字後面緊接（＿＿），答案是括號裡的一個讀音），所以這個目標照原題型出`);
+  // 畫面上同一句只寫一次（L2 第三輪 2、3）：配了不同讀音的孩子分不出該念哪一個；讀音相同的，出題歷史分在兩個指紋，選句會插隊。
+  const stems = target.prompts.map(prompt => prompt.kind === 'qa' ? choiceStem(prompt.question) : '');
+  const repeated = target.prompts.filter((_, i) => stems.indexOf(stems[i]) !== stems.lastIndexOf(stems[i]));
+  if (repeated.length) return fail(repeated.map(prompt => prompt.line), 'pick-mixed', '這一句和別句在畫面上是同一句（只差粗體、螢光筆、底線數或註解也算）：同一句只寫一次，配了不同讀音的孩子也分不出該念哪一個，所以這個目標照原題型出');
   const answers = target.prompts.map(prompt => prompt.kind === 'qa' ? optionKeys.indexOf(pickKey(prompt.answer)) : -1);
   // 每個讀音至少一句（§3、L2 R4）：不然一張卡的答案都是同一個讀音，一直點同一個鍵就全對。
   const unused = options.filter((_, i) => !answers.includes(i));
   if (unused.length) return fail([target.line], 'pick-not-recognized', `括號裡的「${unused.join('、')}」沒有句子：每個讀音至少要有一句，所以這個目標照原題型出。罕用的讀音不放進括號，括號裡也不放錯的念法`);
-  const stems = target.prompts.map(prompt => prompt.kind === 'qa' ? choiceStem(prompt.question) : '');
-  return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, answers, stems, ...anchorsOf(notes, optionKeys) }, problems: [] };
+  return { choice: { word: split.word, options, optionKeys, title: CHOICE_ENDING, answers, ...anchorsOf(notes, optionKeys) }, problems: [] };
 }
 
 /** AI 草稿的檢查用（tasks/polyphone-pick.md §5）：這個目標照多音字讀、讀不成時的診斷；比較卡先讀，讀成或有診斷時是空的。 */

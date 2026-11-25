@@ -1,4 +1,4 @@
-import { choiceStem, fieldStart, linesOf, listTree, parseDeck, readProperties } from '../deck/index.ts';
+import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../deck/index.ts';
 import type { Deck, DeckProps, Item, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
@@ -21,7 +21,7 @@ export const EXISTING_WHY = {
   sameQuestion: '目的地已經有同一題，但補充不一樣，請自己看',
   qaConflict: (deck: string): string => `「${deck}」已經有同一個問題、答案不一樣：可能是改過的答案，也可能這題本來就有好幾個答案（例如舉一種會導電的金屬）。請打開對照；要加就改寫題目或手動貼上`,
   verify: '加過去會改到別的內容，請手動搬',
-  choiceAmbiguous: '加過去之後同一句配了兩個讀音，孩子分不出該念哪一個：請換只有一種念法的句子再手動貼上',
+  choiceLost: '加過去之後這個多音字不能再用點選填空：有一句不是多音字句，或和別句在畫面上是同一句（只差粗體、底線數或註解也算）。請改好再手動貼上',
   sources: SOURCE_WHY,
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
@@ -192,31 +192,11 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   const text = sources.text;
   if (text === destText) return { kind: 'plan', text: null };
   const after = parseDeck(text);
-  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、R2）：合起來的池裡同一句（照 choiceStem）配了兩個讀音就不寫，同一批的、和原本的句子都算。
+  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查、L2 R1、第三輪）：加過去之後不能再用點選填空（同一句寫了兩次、配了兩個讀音，
+  // 或句子不是純文字）就不寫，同一批的、和原本的句子都算。原本就照翻面出的（家長手改的）照一般的核對。
   const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
-  if (now && newlyAmbiguous(target, now)) return leave(EXISTING_WHY.choiceAmbiguous);
+  if (target.choice && now && !now.choice) return leave(EXISTING_WHY.choiceLost);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
-}
-
-/** 多音字的池：每一句（照 choiceStem）配了哪些讀音。 */
-function readingsBySentence(target: Target): Map<string, Set<number>> {
-  const out = new Map<string, Set<number>>();
-  const choice = target.choice;
-  if (choice) target.prompts.forEach((prompt, i) => {
-    if (prompt.kind !== 'qa') return;
-    const key = choiceStem(prompt.question);
-    out.set(key, (out.get(key) ?? new Set()).add(choice.answers[i]));
-  });
-  return out;
-}
-
-/**
- * 加題之後有沒有哪一句多配了讀音（同 check.ts 的 choice-ambiguous）：逐句比加題前後，原本就配了兩個讀音的那一句（家長手改的）不算新的，
- * 別句新配了兩個讀音照樣擋（L2 第二輪 1）。加題只會多不會少，所以比讀音數就夠了。
- */
-function newlyAmbiguous(before: Target, after: Target): boolean {
-  const old = readingsBySentence(before);
-  return [...readingsBySentence(after)].some(([key, readings]) => readings.size > 1 && readings.size > (old.get(key)?.size ?? 0));
 }
 
 /**

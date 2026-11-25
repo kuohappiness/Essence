@@ -174,21 +174,17 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     for (const p of choiceProblems(t)) issue(p.line + 1, '錯誤', 'choice-invalid', p.message);
     const choice = t.choice;
     if (!choice) continue;
-    // 同一個題幹配兩個讀音：孩子分不出該念哪一個。
-    const stems = new Map<string, Set<number>>();
-    t.prompts.forEach((p, i) => { if (p.kind === 'qa') stems.set(choiceStem(p.question), (stems.get(choiceStem(p.question)) ?? new Set()).add(choice.answers[i])); });
-    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(choiceStem(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', AMBIGUOUS);
+    // 同一句配兩個讀音（或寫兩次）：解析時就不認，上面的 choice-invalid 會報（L2 第三輪 2、3）。
     if (subject === '國語') {
       const wrong = choice.options.filter(option => !BOPOMOFO.test(option.trim()));
       if (wrong.length) issue(line, '錯誤', 'choice-reading', `讀音照課本寫注音，聲調用 ˊ ˇ ˋ，輕聲的 ˙ 寫在前面：${wrong.join('、')}`);
       if (!/^\p{Script=Han}$/u.test(choice.word.replaceAll('**', '').trim())) issue(line, '提醒', 'choice-word', `括號前面是一個字（現在是「${choice.word}」）`);
     }
-    // 每個讀音幾句：畫面上同一句的算一句（指紋相同、只差底線數或註解，L2 第二輪 3）。
-    const prints = new Map<number, Set<string>>();
-    t.prompts.forEach((_, i) => { prints.set(choice.answers[i], (prints.get(choice.answers[i]) ?? new Set()).add(choice.stems[i])); });
+    // 每個讀音幾句（畫面上同一句寫兩次的解析時就不認，一題就是一句）。
+    const sentences = (option: number): number => choice.answers.filter(answer => answer === option).length;
     const least = choice.options.length === 2 ? 3 : 2;
-    const few = choice.options.filter((_, i) => (prints.get(i)?.size ?? 0) < least);
-    if (few.length) issue(line, '不符', 'choice-few-sentences', `每個讀音至少兩句，只有兩個讀音的每個至少三句：${few.map(option => `${option} ${String(prints.get(choice.options.indexOf(option))?.size ?? 0)} 句`).join('、')}（D-182）`);
+    const few = choice.options.filter((_, i) => sentences(i) < least);
+    if (few.length) issue(line, '不符', 'choice-few-sentences', `每個讀音至少兩句，只有兩個讀音的每個至少三句：${few.map(option => `${option} ${String(sentences(choice.options.indexOf(option)))} 句`).join('、')}（D-182）`);
     const bare = choice.options.filter((_, i) => choice.anchors[i] === null);
     if (bare.length) issue(line, '不符', 'choice-no-anchor', `記憶錨點沒有「${bare.join('、')}」的子項目：對答案後的對照只有讀音（預設〈讀音〉）`);
     // 對到讀音的（已經去掉讀音和第一個冒號）兩個以上；接在後面的只看同一讀音的第二行（整行）三個以上（L2 R8）。

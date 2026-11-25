@@ -19,7 +19,7 @@ const hints = (text: string): { code: ProblemCode; line: number }[] => parseDeck
 
 void test('多音字：正式的寫法', () => {
   const target = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^k3m9qa', SIX, '    - 記憶錨點：\n        - ㄓㄤˇ：長大、帶頭的人：成長、班長\n        - ㄔㄤˊ：距離或時間久：長短、很長\n'));
-  assert.deepEqual(target.choice, { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], stems: ['他長(_)得比哥哥高。', '小樹苗慢慢長(_)大了。', '他是我們班的班長(_)。', '這條路很長(_)。', '夏天的白天比較長(_)。', '妹妹留著一頭長(_)髮。'], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
+  assert.deepEqual(target.choice, { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
   assert.equal(target.id, 'k3m9qa');
   assert.equal(target.group, undefined);
   assert.equal(target.ok, true);
@@ -138,6 +138,25 @@ void test('多音字（L2 第三輪 1、4）：句子只收純文字，有別的
     assert.ok(first(text).choice, question);
     assert.deepEqual(hints(text), [], question);
   }
+});
+
+void test('多音字（L2 第三輪 2、3）：畫面上同一句寫了兩次，標出那幾句、照原題型出', () => {
+  // 讀音相同、只差底線數、粗體、螢光筆、註解、全半形括號，或配了另一個讀音，都算同一句。
+  const copies = [
+    '他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '他長（＿）得比哥哥高。 :: ㄓㄤˇ', '他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ', '==他==長（＿＿）得比哥哥高。 :: ㄓㄤˇ',
+    '他長（＿＿）得比哥哥高。%% 註 %% :: ㄓㄤˇ', '他長(＿＿)得比哥哥高。 :: ㄓㄤˇ', '他長（＿＿＿）得比哥哥高。 :: ㄔㄤˊ',
+  ];
+  for (const copy of copies) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, copy]);
+    assert.equal(first(text).choice, undefined, copy);
+    assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 1 }, { code: 'pick-mixed', line: 7 }], copy);
+    assert.match(parseDeck(text).problems[0].message, /同一句/, copy);
+  }
+  // 只有這一句有 ㄏㄤˊ（第三輪 2）：照原題型出，不會少考一個讀音。
+  const lone = deck('行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音', ['他行（＿＿）走得很快。 :: ㄒㄧㄥˊ', '他行（＿）走得很快。 :: ㄏㄤˊ', '他的道行（＿＿）很深。 :: ㄏㄥˋ']);
+  assert.equal(first(lone).choice, undefined);
+  // 不同的句子照樣認。
+  assert.ok(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, '他長（＿＿）得比姊姊高。 :: ㄓㄤˇ'])).choice);
 });
 
 void test('多音字：原本就停出的照舊', () => {
