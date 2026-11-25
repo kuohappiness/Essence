@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：實作中｜下一步：Claude 照 [Fable 的條件](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#fable-52-xhigh-意見第四輪>)修 L2 第四輪剩下的發現（不再送審）；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件｜等誰：Claude
+狀態：待審｜下一步：L2 第四輪照 Fable 的條件修完（[修正表](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)），Claude 請使用者的電腦重跑 Windows 兩個檢查；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件｜等誰：Claude、使用者
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -198,7 +198,7 @@ packages/ai-client/
 
 第一步做完（分支 `claude/project-thread-q0jv5f`：套件 `8a5223cb`、共用檢查與 CI `74143921`），還沒合併：
 
-- 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、207 個離線測試）通過。
+- 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、220 個離線測試）通過。
 - GitHub 上的 Codex 自動審查（PR #51，`1c993b62`）提了三項 P2，各先寫一個會失敗的測試再修，一項一個 commit：openai-chat 串流的拒答被丟掉（`1dc7db34`）、非串流回應分段慢到時被誤判閒置逾時（`e3761c6c`）、`extraBody` 改了推理等級時證據記錯（`1fc4d355`）。
 - 共用檢查：`tools/` 的 `npm run self-check` 通過；分派、gate、hook、雲端設定、邊界的測試都補了套件的案例。
 - 真的連線（雲端，假金鑰，2026-11-25）：Anthropic 回 401 `authentication_error` 並帶 `request-id`，分類成 `auth`；Google 回 400 `API_KEY_INVALID`，分類成 `auth`；OpenAI 與 OpenRouter 被雲端的網路設定擋住，沒測到。
