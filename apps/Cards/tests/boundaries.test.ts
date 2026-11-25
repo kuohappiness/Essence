@@ -68,7 +68,8 @@ void test('deck、study 不 import catalog；catalog 從 study 只 import 型別
   const root = new URL('../src/core/', import.meta.url);
   const specifiers = async (folder: string): Promise<{ path: string; name: string; typeOnly: boolean }[]> => {
     const found: { path: string; name: string; typeOnly: boolean }[] = [];
-    for (const path of (await readdir(new URL(folder + '/', root))).filter(each => each.endsWith('.ts'))) {
+    // 遞迴掃：deck 的認法在 kinds/ 底下（題型模組任務說明 §1-3）。
+    for (const path of (await readdir(new URL(folder + '/', root), { recursive: true })).map(each => each.replaceAll('\\', '/')).filter(each => each.endsWith('.ts'))) {
       const source = ts.createSourceFile(path, await readFile(new URL(folder + '/' + path, root), 'utf8'), ts.ScriptTarget.Latest, true);
       source.forEachChild(node => {
         if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {

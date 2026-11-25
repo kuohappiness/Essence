@@ -55,10 +55,17 @@ const codemirrorMessage = '@codemirror 只有 src/obsidian/ 與 src/main.ts 能�
 // 核心不能 import src 裡核心以外的檔案。
 // 核心的模組之間：src/core/<模組>/ 從別的模組只能 import 那個模組的 index.ts；deck 不能 import study；study 從 deck 只拿型別。
 const coreModule = /\/src\/core\/([^/]+)\//;
+// 題型模組（tasks/question-type-modules.md §1-3）：deck/kinds/ 的檔之間只 import shared.ts；polyphone、typing、order 另外可以 import group.ts。
+const kindFile = /\/src\/core\/deck\/kinds\/([^/]+)\.ts$/;
+const kindsOnGroup = ['polyphone', 'typing', 'order'];
 function crossModule(path, name, typeOnly) {
   if (!name.startsWith('.')) return undefined;
   const target = posix.normalize(posix.join(posix.dirname(path), name));
   if (!target.includes('/src/core/')) return '核心不能 import src 裡核心以外的檔案。';
+  const fromKind = kindFile.exec(path)?.[1], toKind = kindFile.exec(target)?.[1];
+  if (fromKind && toKind && toKind !== 'shared' && !(toKind === 'group' && kindsOnGroup.includes(fromKind))) {
+    return 'kinds/ 的檔之間只能 import shared.ts；polyphone、typing、order 另外可以 import group.ts（題型模組任務說明 §1-3）。';
+  }
   const from = coreModule.exec(path)?.[1];
   if (!from) return undefined;
   const to = coreModule.exec(target)?.[1];
