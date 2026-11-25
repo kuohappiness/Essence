@@ -9,7 +9,7 @@ import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
 import { readFrozenSteps, verifyLock, type FrozenStep } from './freeze.ts';
-import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
+import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent } from './jobs.ts';
 import { fillReplies } from './prompts.ts';
 
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
@@ -69,11 +69,27 @@ export interface QueueOptions {
 }
 
 /** 跑一份工作的每一步；回這份工作最後的結果種類。 */
+/**
+ * 上一次嘗試做完、這一次可以沿用的步驟（§8 第 14 條）：從第一個沒做完的那一步往前找一個切點，切點之後的步驟沒有一個接著切點之前的對話。
+ * 後一步開新的對話時就從那一步接著做；接著同一個對話的從那個對話的第一步重來，因為中斷過的對話（可能留著一半的回覆）和沒中斷的不一樣。
+ */
+function reusableSteps(folder: Folder, job: Job, events: readonly JobEvent[], attempt: number): { step: FrozenStep; detail: Record<string, unknown> }[] {
+  const previous = attempt - 1;
+  const done = new Map(events.filter(event => event.job === job.key && event.attempt === previous && event.type === 'step' && event.step !== undefined).map(event => [event.step!, event.detail ?? {}]));
+  const finished = job.steps.filter(step => done.has(step.step) && existsSync(join(attemptDir(folder, job, previous), `${String(step.step)}.md`)));
+  let cut = job.steps.find(step => !finished.includes(step))?.step ?? job.steps.length + 1;
+  const crosses = (at: number): boolean => job.steps.some(step => step.step >= at && job.steps.some(before => before.step < at && before.conversation === step.conversation));
+  while (cut > 1 && crosses(cut)) cut--;
+  return finished.filter(step => step.step < cut).map(step => ({ step, detail: done.get(step.step)! }));
+}
+
 async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string): Promise<StepResult['kind'] | 'done'> {
   const { config } = folder;
   const generator = config.generators.find(each => each.name === job.generator)!;
   const lesson = config.lessons.find(each => each.code === job.lesson)!;
-  const attempt = jobState(readEvents(folder), job.key).attempts + 1;
+  const events = readEvents(folder);
+  const attempt = jobState(events, job.key).attempts + 1;
+  const reused = reusableSteps(folder, job, events, attempt);
   appendEvent(folder, { type: 'start', job: job.key, attempt });
   const dir = attemptDir(folder, job, attempt);
   mkdirSync(dir, { recursive: true });
@@ -83,7 +99,13 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
   if (codex) writeFileSync(join(cwd, '教材.pdf'), pdf);
   const sessions = new Map<string, string>(), replies = new Map<string, string>();
   try {
-    for (const step of job.steps) {
+    for (const { step, detail } of reused) {
+      const reply = readFileSync(join(attemptDir(folder, job, attempt - 1), `${String(step.step)}.md`), 'utf8');
+      writeFileSync(join(dir, `${String(step.step)}.md`), reply, { encoding: 'utf8', flag: 'wx' });
+      replies.set(replyName(job, step), reply);
+      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ...detail, reused: detail.reused ?? attempt - 1 } });
+    }
+    for (const step of job.steps.slice(reused.length)) {
       const resume = sessions.get(step.conversation) ?? null;
       const prompt = fillReplies(readFileSync(join(folder.root, '凍結', '提示', step.file), 'utf8'), replies);
       const note = codex && resume === null ? CODEX_MATERIAL : null;

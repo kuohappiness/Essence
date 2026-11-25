@@ -31,7 +31,7 @@ void test('有效原稿：有 <<<完>>>、卡組段不是空的；不是卡組�
 });
 
 /** 自備提示的測試資料夾（不用 git 的檔案來源），凍結好。 */
-async function frozenFolder(groups: string, generators: string): Promise<Folder> {
+async function frozenFolder(groups: string, generators: string, concurrency = 1): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-gen-folder-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
@@ -40,7 +40,7 @@ async function frozenFolder(groups: string, generators: string): Promise<Folder>
   writeFileSync(join(root, '測試.yaml'), `
 名稱: 生成測試
 課庫: 課
-同時: 1
+同時: ${String(concurrency)}
 課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
 組:
 ${groups}
@@ -93,6 +93,47 @@ void test('多步：同一個對話接著說（resume、不再附 PDF），{{A.1
   assert.equal(second.pdf, null);
   assert.deepEqual(readdirSync(join(folder.root, '生成', '原稿')).sort(), ['乙-L3-claude-1-1.md', '乙-L3-claude-1-2.md', '甲-L3-claude-1.md']);
   assert.equal(jobState(readEvents(folder), '乙-L3-claude-1').status, 'done');
+});
+
+void test('多步的後一步失敗：那一步開新的對話時，重跑從那一步接著做（沿用前一步的回覆、記下沿用哪一次）；接著同一個對話的從頭來', async () => {
+  const groups = [
+    '  - { 名稱: 甲, 步驟: [{ 對話: A, 規則: { 自備: { L3: 一.md } }, 卡組: 否 }, { 對話: B, 規則: { 自備: { L3: 二.md } }, 卡組: 是 }] }',
+    '  - { 名稱: 乙, 步驟: [{ 對話: A, 規則: { 自備: { L3: 一.md } }, 卡組: 否 }, { 對話: A, 規則: { 自備: { L3: 二.md } }, 卡組: 是 }] }',
+  ].join('\n');
+  const folder = await frozenFolder(groups, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  let second = 0;
+  const { adapter, requests } = fake(request => request.text.startsWith('組一') ? { ...ok('第一步的清單'), ms: 7 } : ++second % 2 ? { kind: 'timeout', message: '睡過頭' } : ok(DECK));
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  assert.deepEqual(requests.map(request => request.text.slice(0, 2)), ['組一', '組二', '組二', '組一', '組二', '組一', '組二']);
+  // 甲：第二步是另一個對話，第二次只送第二步，帶著第一次的第一步回覆、附 PDF。
+  assert.equal(requests[2].text, '組二第二步：前一步是「第一步的清單」');
+  assert.equal(requests[2].resume, null);
+  assert.ok(requests[2].pdf !== null);
+  const events = readEvents(folder);
+  const reused = events.find(event => event.job === '甲-L3-claude-1' && event.attempt === 2 && event.step === 1);
+  assert.deepEqual([reused?.type, reused?.detail?.reused, reused?.detail?.ms], ['step', 1, 7]);
+  assert.equal(readFileSync(join(folder.root, '生成', '嘗試', '甲-L3-claude-1-2', '1.md'), 'utf8'), '第一步的清單');
+  // 乙：第二步接著同一個對話，第二次從第一步重來（中斷過的對話不等於沒中斷的）。
+  assert.equal(requests[5].resume, null);
+  assert.equal(requests[6].resume, 's1');
+  assert.deepEqual(['甲-L3-claude-1', '乙-L3-claude-1'].map(key => jobState(events, key).status), ['done', 'done']);
+});
+
+void test('同時跑兩份：兩份一起在跑，事件檔每一行都完整', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 3 }', 2);
+  let running = 0, most = 0;
+  const adapter: Adapter = async request => {
+    most = Math.max(most, ++running);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    running--;
+    request.record('{"type":"result"}', '');
+    return ok(DECK);
+  };
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  assert.equal(most, 2);
+  const lines = readFileSync(join(folder.root, '生成', '事件.jsonl'), 'utf8').split('\n').filter(Boolean);
+  const parsed = lines.map(line => JSON.parse(line) as { type: string });
+  assert.deepEqual(['start', 'done'].map(type => parsed.filter(event => event.type === type).length), [6, 6]);
 });
 
 void test('額度用完：整個佇列停下、記下重置時間、不重試；下一次開跑接著做沒做完的', async () => {
