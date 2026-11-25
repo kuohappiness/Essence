@@ -1,8 +1,24 @@
 # 多音字的點選填空（D-230 第 4 點，Codex L2 審查請求）
 
-狀態：待審｜下一步：Codex 審第一輪，報告寫在 `Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md`｜等誰：Codex
+狀態：待審｜下一步：Codex 審第二輪（只審修正），第一輪的報告與核對在 [2026-11-25-polyphone-pick-l2.md](<../Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
+
+## 第二輪（只審修正）
+
+- **待審**：`ef876f6d`（第一輪審的 commit）到這份請求所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/polyphone-pick-l2.md`）的差異，範圍：`src/core/deck/question-types.ts`（`choiceStem`、`visibleOf`、`readChoice` 的沒有句子的讀音、`readPick` 的結尾）、`src/core/ai/check.ts`（`checkChoice`、`sameSentenceTwice`、錨點的冒號）、`src/core/ai/existing.ts`（`planExisting` 的 `ambiguous`）、`src/core/study/compose.ts` 的 `choicePrompts`、`apps/Cards/docs/card-rules/elementary-chinese.md` 的〈讀音〉與〈輸出前自我檢查〉，以及它們的呼叫端與測試。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第一輪）〉：每一項的修法與 commit。
+- **請特別試**：
+  - `choiceStem` 只用在比對同一句：底線數不同的兩句指紋不同，出題時仍算兩句（會不會出在同一張、算句數時會不會多算），這樣有沒有問題。
+  - `visibleOf` 拆出來之後，比較卡與英文的 `countBlanks` 結果不變；字在連結文字裡（`[[x|長]]（＿＿）`）、在 HTML 標籤之間時多音字句的認法。
+  - R4 之後：家長刪到某個讀音沒有句子時改成翻面、補回句子又變回點選，同一個 `lt` 先後混著翻面自評與點選的紀錄，排程與紀錄重播對不對。
+  - R5 之後：預覽（`choicePreviewCards`）與今天的份、練習、小考的順序；同一組句子在筆記裡換行序時順序會變（筆記改了），這樣可不可以接受。
+  - R6 讓已有的相似字、比較卡組裡「有組、標題多了別的字、題目是一般問答」的目標多了 `pick-not-recognized` 的提示（只提示，出法不變），有沒有別的影響。
+  - R1 的 `sameSentenceTwice` 只看名稱結尾是讀音的項目、`（＿…）` 形狀的題目；`EXISTING_WHY.choiceAmbiguous` 只在加入前原本沒有同一句配兩個讀音時才擋。
+- **驗證**：完整的 `npm run check` 由每個 commit 的 pre-commit 在雲端 Linux 跑過；每一項的回歸測試都先在修正前的程式上確認失敗。
+- 報告接在 `Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md` 的後面，標「第二輪」。延續第一輪的發現標「延續 Rx」，修正帶出的標「Rx 修正引入」。
+
+以下是第一輪的請求，第二輪照用其中的回報格式。
 
 [任務說明](polyphone-pick.md) 改了出題語法的認法（[syntax §2-3](../syntax.md#比較卡點選填空)，`AGENTS.md`〈Code Review Rules〉的 P1 範圍）、一張卡的組法、計分與複習紀錄的寫法，以及 AI 草稿的檢查與送給 AI 的規則，屬於[高風險範圍](../../../../docs/agents/quality.md#高風險範圍要做-l2)，合併前做 L2。
 
