@@ -107,6 +107,22 @@ void test('同一句寫兩次算一句：一張卡裡的指紋不重複', () => 
   assert.equal(new Set(card.blanks.map(blank => blank.prompt.fingerprint)).size, 2);
 });
 
+void test('只差底線數的同一句也算一句（L2 第二輪 3）：一張卡裡、預覽裡都只出一次', () => {
+  const copies = deckOf(`- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^k3m9qa
+    - 他長（＿）得比哥哥高。 :: ㄓㄤˇ
+    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ
+    - 他長（＿＿＿）得比哥哥高。 :: ㄓㄤˇ
+    - 這條路很長（＿＿）。 :: ㄔㄤˊ
+    - 夏天的白天比較長（＿＿）。 :: ㄔㄤˊ
+    - 妹妹留著一頭長（＿＿）髮。 :: ㄔㄤˊ
+`);
+  const target = targetOf(copies);
+  // 一張三格：「他長」一格，另外兩格是 ㄔㄤˊ 的前兩句。
+  assert.deepEqual([...heads(make(target))].sort(), ['他長', '這條', '夏天'].sort());
+  // 預覽：第一張三格，其餘不同的句子各一張（只剩妹妹）；「他長」的另外兩種寫法不另出。
+  assert.deepEqual(choicePreviewCards(P, target).map(card => heads(card)), [heads(make(target)), ['妹妹']]);
+});
+
 void test('預覽：一張第一次的卡，其餘不同指紋的句子各一張（一格，字鍵照樣是全部讀音）', () => {
   const cards = choicePreviewCards(P, targetOf(long));
   assert.deepEqual(cards.map(card => card.blanks.length), [3, 1, 1, 1]);

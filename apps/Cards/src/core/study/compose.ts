@@ -132,8 +132,9 @@ function choiceCell(lt: string, target: Target, choice: Choice, prompt: Prompt):
  * 池裡不夠就全出。回傳照筆記的順序：同一組句子出題歷史不同，打亂前的順序也一樣（L2 R5）；畫面的順序由 choiceAssembled 打亂。
  */
 function choicePrompts(target: Target, choice: Choice, shown: Shown): Prompt[] {
-  const order = rotation(target, shown);
   const optionOf = (prompt: Prompt): number => choice.answers[target.prompts.indexOf(prompt)] ?? -1;
+  // 畫面上同一句的（只差底線數、註解，L2 第二輪 3）算一句：出題順序裡只留最前面的那一個。
+  const order = distinctSentences(rotation(target, shown), target, choice);
   const picked = new Set<Prompt>();
   choice.options.forEach((_, option) => {
     const first = order.find(prompt => optionOf(prompt) === option);
@@ -144,6 +145,16 @@ function choicePrompts(target: Target, choice: Choice, shown: Shown): Prompt[] {
     picked.add(prompt);
   }
   return target.prompts.filter(prompt => picked.has(prompt));
+}
+
+/** 畫面上同一句的（choice.stems 相同）只留第一個；used 是已經用過的句子。 */
+function distinctSentences(prompts: readonly Prompt[], target: Target, choice: Choice, used = new Set<string>()): Prompt[] {
+  return prompts.filter(prompt => {
+    const stem = choice.stems[target.prompts.indexOf(prompt)] ?? '';
+    if (used.has(stem)) return false;
+    used.add(stem);
+    return true;
+  });
 }
 
 /** 格子定了之後的一張多音字卡：打散格子與字鍵（字鍵三個以上時順序一定和括號不同，同比較卡）。 */
@@ -174,8 +185,9 @@ export function choicePreviewCards(deck: string, target: Target): Card[] {
   if (!choice) throw TypeError('不是多音字：' + target.name);
   const fields: ChoiceFields = { lt: target.id ?? '', deck, target, isNew: false, early: false };
   const first = choiceCardOf(fields, new Map());
-  const rest = rotation(target, new Map())
-    .filter(prompt => !first.blanks.some(blank => blank.prompt === prompt))
+  // 第一張用過的句子、畫面上同一句的（L2 第二輪 3）不另出。
+  const used = new Set(first.blanks.map(blank => choice.stems[target.prompts.indexOf(blank.prompt)] ?? ''));
+  const rest = distinctSentences(rotation(target, new Map()), target, choice, used)
     .map(prompt => choiceAssembled(fields, choice, [choiceCell(fields.lt, target, choice, prompt)]));
   return [first, ...rest];
 }

@@ -19,7 +19,7 @@ const hints = (text: string): { code: ProblemCode; line: number }[] => parseDeck
 
 void test('多音字：正式的寫法', () => {
   const target = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^k3m9qa', SIX, '    - 記憶錨點：\n        - ㄓㄤˇ：長大、帶頭的人：成長、班長\n        - ㄔㄤˊ：距離或時間久：長短、很長\n'));
-  assert.deepEqual(target.choice, { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
+  assert.deepEqual(target.choice, { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], stems: ['他長(_)得比哥哥高。', '小樹苗慢慢長(_)大了。', '他是我們班的班長(_)。', '這條路很長(_)。', '夏天的白天比較長(_)。', '妹妹留著一頭長(_)髮。'], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
   assert.equal(target.id, 'k3m9qa');
   assert.equal(target.group, undefined);
   assert.equal(target.ok, true);

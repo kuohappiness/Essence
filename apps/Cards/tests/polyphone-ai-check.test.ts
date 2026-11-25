@@ -74,6 +74,9 @@ void test('括號裡有讀音沒有句子：解析就不認（L2 R4），報 cho
 void test('choice-few-sentences（不符）：只有兩個讀音的每個讀音至少三句，三個以上的至少兩句；同一句寫兩次算一句', () => {
   assert.deepEqual(found(draft(NAME, SIX.slice(1))), [['不符', 3, 'choice-few-sentences']]);
   assert.deepEqual(found(draft(NAME, [...SIX.slice(1), SIX[1]])), [['不符', 3, 'choice-few-sentences']]);
+  // 只差底線數的同一句也算一句（L2 第二輪 3）。
+  const copies = ['    - 他長（＿）得比哥哥高。 :: ㄓㄤˇ', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 他長（＿＿＿）得比哥哥高。 :: ㄓㄤˇ', ...SIX.slice(3)];
+  assert.deepEqual(found(draft(NAME, copies)), [['不符', 3, 'choice-few-sentences']]);
   const three = ['    - 他行（＿＿）走得很快。 :: ㄒㄧㄥˊ', '    - 這樣做不行（＿＿）。 :: ㄒㄧㄥˊ', '    - 銀行（＿＿）在街角。 :: ㄏㄤˊ', '    - 他在家排行（＿＿）老二。 :: ㄏㄤˊ', '    - 道行（＿＿）很深。 :: ㄏㄥˋ', '    - 他的道行（＿＿）不夠。 :: ㄏㄥˋ'];
   const anchor = ['    - 記憶錨點：', '        - ㄒㄧㄥˊ：走：行走', '        - ㄏㄤˊ：行業：銀行', '        - ㄏㄥˋ：修行：道行'];
   assert.deepEqual(found(draft('行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音', three, anchor)), []);
