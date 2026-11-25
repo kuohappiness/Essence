@@ -39,20 +39,22 @@ export function pickKey(text: string): string {
 export const choiceStem = (question: string): string => pickKey(question).replace(/_+/g, '_');
 
 /**
- * 一段文字有幾個空格（§3〈空格怎麼數〉）：連續的 `＿` 算一格，半形 `__` 不算。不看行內程式碼、公式、整個圖片與嵌入、連結目的地、
- * HTML 標籤與 `%%` 註解；連結文字算，字元參照當一個 `＿`（渲染後就是）。隔開的內容換成 \0，渲染後它們也是不同的文字節點；
- * 註解渲染後不見了，直接拿掉。
+ * 畫面上看得到的文字（§3〈空格怎麼數〉）：不看行內程式碼、公式、整個圖片與嵌入、連結目的地、HTML 標籤與 `%%` 註解；連結文字算。
+ * 隔開的內容換成 \0，渲染後它們也是不同的文字節點；註解渲染後不見了，直接拿掉。字元參照照原樣（數空格時才當成 `＿`）。
  */
-function countBlanks(text: string): number {
-  const visible = maskInline(text)
+function visibleOf(text: string): string {
+  return maskInline(text)
     .replace(/%%[^]*?%%/g, '')
     .replace(/!\[\[[^\]\n]*\]\]/g, '\0')
     .replace(/!\[[^\]\n]*\]\([^)\n]*\)/g, '\0')
     .replace(/\[\[[^\]\n|]*\|([^\]\n]*)\]\]/g, '\0$1\0')
     .replace(/\[([^\]\n]*)\]\([^)\n]*\)/g, '\0$1\0')
-    .replace(/<\/?[a-zA-Z][^<>\n]*>/g, '\0')
-    .replace(/&#(?:65343|[xX]0*[fF][fF]3[fF]);/g, '＿');
-  return visible.match(/＿+/g)?.length ?? 0;
+    .replace(/<\/?[a-zA-Z][^<>\n]*>/g, '\0');
+}
+
+/** 一段文字有幾個空格：畫面上連續的 `＿` 算一格，半形 `__` 不算；字元參照當一個 `＿`（渲染後就是）。 */
+function countBlanks(text: string): number {
+  return visibleOf(text).replace(/&#(?:65343|[xX]0*[fF][fF]3[fF]);/g, '＿').match(/＿+/g)?.length ?? 0;
 }
 
 /** 名稱拆成字或詞、連續的括號與其後的文字；這一段有不成對、巢狀的括號，或沒有括號就是 null。 */
@@ -155,11 +157,11 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 
 /**
  * 多音字句（§1-2）：問答題、答案單行，題幹剛好一個空格，而且是緊接名稱的字（可以有粗體或螢光筆）的 `（＿…）`：左右括號全半形都算，
- * 裡面只有全形底線。行內程式碼、公式裡的不算（和數空格同一個遮罩）。
+ * 裡面只有全形底線。數空格和找位置都看畫面上的文字（visibleOf），註解、HTML 標籤裡的不算（L2 R3）。
  */
 function isChoiceSentence(prompt: Prompt, word: string): boolean {
   if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || countBlanks(prompt.question) !== 1) return false;
-  return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(maskInline(prompt.question));
+  return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(visibleOf(prompt.question));
 }
 
 export interface ChoiceReading {

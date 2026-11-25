@@ -95,6 +95,18 @@ void test('多音字：有的題是、有的不是：照翻面，pick-mixed 標�
   assert.deepEqual(hints(other), [{ code: 'pick-mixed', line: 6 }]);
 });
 
+void test('多音字（L2 R3）：看不見的文字裡的「長（＿＿）」不算；空格要是畫面上那一個', () => {
+  const hidden = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭＿髮。%% 長（＿＿） %% :: ㄔㄤˊ']);
+  assert.equal(first(hidden).choice, undefined);
+  assert.deepEqual(hints(hidden), [{ code: 'pick-mixed', line: 6 }]);
+  const html = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭＿髮。<span title="長（＿＿）"></span> :: ㄔㄤˊ']);
+  assert.deepEqual(hints(html), [{ code: 'pick-mixed', line: 6 }]);
+  // 註解在別的地方：照樣是多音字句。
+  const note = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭長（＿＿）髮。%% 註 %% :: ㄔㄤˊ']);
+  assert.ok(first(note).choice);
+  assert.deepEqual(hints(note), []);
+});
+
 void test('多音字：原本就停出的照舊', () => {
   const empty = parseDeck(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', ['他長（＿＿）得比哥哥高。 ::']));
   assert.equal(empty.targets[0].ok, false);
