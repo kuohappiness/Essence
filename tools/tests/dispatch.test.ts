@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { CARDS, RULES, entryTools, relatedTests, relativeImports, toolPaths } from '../dispatch.ts';
+import { CARDS, RULES, dispatch, entryTools, readChanges, relatedTests, relativeImports, toolPaths } from '../dispatch.ts';
 import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
@@ -573,3 +573,34 @@ void test('§A3 分派表：入口寫到的 tools/ 檔，檔名有任何 shell �
   }
 });
 
+void test('§A3 分派表：入口寫到的 tools/ 檔改了、刪了、改名了，暫存區與 range 都跑那個外掛（L2 ai-client 第三輪 延續 R3）', async t => {
+  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a\\b.ts', '檢查 工具.mjs', 'x.js'];
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  // 只動索引（不寫工作樹）：Windows 的檔名不能有 <、|、" 這些字，Git 的索引可以。
+  for (const name of names) {
+    for (const kind of ['modify', 'delete', 'rename'] as const) {
+      const root = await mkdtemp(join(tmpdir(), 'essence-dispatch-entry-'));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=DispatchTest', '-c', 'user.email=test@example.invalid', ...args], { cwd: root, env, encoding: 'utf8' });
+      const blob = (text: string) => execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: root, env, input: text, encoding: 'utf8' }).trim();
+      const add = (path: string, text: string) => git('update-index', '--add', '--cacheinfo', `100644,${blob(text)},${path}`);
+      git('init', '-q', '-b', 'main');
+      const tool = `tools/${name}`;
+      const script = `node "../../${tool.replace(/["\\$`]/g, ch => `\\${ch}`)}"`;
+      add('packages/ai-client/package.json', JSON.stringify({ scripts: { check: script } }));
+      add(tool, 'export {};\n');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      if (kind === 'modify') add(tool, 'export const x = 1;\n');
+      else git('update-index', '--force-remove', '--', tool);
+      if (kind === 'rename') add('tools/renamed.ts', 'export {};\n');
+      const label = `${name}：${kind}（${script}）`;
+      const staged = { kind: 'staged' } as const;
+      assert.equal(dispatch(readChanges(root, staged), { root, ci: false, compare: staged }).targets['ai-client'].run, 'full', `暫存區 ${label}`);
+      git('commit', '-q', '-m', kind);
+      const range = { kind: 'range', base, head: git('rev-parse', 'HEAD').trim() } as const;
+      assert.equal(dispatch(readChanges(root, range), { root, ci: true, compare: range }).targets['ai-client'].run, 'full', `range ${label}`);
+    }
+  }
+});

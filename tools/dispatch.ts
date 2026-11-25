@@ -166,7 +166,8 @@ export function relativeImports(text: string): string[] {
  * 只認程式（.ts、.mts、.cts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
  *
  * 兩種一起算，寧可多算（L2 ai-client 第二輪 延續 R3，比照 relativeImports 換前提）：
- * 1. known（repo 裡現有的 tools/ 程式檔）：文字裡出現那個路徑就算，不管怎麼加引號或跳脫（先拿掉反斜線再找一次）。
+ * 1. known（repo 裡現有的 tools/ 程式檔，加上這次改動的路徑：刪掉、改名的檔不在比較的樹裡，L2 ai-client 第三輪 延續 R3）：
+ *    文字裡出現那個路徑就算，不管怎麼加引號或跳脫（先拿掉反斜線再找一次）。
  *    不解析 shell 的引號：第一輪、第二輪都是正規式在引號裡的特殊字元停下來漏算的。多算只會多跑檢查。
  * 2. 正規式：給 known 裡沒有的（這次刪掉或還沒加的檔）。引號括住的整段算檔名，沒有引號的到空白或 shell 的符號為止。
  */
@@ -191,12 +192,12 @@ export function toolPaths(text: string, base: string | undefined, known: Iterabl
  * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json、packages/*\/package.json 的 scripts（從外掛或套件的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
  */
-export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
+export function entryTools(root: string, compare: Dispatch['compare'], changed: readonly string[] = []): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
     path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^(?:apps|packages)\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
-  const known = [...texts.keys()].filter(isSource);
+  const known = [...new Set([...texts.keys(), ...changed])].filter(isSource);
   for (const [path, text] of texts) {
     if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.', known)) entries.add(tool);
     else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined, known)) entries.add(tool);
@@ -282,7 +283,7 @@ export function dispatch(changes: Change[], { root, ci, compare }: { root: strin
   const blocked: string[] = [];
   const paths: PathResult[] = [];
   let entries: Set<string> | undefined;
-  const ctx: Context = { entries: () => (entries ??= entryTools(root, compare)) };
+  const ctx: Context = { entries: () => (entries ??= entryTools(root, compare, changes.map(change => change.path))) };
   for (const change of changes) {
     const rule = RULES.find(r => r.matches(change.path, change, ctx))!;
     paths.push({ status: change.status, path: change.path, rule: rule.id, ruleName: rule.name });
