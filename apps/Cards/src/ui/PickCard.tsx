@@ -113,7 +113,7 @@ function PickBody(props: BodyProps): React.JSX.Element {
   </div>;
   return <article className={'ec-card ec-pick' + (order ? ' is-order' : '')} lang="zh-Hant">
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span>{view.crumb}</span></div>
-    <p className="ec-pick-title">{order ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>
+    <p className="ec-pick-title">{order || group.choice ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>
     <ul className="ec-pick-rows" style={order ? { '--ec-order-width': `${String(width)}em` } as React.CSSProperties : undefined}>{card.blanks.map((blank, index) => {
       const cell = pick.cells[index];
       const movable = pick.stage === 'answer' || (pick.stage === 'retry' && cell.state === 'retry');
@@ -141,7 +141,9 @@ function PickBody(props: BodyProps): React.JSX.Element {
           {parts?.words && <span className="ec-cmp-words">{parts.words}</span>}
         </span>
       </div>;
-    })}</div>}
+    })}
+    {group.choice && group.choice.rest.length > 0 && <div className="ec-cmp-rest">{group.choice.rest.map((text, i) => note(text, i, 'ec-cmp-line'))}</div>}
+    </div>}
   </article>;
 }
 

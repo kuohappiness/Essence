@@ -144,7 +144,7 @@ const INPUT: DeepenInput = {
   words: null,
 };
 
-void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其他篇、以前出過的、地圖原文；版號 加深 v2', () => {
+void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其他篇、以前出過的、地圖原文；版號 加深 v3', () => {
   const task = deepenTask(INPUT);
   for (const line of ['  - abc222 能說明溶解｜記穩了｜第一題：Q :: A', '  - abc333 能比較｜常錯', '  - abc444 能算｜還沒記穩', '  - abc555 別篇的目標', '  - abc666 沒採用的', '- 家長調整：這次不要課外', '<<<全貌>>>', '全貌原文', '架構原文']) {
     assert.ok(task.split('\n').includes(line), line);
@@ -155,7 +155,7 @@ void test('任務段：目標標記穩了／常錯／還沒記穩、同單元其
   const none = deepenTask({ ...INPUT, map: null, siblings: [], gone: [] });
   assert.match(none, /最新的學習地圖：無。請先依教材補一份全貌與架構/);
   const prompt = buildDeepenPrompt(INPUT, []);
-  assert.equal(prompt.parts.at(-1)?.version, '加深 v2');
+  assert.equal(prompt.parts.at(-1)?.version, '加深 v3');
 });
 
 void test('D-210 第 3 點：加深也帶點選填空的勾選與英文的已有單字', () => {

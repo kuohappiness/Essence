@@ -516,8 +516,12 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
   await add('apps/Cards/docs/card-rules/elementary-social.md', '# 社會\n\n<!-- 以下送給 AI -->\n\n[決定](../decisions.md#d-1)、[短規則](../../experiments/t4/arch/短規則.md)\n');
   await add('apps/Cards/manifest.json', '{}\n');
   const social = (path: string) => 'apps/Cards/docs/card-rules/elementary-social.md  ' + path + '  FROZEN_RULES 的這一項沒有用到（連結改好了或拿掉了），請刪掉';
-  // elementary-chinese.md 在表上但這裡沒有這份檔（像是改名或拿掉）：那一列要刪，之後同名的新檔才不會被放過（第二輪）。
+  // elementary-chinese.md 在 v0.11 改好連結、從表上拿掉了：標記以下照新位置查，舊位置的連結算錯。
+  await add('apps/Cards/docs/card-rules/elementary-chinese.md', rule);
   assert.deepEqual(run(), [
+    'apps/Cards/docs/card-rules/elementary-chinese.md:3  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/card-rules/elementary-chinese.md:7  ../decisions.md#d-1  找不到檔案',
+    'apps/Cards/docs/card-rules/elementary-chinese.md:7  ../nowhere.md  找不到檔案',
     'apps/Cards/docs/card-rules/english.md:3  ../decisions.md#d-1  找不到檔案',
     'apps/Cards/docs/card-rules/english.md:7  ../nowhere.md  找不到檔案',
     'apps/Cards/docs/card-rules/review-probe.md:3  ../decisions.md#d-1  找不到檔案',
@@ -526,21 +530,20 @@ void test('§B3 製卡規則送給 AI 的部分：表上的檔與路徑，標記
     'apps/Cards/docs/other/x.md:3  ../decisions.md#d-1  找不到檔案',
     'apps/Cards/docs/other/x.md:7  ../decisions.md#d-1  找不到檔案',
     'apps/Cards/docs/other/x.md:7  ../nowhere.md  找不到檔案',
-    'apps/Cards/docs/card-rules/elementary-chinese.md  apps/Cards/docs/card-rules/elementary-chinese.md  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列',
     social('../../experiments/t4/arch/第二輪/判斷邊界.md'),
     social('../../experiments/t4/arch/第二輪/五步.md'),
     social('../../experiments/t4/arch/第二輪/格式.md'),
   ]);
 });
 
-void test('§B3 製卡規則整個資料夾搬走：表上的三列都要刪（L2 第三輪）；沒有 Cards 的 manifest 的 repo 不看', async t => {
+void test('§B3 製卡規則整個資料夾搬走：表上的每一列都要刪（L2 第三輪）；沒有 Cards 的 manifest 的 repo 不看', async t => {
   const { add, run } = await repo(t);
   await add('docs/x.md', '# X\n');
   assert.deepEqual(run(), []);
   await add('apps/Cards/manifest.json', '{}\n');
   await add('apps/Cards/docs/rules/english.md', '# 英文\n');
   const gone = (file: string) => `apps/Cards/docs/card-rules/${file}  apps/Cards/docs/card-rules/${file}  FROZEN_RULES 的這一列的檔不在了（拿掉或改名），請刪掉這一列`;
-  assert.deepEqual(run(), [gone('elementary-chinese.md'), gone('elementary-social.md'), gone('english.md')]);
+  assert.deepEqual(run(), [gone('elementary-social.md'), gone('english.md')]);
 });
 
 // D-214 第 2、3 點：「→」與反過來的「來自」都是往下游的邊；拆分列出每一支，退回的循環停在退回到的那一站。

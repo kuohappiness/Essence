@@ -8,7 +8,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 加深的任務段（tasks/ai-cards-deepen.md §2-2）：版號 `加深 v2`（第 3 批加點選填空與英文單字，D-210），和製卡的 `提示 v3` 分開記。規則組照這一篇的科目送（同最小版）。
 
 /** 任務段的版號：改字就加一。 */
-const DEEPEN_VERSION = '加深 v2';
+const DEEPEN_VERSION = '加深 v3'; // v3：點選填空的規則加相似詞（tasks/polyphone-pick.md §2）
 
 /** 這一篇的一個學習目標：ID、名稱、記穩了的判斷（§2-1）與第一題（寫法同 `提示 v3`）。 */
 interface DeepenTarget { id: string; name: string; mastery: Mastery; first?: string }

@@ -1,5 +1,5 @@
 import type { Deck, Target } from '../core/deck/index.ts';
-import { cardOf, pickPreviewCards } from '../core/study/index.ts';
+import { cardOf, choicePreviewCards, pickPreviewCards } from '../core/study/index.ts';
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
 import { isEnglish } from './english.ts';
@@ -20,13 +20,14 @@ export interface PreviewOptions {
 
 /**
  * 這一篇的每一題（同一個目標的整個題目池），照筆記順序；寫錯的目標跳過。還沒補 ID 的目標 lt 是空字串，畫面只拿它組鍵。
- * 比較卡（tasks/question-type-seam.md §9）：一組的卡放在組裡第一個目標的位置。
+ * 比較卡（tasks/question-type-seam.md §9）：一組的卡放在組裡第一個目標的位置。多音字（tasks/polyphone-pick.md §3-4）：第一次的卡加其餘的句子各一張。
  */
 function cardsOf(path: string, targets: readonly Target[]): Card[] {
   const ok = targets.filter(target => target.ok);
   const groups = new Set<string>();
   return ok.flatMap(target => {
     const key = target.group?.key;
+    if (target.choice) return choicePreviewCards(path, target);
     if (key === undefined) return target.prompts.map(prompt => cardOf({ lt: target.id ?? '', deck: path, target, prompt, isNew: false, early: false }));
     if (groups.has(key)) return [];
     groups.add(key);

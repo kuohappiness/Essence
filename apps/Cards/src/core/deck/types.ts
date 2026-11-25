@@ -49,6 +49,8 @@ export interface Target {
   idCandidates?: string[];
   /** 只有點選填空的目標才有（D-182、tasks/question-type-seam.md §3）。 */
   group?: PickGroup;
+  /** 只有多音字的點選填空才有（D-230 第 4 點、tasks/polyphone-pick.md §1）：選項是這個目標自己的，寫在名稱最後一個括號。 */
+  choice?: Choice;
   /** 只有全詩順序卡才有（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。 */
   order?: PoemOrder;
   /** 只有英文的句子排序卡才有（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。 */
@@ -88,6 +90,12 @@ export interface Couplet { title: string | null; index: number | null; lines: re
  * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。
  */
 export interface PickGroup { word: string; members: readonly string[]; key: string; title: string; wordKey: string; memberKeys: readonly string[] }
+/**
+ * 多音字（tasks/polyphone-pick.md §1、§4-2）：選項屬於這個目標的點選填空，選項是名稱最後一個括號裡的讀音（optionKeys 是正規化後的，和 options 對齊）。
+ * 不放進 group：group.key 是好幾個目標的組。answers 對齊 prompts，是每一題的答案在 options 的位置（解析時已確認畫面上沒有同一句寫兩次，
+ * 所以指紋也不重複）；anchors 對齊 options，是記憶錨點裡那個讀音的說明與常用詞（第一個全形冒號後面，沒有是 null）；rest 是對不到讀音的錨點行，照原本的順序。
+ */
+export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; anchors: readonly (string | null)[]; rest: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;
