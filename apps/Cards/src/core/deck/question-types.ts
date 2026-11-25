@@ -40,17 +40,21 @@ const withoutComments = (text: string): string => text.replace(/%%[^]*?%%/g, '')
 
 /**
  * 多音字句只收純文字（tasks/polyphone-pick.md §1-2，L2 第三輪換的前提）：拿掉 `%%` 註解與成對的粗體、螢光筆之後，
- * 不能有其他 Markdown 或 HTML 的符號（連結、程式碼、公式、HTML 與註解、斜體、刪除線、跳脫、字元參照、沒結束的 `%%`）和看不見的格式字元。
+ * 不能有其他 Markdown 或 HTML 的符號（連結、程式碼、公式、HTML 與註解、斜體、刪除線、跳脫、字元參照、沒結束的 `%%`）和看不見的格式字元，
+ * 也不能分成兩行、用清單或標題的記號開頭。
  * 這樣畫面上的句子就是原文去掉粗體與螢光筆，同一句、空格的位置都直接從原文看，不必猜渲染的結果；全形的符號是一般的字。
  */
 const NOT_PLAIN = /[*_`$<>[\]&~\\%]|\p{Cf}/u;
-const plainSentence = (text: string): boolean => !NOT_PLAIN.test(text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1'));
+/** 開頭是清單或標題的記號（L2 第四輪 2、3）：`1.` 後面空四格以上是程式碼區塊，`-`、`+`、`1.` 起頭是清單，指紋也會把清單記號拿掉。 */
+const BLOCK_START = /^(?:[-+]|\d+[.)]|#{1,6})(?:\s|$)/;
+const plainSentence = (text: string): boolean => !text.includes('\n') && !BLOCK_START.test(text.trim())
+  && !NOT_PLAIN.test(text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1'));
 
 /**
- * 多音字的兩句是不是同一句（§5、L2 R2）：多音字句是純文字，畫面上的句子就是原文；拿掉註解再照 pickKey（粗體、螢光筆、全半形、空白），
- * 連續的底線當一個（畫面上空格都一樣長）。
+ * 多音字的兩句是不是同一句（§5、L2 R2）：多音字句是純文字，畫面上的句子就是原文；拿掉註解、照 NFKC 把編碼不同但畫面一樣的字併成一個
+ * （組合字元、康熙部首，L2 第四輪 1），再照 pickKey（粗體、螢光筆、全半形、大小寫、空白），連續的底線當一個（畫面上空格都一樣長）。
  */
-export const choiceStem = (question: string): string => pickKey(withoutComments(question)).replace(/_+/g, '_');
+export const choiceStem = (question: string): string => pickKey(withoutComments(question).normalize('NFKC')).replace(/_+/g, '_');
 
 /**
  * 畫面上看得到的文字（§3〈空格怎麼數〉）：不看行內程式碼、公式、整個圖片與嵌入、連結目的地、HTML 標籤與 `%%` 註解；連結文字算。

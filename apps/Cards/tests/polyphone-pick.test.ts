@@ -125,13 +125,19 @@ void test('多音字（L2 第三輪 1、4）：句子只收純文字，有別的
     '妹妹留著一頭[[長（＿＿）]]髮。', '妹妹留著一頭[長（＿＿）](https://example.com)髮。', '妹妹留著一頭長（＿＿）*烏黑的*髮。',
     '妹妹留著一頭長（＿＿）_烏黑的_髮。', '妹妹留著一頭長（＿＿）`烏黑`髮。', '妹妹留著一頭長（＿＿）~~短~~髮。',
     '妹妹留著一頭長（＿＿）&amp;髮。', '妹妹留著一頭長（＿＿）\\*髮。', '妹妹留著一頭長（＿＿）$x$髮。', '妹妹留著一頭長（＿＿）髮。%% 沒有結束',
-    '妹妹留著一頭長（＿＿）​髮。',
+    '妹妹留著一頭長（＿＿）\u200b髮。',
+    // 開頭是清單、標題的記號（L2 第四輪 2、3：`1.` 後面空五格是程式碼區塊，`-`、`+` 起頭是清單），或分成兩行。
+    '1.     妹妹留著一頭長（＿＿）髮。', '1. 妹妹留著一頭長（＿＿）髮。', '2) 妹妹留著一頭長（＿＿）髮。', '- 妹妹留著一頭長（＿＿）髮。', '+ 妹妹留著一頭長（＿＿）髮。', '# 妹妹留著一頭長（＿＿）髮。',
   ];
   for (const question of formatted) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
     assert.equal(first(text).choice, undefined, question);
     assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 6 }], question);
   }
+  // 題目分成兩行（第二行可能是清單）也不認。
+  const lines = parseDeck(`- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音\n${SIX.slice(0, 5).map(line => `    - ${line}\n`).join('')}    - 妹妹留著一頭長（＿＿）\n      髮。 :: ㄔㄤˊ\n`);
+  assert.equal(lines.targets[0].choice, undefined);
+  assert.deepEqual(lines.problems.map(p => [p.code, p.line]), [['pick-mixed', 6]]);
   // 粗體、螢光筆（成對）與 `%%` 註解照樣認；全形的符號是一般的字。
   for (const question of ['妹妹留著一頭**長**（＿＿）髮。', '妹妹留著一頭==長==（＿＿）髮。', '**妹妹**留著一頭長（＿＿）髮。', '妹妹留著一頭長（＿＿）髮。%% 註 %%', '妹妹留著一頭長（＿＿）髮＊。']) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
@@ -151,6 +157,16 @@ void test('多音字（L2 第三輪 2、3）：畫面上同一句寫了兩次，
     assert.equal(first(text).choice, undefined, copy);
     assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 1 }, { code: 'pick-mixed', line: 7 }], copy);
     assert.match(parseDeck(text).problems[0].message, /同一句/, copy);
+  }
+  // 編碼不同、畫面一樣的（L2 第四輪 1：組合字元、康熙部首），只差大小寫、全半形、全形空白的（第四輪 4，寫成定義）也是同一句。
+  const pairs = [
+    ['例 café，他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '例 cafe\u0301，他長（＿＿）得比哥哥高。 :: ㄔㄤˊ'], ['弟弟長（＿＿）大了。 :: ㄓㄤˇ', '弟弟長（＿＿）\u2f24了。 :: ㄔㄤˊ'],
+    ['Do 這條路很長（＿＿）。 :: ㄔㄤˊ', 'do 這條路很長（＿＿）。 :: ㄔㄤˊ'], ['這條路很長（＿＿）！ :: ㄔㄤˊ', '這條路很長（＿＿）! :: ㄔㄤˊ'], ['甲　乙，這條路很長（＿＿）。 :: ㄔㄤˊ', '甲 乙，這條路很長（＿＿）。 :: ㄔㄤˊ'],
+  ];
+  for (const [one, two] of pairs) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, one, two]);
+    assert.equal(first(text).choice, undefined, two);
+    assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 7 }, { code: 'pick-mixed', line: 8 }], two);
   }
   // 只有這一句有 ㄏㄤˊ（第三輪 2）：照原題型出，不會少考一個讀音。
   const lone = deck('行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音', ['他行（＿＿）走得很快。 :: ㄒㄧㄥˊ', '他行（＿）走得很快。 :: ㄏㄤˊ', '他的道行（＿＿）很深。 :: ㄏㄥˋ']);
