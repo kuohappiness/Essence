@@ -1,6 +1,7 @@
 // 比較測試工具：結果的兩份報告（任務說明 tasks/rule-test-tool.md §5-9；指標照 tasks/rule-test-d236.md）。明細.md（私人）：逐課、逐生成器、逐份的指標，
 // 漏與部分的列、問題與裁定、評審 × 生成器的分項。摘要.md：只有數字（每組每份的平均），沒有教材、評分表與題目的原文，可以貼進 repo。
 import type { Folder } from './folder.ts';
+import { allContrasts } from './contrast.ts';
 import { allGates, type GateResult } from './gates.ts';
 import { EVALUATION } from './levels.ts';
 import { rejudgeStats } from './judge.ts';
@@ -62,7 +63,7 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
   for (const section of sections(folder, unique)) {
     lines.push(`## ${section.lesson}｜${section.generator}`, '', ...head(AVERAGE_HEAD), ...section.groups.map(each => row([each.group, ...averages(each.decks)])), '');
   }
-  lines.push(...gateLines(folder, reports), '');
+  lines.push(...gateLines(folder, reports), '', ...contrastLines(folder, reports));
   if (mode === 'summary') return lines;
 
   for (const report of reports) {
@@ -127,6 +128,21 @@ function gateLines(folder: Folder, reports: readonly BatchReport[]): string[] {
       ...late.length ? [`- 含看過前一批結果才決定加跑的份（批 ${late.join('、')}）`] : [],
       '',
     );
+  }
+  return lines;
+}
+
+/** 對照（rule-test-d236.md §8）：只報告，不判過不過。每一個對照先列兩組設定的差別，再逐批、逐課、逐生成器列每個指標。 */
+function contrastLines(folder: Folder, reports: readonly BatchReport[]): string[] {
+  const contrasts = allContrasts(folder.config, reports.flatMap(report => report.decks));
+  if (!contrasts.length) return [];
+  const lines = ['## 對照', '', '只報告，不判過不過（§8）。甲、乙只收同一個區組的份；明不明顯是單邊的兩兩比（平均比較少的那一邊，5%），兩組都有 3 份以上才判。', ''];
+  for (const contrast of contrasts) {
+    lines.push(`### ${contrast.name}：甲 ${contrast.a}、乙 ${contrast.b}`, '', '設定的差別：', '', ...contrast.differences.map(each => `- ${each}`), '');
+    for (const result of contrast.results) {
+      lines.push(`#### 批 ${String(result.batch)} ${result.lesson}｜${result.generator}（甲 ${String(result.counts.a)} 份、乙 ${String(result.counts.b)} 份）`, '', ...result.metrics.map(each => `- ${each.text}`), '');
+    }
+    if (contrast.missing.length) lines.push('缺一邊的：', '', ...contrast.missing.map(each => `- ${each}`), '');
   }
   return lines;
 }

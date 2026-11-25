@@ -32,10 +32,10 @@ const ENOUGH = 3;
 const ALPHA = 0.05;
 
 /** drop：這一份不算進這個指標（卡組存不了、不能加深時的確定接錯，rule-test-d236.md §2-1）。 */
-type Value = number | 'na' | 'unknown' | 'drop';
+export type Value = number | 'na' | 'unknown' | 'drop';
 
 /** 學習面指標的值（§7-2 第 4 道的清單）；na 是這一組不適用（不交地圖、沒跑加深）。 */
-function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
+export function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
   switch (metric) {
     case '傷到學習': return deck.harm.total + (deck.deepen?.harm ?? 0);
     case '判錯': return deck.harm.判錯;
@@ -47,7 +47,7 @@ function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
     case '確定接錯': return deck.deepen ? deck.deepen.wrong ?? 'drop' : 'na';
   }
 }
-function secondaryValue(deck: DeckMetrics, metric: SecondaryMetric): Value {
+export function secondaryValue(deck: DeckMetrics, metric: SecondaryMetric): Value {
   switch (metric) {
     case '規則字數': return deck.rulesChars;
     case '整份提示字數': return deck.promptChars;
@@ -69,7 +69,7 @@ const DEEPEN: readonly LearningMetric[] = ['加深機會漏掉', '確定接錯']
  * 一個指標兩組的值（§2-1）：任一組不適用是跳過；加深放棄的篇已經不在值裡，放棄到整份沒有加深的份不算，
  * 剩下的份數不到、或兩組放棄的篇差 2 篇以上，是未定（逾時不一定是平台的錯）。
  */
-function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], pick: (deck: DeckMetrics) => Value, metric: string): SeriesOr {
+export function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], pick: (deck: DeckMetrics) => Value, metric: string): SeriesOr {
   let c = candidate, b = baseline;
   if ((DEEPEN as readonly string[]).includes(metric) || metric === '傷到學習') {
     const gone = (decks: readonly DeckMetrics[]): number => decks.reduce((total, deck) => total + (deck.deepen?.abandoned ?? 0), 0);
@@ -85,7 +85,7 @@ function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetric
   if ([...vc, ...vb].some(each => typeof each !== 'number')) return { unknown: '有份沒有資料' };
   return { c: vc as number[], b: vb as number[], meanC: mean(vc as number[]), meanB: mean(vb as number[]) };
 }
-const isSeries = (s: SeriesOr): s is Series => 'c' in s;
+export const isSeries = (s: SeriesOr): s is Series => 'c' in s;
 const allowed = (tolerance: Tolerance, meanB: number): number => Math.max(tolerance.percent * meanB, tolerance.floor);
 
 /** 確定接錯的兩端（§6-3）：兩組交叉，一端候選的歧見當對、基準的當錯，另一端反過來。 */
@@ -227,7 +227,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
  * 配對（§7-1 第 1 點）：只收同一個區組裡有 b 組的 a 組份，和那幾份 b 組；收進來以後兩組混在一起比。
  * 沒有 b 組的區組，那幾份 a 組不收，回傳在 unpaired。對照（§8）用同一個函式。
  */
-function pairUp(decks: readonly DeckMetrics[], lesson: string, generator: string, a: string, b: string): { a: DeckMetrics[]; b: DeckMetrics[]; unpaired: number } {
+export function pairUp(decks: readonly DeckMetrics[], lesson: string, generator: string, a: string, b: string): { a: DeckMetrics[]; b: DeckMetrics[]; unpaired: number } {
   const here = decks.filter(deck => deck.lesson === lesson && deck.generator === generator);
   const key = (deck: DeckMetrics): string => `${String(deck.batch)}/${deck.block}`;
   const withB = new Set(here.filter(deck => deck.group === b).map(key));

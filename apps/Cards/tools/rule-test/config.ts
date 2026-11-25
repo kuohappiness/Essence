@@ -42,7 +42,7 @@ export interface Judge { name: string; kind: 'claude' | 'codex'; model: string; 
 export const LEARNING_METRICS = ['傷到學習', '判錯', '每個必備平均幾題', '多餘的題', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯'] as const;
 export type LearningMetric = (typeof LEARNING_METRICS)[number];
 /** 次要指標（§9）：只報告，學習面打平時才用。 */
-const SECONDARY_METRICS = ['規則字數', '整份提示字數', 'token', '生成時間'] as const;
+export const SECONDARY_METRICS = ['規則字數', '整份提示字數', 'token', '生成時間'] as const;
 export type SecondaryMetric = (typeof SECONDARY_METRICS)[number];
 
 /** 容許量＝max（百分比 × 基準平均，絕對下限）；下限處理基準平均是 0 的情況（§7-2 第 3、5 道）。 */
