@@ -141,3 +141,36 @@ void test('§3-2 寫前寫後核對：比較卡混進普通問答（新的寫法
   const out = planned(item(Q2), two);
   assert.deepEqual(parseDeck(out).targets[1].prompts.map(p => p.fingerprint), parseDeck(two).targets[1].prompts.map(p => p.fingerprint));
 });
+
+void test('多音字（tasks/polyphone-pick.md §5）：加合規的句子照常、再算一次是已經在；括號外的讀音、空格不合規、普通問答不寫；翻面的讀音卡照原池加題', () => {
+  const choice = (...body: string[]): string => head('2-1 密度') + ['- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^q8z3ka', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 這條路很長（＿＿）。 :: ㄔㄤˊ', ...body].join('\n') + '\n';
+  const choiceItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長（ㄓㄤˇ、ㄔㄤˊ） 讀音]]', ...body].join('\n');
+  const more = '    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ';
+  const out = planned(choiceItem(more), choice());
+  assert.equal(out, choice(more));
+  assert.ok(parseDeck(out).targets[0].choice);
+  already(choiceItem(more), out);
+  for (const bad of ['    - 他長（＿＿）得很快。 :: ㄓㄤ', '    - 他長__得很快。 :: ㄓㄤˇ', '    - 「長」有幾種念法？ :: 兩種']) assert.equal(left(choiceItem(bad), choice()), EXISTING_WHY.choiceLost, bad);
+  // 已有的翻面讀音卡（名稱沒有括號）：照原池的問句加題，還是翻面。
+  const flip = (...body: string[]): string => head('2-1 密度') + ['- 長 讀音 ^q8z3ka', '    - 「他長得比哥哥高」的長怎麼念？ :: ㄓㄤˇ', ...body].join('\n') + '\n';
+  const flipItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長 讀音]]', ...body].join('\n');
+  const asked = '    - 「這條路很長」的長怎麼念？ :: ㄔㄤˊ';
+  assert.equal(planned(flipItem(asked), flip()), flip(asked));
+});
+
+void test('多音字（PR #53 的 Codex 審查、L2 第三輪）：加過去之後不能再用點選填空就不寫；同一批的兩句、和原本的句子都算', () => {
+  const choice = (...body: string[]): string => head('2-1 密度') + ['- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^q8z3ka', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 這條路很長（＿＿）。 :: ㄔㄤˊ', ...body].join('\n') + '\n';
+  const choiceItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長（ㄓㄤˇ、ㄔㄤˊ） 讀音]]', ...body].join('\n');
+  // 同一句配兩個讀音（同一批、只差粗體、底線數、看不見的註解）、同一句同一個讀音只差粗體、不是純文字的句子。
+  const lost = [
+    ['    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '    - 小樹苗慢慢長（＿＿）大了。 :: ㄔㄤˊ'], ['    - 他**長**（＿＿）得比哥哥高。 :: ㄔㄤˊ'], ['    - 這條路很長（＿＿＿）。 :: ㄓㄤˇ'],
+    ['    - 這條路很長（＿＿）。%% 備註 %% :: ㄓㄤˇ'], ['    - 他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ'], ['    - 小樹苗慢慢長（＿＿）*大*了。 :: ㄓㄤˇ'],
+  ];
+  for (const body of lost) assert.equal(left(choiceItem(...body), choice()), EXISTING_WHY.choiceLost, body.join());
+  const fine = '    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ';
+  assert.equal(planned(choiceItem(fine), choice()), choice(fine));
+  // 原本就照翻面出的（家長手改出同一句兩個讀音）：照一般的核對加，還是翻面；點選填空才照答案評分，不會把答對記成差一點。
+  const conflicted = '    - 他長（＿＿＿）得比哥哥高。 :: ㄔㄤˊ';
+  assert.equal(parseDeck(choice(conflicted)).targets[0].choice, undefined);
+  assert.equal(planned(choiceItem(fine), choice(conflicted)), choice(conflicted, fine));
+});
