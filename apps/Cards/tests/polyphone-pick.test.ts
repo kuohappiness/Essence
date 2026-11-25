@@ -116,19 +116,27 @@ void test('多音字（L2 R3）：看不見的文字裡的「長（＿＿）」�
   assert.deepEqual(hints(note), []);
 });
 
-void test('多音字（L2 第二輪 4）：句子裡有 HTML 標籤的不算，照原題型出；連結在別的地方照樣算', () => {
-  // 畫面不在 <code> 這類受保護的內容裡放選項，選項會跑到句尾：寧可整個目標照原題型出。
-  for (const line of ['妹妹留著一頭<code>長（＿＿）</code>髮。 :: ㄔㄤˊ', '妹妹留著一頭長（＿＿）髮。<br> :: ㄔㄤˊ', '妹妹留著一頭<span>長</span>（＿＿）髮。 :: ㄔㄤˊ']) {
-    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), line]);
-    assert.equal(first(text).choice, undefined, line);
-    assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 6 }], line);
+void test('多音字（L2 第三輪 1、4）：句子只收純文字，有別的格式就照原題型出', () => {
+  // 畫面上的句子要能直接從原文看出來（同一句、空格的位置）：字可以粗體或螢光筆，`%%` 註解拿掉；其他格式都不認。
+  const formatted = [
+    '妹妹留著一頭<code>長（＿＿）</code>髮。', '妹妹留著一頭長（＿＿）髮。<br>', '妹妹留著一頭<span>長</span>（＿＿）髮。',
+    '妹妹留著一頭長（＿＿）髮。<br title="<">', '妹妹留著<!--一頭長（＿＿）-->髮。', '妹妹留著一頭長（＿＿）<https://example.com>髮。',
+    '妹妹留著一頭長（＿＿）[[髮]]。', '妹妹留著一頭長（＿＿）[髮](https://example.com)。', '妹妹留著一頭長（＿＿）[髮](<https://example.com>)。',
+    '妹妹留著一頭[[長（＿＿）]]髮。', '妹妹留著一頭[長（＿＿）](https://example.com)髮。', '妹妹留著一頭長（＿＿）*烏黑的*髮。',
+    '妹妹留著一頭長（＿＿）_烏黑的_髮。', '妹妹留著一頭長（＿＿）`烏黑`髮。', '妹妹留著一頭長（＿＿）~~短~~髮。',
+    '妹妹留著一頭長（＿＿）&amp;髮。', '妹妹留著一頭長（＿＿）\\*髮。', '妹妹留著一頭長（＿＿）$x$髮。', '妹妹留著一頭長（＿＿）髮。%% 沒有結束',
+    '妹妹留著一頭長（＿＿）​髮。',
+  ];
+  for (const question of formatted) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
+    assert.equal(first(text).choice, undefined, question);
+    assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 6 }], question);
   }
-  // 反引號的程式碼本來就看不到（＿＿），也不算。
-  assert.equal(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭`長（＿＿）`髮。 :: ㄔㄤˊ'])).choice, undefined);
-  for (const line of ['妹妹留著一頭長（＿＿）[[髮]]。 :: ㄔㄤˊ', '妹妹留著一頭長（＿＿）[髮](https://example.com)。 :: ㄔㄤˊ']) {
-    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), line]);
-    assert.ok(first(text).choice, line);
-    assert.deepEqual(hints(text), [], line);
+  // 粗體、螢光筆（成對）與 `%%` 註解照樣認；全形的符號是一般的字。
+  for (const question of ['妹妹留著一頭**長**（＿＿）髮。', '妹妹留著一頭==長==（＿＿）髮。', '**妹妹**留著一頭長（＿＿）髮。', '妹妹留著一頭長（＿＿）髮。%% 註 %%', '妹妹留著一頭長（＿＿）髮＊。']) {
+    const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
+    assert.ok(first(text).choice, question);
+    assert.deepEqual(hints(text), [], question);
   }
 });
 

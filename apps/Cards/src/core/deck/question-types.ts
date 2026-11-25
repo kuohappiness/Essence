@@ -35,14 +35,22 @@ export function pickKey(text: string): string {
   return foldWidth(bare).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-/**
- * 多音字的兩句是不是同一句（tasks/polyphone-pick.md §5、L2 R2、第二輪 2）：看畫面上的字（visibleOf，`%%` 註解、標籤不算），
- * 再照 pickKey，連續的底線當一個（畫面上空格都一樣長）。
- */
-export const choiceStem = (question: string): string => pickKey(visibleOf(question).replaceAll('\0', '')).replace(/_+/g, '_');
+/** 拿掉 `%%` 註解（渲染後看不見）。 */
+const withoutComments = (text: string): string => text.replace(/%%[^]*?%%/g, '');
 
-/** 一個 HTML 標籤（開頭或結尾）。 */
-const HTML_TAG = /<\/?[a-zA-Z][^<>\n]*>/;
+/**
+ * 多音字句只收純文字（tasks/polyphone-pick.md §1-2，L2 第三輪換的前提）：拿掉 `%%` 註解與成對的粗體、螢光筆之後，
+ * 不能有其他 Markdown 或 HTML 的符號（連結、程式碼、公式、HTML 與註解、斜體、刪除線、跳脫、字元參照、沒結束的 `%%`）和看不見的格式字元。
+ * 這樣畫面上的句子就是原文去掉粗體與螢光筆，同一句、空格的位置都直接從原文看，不必猜渲染的結果；全形的符號是一般的字。
+ */
+const NOT_PLAIN = /[*_`$<>[\]&~\\%]|\p{Cf}/u;
+const plainSentence = (text: string): boolean => !NOT_PLAIN.test(text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1'));
+
+/**
+ * 多音字的兩句是不是同一句（§5、L2 R2）：多音字句是純文字，畫面上的句子就是原文；拿掉註解再照 pickKey（粗體、螢光筆、全半形、空白），
+ * 連續的底線當一個（畫面上空格都一樣長）。
+ */
+export const choiceStem = (question: string): string => pickKey(withoutComments(question)).replace(/_+/g, '_');
 
 /**
  * 畫面上看得到的文字（§3〈空格怎麼數〉）：不看行內程式碼、公式、整個圖片與嵌入、連結目的地、HTML 標籤與 `%%` 註解；連結文字算。
@@ -55,7 +63,7 @@ function visibleOf(text: string): string {
     .replace(/!\[[^\]\n]*\]\([^)\n]*\)/g, '\0')
     .replace(/\[\[[^\]\n|]*\|([^\]\n]*)\]\]/g, '\0$1\0')
     .replace(/\[([^\]\n]*)\]\([^)\n]*\)/g, '\0$1\0')
-    .replace(new RegExp(HTML_TAG.source, 'g'), '\0');
+    .replace(/<\/?[a-zA-Z][^<>\n]*>/g, '\0');
 }
 
 /** 一段文字有幾個空格：畫面上連續的 `＿` 算一格，半形 `__` 不算；字元參照當一個 `＿`（渲染後就是）。 */
@@ -163,14 +171,14 @@ const CHOICE_ENDING = '讀音';
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * 多音字句（§1-2）：問答題、答案單行，題幹剛好一個空格，而且是緊接名稱的字（可以有粗體或螢光筆）的 `（＿…）`：左右括號全半形都算，
- * 裡面只有全形底線。數空格和找位置都看畫面上的文字（visibleOf），註解、HTML 標籤裡的不算（L2 R3）。
- * 畫面上的句子有 HTML 標籤的不算（L2 第二輪 4）：畫面不在 `<code>` 這類受保護的內容裡放選項，認了會把選項放到句尾；照原題型出比較保險。
+ * 多音字句（§1-2）：問答題、答案單行，題幹是純文字（plainSentence）、剛好一個空格，而且是緊接名稱的字（可以有粗體或螢光筆）的 `（＿…）`：
+ * 左右括號全半形都算，裡面只有全形底線。註解裡的不算（L2 R3）。
  */
 function isChoiceSentence(prompt: Prompt, word: string): boolean {
-  if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || countBlanks(prompt.question) !== 1) return false;
-  if (HTML_TAG.test(maskInline(prompt.question).replace(/%%[^]*?%%/g, ''))) return false;
-  return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(visibleOf(prompt.question));
+  if (prompt.kind !== 'qa' || prompt.answer.includes('\n')) return false;
+  const text = withoutComments(prompt.question);
+  if (!plainSentence(text) || (text.match(/＿+/g)?.length ?? 0) !== 1) return false;
+  return new RegExp(escapeRegExp(word) + '(?:\\*\\*|==)?[（(]＿+[）)]').test(text);
 }
 
 export interface ChoiceReading {
