@@ -62,7 +62,7 @@ void test('句子排序是點選填空：一個目標，這一題的每一格是
   const h = await setup(t, { [P]: DECK });
   const s = await h.open({ subject: '英文' });
   const { card } = view(s);
-  assert.equal(questionType(card), 'pick');
+  assert.equal(questionType(card), 'order');
   assert.deepEqual(card.blanks.map(blank => [blank.lt, blank.answer, blank.cell]), [['order1', 'the', 0], ['order1', 'man', 1], ['order1', 'the', 2], ['order1', 'dog', 3]]);
   assert.deepEqual([...(card.group?.keys ?? [])].sort(), ['dog', 'man', 'the', 'the']);
   assert.notDeepEqual(card.group?.keys, ['the', 'man', 'the', 'dog'], '字鍵不照句子的順序');

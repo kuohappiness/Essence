@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { Target } from '../src/core/deck/index.ts';
 import { cardOf, questionType } from '../src/core/study/index.ts';
+import type { QuestionType } from '../src/core/study/index.ts';
 import { setup, view } from './helpers/pick-session.ts';
 
 // 卡型分類表（題型模組討論稿 §5 第 0 段，apps/Cards/docs/Claude Codex Discussion/2026-11-25-question-type-modules.md）：
@@ -84,18 +85,18 @@ const ROWS: readonly [string, string, readonly string[], readonly string[]][] = 
     ['flip flip', 'group pick', 'flip flip', 'flip flip']],
   // 排序：非英文是全詩順序（不用寫全詩）；英文沒寫全詩是句子排序（§2-3〈全詩順序卡〉〈英文的句子排序〉）。
   ['鳥鳴澗 全詩 排序', '人閒桂花落',
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick'],
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick']],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order'],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order']],
   ['間接問句 排序', 'where',
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick'],
-    ['flip flip', 'flip flip', 'flip flip', 'sentence-order pick']],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order'],
+    ['flip flip', 'flip flip', 'flip flip', 'sentence-order order']],
   ['鳥鳴澗 第 1 句 接句', '夜靜春山空',
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip'],
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip']],
   // 讀得出組又寫了排序、接句（題型模組任務說明 §1-3 第 3 點，Fable 第一輪的窮舉）：比較句照比較卡（比較卡先認）；兩格填空在國語是全詩順序，
   // 英文沒寫全詩、句子排序又排除讀得出組的名稱，照翻面；一格填空是接句。多音字的括號讀不出組，只有一格填空的是接句。
   ['寨（寨、塞） 排序', '寨',
-    ['flip flip', 'group pick', 'flip flip', 'poem-order pick'],
+    ['flip flip', 'group pick', 'flip flip', 'poem-order order'],
     ['flip flip', 'group pick', 'flip flip', 'flip flip']],
   ['寨（寨、塞） 接句', '寨',
     ['flip flip', 'group pick', 'couplet flip', 'flip flip'],
@@ -148,8 +149,8 @@ const KIND_SAMPLES: readonly { kind: string; type: string; subject: string; text
   { kind: 'typing-inflection', type: 'typed', subject: '英文', text: '- go 過去式 ^aaa111\n    - Yesterday I ＿＿ to school.（去） :: went\n' },
   { kind: 'group', type: 'pick', subject: '國語', text: '- 寨（寨、塞） 相似字 ^aaa111\n    - 山＿＿ :: 寨\n- 塞（寨、塞） 相似字 ^bbb222\n    - 大＿＿車 :: 塞\n' },
   { kind: 'choice', type: 'pick', subject: '國語', text: '- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^aaa111\n    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ\n    - 這條路很長（＿＿）。 :: ㄔㄤˊ\n' },
-  { kind: 'poem-order', type: 'pick', subject: '國語', text: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n' },
-  { kind: 'sentence-order', type: 'pick', subject: '英文', text: '- 間接問句 排序 ^aaa111\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives==.\n' },
+  { kind: 'poem-order', type: 'order', subject: '國語', text: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n' },
+  { kind: 'sentence-order', type: 'order', subject: '英文', text: '- 間接問句 排序 ^aaa111\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives==.\n' },
 ];
 
 for (const { kind, type, subject, text } of KIND_SAMPLES) {
@@ -163,13 +164,13 @@ for (const { kind, type, subject, text } of KIND_SAMPLES) {
 }
 
 // 題型對得上（題型模組任務說明 §1-7，Fable G2 b）：卡型決定題型，questionType 只看卡片自己（compose.ts），兩邊在這裡對齊。
-// 比較卡、多音字、排序是點選；其他卡型和沒有卡型的照這張卡打不打字。多一種卡型時這張表編譯不過，要寫它是不是點選。
-const PICKED: Record<NonNullable<Target['kind']>['id'], boolean> = { group: true, polyphone: true, order: true, typing: false, couplet: false };
+// 比較卡、多音字是點選，排序是排序（A2，§1-8）；其他卡型和沒有卡型的照這張卡打不打字（null）。多一種卡型時這張表編譯不過，要寫它是哪一種題型。
+const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null };
 void test('題型對得上：卡型範例的每一張卡，questionType 和卡型一致', async t => {
   for (const { kind, subject, text } of KIND_SAMPLES) {
     const h = await setup(t, { [`Essence Cards/${subject}/範例.md`]: `---\n科目: ${subject}\n---\n${text}` });
     const card = view(await h.open({ subject })).card;
     const own = card.target.kind;
-    assert.equal(questionType(card), own && PICKED[own.id] ? 'pick' : card.typed ? 'typed' : 'flip', kind);
+    assert.equal(questionType(card), (own && TYPE_OF[own.id]) ?? (card.typed ? 'typed' : 'flip'), kind);
   }
 });

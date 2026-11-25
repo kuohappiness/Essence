@@ -4,11 +4,11 @@ import type { Blank, Card, CardGroup, Shown } from './types.ts';
 // 題型接點的第二個（D-181）：這張卡是哪一種題型、有哪幾格。其他三個在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
 
 /** 新增題型時多一個值，TypeScript 會指出 FLOWS、PREVIEWS、SCREENS 與 tests/question-types.test.ts 的範例缺哪一列；解析或組卡沒接上，那個範例的測試不過。 */
-export type QuestionType = 'flip' | 'typed' | 'pick';
+export type QuestionType = 'flip' | 'typed' | 'pick' | 'order';
 
-/** 一張卡是哪一種題型：唯一判斷的地方，Card 不多存一份。 */
+/** 一張卡是哪一種題型：唯一判斷的地方，Card 不多存一份。排序（全詩、句子）是自己的題型（題型模組任務說明 §1-8），作答照點選填空。 */
 export function questionType(card: Card): QuestionType {
-  return card.group ? 'pick' : card.typed ? 'typed' : 'flip';
+  return card.group?.order ? 'order' : card.group ? 'pick' : card.typed ? 'typed' : 'flip';
 }
 
 /**

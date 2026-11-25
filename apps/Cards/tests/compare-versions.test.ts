@@ -389,8 +389,8 @@ void test('卡型摘要：每一種卡型照筆記寫出卡型、樣子與內容
   // 今天的份每張卡的題型與格數（都是新卡）：多音字兩個讀音、只有兩句，一張兩格（tasks/polyphone-pick.md 出題第 1 點）；全詩兩格、句子排序三格。
   const today = Object.fromEntries(snap.today.map(item => [item.lt, [item.type, item.cells]]));
   assert.deepEqual(today, {
-    zhai00: ['pick', 1], sai000: ['pick', 1], chang0: ['pick', 2], flip00: ['flip', 1], poem00: ['pick', 2], coup00: ['flip', 1],
-    gopast: ['typed', 1], gram00: ['typed', 1], order0: ['pick', 3], borrow: ['flip', 1],
+    zhai00: ['pick', 1], sai000: ['pick', 1], chang0: ['pick', 2], flip00: ['flip', 1], poem00: ['order', 2], coup00: ['flip', 1],
+    gopast: ['typed', 1], gram00: ['typed', 1], order0: ['order', 3], borrow: ['flip', 1],
   });
 });
 

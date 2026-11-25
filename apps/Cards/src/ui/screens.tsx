@@ -4,6 +4,7 @@ import { anchorBreak, blankCount, extraLabel, lineSpeech, otherAnswers, question
 import type { CardView, Spelling, TypedView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
+import { orderScreen } from './OrderCard.tsx';
 import { pickScreen } from './PickCard.tsx';
 import { Rates, type BodyProps, type Screen } from './screen.tsx';
 import { firstMaterial, resolveSource } from './sources.ts';
@@ -249,4 +250,4 @@ const typedScreen: Screen = {
   stage: view => typingOf(view) ? ' is-typing' : '',
 };
 
-export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen, pick: pickScreen };
+export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen, pick: pickScreen, order: orderScreen };
