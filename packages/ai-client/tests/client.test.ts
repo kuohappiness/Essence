@@ -513,3 +513,23 @@ void test('extraBody 不能改模型或串流；改了哪些欄位記在 trace�
   assert.deepEqual(bodyOf(google).generationConfig, { thinkingConfig: { thinkingLevel: 'high' } });
   assert.ok(result.trace.warnings.includes('extraBody set: generationConfig.thinkingConfig.thinkingLevel'), result.trace.warnings.join(' / '));
 });
+
+void test('目錄的形狀壞掉：跳過那一筆、回報，不讓整個 client 建不起來；不存在的日期也擋（L2 R14）', () => {
+  const overrides = { providers: [
+    { id: 'openai', models: [
+      { id: 'null-price', prices: [null] },
+      { id: 'feb-30', prices: [{ input: 1, output: 2 }], pricesAsOf: '2026-02-30' },
+      { id: 'bad-from', prices: [{ input: 1, output: 2, effectiveFrom: '2026-13-01' }], pricesAsOf: '2026-11-25' },
+      null,
+    ] },
+    { id: 'anthropic', models: 'nope' },
+    { id: 'google', limits: { maxRequestBytes: 'big' } },
+    null,
+  ] } as unknown as NonNullable<Parameters<typeof createAiClient>[0]>['catalog'];
+  const client = createAiClient({ catalog: overrides });
+  const found = client.catalogProblems.map(p => `${p.provider}/${p.model ?? ''}`).sort();
+  assert.deepEqual(found, ['(沒有 id)/', 'anthropic/', 'google/', 'openai/', 'openai/bad-from', 'openai/feb-30', 'openai/null-price'].sort());
+  // 其他廠商照常能用。
+  assert.ok(client.providers().some(p => p.id === 'openrouter'));
+  assert.ok(!createAiClient({ catalog: { providers: 'nope' } as unknown as typeof overrides }).catalogProblems.some(p => p.provider === 'openai'));
+});

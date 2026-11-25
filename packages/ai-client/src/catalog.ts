@@ -26,7 +26,14 @@ export function isAllowedUrl(raw: string): boolean {
   return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
 }
 
-const isDate = (value: unknown): boolean => typeof value === 'string' && DATE.test(value) && !Number.isNaN(Date.parse(value));
+/** 日曆上真的有的日期：2026-02-30 這類 Date.parse 會往後推的也擋（L2 R14）。 */
+function isDate(value: unknown): boolean {
+  if (typeof value !== 'string' || !DATE.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isPrice = (value: unknown): boolean => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
 function reasoningProblem(spec: unknown): string | null {
@@ -47,6 +54,8 @@ function inputsProblem(inputs: unknown): string | null {
 }
 
 function priceProblem(price: PriceSpec): string | null {
+  if (!isObject(price)) return 'prices 的每一筆要是物件';
+  if (price.longContext !== undefined && !isObject(price.longContext)) return 'longContext 要是物件';
   if (price.effectiveFrom !== undefined && !isDate(price.effectiveFrom)) return 'effectiveFrom 不是合法日期';
   for (const key of ['input', 'output'] as const) if (!isPrice(price[key])) return `價格的 ${key} 要是非負數`;
   for (const key of ['cachedInput', 'cacheWrite'] as const) if (price[key] !== undefined && !isPrice(price[key])) return `價格的 ${key} 要是非負數`;
@@ -56,6 +65,7 @@ function priceProblem(price: PriceSpec): string | null {
 }
 
 function modelProblem(model: ModelSpec): string | null {
+  if (!isObject(model)) return '模型要是物件';
   if (typeof model.id !== 'string' || !model.id) return '模型沒有 id';
   const inputs = inputsProblem(model.inputs);
   if (inputs) return inputs;
@@ -76,6 +86,19 @@ function modelProblem(model: ModelSpec): string | null {
   return null;
 }
 
+/** 廠商裡的物件欄位：形狀不對就整筆跳過，不讓之後讀欄位時丟例外（L2 R14）。 */
+function providerShapeProblem(p: ProviderSpec): string | null {
+  for (const key of ['defaults', 'limits', 'headers', 'options'] as const) {
+    if (p[key] !== undefined && !isObject(p[key])) return `${key} 要是物件`;
+  }
+  if (p.models !== undefined && !Array.isArray(p.models)) return 'models 要是陣列';
+  for (const [key, value] of Object.entries(p.limits ?? {})) {
+    if (!Number.isInteger(value) || value <= 0) return `limits 的 ${key} 要是正整數`;
+  }
+  if (Object.values(p.headers ?? {}).some(v => typeof v !== 'string')) return 'headers 的值要是字串';
+  return null;
+}
+
 /** 驗一份目錄：回傳能用的部分與每個問題。dialects 是登記過的方言名稱。 */
 export function validateCatalog(input: unknown, dialects: ReadonlySet<string>): { catalog: Catalog; problems: CatalogProblem[] } {
   const problems: CatalogProblem[] = [];
@@ -83,13 +106,15 @@ export function validateCatalog(input: unknown, dialects: ReadonlySet<string>): 
   const providers: ProviderSpec[] = [];
   const seen = new Set<string>();
   for (const p of Array.isArray(raw.providers) ? raw.providers : []) {
-    const id = typeof p?.id === 'string' && p.id ? p.id : '(沒有 id)';
+    const id = isObject(p) && typeof p.id === 'string' && p.id ? p.id : '(沒有 id)';
     const fail = (problem: string) => problems.push({ provider: id, problem });
     if (id === '(沒有 id)') { fail('廠商沒有 id'); continue; }
     if (seen.has(id)) { fail('id 重複'); continue; }
     if (!dialects.has(p.dialect)) { fail(`方言 ${String(p.dialect)} 沒有登記`); continue; }
     if (typeof p.baseUrl !== 'string' || !isAllowedUrl(p.baseUrl)) { fail('baseUrl 要是 https，或本機的 http'); continue; }
     if (p.auth !== null && (typeof p.auth !== 'object' || typeof p.auth.header !== 'string' || !p.auth.header)) { fail('auth 要是 { header, scheme? } 或 null'); continue; }
+    const shape = providerShapeProblem(p);
+    if (shape) { fail(shape); continue; }
     const defaultsProblem = inputsProblem(p.defaults?.inputs) ?? reasoningProblem(p.defaults?.reasoning);
     if (defaultsProblem) { fail(`defaults：${defaultsProblem}`); continue; }
     const models: ModelSpec[] = [];
@@ -113,24 +138,34 @@ export interface CatalogOverrides {
   providers?: (Partial<Omit<ProviderSpec, 'models'>> & { id: string; models?: (Partial<ModelSpec> & { id: string })[] })[];
 }
 
-export function mergeCatalog(base: Catalog, extra: CatalogOverrides | undefined): unknown {
-  if (!extra?.providers) return base;
-  const providers = base.providers.map(p => ({ ...p, models: [...p.models] }));
-  for (const add of extra.providers) {
-    const existing = providers.find(p => p.id === add.id);
-    if (!existing) {
-      providers.push({ ...add, models: add.models ?? [] } as ProviderSpec);
+/**
+ * 形狀不對的覆寫不在這裡丟例外：原樣放進結果，交給 validateCatalog 跳過並回報（L2 R14）。
+ * 只有 providers 本身不是陣列時沒有可以放的地方，在這裡回報。
+ */
+export function mergeCatalog(base: Catalog, extra: CatalogOverrides | undefined): { catalog: unknown; problems: CatalogProblem[] } {
+  if (!isObject(extra) || extra.providers === undefined) return { catalog: base, problems: [] };
+  if (!Array.isArray(extra.providers)) return { catalog: base, problems: [{ provider: '(覆寫)', problem: 'providers 要是陣列' }] };
+  const providers: unknown[] = base.providers.map(p => ({ ...p, models: [...p.models] }));
+  for (const add of extra.providers as unknown[]) {
+    const existing = isObject(add) ? (providers as ProviderSpec[]).find(p => isObject(p) && p.id === add.id) : undefined;
+    if (!isObject(add) || !existing) {
+      providers.push(isObject(add) ? { ...add, models: add.models ?? [] } : add);
       continue;
     }
     const { models, ...fields } = add;
     Object.assign(existing, fields);
-    for (const m of models ?? []) {
-      const i = existing.models.findIndex(x => x.id === m.id);
-      if (i === -1) existing.models.push(m);
-      else existing.models[i] = { ...existing.models[i], ...m };
+    if (models === undefined) continue;
+    if (!Array.isArray(models)) {
+      (existing as { models: unknown }).models = models;
+      continue;
+    }
+    for (const m of models as unknown[]) {
+      const i = isObject(m) ? existing.models.findIndex(x => x.id === m.id) : -1;
+      if (i === -1) existing.models.push(m as ModelSpec);
+      else existing.models[i] = { ...existing.models[i], ...(m as Partial<ModelSpec>) };
     }
   }
-  return { ...base, providers };
+  return { catalog: { ...base, providers }, problems: [] };
 }
 
 export const BUILTIN_CATALOG: unknown = builtin;

@@ -103,7 +103,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
   const clock: Clock = { ...defaultClock, ...options.clock };
   const dialectIds = new Set(DIALECTS.keys());
   const base = validateCatalog(BUILTIN_CATALOG, dialectIds);
-  const merged = validateCatalog(mergeCatalog(base.catalog, options.catalog), dialectIds);
+  const overrides = mergeCatalog(base.catalog, options.catalog);
+  const merged = validateCatalog(overrides.catalog, dialectIds);
+  merged.problems.unshift(...overrides.problems);
   // 送出端用的目錄是自己的一份、凍結的：providers() 交出去的改不動，呼叫端事後改自己傳的 catalog 也影響不到（L2 R2）。
   const catalog = deepFreeze(structuredClone(merged.catalog));
   const problems = deepFreeze(structuredClone([...base.problems, ...merged.problems.filter(p => !base.problems.some(b => b.provider === p.provider && b.model === p.model))]));
