@@ -165,6 +165,8 @@ void test('多音字（PR #53 的 Codex 審查）：加題後同一句配了兩�
   assert.equal(left(choiceItem('    - 他**長**（＿＿）得比哥哥高。 :: ㄔㄤˊ'), choice()), EXISTING_WHY.choiceAmbiguous);
   // 底線數不同畫面上是同一句（L2 R2）。
   assert.equal(left(choiceItem('    - 這條路很長（＿＿＿）。 :: ㄓㄤˇ'), choice()), EXISTING_WHY.choiceAmbiguous);
+  // 只差看不見的註解也是同一句（L2 第二輪 2）。
+  assert.equal(left(choiceItem('    - 這條路很長（＿＿）。%% 備註 %% :: ㄓㄤˇ'), choice()), EXISTING_WHY.choiceAmbiguous);
   // 同一句、同一個讀音只差粗體：不是兩個讀音，照常加。
   const bold = '    - 他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ';
   assert.equal(planned(choiceItem(bold), choice()), choice(bold));

@@ -203,7 +203,7 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
  */
 function sameSentenceTwice(target: CheckedTarget, issue: Report): void {
   if (!/(^|[\s）)])讀音$/.test(target.name.replaceAll('**', '').trim())) return;
-  const slot = target.questions.filter(q => q.kind === 'qa' && /[（(]＿+[)）]/.test(q.front));
+  const slot = target.questions.filter(q => q.kind === 'qa' && /\(_+\)/.test(choiceStem(q.front)));
   const answers = new Map<string, Set<string>>();
   for (const q of slot) answers.set(choiceStem(q.front), (answers.get(choiceStem(q.front)) ?? new Set()).add(pickKey(q.back)));
   for (const q of slot) if ((answers.get(choiceStem(q.front))?.size ?? 0) > 1) issue(q.line, '錯誤', 'choice-ambiguous', AMBIGUOUS);

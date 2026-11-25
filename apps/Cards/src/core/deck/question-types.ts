@@ -35,8 +35,11 @@ export function pickKey(text: string): string {
   return foldWidth(bare).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-/** 多音字的兩句是不是同一句（tasks/polyphone-pick.md §5、L2 R2）：照 pickKey，連續的底線當一個（畫面上空格都一樣長）。 */
-export const choiceStem = (question: string): string => pickKey(question).replace(/_+/g, '_');
+/**
+ * 多音字的兩句是不是同一句（tasks/polyphone-pick.md §5、L2 R2、第二輪 2）：看畫面上的字（visibleOf，`%%` 註解、標籤不算），
+ * 再照 pickKey，連續的底線當一個（畫面上空格都一樣長）。
+ */
+export const choiceStem = (question: string): string => pickKey(visibleOf(question).replaceAll('\0', '')).replace(/_+/g, '_');
 
 /**
  * 畫面上看得到的文字（§3〈空格怎麼數〉）：不看行內程式碼、公式、整個圖片與嵌入、連結目的地、HTML 標籤與 `%%` 註解；連結文字算。
