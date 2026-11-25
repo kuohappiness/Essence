@@ -423,6 +423,23 @@ void test('今天的份照真的複習出卡：同一篇同一組的兩個新目
   ]);
 });
 
+void test('再複習一些照它自己的範圍出卡：英文另一個方向今天答過，這個方向在再複習一些就不出（L2 第二輪 F1）', async () => {
+  // 20 個到期的目標正好占滿每天 5 分鐘（每張 15 秒），borrow 的兩個方向排進再複習一些。
+  const due = Array.from({ length: 20 }, (_, i) => `due${String(i).padStart(3, '0')}`);
+  const english = '---\n科目: 英文\n---\n- borrow 英翻中 ^en0001\n    - borrow :: 借入\n- borrow 中翻英 ^zh0001\n    - 我可以借你的筆嗎？Can I ＿＿ your pen? :: borrow\n';
+  const log = [...due.map(id => review('2026-10-01T20:00:00.000+08:00', id)), review('2026-10-29T19:00:00.000+08:00', 'zh0001')].join('\n') + '\n';
+  const snap = await snapshot(root, { now: NOW, offset: 480, data: '{"capMinutes":5}', files: { [A]: due.map(id => goal(id)).join(''), [B]: english, [LOG]: log } });
+  const more = snap.today.filter(item => item.list === 'more');
+  assert.deepEqual(more.map(item => [item.lt, item.prompt]), [['en0001', null]], '另一個方向今天答過：再複習一些不出這張');
+  assert.ok(snap.today.filter(item => item.list === 'share').every(item => item.prompt !== null));
+  // 錯題補強不算一般作答：另一個方向只有錯題補強，這個方向照出。
+  const mistake = JSON.stringify({ t: '2026-10-29T19:00:00.000+08:00', lt: 'zh0001', r: 'miss', src: 'mistake' });
+  const both = await snapshot(root, { now: NOW, offset: 480, data: '{"capMinutes":5}', files: { [A]: due.map(id => goal(id)).join(''), [B]: english, [LOG]: [...due.map(id => review('2026-10-01T20:00:00.000+08:00', id)), mistake].join('\n') + '\n' } });
+  const en = both.today.find(item => item.lt === 'en0001');
+  assert.equal(en?.list, 'more');
+  assert.notEqual(en?.prompt, null, '只有錯題補強：再複習一些照出這張');
+});
+
 void test('接不上就丟錯（比較的一方寫無法比較）：版號不是正式版號、state 沒有閘門、沒有讀取能力的模組、比較時想寫版本行以外的內容', async t => {
   const input = { now: NOW, offset: 480, files };
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: string };

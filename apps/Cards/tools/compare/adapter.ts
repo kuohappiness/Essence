@@ -253,11 +253,16 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   }) }));
   // 每一張卡照那一版真的複習怎麼出（L2 第一輪 R1）：同一個佇列、同一篇的目標一起放進今天的份，nextCard 出一張，這張上的目標拿掉再出下一張。
   // 比較卡併同組的目標看的是範圍，只放一個目標就併不到。不模擬作答：記的是每個目標還沒作答時出現在哪一張卡。今天已經答對的是 done；時間是固定的，不會是 stale。
+  // 再複習一些照它自己的入口（{ more: true }，跨篇一起出、跳過英文另一個方向今天已經一般作答的目標）；它跳過的目標沒有卡（L2 第二輪 F1）。
   const shown = new Map<string, Pick<TodaySnap, 'prompt' | 'type' | 'cells' | 'lts'>>();
-  for (const { items } of lists) for (const deck of new Set(items.map(each => each.deck))) {
-    let left = items.filter(each => each.deck === deck);
+  const buckets = lists.flatMap(({ list, items }) => (list === 'more' ? [items] : [...new Set(items.map(each => each.deck))].map(deck => items.filter(each => each.deck === deck))).map(group => ({ list, items: group })));
+  for (const { list, items } of buckets) {
+    const deck = items[0]?.deck;
+    let left = items;
     while (left.length) {
-      const next = nextCard({ ...today, share: left.map(each => each.item), more: [] }, todayInput, { deck }) as { kind: string; card?: unknown };
+      const next = (list === 'more'
+        ? nextCard({ ...today, more: left.map(each => each.item) }, todayInput, { more: true })
+        : nextCard({ ...today, share: left.map(each => each.item), more: [] }, todayInput, { deck })) as { kind: string; card?: unknown };
       if (next.kind === 'done') break;
       if (next.kind !== 'card') throw wrongType('nextCard()');
       const card = fields(next.card, 'nextCard() 的 card');
