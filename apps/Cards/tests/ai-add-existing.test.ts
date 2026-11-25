@@ -157,3 +157,13 @@ void test('多音字（tasks/polyphone-pick.md §5）：加合規的句子照常
   const asked = '    - 「這條路很長」的長怎麼念？ :: ㄔㄤˊ';
   assert.equal(planned(flipItem(asked), flip()), flip(asked));
 });
+
+void test('多音字（PR #53 的 Codex 審查）：加題後同一句配了兩個讀音，不寫；同一批的兩句、和原本的句子只差粗體都算', () => {
+  const choice = (...body: string[]): string => head('2-1 密度') + ['- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^q8z3ka', '    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ', '    - 這條路很長（＿＿）。 :: ㄔㄤˊ', ...body].join('\n') + '\n';
+  const choiceItem = (...body: string[]): string => ['- [[國二上自然 2-1#^q8z3ka|長（ㄓㄤˇ、ㄔㄤˊ） 讀音]]', ...body].join('\n');
+  assert.equal(left(choiceItem('    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '    - 小樹苗慢慢長（＿＿）大了。 :: ㄔㄤˊ'), choice()), EXISTING_WHY.choiceAmbiguous);
+  assert.equal(left(choiceItem('    - 他**長**（＿＿）得比哥哥高。 :: ㄔㄤˊ'), choice()), EXISTING_WHY.choiceAmbiguous);
+  // 同一句、同一個讀音只差粗體：不是兩個讀音，照常加。
+  const bold = '    - 他**長**（＿＿）得比哥哥高。 :: ㄓㄤˇ';
+  assert.equal(planned(choiceItem(bold), choice()), choice(bold));
+});

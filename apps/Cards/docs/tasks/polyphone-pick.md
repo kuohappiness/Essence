@@ -192,6 +192,7 @@ D-230 第 3 點：國語的詞寫相似詞（`反映（反應、反映） 相似
   - 任務段改字，版號加一：`提示 v5`、`加深 v3`（§2）。
   - 沒勾點選填空的 `長 讀音` 是翻面，預設寫成句數照通用的三題上限、每個讀音至少一句（翻面一次一句、孩子自評，沒有亂猜的問題）；§6 原本沒寫這一條。
   - `check.ts` 讓候選卡片裡的比較卡、多音字也不用寫成「能……」（原本只看本文）。
+  - **PR #53 的 GitHub Codex 審查（P2）**：加進已有的學習目標時，同一批兩句相同、讀音不同，或和原本的句子只差粗體，原本會寫進去。改成：草稿檢查對名稱結尾是讀音的項目報 `choice-ambiguous`（同一批）；加入時合起來的池裡同一句配了兩個讀音就留在框裡（`EXISTING_WHY.choiceAmbiguous`）。測試在 `tests/polyphone-ai-check.test.ts`、`tests/ai-add-existing.test.ts`。
 - **順手清的技術債**（[Cards backlog](../backlog.md) 觸發點到了的兩列）：
   - 國語預設送給 AI 的部分改成新位置的連結、`FROZEN_RULES` 拿掉國語那一列（v0.11 本來就是新版本，`tools/tests/check-docs.test.ts` 改成國語照常查；`884a387c`）。backlog 那一列改成只剩社會、英文。
   - 國小社會 3-1、3-2 試用看到的三個誤報（任務段改了版號）：任務段候選卡片的範例加 `出處：<這次的頁碼>`；「晒」不算常見簡體字形；給家長的備註寫「一般常聽到」也算說法不一致（`tests/ai-check-trial-notes.test.ts`、`tests/ai-cards.test.ts`）。backlog 那一列刪了。

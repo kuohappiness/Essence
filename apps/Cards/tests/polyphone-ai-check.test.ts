@@ -32,6 +32,13 @@ void test('choice-invalid（錯誤）：讀音結尾、有括號，卻讀不成�
   assert.deepEqual(found(draft('長 讀音', ['    - 「他長得高」的長怎麼念？ :: ㄓㄤˇ'], [])), [['不符', 3, 'target-name']]);
 });
 
+void test('choice-ambiguous（錯誤）：加進已有的學習目標裡，同一批的同一句配兩個讀音也報（PR #53 的 Codex 審查）；和原本的句子比在寫入時', () => {
+  // 本文第 1～13 行，第 14 行空行，框從第 15 行起：名稱第 16 行、出處第 17 行、題目第 18 行起。
+  const box = (...sentences: string[]): string => draft(NAME) + ['', '> [!note] 加進已有的學習目標', `> - q8z3ka ${NAME}`, '>     - 出處：p.21', ...sentences.map(each => '>' + each)].join('\n') + '\n';
+  assert.deepEqual(found(box('     - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '     - 小樹苗慢慢**長**（＿＿）大了。 :: ㄔㄤˊ')), [['錯誤', 18, 'choice-ambiguous'], ['錯誤', 19, 'choice-ambiguous']]);
+  assert.deepEqual(found(box('     - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ', '     - 這條路很長（＿＿）。 :: ㄔㄤˊ')), []);
+});
+
 void test('choice-ambiguous（錯誤）：同一個題幹配兩個讀音；題幹不同不報', () => {
   const twice = [...SIX.slice(0, 5), '    - 他長（＿＿）得比哥哥高。 :: ㄔㄤˊ'];
   assert.deepEqual(found(draft(NAME, twice)), [['錯誤', 8, 'choice-ambiguous'], ['錯誤', 13, 'choice-ambiguous']]);

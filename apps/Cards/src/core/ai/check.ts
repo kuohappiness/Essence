@@ -164,6 +164,7 @@ type Report = (line: number, level: CheckLevel, code: string, msg: string) => vo
 // ── 多音字（tasks/polyphone-pick.md §5）：比解析嚴，本文與候選都檢查。 ──
 /** 注音的讀音：一到三個注音符號，前面可以有輕聲的 ˙，後面可以有 ˊ ˇ ˋ（國語才檢查，格式查核 2-4）。 */
 const BOPOMOFO = /^˙?[\u3105-\u3129]{1,3}[ˊˇˋ]?$/u;
+const AMBIGUOUS = '同一句配了兩個讀音，孩子分不出該念哪一個；請換只有一種念法的句子';
 /** 照多音字讀的目標：讀成的，或讀音結尾、有括號卻讀不成的（名稱不用寫成「能……」、不算通用的三題上限）。 */
 const isChoice = (t: DeckTarget): boolean => t.choice !== undefined || choiceProblems(t).length > 0;
 
@@ -176,7 +177,7 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     // 同一個題幹配兩個讀音：孩子分不出該念哪一個。
     const stems = new Map<string, Set<number>>();
     t.prompts.forEach((p, i) => { if (p.kind === 'qa') stems.set(pickKey(p.question), (stems.get(pickKey(p.question)) ?? new Set()).add(choice.answers[i])); });
-    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(pickKey(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', '同一句配了兩個讀音，孩子分不出該念哪一個；請換只有一種念法的句子');
+    for (const p of t.prompts) if (p.kind === 'qa' && (stems.get(pickKey(p.question))?.size ?? 0) > 1) issue(p.line + 1, '錯誤', 'choice-ambiguous', AMBIGUOUS);
     if (subject === '國語') {
       const wrong = choice.options.filter(option => !BOPOMOFO.test(option.trim()));
       if (wrong.length) issue(line, '錯誤', 'choice-reading', `讀音照課本寫注音，聲調用 ˊ ˇ ˋ，輕聲的 ˙ 寫在前面：${wrong.join('、')}`);
@@ -194,6 +195,18 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     if (bare.length) issue(line, '不符', 'choice-no-anchor', `記憶錨點沒有「${bare.join('、')}」的子項目：對答案後的對照只有讀音（預設〈讀音〉）`);
     if (choice.anchors.some(anchor => anchor !== null && anchor.split('：').length > 2)) issue(line, '提醒', 'choice-anchor-colon', '記憶錨點的子項目有三個以上全形冒號；常用詞裡不要再用全形冒號');
   }
+}
+
+/**
+ * 加進已有的學習目標裡的讀音（PR #53 的 Codex 審查）：同一批裡空格緊接字的同一句配了兩個答案，和 choice-ambiguous 同一種錯。
+ * 只看名稱結尾是讀音的；和目的地原本的句子比在寫入時（existing.ts）。
+ */
+function sameSentenceTwice(target: CheckedTarget, issue: Report): void {
+  if (!/(^|[\s）)])讀音$/.test(target.name.replaceAll('**', '').trim())) return;
+  const slot = target.questions.filter(q => q.kind === 'qa' && /[（(]＿+[)）]/.test(q.front));
+  const answers = new Map<string, Set<string>>();
+  for (const q of slot) answers.set(pickKey(q.front), (answers.get(pickKey(q.front)) ?? new Set()).add(pickKey(q.back)));
+  for (const q of slot) if ((answers.get(pickKey(q.front))?.size ?? 0) > 1) issue(q.line, '錯誤', 'choice-ambiguous', AMBIGUOUS);
 }
 
 function checkPick(text: string, deck: Deck, issue: Report, subject?: string): void {
@@ -483,7 +496,11 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
       } else if (title === '加進已有的學習目標') {
         order.push({ kind: 'existing', line: block.line });
         parseBox(inner);
-        for (const node of roots) existing.push(analyzeTarget(node, 'existing'));
+        for (const node of roots) {
+          const target = analyzeTarget(node, 'existing');
+          existing.push(target);
+          sameSentenceTwice(target, issue);
+        }
         issue(block.line, '提醒', 'existing-present', `「加進已有的學習目標」有 ${String(roots.length)} 項：確認輸入真的給了這些已有的學習目標`);
       } else if (title === '候選卡片') {
         order.push({ kind: 'candidate', line: block.line });

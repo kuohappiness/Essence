@@ -1,4 +1,4 @@
-import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../deck/index.ts';
+import { fieldStart, linesOf, listTree, parseDeck, pickKey, readProperties } from '../deck/index.ts';
 import type { Deck, DeckProps, Item, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
@@ -21,6 +21,7 @@ export const EXISTING_WHY = {
   sameQuestion: '目的地已經有同一題，但補充不一樣，請自己看',
   qaConflict: (deck: string): string => `「${deck}」已經有同一個問題、答案不一樣：可能是改過的答案，也可能這題本來就有好幾個答案（例如舉一種會導電的金屬）。請打開對照；要加就改寫題目或手動貼上`,
   verify: '加過去會改到別的內容，請手動搬',
+  choiceAmbiguous: '加過去之後同一句配了兩個讀音，孩子分不出該念哪一個：請換只有一種念法的句子再手動貼上',
   sources: SOURCE_WHY,
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
@@ -190,7 +191,24 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   if (sources.kind === 'leave') return leave(sources.why);
   const text = sources.text;
   if (text === destText) return { kind: 'plan', text: null };
-  return verify(deck, parseDeck(text), target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
+  const after = parseDeck(text);
+  // 多音字（tasks/polyphone-pick.md §5，PR #53 的 Codex 審查）：合起來的池裡同一句（照 pickKey）配了兩個讀音就不寫，同一批的、和原本的句子都算。
+  const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
+  if (now && ambiguous(now) && !ambiguous(target)) return leave(EXISTING_WHY.choiceAmbiguous);
+  return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
+}
+
+/** 多音字的池裡有沒有同一句配了兩個讀音（同 check.ts 的 choice-ambiguous）。 */
+function ambiguous(target: Target): boolean {
+  const choice = target.choice;
+  if (!choice) return false;
+  const stems = new Map<string, number>();
+  return target.prompts.some((prompt, i) => {
+    if (prompt.kind !== 'qa') return false;
+    const key = pickKey(prompt.question), seen = stems.get(key);
+    stems.set(key, choice.answers[i]);
+    return seen !== undefined && seen !== choice.answers[i];
+  });
 }
 
 /**
