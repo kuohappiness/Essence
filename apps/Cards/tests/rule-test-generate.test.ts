@@ -198,3 +198,17 @@ void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PD
   assert.equal((await claudeAdapter(() => fakeCli('quota'))(request())).kind, 'quota');
   assert.deepEqual(await claudeAdapter(() => { throw Error('找不到 claude'); })(request()), { kind: 'fatal', message: '找不到 claude' });
 });
+
+void test('Codex 生成：不收附件，教材放進對話的資料夾，每個對話的第一步前面加同一句說明（記進事件）', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1, 課: [] }\n  - { 生成器: codex, 模型: gpt-6.2-sol, 推理: high, 份數: 1 }');
+  const seen: string[][] = [];
+  const { adapter, requests } = fake(request => { seen.push(readdirSync(request.cwd)); return ok(DECK, 'codex-1'); });
+  await runQueue(folder, { adapters: { codex: adapter }, log: () => {} });
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every(request => request.pdf === null && request.model === 'gpt-6.2-sol' && request.effort === 'high'));
+  assert.deepEqual(seen, [['教材.pdf'], ['教材.pdf']]);
+  assert.ok(requests[0].text.startsWith('（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）\n\n組'));
+  const steps = readEvents(folder).filter(event => event.type === 'step');
+  assert.ok(steps.every(event => event.detail?.material === '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）'));
+  assert.equal(readFileSync(join(folder.root, '生成', '原稿', '甲-L3-codex-1.md'), 'utf8'), DECK);
+});

@@ -4,7 +4,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { claudeAdapter, type Adapter, type StepResult } from './adapters.ts';
+import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './adapters.ts';
 import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
@@ -14,6 +14,10 @@ import { fillReplies } from './prompts.ts';
 
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
 const BREAKER = 3;
+/**
+ * Codex 不收附件（探針 P6）：教材放進對話的資料夾，每個對話的第一步前面加這一句；各組相同（附件說明各組相同，§5-4），記進那一步的事件。
+ */
+const CODEX_MATERIAL = '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）';
 
 export const rawName = (job: Job, step: FrozenStep): string => `${job.key}${job.steps.length > 1 ? `-${String(step.step)}` : ''}.md`;
 const attemptDir = (folder: Folder, job: Job, attempt: number): string => join(folder.root, '生成', '嘗試', `${job.key}-${String(attempt)}`);
@@ -75,13 +79,17 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
   mkdirSync(dir, { recursive: true });
   const cwd = mkdtempSync(join(temp, 'rule-test-gen-'));
   const pdf = readFileSync(materialOf(folder, lesson));
+  const codex = job.kind === 'codex';
+  if (codex) writeFileSync(join(cwd, '教材.pdf'), pdf);
   const sessions = new Map<string, string>(), replies = new Map<string, string>();
   try {
     for (const step of job.steps) {
-      const text = fillReplies(readFileSync(join(folder.root, '凍結', '提示', step.file), 'utf8'), replies);
       const resume = sessions.get(step.conversation) ?? null;
+      const prompt = fillReplies(readFileSync(join(folder.root, '凍結', '提示', step.file), 'utf8'), replies);
+      const note = codex && resume === null ? CODEX_MATERIAL : null;
+      const text = note ? `${note}\n\n${prompt}` : prompt;
       const result = await adapter({
-        text, pdf: resume === null ? pdf : null, resume, model: generator.model, effort: generator.effort, systemPrompt: config.systemPrompt, cwd,
+        text, pdf: resume === null && !codex ? pdf : null, resume, model: generator.model, effort: generator.effort, systemPrompt: config.systemPrompt, cwd,
         timeoutMs: config.timeoutMinutes * 60_000,
         record: (stdout, stderr) => { writeFileSync(join(dir, `${String(step.step)}.jsonl`), stdout + (stderr ? `\n--- stderr ---\n${stderr}` : ''), 'utf8'); },
       });
@@ -92,7 +100,7 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
       writeFileSync(join(dir, `${String(step.step)}.md`), result.reply, { encoding: 'utf8', flag: 'wx' });
       if (result.session) sessions.set(step.conversation, result.session);
       replies.set(replyName(job, step), result.reply);
-      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, chars: result.reply.length, ...result.warnings.length ? { warnings: result.warnings } : {} } });
+      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, chars: result.reply.length, ...note ? { material: note } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } });
     }
     finalize(folder, job, attempt);
     return 'done';
@@ -104,7 +112,7 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
 /** 跑佇列到沒有工作、或停下（額度用完、fatal、斷路器）。手貼的工作不在這裡跑。 */
 export async function runQueue(folder: Folder, options: QueueOptions = {}): Promise<void> {
   const { log = console.log, temp = tmpdir() } = options;
-  const adapters: Record<string, Adapter | undefined> = { claude: options.adapters?.claude ?? claudeAdapter(), codex: options.adapters?.codex };
+  const adapters: Record<string, Adapter | undefined> = { claude: options.adapters?.claude ?? claudeAdapter(), codex: options.adapters?.codex ?? codexAdapter() };
   verifyLock(folder);
   const steps = readFrozenSteps(folder);
   const release = acquireLock(folder, 'generate');
@@ -121,8 +129,7 @@ export async function runQueue(folder: Folder, options: QueueOptions = {}): Prom
       const events = readEvents(folder);
       const job = planJobs(folder, steps, events).find(each => each.kind !== 'manual' && !inFlight.has(each.key) && ['pending', 'retry'].includes(jobState(events, each.key).status));
       if (!job) return;
-      const adapter = adapters[job.kind];
-      if (!adapter) { stop(`還不支援 ${job.kind} 生成器（§11 第 3 步）`); return; }
+      const adapter = adapters[job.kind]!;
       inFlight.add(job.key);
       log(`開始 ${job.key}`);
       let outcome: Awaited<ReturnType<typeof runJob>>;
