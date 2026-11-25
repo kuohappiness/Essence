@@ -1,6 +1,6 @@
 # AI 連線套件第一步（Codex L2 審查請求）
 
-狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md --note 第三輪` 請 Codex 審〈第三輪〉，報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
+狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md --note 第四輪` 請 Codex 審〈第四輪〉（最後一輪），報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -116,3 +116,20 @@
   7. 延續 R13：服務回報的模型在這一家目錄裡才改照它估價；不認得的名稱（快照名稱）照請求的，不改成「費用不明」。
 - **驗證**：`packages/ai-client/` 的 `npm run check`（192 個離線測試）；`tools/` 的 `npm run self-check`。Windows 上請再跑一次這兩個，結果寫進報告。
 - **回報**：接在審查報告後面，標「第三輪」；格式與權限照上面〈回報與權限〉。照 D-171，第四輪之後還有擋合併的發現就停下來交給使用者。
+
+## 第四輪（只審第三輪的修正，最後一輪）
+
+第三輪的 13 項：12 項修了，延續 R8 的期限寫成前提（不修，理由在核對表），延續 R5、延續 R7 照舊是已知的限制，延續 R19 等使用者同意 D-232。Claude 的核對與每一項的 commit、測試在[審查報告〈Claude 核對（第三輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第三輪>)。
+
+- **待審**：`a4ca62e4` 到這份請求這一節所在的 commit（`git log -1 --format=%H -- docs/tasks/ai-client-l2.md`）；`git diff a4ca62e4...<那個 commit>`。一項一個 commit，commit 訊息的結尾標著 `(L2 round 3, …)`。
+- **要看**：第三輪的發現都是第 3 代，這一輪的修法多半是**換前提**（核對表標「換前提」的 7 項），讓整類的值在同一個地方處理。請判斷：新的前提站不站得住、有沒有把原本正常的情況擋掉、修法有沒有帶進新的問題。只報同一類裡還沒處理到的另一個值時，請一併說明它是不是新前提本身的缺口；前三輪已經看過、修正沒碰到的程式不用重審。
+- **實作者另外選的做法**（請判斷站不站得住）：
+  1. 延續 R1：短於 8 個字的金鑰只准送到本機（localhost、127.0.0.1、::1，http 或 https），送到別處在送出前回 `invalid_request`；本機的短金鑰照舊不遮。
+  2. 延續 R4：可攜性改成「型別是唯一來源」：`src/` 另外用 `types: []` 的設定做型別檢查，ESLint 只擋直接寫出 `globalThis`、`self`、`window`。
+  3. 延續 R8（期限）：**不修**。整體期限管送出與等待；`waiting`、`text` 的回呼拖過期限時結果已經完整收到，照樣交回（和 R10 同一個前提），寫進〈7〉第 4 點。
+  4. 延續 R12（2xx 的形狀）：一條共用的規則，成功一定要有服務說的停止原因、而且有文字（只有 `length` 可以是空的）。連帶的改變：Chat 只有 `[DONE]`、沒有任何 `finish_reason` 的串流，和 Responses 只在 `response.completed` 裡有文字、沒有任何 `output_text.delta` 的串流，以前算成功（後者還是空的文字），現在算 `server`、帶 `partialText`。
+  5. R9 與 R12 交互：剛好 4 MiB、之後不關也不再送的本文，等到逾時算 `timeout`（本文沒有結束，不知道收完了沒有），不算 `server`。
+  6. 延續 R14（`options`）：自訂服務和目錄用同一個驗法；自訂服務的錯誤訊息因此改成 `custom endpoint: ` 加上和 `catalogProblems` 同一句中文。`maxTokensField` 只准兩個值。
+  7. 延續 R6：數字欄位的 `null` 在入口一律當成沒給；期限照計時器上限從開始算一次。
+- **驗證**：`packages/ai-client/` 的 `npm run check`（207 個離線測試）；`tools/` 的 `npm run self-check`。Windows 上請再跑一次這兩個，結果寫進報告。
+- **回報**：接在審查報告後面，標「第四輪」；格式與權限照上面〈回報與權限〉。**這是最後一輪**（D-171）：還有擋合併的發現，寫清楚每一項的條件、機率與影響，交給使用者決定修不修，不再開第五輪。

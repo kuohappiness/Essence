@@ -18,7 +18,7 @@
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 入口網站與網頁版的 Cards | 討論中 | 請 Codex 回答第 7 節（D-215），雙方一致後把第 2 節談定的寫成 D-ID；同時和使用者談第 6 節 | Codex、使用者 | [入口網站討論稿](<../apps/Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>) |
-| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 待審 | 本機 Codex 照 [L2 請求〈第三輪〉](tasks/ai-client-l2.md#第三輪只審第二輪的修正) 審第二輪的修正；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件 | Codex、使用者 | [任務說明](tasks/ai-client.md) |
+| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 待審 | 本機 Codex 照 [L2 請求〈第四輪〉](tasks/ai-client-l2.md#第四輪只審第三輪的修正最後一輪) 審第三輪的修正（最後一輪）；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件 | Codex、使用者 | [任務說明](tasks/ai-client.md) |
 
 ## 等觸發點
 
