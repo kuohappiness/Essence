@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { RULE_SUBJECTS, taskSection, type CardForm, type ExistingTarget } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { embedRules } from '../tools/build.mjs';
-import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
+import { PLUGIN_TASK, readConfig } from '../tools/rule-test/config.ts';
 import { openFolder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps, verifyLock } from '../tools/rule-test/freeze.ts';
 import { initFolder } from '../tools/rule-test/init.ts';
@@ -263,6 +263,9 @@ void test('init：建 測試.yaml 範本；已經有了、或在 repo 裡就停�
   const root = join(mkdtempSync(join(tmpdir(), 'rule-test-init-')), '新的一輪');
   initFolder(root);
   assert.match(readFileSync(join(root, '測試.yaml'), 'utf8'), /^# 比較測試的設定/);
+  // 範本本身讀得懂（D-236 的鍵：加深、加深規則、時間預算）。
+  const config = readConfig(readFileSync(join(root, '測試.yaml'), 'utf8'));
+  assert.deepEqual([config.deepen, config.groups[1].deepenRules?.files, config.gates.timeBudget], [{ generators: ['claude'] }, ['apps/Cards/docs/card-rules/next/core.md'], 'report']);
   assert.ok(existsSync(join(root, '提示')));
   assert.throws(() => initFolder(root), /已經有 測試\.yaml/);
   assert.throws(() => initFolder(join(REPO_ROOT, '比較測試')), /測試資料夾在 repo 裡/);

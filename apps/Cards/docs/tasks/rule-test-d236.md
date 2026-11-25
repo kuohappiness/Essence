@@ -1,6 +1,6 @@
 # 比較測試工具照 D-236 改：錯誤分三級、孩子的時間、學習地圖與加深（給 Claude）
 
-狀態：規劃中｜下一步：照兩輪查核改完，開始實作｜等誰：Claude
+狀態：實作中｜下一步：在分支 `claude/project-thread-lhii7b` 做端到端測試、L1 對照、L2 查核、開 PR｜等誰：Claude
 
 來自：D-236（在分支 `claude/project-thread-g21wd8` 的 `docs/decisions.md`，commit 69435f3a；PR #49 合併後改成連結）與同一個分支的 `apps/Cards/docs/Claude Codex Discussion/2026-11-25-three-layer-review.md` §8。使用者 2026-11-25：「第二輪的評估：我同意」「新的一輪評估用新的對話」。
 
