@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Adapter } from '../tools/rule-test/adapters.ts';
-import { blindFolder, makeBlocks, readBatch, type BlindEntry } from '../tools/rule-test/blind.ts';
+import { blindFolder, makeBlocks, openBatch, readBlocks, type BlindEntry } from '../tools/rule-test/blind.ts';
 import { checkFolder } from '../tools/rule-test/check.ts';
 import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder } from '../tools/rule-test/freeze.ts';
@@ -72,7 +72,9 @@ void test('blind：卡組段原字照留、每課打亂代號、每組各取一�
   // 給評審的資料夾裡沒有組名、生成器與原稿。
   const given = readdirSync(dir, { recursive: true }).map(String).join('\n') + readFileSync(join(dir, '已有目標.json'), 'utf8');
   assert.ok(!/甲|乙|claude/.test(given));
-  assert.deepEqual(readBatch(folder, 1).entries, batch.entries);
+  // 評分與狀態只讀區組（代號），對照表鎖定前讀不到（§8 第 12 條）。
+  assert.deepEqual(readBlocks(folder, 1), batch.blocks);
+  assert.throws(() => openBatch(folder, 1), /批 1 還沒鎖定/);
   // 一批一次：再跑沒有新的原稿。
   assert.throws(() => blindFolder(folder, { log: () => {} }), /沒有新的有效原稿/);
   // 評分表鎖定後改了就停下。

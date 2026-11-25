@@ -26,8 +26,19 @@ export function batchNumbers(folder: Folder): number[] {
   const dir = join(folder.root, '封存');
   return existsSync(dir) ? readdirSync(dir).flatMap(name => /^對照表-批(\d+)\.json$/.exec(name)?.[1] ?? []).map(Number).sort((a, b) => a - b) : [];
 }
-export const readBatch = (folder: Folder, n: number): Batch => JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as Batch;
+/** 對照表只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。 */
+const readBatch = (folder: Folder, n: number): Batch => JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as Batch;
 export const batchDir = (folder: Folder, n: number): string => join(folder.root, '評分', `批${String(n)}`);
+/** 一批的區組（只有代號，沒有組別）：評分、狀態用這個，不讀對照表。 */
+export const readBlocks = (folder: Folder, n: number): Block[] => JSON.parse(readFileSync(join(batchDir(folder, n), '區組.json'), 'utf8')) as Block[];
+
+/** 解開時讀對照表：那一批的 鎖定.md 與 裁定.md 都在才讀得到（§5-9）；雜湊與裁定填完沒有由 unblind 先查。 */
+export function openBatch(folder: Folder, n: number): Batch {
+  const dir = batchDir(folder, n);
+  if (!existsSync(join(dir, '鎖定.md'))) throw Error(`批 ${String(n)} 還沒鎖定（兩位評審都交齊才鎖定），不能解開`);
+  if (!existsSync(join(dir, '裁定.md'))) throw Error(`批 ${String(n)} 還沒裁定（先跑 disputes）`);
+  return readBatch(folder, n);
+}
 
 function shuffle<T>(items: readonly T[], random: (max: number) => number): T[] {
   const out = [...items];

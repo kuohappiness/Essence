@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeAdapter, codexAdapter, parseJsonReply, type Adapter } from './adapters.ts';
-import { batchDir, batchNumbers, readBatch, type Batch, type Block } from './blind.ts';
+import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import type { Judge } from './config.ts';
 import { materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
@@ -112,18 +112,18 @@ export function judgePrompt(folder: Folder, block: Block, rows: readonly RubricR
 export interface JudgeOptions { adapters?: Partial<Record<'claude' | 'codex', Adapter>>; log?: (line: string) => void; temp?: string; batch?: number }
 
 /** 跑一位評審評一個區組：驗結果，不合就在同一個對話補正。 */
-async function runOne(folder: Folder, batch: Batch, block: Block, judge: Judge, adapter: Adapter, temp: string): Promise<'done' | 'fail' | 'timeout' | 'quota' | 'fatal'> {
-  const log = LOG(batch.batch), key = jobOf(block, judge);
+async function runOne(folder: Folder, batch: number, block: Block, judge: Judge, adapter: Adapter, temp: string): Promise<'done' | 'fail' | 'timeout' | 'quota' | 'fatal'> {
+  const log = LOG(batch), key = jobOf(block, judge);
   const attempt = jobState(readEvents(folder, log), key).attempts + 1;
   appendEvent(folder, { type: 'start', job: key, attempt }, log);
   const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
   const rows = parseRubric(readFileSync(rubricOf(folder, lesson), 'utf8'), new Set(readFrozenSnapshot(folder, lesson.code)?.targets.map(t => t.id) ?? []));
   const pdf = readFileSync(materialOf(folder, lesson));
   const pages = countPdfPages(pdf);
-  const decks = new Map(block.codes.map(code => [code, readFileSync(join(batchDir(folder, batch.batch), '卡組', block.lesson, `${code}.md`), 'utf8').split('\n')]));
+  const decks = new Map(block.codes.map(code => [code, readFileSync(join(batchDir(folder, batch), '卡組', block.lesson, `${code}.md`), 'utf8').split('\n')]));
   const cwd = mkdtempSync(join(temp, 'rule-test-judge-'));
-  cpSync(join(batchDir(folder, batch.batch), '區組', block.name), cwd, { recursive: true });
-  const records = join(batchDir(folder, batch.batch), '紀錄');
+  cpSync(join(batchDir(folder, batch), '區組', block.name), cwd, { recursive: true });
+  const records = join(batchDir(folder, batch), '紀錄');
   mkdirSync(records, { recursive: true });
   const schema = JSON.stringify(judgeSchema(block.codes));
   try {
@@ -144,7 +144,7 @@ async function runOne(folder: Folder, batch: Batch, block: Block, judge: Judge, 
       problems = validateResult(value, { rows, codes: block.codes, decks, pages });
       appendEvent(folder, { type: 'step', job: key, attempt, step: round + 1, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, problems: problems.length } }, log);
       if (!problems.length) {
-        writeOnce(resultFile(folder, batch.batch, judge.name, block.name), JSON.stringify(value, null, 2) + '\n');
+        writeOnce(resultFile(folder, batch, judge.name, block.name), JSON.stringify(value, null, 2) + '\n');
         appendEvent(folder, { type: 'done', job: key, attempt }, log);
         return 'done';
       }
@@ -157,13 +157,13 @@ async function runOne(folder: Folder, batch: Batch, block: Block, judge: Judge, 
 }
 
 /** 一批的每個區組兩位都交了：每個結果檔的雜湊寫進 鎖定.md（§5-7）。回傳有沒有鎖定。 */
-function lockBatch(folder: Folder, batch: Batch): boolean {
-  const file = join(batchDir(folder, batch.batch), '鎖定.md');
+function lockBatch(folder: Folder, batch: number, blocks: readonly Block[]): boolean {
+  const file = join(batchDir(folder, batch), '鎖定.md');
   if (existsSync(file)) return true;
-  const files = batch.blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge, path: resultFile(folder, batch.batch, judge.name, block.name) })));
+  const files = blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge, path: resultFile(folder, batch, judge.name, block.name) })));
   if (!files.every(each => existsSync(each.path))) return false;
   const time = new Date().toISOString();
-  writeOnce(file, [`# 批 ${String(batch.batch)} 鎖定`, '', '| 課 | 區組 | 評審 | 結果檔 | sha256 | 鎖定（UTC） |', '|---|---|---|---|---|---|',
+  writeOnce(file, [`# 批 ${String(batch)} 鎖定`, '', '| 課 | 區組 | 評審 | 結果檔 | sha256 | 鎖定（UTC） |', '|---|---|---|---|---|---|',
     ...files.map(each => `| ${each.block.lesson} | ${each.block.name} | ${each.judge.name} | 結果/${each.judge.name}/${each.block.name}.json | ${sha256File(each.path)} | ${time} |`), ''].join('\n'));
   return true;
 }
@@ -173,11 +173,12 @@ export async function runJudges(folder: Folder, options: JudgeOptions = {}): Pro
   const { log = console.log, temp = tmpdir() } = options;
   verifyLock(folder);
   const numbers = batchNumbers(folder);
-  const batch = readBatch(folder, options.batch ?? numbers.at(-1) ?? 0);
+  const batch = options.batch ?? numbers.at(-1) ?? 0;
+  const blocks = readBlocks(folder, batch);
   const adapters: Record<string, Adapter | undefined> = { claude: options.adapters?.claude ?? claudeAdapter(), codex: options.adapters?.codex ?? codexAdapter() };
-  const release = acquireLock(folder, 'judge', LOG(batch.batch));
-  const todo = batch.blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge })))
-    .filter(({ block, judge }) => !existsSync(resultFile(folder, batch.batch, judge.name, block.name)) && jobState(readEvents(folder, LOG(batch.batch)), jobOf(block, judge)).status !== 'failed');
+  const release = acquireLock(folder, 'judge', LOG(batch));
+  const todo = blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge })))
+    .filter(({ block, judge }) => !existsSync(resultFile(folder, batch, judge.name, block.name)) && jobState(readEvents(folder, LOG(batch)), jobOf(block, judge)).status !== 'failed');
   let stopped: string | null = null;
   try {
     const worker = async (): Promise<void> => {
@@ -187,13 +188,13 @@ export async function runJudges(folder: Folder, options: JudgeOptions = {}): Pro
         log(`${jobOf(next.block, next.judge)}：${outcome}`);
         if (outcome === 'quota' || outcome === 'fatal') {
           stopped = outcome === 'quota' ? '額度用完' : `${jobOf(next.block, next.judge)} 碰到重試也沒用的錯誤`;
-          appendEvent(folder, { type: 'stop', detail: { reason: stopped } }, LOG(batch.batch));
+          appendEvent(folder, { type: 'stop', detail: { reason: stopped } }, LOG(batch));
         }
       }
     };
     await Promise.all(Array.from({ length: folder.config.concurrency }, worker));
   } finally { release(); }
-  if (lockBatch(folder, batch)) log(`批 ${String(batch.batch)} 兩位評審都交齊了，已鎖定（鎖定.md）。`);
+  if (lockBatch(folder, batch, blocks)) log(`批 ${String(batch)} 兩位評審都交齊了，已鎖定（鎖定.md）。`);
 }
 
 /** `npm run rule-test -- judge <測試資料夾> [--confirmed] [--foreground]` */
@@ -205,13 +206,13 @@ export async function judge(): Promise<void> {
   verifyLock(folder);
   const numbers = batchNumbers(folder);
   if (!numbers.length) throw Error('還沒匿名（先跑 blind）');
-  const batch = readBatch(folder, numbers.at(-1)!);
-  const todo = batch.blocks.flatMap(block => folder.config.judges.filter(each => !existsSync(resultFile(folder, batch.batch, each.name, block.name))).map(each => `${block.name}-${each.name}`));
+  const batch = numbers.at(-1)!;
+  const todo = readBlocks(folder, batch).flatMap(block => folder.config.judges.filter(each => !existsSync(resultFile(folder, batch, each.name, block.name))).map(each => `${block.name}-${each.name}`));
   if (!flags.includes('--confirmed')) {
-    console.log(todo.length ? `批 ${String(batch.batch)}：要開 ${String(todo.length)} 個評審對話（${folder.config.judges.map(each => `${each.name} ${each.model} ${each.effort}`).join('、')}）：${todo.join('、')}\n\n同意用量後加 --confirmed 開跑。` : `批 ${String(batch.batch)} 都評完了。`);
+    console.log(todo.length ? `批 ${String(batch)}：要開 ${String(todo.length)} 個評審對話（${folder.config.judges.map(each => `${each.name} ${each.model} ${each.effort}`).join('、')}）：${todo.join('、')}\n\n同意用量後加 --confirmed 開跑。` : `批 ${String(batch)} 都評完了。`);
     return;
   }
   if (flags.includes('--foreground')) { await runJudges(folder); return; }
-  const pid = detach(folder, 'judge', join('評分', `批${String(batch.batch)}`, '執行.log'));
+  const pid = detach(folder, 'judge', join('評分', `批${String(batch)}`, '執行.log'));
   console.log(`背景開始評分（行程 ${String(pid)}）；進度用 status 看。`);
 }
