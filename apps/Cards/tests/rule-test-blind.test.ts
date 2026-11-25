@@ -16,7 +16,7 @@ import { RUBRIC } from './helpers/rule-test.ts';
 const GOOD = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 const BROKEN = '- borrow 英翻中\n    - borrow ::\n<<<完>>>';
 
-async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }', rubric?: string): Promise<Folder> {
+async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }', rubric?: string): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-blind-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
@@ -44,13 +44,22 @@ void test('check：照外掛的 inspectReply 記錯誤、提示與每篇的目�
   await runQueue(folder, { adapters: { claude: reply(prompt => prompt.startsWith('組乙') ? BROKEN : GOOD) }, log: () => {} });
   const records = checkFolder(folder, () => {});
   assert.deepEqual(records.map(record => [record.job, record.errors.length, record.pieces]), [
-    ['甲-L3-claude-1', 0, [{ name: '國二上英文 L3 單字', targets: 2, prompts: 2, candidates: 0, adds: 0 }]],
-    ['乙-L3-claude-1', 1, [{ name: '國二上英文 L3（卡片）', targets: 1, prompts: 1, candidates: 0, adds: 0 }]],
+    ['甲-L3-claude-1', 0, [{ name: '國二上英文 L3 單字', targets: 2, prompts: 2, candidates: 0, adds: 0, addPrompts: 0 }]],
+    ['乙-L3-claude-1', 1, [{ name: '國二上英文 L3（卡片）', targets: 1, prompts: 1, candidates: 0, adds: 0, addPrompts: 0 }]],
   ]);
   assert.match(records[1].errors[0], /底下沒有答案/);
   const lines: string[] = [];
   checkFolder(folder, line => lines.push(line));
   assert.deepEqual(lines, []);
+});
+
+void test('check：加題一項底下三題，孩子要複習的題算 3（rule-test-d236.md §4）', async () => {
+  const added = ['````markdown', '國二上英文 L3 單字', '- borrow 英翻中', '    - borrow :: v. 借入', '',
+    '> [!note]- 加進已有的學習目標', '> - abc234 lend 英翻中', '>     - lend :: v. 借出', '>     - 「借出」的英文 :: lend', '>     - lend 的過去式 :: lent', '<<<完>>>', '````'].join('\n');
+  const folder = await folderWith(['甲', '乙'], 1);
+  await runQueue(folder, { adapters: { claude: reply(() => added) }, log: () => {} });
+  const records = checkFolder(folder, () => {});
+  assert.deepEqual(records.map(record => record.pieces.map(piece => [piece.prompts, piece.adds, piece.addPrompts])), [[[1, 1, 3]], [[1, 1, 3]]]);
 });
 
 void test('blind：卡組段原字照留、每課打亂代號、每組各取一份成區組；評審資料夾有評分表、教材、題池與加行號的卡組；對照表另外封存', async () => {
@@ -142,7 +151,7 @@ void test('凍結與匿名：評分表格式不合就停下、不鎖（2026-11-2
 });
 
 void test('blind：組名叫「候選」時，外掛規定的「候選卡片」框標題不算洩漏，其他地方的組名照樣停下（2026-11-25 使用者電腦）', async () => {
-  const gates = '{ 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }';
+  const gates = '{ 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }';
   const boxed = GOOD.replace('<<<完>>>', '> [!note]- 候選卡片\n> - give 英翻中\n>     - 理由：課本 p.4 有\n>     - give :: v. 給\n<<<完>>>');
   const folder = await folderWith(['現行', '候選'], 1, gates, RUBRIC);
   await runQueue(folder, { adapters: { claude: reply(() => boxed) }, log: () => {} });

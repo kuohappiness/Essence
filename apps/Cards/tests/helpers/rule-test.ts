@@ -36,7 +36,7 @@ export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = 
 ${groups.map(name => `  - { 名稱: ${name}, 規則: { 自備: { L3: ${name}.md } } }`).join('\n')}
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: ${groups[0]}, 候選: [${groups[1]}], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: ${groups[0]}, 候選: [${groups[1]}], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 ${more}`);
   await freezeFolder(openFolder(root), { log: () => {} });
   const folder = openFolder(root);

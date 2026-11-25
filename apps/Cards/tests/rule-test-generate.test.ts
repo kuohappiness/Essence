@@ -69,7 +69,7 @@ ${groups}
 生成:
 ${generators}
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   await freezeFolder(openFolder(root), { log: () => {} });
   return openFolder(root);

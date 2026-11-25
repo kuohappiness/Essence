@@ -62,6 +62,6 @@ void test('補跑成為新的一批：第二批還沒鎖定時解開第一批；
   await through(folder, 2);
   const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8');
   assert.match(summary, /- 批 2：.*（在前一批解開之後才匿名：看過前一批結果才決定加跑）/);
-  assert.match(summary, /### L3｜claude｜乙 對 甲：沒過\n\n- 份數：候選 2、基準 2/);
-  assert.match(summary, /- 各批：批 1 沒過、批 2 沒過\n- 含看過前一批結果才決定加跑的份（批 2）/);
+  assert.match(summary, /### L3｜claude｜乙 對 甲：未定\n\n- 學習面沒有明顯的差，但有指標多過容許量或份數不到打平的要求\n- 份數：候選 2、基準 2/);
+  assert.match(summary, /- 各批：批 1 未定、批 2 未定\n- 含看過前一批結果才決定加跑的份（批 2）/);
 });

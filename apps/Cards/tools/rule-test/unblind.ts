@@ -5,12 +5,13 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { join } from 'node:path';
 import { batchDir, batchNumbers, openBatch, type Batch } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
-import { collectDisputes, mergeBatch, QUALITY_KINDS, type QualityKind } from './disputes.ts';
+import { collectDisputes, mergeBatch } from './disputes.ts';
+import { levelOf, QUALITY_KINDS, type Level, type QualityKind } from './levels.ts';
 import { lessonDir, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSteps, verifyLock } from './freeze.ts';
 import { readFormat } from './check.ts';
 import { jobState, planJobs, readEvents } from './jobs.ts';
-import { leakCandidates, type MergedIssue, type Verdict } from './merge.ts';
+import { duplicateGroups, leakCandidates, type MergedIssue, type Verdict } from './merge.ts';
 import { parseRubric, type RubricRow } from './rubric.ts';
 import type { JudgeResult } from './judge.ts';
 import { allGates } from './gates.ts';
@@ -68,17 +69,38 @@ export interface DeckMetrics {
   bonus: Record<Verdict, number>;
   disagreements: number;
   major: number; majorBoth: number; majorRuled: number;
+  /** 第 1 道的重大（rule-test-d236.md §7-2）：重大錯誤＋存不了（每份 1）＋加深的重大與加深存不了。 */
+  majorTotal: number;
   quality: Record<QualityKind, number>; qualityTotal: number; qualityBoth: number; qualityOne: number;
-  nearDuplicates: number; crossRows: number; crossWrong: number;
-  /** 會直接進孩子複習的錯：重大錯誤＋題目品質（每筆 1）；另一個不算多解；每題的平均只當參考。 */
-  childErrors: number; childErrorsNoMulti: number; perQuestion: number | null;
+  /** 傷到學習（§3）：判錯、洩漏、漏的必備，其他是其餘算傷到學習的種類；total 是合計（加深的另外加在 deepen）。 */
+  harm: { 判錯: number; 洩漏: number; 漏的必備: number; 其他: number; total: number };
+  /** 小問題的筆數（只報告）。 */
+  minor: number;
+  /** 近義重複：對數、併成幾組、多餘的題（每組題數減一加總，§4）。 */
+  nearDuplicates: number; duplicateGroups: number; extraPrompts: number;
+  crossRows: number; crossWrong: number;
+  /** 孩子要複習的題（正式目標的題＋加題底下的每一題）、確定考到的必備（兩位都判有）、每個必備平均幾題（§4）。 */
+  childPrompts: number; sureRequired: number; perRequired: number;
   targets: number; prompts: number; candidates: number; adds: number; unsaveable: boolean;
   rulesChars: number; promptChars: number;
   generationMs: number | null; costUsd: number | null;
+  /** token（§9）：輸入含快取寫入與讀取、輸出；有一步不知道就是 null。 */
+  tokens: { input: number | null; output: number | null };
+  /** 地圖（§5）：這一組不交地圖是 null。 */
+  map: { missing: boolean; missed: number; issues: number } | null;
+  /** 加深（§6）：沒跑加深（手貼、設定沒寫）是 null。 */
+  deepen: DeepenMetrics | null;
   leakCandidates: string[]; worthLearning: number;
   /** 每位評審自己的數（評審 × 生成器的分項，§5-9）。 */
   byJudge: Record<string, { missed: number; issues: number }>;
   issues: MergedIssue[];
+}
+
+/** 一份的加深（§6-3）：放棄的篇不算進來，另外報。 */
+export interface DeepenMetrics {
+  pieces: number; abandoned: number; items: number;
+  /** 加深機會漏掉（兩位都判沒有的列數）；確定接錯、歧見（兩位不同）；加深的重大（含加深存不了）與傷到學習。 */
+  missed: number; wrong: number; disputed: number; major: number; harm: number;
 }
 
 export interface BatchReport {
@@ -97,13 +119,27 @@ export const readReports = (folder: Folder): BatchReport[] => existsSync(results
 const sum = (values: readonly number[]): number => values.reduce((total, each) => total + each, 0);
 
 /** 生成時間與用量：完成的那一次嘗試，每一步的時間加起來（手貼的沒有）。 */
-function generationOf(folder: Folder, job: string): { ms: number | null; cost: number | null } {
+function generationOf(folder: Folder, job: string): { ms: number | null; cost: number | null; tokens: DeckMetrics['tokens'] } {
   const events = readEvents(folder);
   const attempt = jobState(events, job).last?.attempt;
   const steps = events.filter(event => event.job === job && event.attempt === attempt && event.type === 'step');
   const ms = steps.map(event => event.detail?.ms).filter((value): value is number => typeof value === 'number');
   const cost = steps.map(event => event.detail?.costUsd).filter((value): value is number => typeof value === 'number');
-  return { ms: ms.length ? sum(ms) : null, cost: cost.length ? sum(cost) : null };
+  return { ms: ms.length ? sum(ms) : null, cost: cost.length ? sum(cost) : null, tokens: tokensOf(steps.map(event => event.detail?.usage)) };
+}
+
+/** token（rule-test-d236.md §9）：每一步的 usage 加總；輸入＝input＋快取寫入＋快取讀取，輸出＝output。有一步沒有就是不知道（null），不是 0。 */
+export function tokensOf(usages: readonly unknown[]): DeckMetrics['tokens'] {
+  if (!usages.length) return { input: null, output: null };
+  let input = 0, output = 0;
+  for (const usage of usages) {
+    const each = typeof usage === 'object' && usage !== null ? usage as Record<string, unknown> : null;
+    const n = (key: string): number | null => typeof each?.[key] === 'number' ? each[key] : null;
+    if (n('input_tokens') === null || n('output_tokens') === null) return { input: null, output: null };
+    input += n('input_tokens')! + (n('cache_creation_input_tokens') ?? 0) + (n('cache_read_input_tokens') ?? 0);
+    output += n('output_tokens')!;
+  }
+  return { input, output };
 }
 
 /** 照教學選擇調整後的評分表列（拿掉、改加分、改必備）。 */
@@ -173,28 +209,39 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
     const quality = Object.fromEntries(QUALITY_KINDS.map(kind => [kind, issues.filter(issue => issue.kind === kind).length])) as Record<QualityKind, number>;
     const qualityIssues = issues.filter(issue => (QUALITY_KINDS as readonly string[]).includes(issue.kind));
     const crossIds = new Set(rows.filter(each => each.row.cross).map(each => each.row.id));
+    const counted = issues.filter(issue => issue.kind !== '跨單元去向' || crossIds.has(issue.rubric));
+    const levelCount = (level: Level, skip: readonly string[] = []): number => counted.filter(issue => !skip.includes(issue.kind) && levelOf(issue.kind, folder.config.levels) === level).length;
     const formats = readFormat(folder, job)!;
     const pieces = formats.flatMap(record => record.pieces);
     const prompts = sum(pieces.map(piece => piece.prompts));
+    const childPrompts = prompts + sum(pieces.map(piece => piece.addPrompts));
     const mine = steps.filter(step => step.group === entry.group && step.lesson === block.lesson);
     const generation = generationOf(folder, job.key);
     const major = majorBoth + majorRuled;
-    const qualityTotal = qualityIssues.length;
+    const unsaveable = formats.some(record => record.errors.length > 0);
+    const missed = count('必備', '沒有');
+    const harm = { 判錯: quality.判錯, 洩漏: quality.洩漏, 漏的必備: missed.length, 其他: levelCount('傷到學習', ['判錯', '洩漏']), total: 0 };
+    harm.total = harm.判錯 + harm.洩漏 + harm.漏的必備 + harm.其他;
+    const pairs = issues.filter(issue => issue.kind === '近義重複').map(issue => issue.at);
+    const duplicates = duplicateGroups(pairs);
+    const sure = count('必備', '有').length;
     const results = merge.results.get(block.name)!;
     return {
       batch: n, lesson: block.lesson, block: block.name, code, group: entry.group, generator: entry.generator, copy: entry.copy, replacement: entry.replacement, late,
-      required: { 有: count('必備', '有').length, 部分: count('必備', '部分').length, 沒有: count('必備', '沒有').length }, missed: count('必備', '沒有'), partial: count('必備', '部分'),
+      required: { 有: sure, 部分: count('必備', '部分').length, 沒有: missed.length }, missed, partial: count('必備', '部分'),
       bonus: { 有: count('加分', '有').length, 部分: count('加分', '部分').length, 沒有: count('加分', '沒有').length },
       disagreements: merged.disagreements.filter(id => rows.some(each => each.row.id === id)).length,
-      major, majorBoth, majorRuled,
-      quality, qualityTotal, qualityBoth: qualityIssues.filter(issue => issue.judges.length > 1).length, qualityOne: qualityIssues.filter(issue => issue.judges.length === 1).length,
-      nearDuplicates: issues.filter(issue => issue.kind === '近義重複').length,
+      major, majorBoth, majorRuled, majorTotal: major + (unsaveable ? 1 : 0),
+      quality, qualityTotal: qualityIssues.length, qualityBoth: qualityIssues.filter(issue => issue.judges.length > 1).length, qualityOne: qualityIssues.filter(issue => issue.judges.length === 1).length,
+      harm, minor: levelCount('小問題'),
+      nearDuplicates: pairs.length, duplicateGroups: duplicates.groups, extraPrompts: duplicates.extra,
       crossRows: crossIds.size, crossWrong: issues.filter(issue => issue.kind === '跨單元去向' && crossIds.has(issue.rubric)).length,
-      childErrors: major + qualityTotal, childErrorsNoMulti: major + qualityTotal - quality.多解, perQuestion: prompts ? (major + qualityTotal) / prompts : null,
+      childPrompts, sureRequired: sure, perRequired: childPrompts / Math.max(sure, 0.5),
       targets: sum(pieces.map(piece => piece.targets)), prompts, candidates: sum(pieces.map(piece => piece.candidates)), adds: sum(pieces.map(piece => piece.adds)),
-      unsaveable: formats.some(record => record.errors.length > 0),
+      unsaveable,
       rulesChars: sum(mine.map(step => step.rulesChars)), promptChars: sum(mine.map(step => step.chars)),
-      generationMs: generation.ms, costUsd: generation.cost,
+      generationMs: generation.ms, costUsd: generation.cost, tokens: generation.tokens,
+      map: null, deepen: null,
       leakCandidates: leakCandidates(deck, issues), worthLearning: merged.worthLearning,
       byJudge: Object.fromEntries([...results].map(([judge, result]: [string, JudgeResult]) => [judge, {
         missed: result.rows.filter(row => rows.some(each => each.kind === '必備' && each.row.id === row.row) && row.decks.find(each => each.deck === code)?.verdict === '沒有').length,

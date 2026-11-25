@@ -1,80 +1,127 @@
-// 比較測試工具：門檻（任務說明 tasks/rule-test-tool.md §6-3）。逐課、逐生成器、逐候選組各判一次，不跨課、不跨生成器合併：
-// 重大錯誤（零，或不比基準多）、不多漏必備（逐列與總數，另查近義重複）、收益至少一項、不能變差（過、沒過、未定三態）。
-// 候選和同一區組的基準比（§5-6）。所有指標都是越少越好；「明顯」用兩兩比的場數（stats.ts）。
-import type { Gates, Metric } from './config.ts';
-import { wins, winsNeeded } from './stats.ts';
+// 比較測試工具：門檻（任務說明 tasks/rule-test-d236.md §7，取代 rule-test-tool.md §6-3 的收益與不能變差）。逐課、逐生成器、逐候選組各判一次：
+// 重大（不比基準多或零）、不多漏必備（逐列、總數、多餘的題）、傷到學習（三態）、收益（學習面，至少一項明顯）、不能變差（學習面全部，明顯變差才沒過），
+// 都過而收益沒有明顯時看打平與次要指標。候選只和同一個區組裡的基準配對，收進來以後兩組混在一起做置換判定（stats.ts）。所有指標都是越少越好。
+import { LEARNING_METRICS, type Gates, type LearningMetric, type SecondaryMetric, type Tolerance } from './config.ts';
+import { permutationP, wins } from './stats.ts';
 import type { DeckMetrics } from './unblind.ts';
 
 /** pass：true 過、false 沒過、null 未定。 */
 interface Check { pass: boolean | null; text: string }
+type BenefitState = 'clear' | 'few' | 'no' | 'skip' | 'unknown';
+type WorseState = 'within' | 'more' | 'worse' | 'skip' | 'unknown';
+type Verdict = '過' | '沒過' | '未定' | '打平' | '打平，候選較省';
 export interface GateResult {
-  lesson: string; generator: string; candidate: string; baseline: string; counts: { candidate: number; baseline: number };
-  major: Check; rows: Check; total: Check; nearDuplicates: Check;
-  benefits: Check[]; noWorse: Check[];
-  verdict: '過' | '沒過' | '未定';
+  lesson: string; generator: string; candidate: string; baseline: string;
+  /** 進門檻的份數；unpaired 是候選裡區組沒有基準、不進門檻的份數。 */
+  counts: { candidate: number; baseline: number; unpaired: number };
+  major: Check; rows: Check; total: Check; extra: Check; harm: Check;
+  benefits: (Check & { metric: LearningMetric; state: BenefitState })[];
+  noWorse: (Check & { metric: LearningMetric; state: WorseState })[];
+  secondary: (Check & { metric: SecondaryMetric })[];
+  verdict: Verdict;
+  /** 結果的理由（一句）；「過」可能是學習面打平、候選較省（設定 打平較省: 過）。 */
+  basis: string;
   /** 隨便各抽一份，候選比較好的機會（平手算一半）。 */
-  chance: Partial<Record<Metric, number>>;
+  chance: Partial<Record<string, number>>;
 }
 
-const FIXED: readonly Metric[] = ['規則字數', '整份提示字數'];
+const FIXED: readonly SecondaryMetric[] = ['規則字數', '整份提示字數'];
 const EPSILON = 1e-9;
-/** 少於幾份時不判明顯（§6-3：任一組不到 3 份時，平均達標標「份數不夠」、超過容許量算未定）。 */
+/** 少於幾份時不判明顯（rule-test-d236.md §7-2 第 4 道：份數不夠）。 */
 const ENOUGH = 3;
+const ALPHA = 0.05;
 
-function valueOf(deck: DeckMetrics, metric: Metric): number | null {
+type Value = number | 'na' | 'unknown';
+
+/** 學習面指標的值（§7-2 第 4 道的清單）；na 是這一組不適用（不交地圖、沒跑加深）。 */
+function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
+  switch (metric) {
+    case '傷到學習': return deck.harm.total + (deck.deepen?.harm ?? 0);
+    case '判錯': return deck.harm.判錯;
+    case '每個必備平均幾題': return deck.perRequired;
+    case '多餘的題': return deck.extraPrompts;
+    case '地圖漏的必備': return deck.map ? deck.map.missed : 'na';
+    case '地圖問題': return deck.map ? deck.map.issues : 'na';
+    case '加深機會漏掉': return deck.deepen ? deck.deepen.missed : 'na';
+    case '確定接錯': return deck.deepen ? deck.deepen.wrong : 'na';
+  }
+}
+function secondaryValue(deck: DeckMetrics, metric: SecondaryMetric): Value {
   switch (metric) {
     case '規則字數': return deck.rulesChars;
     case '整份提示字數': return deck.promptChars;
-    case '孩子會碰到的錯': return deck.childErrors;
-    case '孩子會碰到的錯（不算多解）': return deck.childErrorsNoMulti;
-    case '重大錯誤': return deck.major;
-    case '題目品質': return deck.qualityTotal;
-    case '近義重複': return deck.nearDuplicates;
-    case '漏的必備': return deck.required.沒有;
-    case '部分的必備': return deck.required.部分;
-    case '題數': return deck.prompts;
-    case '目標數': return deck.targets;
-    case '生成時間': return deck.generationMs;
+    case 'token': return deck.tokens.input === null || deck.tokens.output === null ? 'unknown' : deck.tokens.input + deck.tokens.output;
+    case '生成時間': return deck.generationMs ?? 'unknown';
   }
 }
 
 const mean = (values: readonly number[]): number => values.reduce((total, each) => total + each, 0) / values.length;
 const one = (value: number): string => value.toFixed(1);
 const percent = (value: number): string => `${(value * 100).toFixed(1).replace(/\.0$/, '')}%`;
+const pText = (p: number): string => `p＝${percent(p)}`;
 
 interface Series { c: number[]; b: number[]; meanC: number; meanB: number }
-function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], metric: Metric): Series | null {
-  const c = candidate.map(deck => valueOf(deck, metric)), b = baseline.map(deck => valueOf(deck, metric));
-  if (c.some(each => each === null) || b.some(each => each === null)) return null;
-  return { c: c as number[], b: b as number[], meanC: mean(c as number[]), meanB: mean(b as number[]) };
-}
-/** 候選比基準少了幾成（基準是 0 時：候選也是 0 算沒變，不然算無限多）。 */
-const reduction = (s: Series): number => s.meanB === 0 ? (s.meanC === 0 ? 0 : -Infinity) : (s.meanB - s.meanC) / s.meanB;
-/** a 組明顯比 b 組少（a 贏的場數達到門檻）。份數太少時永遠不明顯。 */
-function clearly(a: readonly number[], b: readonly number[]): { yes: boolean; won: number; need: number | null } {
-  const need = winsNeeded(a.length, b.length);
-  const won = wins(a, b);
-  return { yes: need !== null && won >= need - EPSILON, won, need };
-}
-const games = (won: number, a: number, b: number, need: number | null): string => `贏 ${String(won)}／${String(a * b)} 場${need === null ? '（份數太少，不會明顯）' : `（要 ${String(need)} 場）`}`;
+type SeriesOr = Series | { skip: string } | { unknown: string };
+const DEEPEN: readonly LearningMetric[] = ['加深機會漏掉', '確定接錯'];
 
-/** 一個候選組對基準的門檻。candidate、baseline 是同一課、同一個生成器、同一區組裡的份。 */
-export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[]): Omit<GateResult, 'lesson' | 'generator' | 'candidate' | 'baseline'> {
+/**
+ * 一個指標兩組的值（§2-1）：任一組不適用是跳過；加深放棄的篇已經不在值裡，放棄到整份沒有加深的份不算，
+ * 剩下的份數不到、或兩組放棄的篇差 2 篇以上，是未定（逾時不一定是平台的錯）。
+ */
+function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], pick: (deck: DeckMetrics) => Value, metric: string): SeriesOr {
+  let c = candidate, b = baseline;
+  if ((DEEPEN as readonly string[]).includes(metric) || metric === '傷到學習') {
+    const gone = (decks: readonly DeckMetrics[]): number => decks.reduce((total, deck) => total + (deck.deepen?.abandoned ?? 0), 0);
+    if (Math.abs(gone(c) - gone(b)) >= 2) return { unknown: `加深放棄的篇：候選 ${String(gone(c))}、基準 ${String(gone(b))}，差 2 篇以上` };
+    const kept = (decks: readonly DeckMetrics[]): DeckMetrics[] => decks.filter(deck => !deck.deepen || deck.deepen.pieces > 0 || deck.deepen.abandoned === 0);
+    if (kept(c).length < c.length || kept(b).length < b.length) return { unknown: '有份的加深整份都放棄了' };
+    c = kept(c); b = kept(b);
+  }
+  const values = (decks: readonly DeckMetrics[]): Value[] => decks.map(pick);
+  const vc = values(c), vb = values(b);
+  if (vc.every(each => each === 'na') || vb.every(each => each === 'na')) return { skip: vb.every(each => each === 'na') ? '基準不適用（凍結時就知道）' : '候選不適用（凍結時就知道）' };
+  if ([...vc, ...vb].some(each => typeof each !== 'number')) return { unknown: '有份沒有資料' };
+  return { c: vc as number[], b: vb as number[], meanC: mean(vc as number[]), meanB: mean(vb as number[]) };
+}
+const isSeries = (s: SeriesOr): s is Series => 'c' in s;
+const allowed = (tolerance: Tolerance, meanB: number): number => Math.max(tolerance.percent * meanB, tolerance.floor);
+
+/** 確定接錯的兩端（§6-3）：兩組交叉，一端候選的歧見當對、基準的當錯，另一端反過來。 */
+function ends(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[]): { favorable: SeriesOr; unfavorable: SeriesOr } {
+  const pick = (withDisputed: boolean) => (deck: DeckMetrics): Value => deck.deepen ? deck.deepen.wrong + (withDisputed ? deck.deepen.disputed : 0) : 'na';
+  const both = (c: boolean, b: boolean): SeriesOr => {
+    const sc = series(candidate, candidate, pick(c), '確定接錯'), sb = series(baseline, baseline, pick(b), '確定接錯');
+    if (!isSeries(sc)) return sc;
+    if (!isSeries(sb)) return sb;
+    return { c: sc.c, b: sb.c, meanC: sc.meanC, meanB: sb.meanC };
+  };
+  const base = series(candidate, baseline, pick(false), '確定接錯');
+  if (!isSeries(base)) return { favorable: base, unfavorable: base };
+  return { favorable: both(false, true), unfavorable: both(true, false) };
+}
+
+/** 一個候選組對基準的門檻。candidate、baseline 是同一課、同一個生成器、已經配好對的份。 */
+export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], unpaired = 0): Omit<GateResult, 'lesson' | 'generator' | 'candidate' | 'baseline'> {
   const n = candidate.length, m = baseline.length, few = n < ENOUGH || m < ENOUGH;
-  const majors = (decks: readonly DeckMetrics[]): string[] => decks.flatMap(deck => deck.issues.filter(issue => issue.kind === '重大錯誤').map(issue => issue.rubric || '沒對到評分表的列'));
+  const chance: GateResult['chance'] = {};
+  const note = (metric: string, s: Series): void => { chance[metric] = wins(s.c, s.b) / (n * m); };
 
+  // 第 1 道：重大（D-234）。
+  const majors = (decks: readonly DeckMetrics[]): string[] => decks.flatMap(deck => deck.issues.filter(issue => issue.kind === '重大錯誤').map(issue => issue.rubric || '沒對到評分表的列'));
   let major: Check;
-  const withMajor = candidate.filter(deck => deck.major > 0);
   if (gates.majorErrors === 'zero') {
+    const withMajor = candidate.filter(deck => deck.majorTotal > 0);
     major = withMajor.length
-      ? { pass: false, text: `重大錯誤：候選 ${String(n)} 份裡有 ${String(withMajor.length)} 份有（共 ${String(withMajor.reduce((total, deck) => total + deck.major, 0))} 筆）；設定是零` }
-      : { pass: true, text: `重大錯誤：候選 ${String(n)} 份都是 0` };
+      ? { pass: false, text: `重大：候選 ${String(n)} 份裡有 ${String(withMajor.length)} 份有（共 ${String(withMajor.reduce((total, deck) => total + deck.majorTotal, 0))} 筆，含存不了）；設定是零` }
+      : { pass: true, text: `重大：候選 ${String(n)} 份都是 0` };
   } else {
-    const c = mean(candidate.map(deck => deck.major)), b = mean(baseline.map(deck => deck.major));
+    const c = mean(candidate.map(deck => deck.majorTotal)), b = mean(baseline.map(deck => deck.majorTotal));
     const only = [...new Set(majors(candidate))].filter(kind => !majors(baseline).includes(kind));
-    major = { pass: c <= b + EPSILON, text: `重大錯誤：候選每份平均 ${one(c)}、基準 ${one(b)}，${c <= b + EPSILON ? '不比基準多' : '比基準多'}${only.length ? `；只有候選才有的：${only.join('、')}` : ''}` };
+    const unsaveable = (decks: readonly DeckMetrics[]): number => decks.filter(deck => deck.unsaveable).length;
+    major = { pass: c <= b + EPSILON, text: `重大：候選每份平均 ${one(c)}、基準 ${one(b)}（含存不了：候選 ${String(unsaveable(candidate))} 份、基準 ${String(unsaveable(baseline))} 份），${c <= b + EPSILON ? '不比基準多' : '比基準多'}${only.length ? `；只有候選才有的：${only.join('、')}` : ''}` };
   }
 
+  // 第 2 道：不多漏必備。
   const rowIds = [...new Set([...candidate, ...baseline].flatMap(deck => deck.missed))];
   const rate = (decks: readonly DeckMetrics[], id: string): number => decks.filter(deck => deck.missed.includes(id)).length / decks.length;
   const worseRows = rowIds.filter(id => rate(candidate, id) - rate(baseline, id) >= gates.rowMissGap - EPSILON);
@@ -83,51 +130,125 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     : { pass: true, text: '逐列：沒有多漏的列' };
   const missC = mean(candidate.map(deck => deck.missed.length)), missB = mean(baseline.map(deck => deck.missed.length));
   const total: Check = { pass: missC - missB < gates.missedRows - EPSILON, text: `總數：候選每份漏 ${one(missC)} 列、基準 ${one(missB)} 列；設定是多 ${String(gates.missedRows)} 列以上算多漏` };
-  const dupC = mean(candidate.map(deck => deck.nearDuplicates)), dupB = mean(baseline.map(deck => deck.nearDuplicates));
-  const nearDuplicates: Check = { pass: dupC - dupB <= gates.nearDuplicates + EPSILON, text: `近義重複：候選每份 ${one(dupC)}、基準 ${one(dupB)}；設定是多出 ${String(gates.nearDuplicates)} 以內` };
+  const dupC = mean(candidate.map(deck => deck.extraPrompts)), dupB = mean(baseline.map(deck => deck.extraPrompts));
+  const extra: Check = { pass: dupC - dupB <= gates.extraPrompts + EPSILON, text: `多餘的題（近義重複）：候選每份 ${one(dupC)}、基準 ${one(dupB)}；設定是多出 ${String(gates.extraPrompts)} 以內` };
 
-  const chance: GateResult['chance'] = {};
-  const benefits = gates.benefits.map(({ metric, atLeast }): Check => {
-    const s = series(candidate, baseline, metric);
-    if (!s) return { pass: false, text: `收益 ${metric}：沒有資料（手貼的沒有生成時間）` };
-    chance[metric] = wins(s.c, s.b) / (n * m);
-    const less = reduction(s), enough = less >= atLeast - EPSILON;
-    const head = `收益 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}，少 ${Number.isFinite(less) ? percent(less) : '（基準是 0）'}（設定至少 ${percent(atLeast)}）`;
-    if (FIXED.includes(metric)) return { pass: enough, text: `${head}→ ${enough ? '達到' : '沒達到'}` };
-    if (few) return { pass: enough, text: `${head}→ ${enough ? '平均達到（份數不夠）' : '沒達到'}` };
-    const test = clearly(s.c, s.b);
-    return { pass: enough && test.yes, text: `${head}，${games(test.won, n, m, test.need)}→ ${enough && test.yes ? '明顯達到' : enough ? '沒達到（不明顯）' : '沒達到'}` };
-  });
-  const noWorse = gates.noWorse.map(({ metric, tolerance }): Check => {
-    const s = series(candidate, baseline, metric);
-    if (!s) return { pass: null, text: `不能變差 ${metric}：沒有資料` };
-    chance[metric] = wins(s.c, s.b) / (n * m);
-    const more = -reduction(s);
-    const head = `不能變差 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}，${more > 0 ? `多 ${Number.isFinite(more) ? percent(more) : '（基準是 0）'}` : '沒有變多'}（容許 ${percent(tolerance)}）`;
-    if (more <= tolerance + EPSILON) return { pass: true, text: `${head}→ 過` };
-    if (few) return { pass: null, text: `${head}→ 未定（份數不夠）` };
-    const test = clearly(s.b, s.c);
-    return test.yes ? { pass: false, text: `${head}，基準${games(test.won, m, n, test.need)}→ 沒過（明顯）` } : { pass: null, text: `${head}，基準${games(test.won, m, n, test.need)}→ 未定（不明顯）` };
+  // 第 3 道：傷到學習（三態）。
+  let harm: Check;
+  const harmSeries = series(candidate, baseline, deck => learningValue(deck, '傷到學習'), '傷到學習');
+  if (!isSeries(harmSeries)) harm = { pass: null, text: `傷到學習：${'skip' in harmSeries ? harmSeries.skip : harmSeries.unknown}→ 未定` };
+  else {
+    const s = harmSeries, limit = allowed(gates.harm, s.meanB), more = s.meanC - s.meanB;
+    note('傷到學習', s);
+    const head = `傷到學習：候選每份 ${one(s.meanC)}、基準 ${one(s.meanB)}（容許多 ${one(limit)}）`;
+    if (more <= limit + EPSILON) harm = { pass: true, text: `${head}→ 過` };
+    else if (few) harm = { pass: null, text: `${head}，多了→ 未定（份數不夠）` };
+    else {
+      const p = permutationP(s.b, s.c);
+      harm = p <= ALPHA + EPSILON ? { pass: false, text: `${head}，多了、明顯（${pText(p)}）→ 沒過` } : { pass: null, text: `${head}，多了、不明顯（${pText(p)}）→ 未定` };
+    }
+  }
+
+  // 第 4 道：收益（學習面，至少一項明顯；k 項各用 5%÷k）。
+  const k = gates.correction ? Math.max(gates.benefits.length, 1) : 1;
+  const benefitOf = (metric: LearningMetric, atLeast: number, s: SeriesOr): Check & { metric: LearningMetric; state: BenefitState } => {
+    if (!isSeries(s)) return 'skip' in s ? { metric, state: 'skip', pass: null, text: `收益 ${metric}：跳過（${s.skip}）` } : { metric, state: 'unknown', pass: null, text: `收益 ${metric}：未定（${s.unknown}）` };
+    note(metric, s);
+    const less = s.meanB === 0 ? (s.meanC === 0 ? 0 : -Infinity) : (s.meanB - s.meanC) / s.meanB;
+    const change = s.meanB === 0 ? (s.meanC === 0 ? '一樣' : '基準是 0') : less >= 0 ? `少 ${percent(less)}` : `多 ${percent(-less)}`;
+    const head = `收益 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}，${change}（設定至少少 ${percent(atLeast)}）`;
+    if (metric === '每個必備平均幾題') {
+      const sureC = mean(candidate.map(deck => deck.sureRequired)), sureB = mean(baseline.map(deck => deck.sureRequired));
+      if (sureC < sureB - EPSILON) return { metric, state: 'no', pass: false, text: `${head}，但確定考到的必備候選 ${one(sureC)}、基準 ${one(sureB)}，比較少→ 不算（題少是因為少考）` };
+    }
+    if (less < atLeast - EPSILON) return { metric, state: 'no', pass: false, text: `${head}→ 沒達到` };
+    if (few) return { metric, state: 'few', pass: false, text: `${head}→ 平均達到，份數不夠` };
+    const p = permutationP(s.c, s.b), limit = ALPHA / k;
+    return p <= limit + EPSILON ? { metric, state: 'clear', pass: true, text: `${head}，${pText(p)}（門檻 ${percent(limit)}）→ 明顯達到` } : { metric, state: 'no', pass: false, text: `${head}，${pText(p)}（門檻 ${percent(limit)}）→ 不明顯` };
+  };
+  const benefits = gates.benefits.map(({ metric, atLeast }) => {
+    if (metric !== '確定接錯') return benefitOf(metric, atLeast, series(candidate, baseline, deck => learningValue(deck, metric), metric));
+    const { favorable, unfavorable } = ends(candidate, baseline);
+    const a = benefitOf(metric, atLeast, favorable), b = benefitOf(metric, atLeast, unfavorable);
+    return a.state === b.state ? b : { metric, state: 'unknown' as const, pass: null, text: `收益 ${metric}：加深的歧見會左右結果（有利的一端：${a.text}；不利的一端：${b.text}）→ 未定` };
   });
 
-  const hard = [major, rows, total, nearDuplicates];
-  const benefit = benefits.some(each => each.pass === true);
-  const verdict = hard.some(each => each.pass === false) || !benefit || noWorse.some(each => each.pass === false) ? '沒過' : noWorse.some(each => each.pass === null) ? '未定' : '過';
-  return { counts: { candidate: n, baseline: m }, major, rows, total, nearDuplicates, benefits, noWorse, verdict, chance };
+  // 第 5 道：不能變差（學習面全部自動進來；明顯變差才沒過）。
+  const worseOf = (metric: LearningMetric, s: SeriesOr): Check & { metric: LearningMetric; state: WorseState } => {
+    if (!isSeries(s)) return 'skip' in s ? { metric, state: 'skip', pass: true, text: `不能變差 ${metric}：跳過（${s.skip}）` } : { metric, state: 'unknown', pass: null, text: `不能變差 ${metric}：未定（${s.unknown}）` };
+    note(metric, s);
+    const tolerance = gates.noWorse[metric as keyof Gates['noWorse']], limit = allowed(tolerance, s.meanB), more = s.meanC - s.meanB;
+    const head = `不能變差 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（容許多 ${limit.toFixed(2)}）`;
+    if (more <= limit + EPSILON) return { metric, state: 'within', pass: true, text: `${head}→ 過` };
+    if (few) return { metric, state: 'more', pass: true, text: `${head}，多了（份數不夠，不判明顯）→ 過，標出來` };
+    const p = permutationP(s.b, s.c);
+    return p <= ALPHA + EPSILON ? { metric, state: 'worse', pass: false, text: `${head}，多了、明顯（${pText(p)}）→ 沒過` } : { metric, state: 'more', pass: true, text: `${head}，多了、不明顯（${pText(p)}）→ 過，標出來` };
+  };
+  const noWorse = LEARNING_METRICS.filter(metric => metric !== '傷到學習').map(metric => {
+    if (metric !== '確定接錯') return worseOf(metric, series(candidate, baseline, deck => learningValue(deck, metric), metric));
+    const { favorable, unfavorable } = ends(candidate, baseline);
+    const a = worseOf(metric, favorable), b = worseOf(metric, unfavorable);
+    return (a.state === 'worse') === (b.state === 'worse') && a.state !== 'unknown' && b.state !== 'unknown' ? b : { metric, state: 'unknown' as const, pass: null, text: `不能變差 ${metric}：加深的歧見會左右結果（有利的一端：${a.text}；不利的一端：${b.text}）→ 未定` };
+  });
+
+  // 打平時的次要指標（§7-3 第 5 步）。
+  const secondary = gates.secondary.map(({ metric, atLeast, tolerance }): Check & { metric: SecondaryMetric } => {
+    const s = series(candidate, baseline, deck => secondaryValue(deck, metric), metric);
+    if (!isSeries(s)) return { metric, pass: null, text: `次要 ${metric}：沒有資料` };
+    const fixed = FIXED.includes(metric);
+    const change = s.meanB === 0 ? 0 : (s.meanC - s.meanB) / s.meanB;
+    const clear = (a: number[], b: number[]): boolean => fixed || (!few && permutationP(a, b) <= ALPHA + EPSILON);
+    const head = `次要 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（${change <= 0 ? `少 ${percent(-change)}` : `多 ${percent(change)}`}；設定至少少 ${percent(atLeast)}、最多多 ${percent(tolerance)}）`;
+    if (change > tolerance + EPSILON && clear(s.b, s.c)) return { metric, pass: false, text: `${head}→ 明顯比較多` };
+    if (-change >= atLeast - EPSILON && clear(s.c, s.b)) return { metric, pass: true, text: `${head}→ 明顯比較省` };
+    return { metric, pass: null, text: `${head}→ 沒有明顯的差` };
+  });
+
+  // 總結果（§7-3）。
+  const hard = [major, rows, total, extra, harm];
+  let verdict: Verdict, basis: string;
+  if (hard.some(each => each.pass === false) || noWorse.some(each => each.state === 'worse')) { verdict = '沒過'; basis = '有一道沒過'; }
+  else if (harm.pass === null || [...benefits, ...noWorse].some(each => each.state === 'unknown') || unpaired > 0) {
+    verdict = '未定'; basis = unpaired > 0 ? `候選有 ${String(unpaired)} 份的區組沒有基準，配對的份數不夠` : harm.pass === null ? '傷到學習未定' : '有指標缺資料或歧見會左右結果';
+  } else if (benefits.some(each => each.state === 'clear')) { verdict = '過'; basis = '學習面有一項明顯比較好'; }
+  else if (benefits.some(each => each.state === 'few')) { verdict = '未定'; basis = '收益平均達到，但份數不夠'; }
+  else if (n >= gates.tieMinCopies && m >= gates.tieMinCopies && harm.pass === true && noWorse.every(each => each.state === 'within' || each.state === 'skip')) {
+    const cheaper = secondary.some(each => each.pass === true) && !secondary.some(each => each.pass === false);
+    if (!cheaper) { verdict = '打平'; basis = '學習面打平'; }
+    else if (gates.tieCheaper === 'pass') { verdict = '過'; basis = '學習面打平、候選較省（設定：打平較省算過）'; }
+    else { verdict = '打平，候選較省'; basis = '學習面打平、候選較省'; }
+  } else { verdict = '未定'; basis = '學習面沒有明顯的差，但有指標多過容許量或份數不到打平的要求'; }
+  return { counts: { candidate: n, baseline: m, unpaired }, major, rows, total, extra, harm, benefits, noWorse, secondary, verdict, basis, chance };
 }
 
-/** 照設定逐課、逐算門檻的生成器、逐候選組判；基準取和候選同一區組的那幾份。 */
+/**
+ * 配對（§7-1 第 1 點）：只收同一個區組裡有 b 組的 a 組份，和那幾份 b 組；收進來以後兩組混在一起比。
+ * 沒有 b 組的區組，那幾份 a 組不收，回傳在 unpaired。對照（§8）用同一個函式。
+ */
+function pairUp(decks: readonly DeckMetrics[], lesson: string, generator: string, a: string, b: string): { a: DeckMetrics[]; b: DeckMetrics[]; unpaired: number } {
+  const here = decks.filter(deck => deck.lesson === lesson && deck.generator === generator);
+  const key = (deck: DeckMetrics): string => `${String(deck.batch)}/${deck.block}`;
+  const withB = new Set(here.filter(deck => deck.group === b).map(key));
+  const all = here.filter(deck => deck.group === a);
+  const paired = all.filter(deck => withB.has(key(deck)));
+  const blocks = new Set(paired.map(key));
+  return { a: paired, b: here.filter(deck => deck.group === b && blocks.has(key(deck))), unpaired: all.length - paired.length };
+}
+
+/** 照設定逐課、逐算門檻的生成器、逐候選組判。 */
 export function allGates(gates: Gates, decks: readonly DeckMetrics[]): GateResult[] {
   const out: GateResult[] = [];
   for (const lesson of [...new Set(decks.map(deck => deck.lesson))]) {
     for (const generator of gates.generators) {
       for (const name of gates.candidates) {
-        const candidate = decks.filter(deck => deck.lesson === lesson && deck.generator === generator && deck.group === name);
-        if (!candidate.length) continue;
-        const blocks = new Set(candidate.map(deck => `${String(deck.batch)}/${deck.block}`));
-        const baseline = decks.filter(deck => deck.lesson === lesson && deck.generator === generator && deck.group === gates.baseline && blocks.has(`${String(deck.batch)}/${deck.block}`));
-        if (!baseline.length) continue;
-        out.push({ lesson, generator, candidate: name, baseline: gates.baseline, ...judgeGates(gates, candidate, baseline) });
+        const pair = pairUp(decks, lesson, generator, name, gates.baseline);
+        if (!pair.a.length && !pair.unpaired) continue;
+        if (!pair.a.length) {
+          const empty: Check = { pass: null, text: '沒有和基準同一個區組的份' };
+          out.push({ lesson, generator, candidate: name, baseline: gates.baseline, counts: { candidate: 0, baseline: 0, unpaired: pair.unpaired }, major: empty, rows: empty, total: empty, extra: empty, harm: empty, benefits: [], noWorse: [], secondary: [], verdict: '未定', basis: `候選 ${String(pair.unpaired)} 份的區組都沒有基準`, chance: {} });
+          continue;
+        }
+        out.push({ lesson, generator, candidate: name, baseline: gates.baseline, ...judgeGates(gates, pair.a, pair.b, pair.unpaired) });
       }
     }
   }

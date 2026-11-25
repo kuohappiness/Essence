@@ -45,8 +45,12 @@ const EXAMPLE = `
   候選: [候選]
   生成器: [claude, ChatGPT]
   重大錯誤: 不比基準多
-  收益: [{ 指標: 規則字數, 至少: 20% }]
-  不能變差: [{ 指標: 題目品質, 容許: "10" }]
+  收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 每個必備平均幾題, 至少: 10% }]
+  不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]
+  傷到學習容許: { 百分比: 10%, 下限: 0.5 }
+  次要: [{ 指標: token, 至少: 10%, 容許: 10% }]
+  打平較省: 只報告
+錯誤分級: { 一題多事: 傷到學習 }
 `;
 
 void test('readConfig：任務說明的範例讀得出來，同 沿用被指的那一組、只換寫到的部分', () => {
@@ -74,9 +78,15 @@ void test('readConfig：任務說明的範例讀得出來，同 沿用被指的�
   assert.equal(config.rejudge, 1);
   assert.deepEqual(config.gates, {
     baseline: '現行', candidates: ['候選'], generators: ['claude', 'ChatGPT'], majorErrors: 'notMore',
-    rowMissGap: 0.5, missedRows: 1, nearDuplicates: 0,
-    benefits: [{ metric: '規則字數', atLeast: 0.2 }], noWorse: [{ metric: '題目品質', tolerance: 0.1 }],
+    rowMissGap: 0.5, missedRows: 1, extraPrompts: 0, harm: { percent: 0.1, floor: 0.5 },
+    benefits: [{ metric: '傷到學習', atLeast: 0.2 }, { metric: '每個必備平均幾題', atLeast: 0.1 }], correction: true,
+    noWorse: {
+      判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.15, floor: 0.3 }, 多餘的題: { percent: 0, floor: 0.5 },
+      地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
+    },
+    secondary: [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }], tieMinCopies: 3, tieCheaper: 'report',
   });
+  assert.deepEqual(config.levels, { 一題多事: '傷到學習', 池裡判準不同: '小問題', 跨單元去向: '小問題' });
 });
 
 void test('readConfig：沒寫的照外掛的預設（任務段、補充與點選填空跟著科目、裁定用 Opus）', () => {
@@ -141,6 +151,30 @@ void test('readConfig：門檻引用的組與生成器要有定義；同一種�
   });
 });
 
+void test('readConfig：收益與不能變差只收學習面的指標（D-236 第 4 點）；錯誤分級只能調沒點名的種類', () => {
+  const config = EXAMPLE
+    .replace('收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 每個必備平均幾題, 至少: 10% }]', '收益: [{ 指標: 規則字數, 至少: 20% }, { 指標: token, 至少: 10% }]\n  近義重複多出: 1')
+    .replace('不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]', '不能變差: [{ 指標: 生成時間, 容許: 10% }, { 指標: 傷到學習, 容許: 10% }]')
+    .replace('打平較省: 只報告', '打平較省: 看情況\n  收益校正: 也許')
+    .replace('錯誤分級: { 一題多事: 傷到學習 }', '錯誤分級: { 重大錯誤: 小問題, 存不了: 小問題, 池裡判準不同: 重大 }');
+  assert.throws(() => readConfig(config), (error: Error) => {
+    const lines = error.message.split('\n').slice(1);
+    const at = (where: string): string[] => lines.filter(line => line.includes(where));
+    assert.equal(at('門檻 收益 第 1 項').length, 1);
+    assert.match(at('門檻 收益 第 1 項')[0], /D-236/);
+    assert.match(at('門檻 收益 第 2 項')[0], /D-236/);
+    assert.match(at('門檻 不能變差 第 1 項')[0], /D-236/);
+    assert.match(at('門檻 不能變差 第 2 項')[0], /傷到學習容許/);
+    assert.match(at('門檻 近義重複多出')[0], /多餘的題多出/);
+    assert.match(at('門檻 打平較省')[0], /「過」或「只報告」/);
+    assert.match(at('門檻 收益校正')[0], /「要」或「不要」/);
+    assert.match(at('錯誤分級 重大錯誤')[0], /只能調 一題多事、池裡判準不同、跨單元去向/);
+    assert.match(at('錯誤分級 存不了')[0], /只能調/);
+    assert.match(at('錯誤分級 池裡判準不同')[0], /「傷到學習」或「小問題」/);
+    return true;
+  });
+});
+
 void test('readConfig：YAML 本身讀不懂時說是 YAML 的問題', () => {
   assert.throws(() => readConfig('名稱: [沒關'), /測試\.yaml 讀不懂/);
   assert.throws(() => readConfig('- 一個清單'), /要是一個物件/);
@@ -160,7 +194,7 @@ void test('測試資料夾或課庫在 repo 裡就停下（repo 是公開的，�
 組: [{ 名稱: 甲, 規則: { 外掛: english } }]
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 甲, 候選: [甲], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [甲], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   assert.throws(() => openFolder(root), /課庫在 repo 裡/);
 });

@@ -33,7 +33,7 @@ function fakeAdjudicator(): { adapter: Adapter; requests: { request: StepRequest
     adapter: request => {
       requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(each => String(each).replaceAll('\\', '/')).sort() });
       request.record('{}', '');
-      const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '多解', reason: 'p.3 寫的是借出' }
+      const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '判錯', reason: 'p.3 寫的是借出' }
         : request.resume === null ? { items: [] } : { items: [{ notes: ['U1'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
       return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 'ruling-1', warnings: [], ms: 1, models: [], structured: value });
     },
@@ -74,7 +74,7 @@ void test('disputes：重大錯誤一筆一個隔離對話（只有那一份卡�
   assert.equal(fix.request.resume, 'ruling-1');
   assert.match(fix.request.text, /這幾筆沒有放進任何一項：U1/);
   const rulings = readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8');
-  assert.ok(rulings.includes(`| M1 | L3 | L3-B01 | ${codes[1]} | 目標 2 第 1 題 | 5 | M1 | codex | lend 教成借入 | 不成立 | 多解 | p.3 寫的是借出 |`));
+  assert.ok(rulings.includes(`| M1 | L3 | L3-B01 | ${codes[1]} | 目標 2 第 1 題 | 5 | M1 | codex | lend 教成借入 | 不成立 | 判錯 | p.3 寫的是借出 |`));
   assert.ok(rulings.includes('| U1 | L3 | L3-B01 | codex | 列 R1 只考英翻中算不算有 |'));
   assert.ok(rulings.includes('| C1 | U1 | 教學選擇 | R1 要不要算必備？ |  |  |'));
   // 操作的 Claude 照使用者的話填了之後，重跑不開對話、不蓋掉。

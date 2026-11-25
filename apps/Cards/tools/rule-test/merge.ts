@@ -46,6 +46,27 @@ function unitsOf(deck: string): (line: number) => Unit {
   };
 }
 
+/** 近義重複的兩行是不是兩道不同的題（rule-test-d236.md §4）：兩行都歸得到題（不是目標外的行、不是有好幾題的目標的名稱行），而且不是同一題。 */
+export function twoPrompts(deck: string, lines: readonly number[]): boolean {
+  if (lines.length !== 2) return false;
+  const unitOf = unitsOf(deck);
+  const [a, b] = lines.map(unitOf);
+  return a.target !== null && b.target !== null && a.prompt !== null && b.prompt !== null && !(a.target === b.target && a.prompt === b.prompt);
+}
+
+/**
+ * 近義重複併成組（§4）：共用一題的對併在一起；多餘的題＝每組（題數 − 1）加總。pairs 是每一對的兩個位置名稱（合併後的 at）。
+ */
+export function duplicateGroups(pairs: readonly (readonly string[])[]): { groups: number; extra: number } {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => { let root = x; while (parent.get(root) !== root) root = parent.get(root)!; parent.set(x, root); return root; };
+  for (const pair of pairs) for (const each of pair) if (!parent.has(each)) parent.set(each, each);
+  for (const [a, b] of pairs) if (a !== undefined && b !== undefined) parent.set(find(a), find(b));
+  const sizes = new Map<string, number>();
+  for (const each of parent.keys()) sizes.set(find(each), (sizes.get(find(each)) ?? 0) + 1);
+  return { groups: sizes.size, extra: [...sizes.values()].reduce((sum, size) => sum + size - 1, 0) };
+}
+
 /** 一筆問題指到哪裡：全部行在同一題就是那一題，在同一個目標就是那個目標，不然照第一行。 */
 function issueUnit(units: readonly Unit[]): Unit {
   const [first] = units;

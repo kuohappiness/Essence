@@ -174,7 +174,7 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
       - { 對話: A, 規則: { 自備: { 英文L3: 分段.md } }, 卡組: 是 }
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 20% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 20% }] }
 `);
   const lines: string[] = [];
   const lock = await freezeFolder(openFolder(folder), { root, log: line => lines.push(line) });
@@ -221,7 +221,7 @@ void test('freeze：教材、自備提示檔、commit 裡的規則檔不在就�
 組: [{ 名稱: 甲, 規則: { 外掛: english } }, { 名稱: 乙, 規則: ${rules} }]
 生成: [{ 生成器: claude, 模型: claude-opus-5-5 }]
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `;
   writeFileSync(join(folder, '測試.yaml'), yaml('{ 自備: { L3: 沒有.md } }'));
   await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), error => {
@@ -247,7 +247,7 @@ void test('freeze：外掛來源用到的檔有沒 commit 的修改就停下', a
 組: [{ 名稱: 現行, 規則: { 外掛: english } }, { 名稱: 候選, 規則: { 外掛: english } }]
 生成: [{ 生成器: claude, 模型: m }]
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), /沒 commit 的修改/);
 });
@@ -277,7 +277,7 @@ void test('init --from：沿用組、生成器、評審與門檻只換課；凍�
   - { 名稱: 候選, 規則: { commit: ${commit}, 檔案: [apps/Cards/docs/card-rules/next/core.md] } }
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 3 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 20% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 20% }] }
 `);
   await freezeFolder(openFolder(old), { root, log: () => {} });
   const fresh = (): string => {

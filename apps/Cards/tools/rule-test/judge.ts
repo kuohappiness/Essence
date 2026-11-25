@@ -14,10 +14,10 @@ import { readFrozenSnapshot, verifyLock } from './freeze.ts';
 import { acquireLock, detach } from './generate.ts';
 import { appendEvent, jobState, readEvents, reopenFailed } from './jobs.ts';
 import { countPdfPages } from './probe.ts';
+import { ISSUE_KINDS, type IssueKind } from './levels.ts';
+import { twoPrompts } from './merge.ts';
 import { judgedRows, parseRubric, type RubricRow } from './rubric.ts';
 
-const ISSUE_KINDS = ['重大錯誤', '洩漏', '多解', '一題多事', '池裡判準不同', '其他品質', '近義重複', '跨單元去向', '值得學'] as const;
-type IssueKind = (typeof ISSUE_KINDS)[number];
 type Verdict = '有' | '部分' | '沒有';
 export interface JudgeResult {
   pages: { page: number; note: string }[];
@@ -74,7 +74,7 @@ export function validateResult(value: unknown, context: JudgeContext): string[] 
     if (!issue.lines.length) problems.push(`${at}：要寫行號`);
     const bad = badLines(issue.deck, issue.lines);
     if (bad.length) problems.push(`${at}：行號 ${bad.join('、')} 不是卡組裡有字的行`);
-    if (issue.kind === '近義重複' && issue.lines.length !== 2) problems.push(`${at}：近義重複要剛好寫兩題的行號`);
+    if (issue.kind === '近義重複' && !twoPrompts(context.decks.get(issue.deck)?.join('\n') ?? '', issue.lines)) problems.push(`${at}：近義重複要剛好寫兩道不同的題的行號（不是目標名稱行、不是同一題）`);
     if ((issue.kind === '跨單元去向') && !rubricIds.has(issue.rubric)) problems.push(`${at}：rubric 要寫評分表的列號`);
     if (issue.kind === '重大錯誤' && issue.rubric && !context.rows.some(row => row.id === issue.rubric && row.kind === '重大錯誤')) problems.push(`${at}：rubric「${issue.rubric}」不是評分表的重大錯誤列`);
   });

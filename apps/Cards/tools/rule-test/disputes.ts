@@ -14,11 +14,10 @@ import { verifyLock } from './freeze.ts';
 import { acquireLock, detach } from './generate.ts';
 import { resultFile, type JudgeResult } from './judge.ts';
 import { jobState, readEvents } from './jobs.ts';
+import { QUALITY_KINDS, type QualityKind } from './levels.ts';
 import { mergeDeck, type MergedDeck } from './merge.ts';
 import { countPdfPages } from './probe.ts';
 
-export const QUALITY_KINDS = ['洩漏', '多解', '一題多事', '池裡判準不同', '其他品質'] as const;
-export type QualityKind = (typeof QUALITY_KINDS)[number];
 
 interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck }
 interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>> }
@@ -136,7 +135,7 @@ function renderRulings(folder: Folder, n: number, majors: readonly MajorDispute[
     `# 批 ${String(n)} 裁定`, '',
     '原評分不改；解開時照這裡另算（§5-8）。空著的格子要填好才能解開（裁定對話失敗的，由操作的 Claude 照評分說明的定義判了填上）。', '',
     '## 只有一位記的重大錯誤', '',
-    '裁定寫「成立」（照算重大錯誤）或「不成立」；不成立、但是題目品質的問題時，「改記」寫是哪一種（洩漏、多解、一題多事、池裡判準不同、其他品質）。', '',
+    `裁定寫「成立」（照算重大錯誤）或「不成立」；不成立、但是題目品質的問題時，「改記」寫是哪一種（${QUALITY_KINDS.join('、')}）。`, '',
     ...majors.length ? [
       row(['編號', '課', '區組', '卡組', '位置', '行號', '評分表列', '記的評審', '評審的說明', '裁定', '改記', '理由']), `|${'---|'.repeat(12)}`,
       ...majors.map(each => {
