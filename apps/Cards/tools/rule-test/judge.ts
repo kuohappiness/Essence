@@ -3,10 +3,10 @@
 import { randomInt } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { claudeAdapter, codexAdapter, type Adapter } from './adapters.ts';
 import { askJson, type AskOutcome } from './ask.ts';
-import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
+import { batchDir, batchNumbers, mapBlockDir, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import type { Judge } from './config.ts';
 import { copyDir, materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
@@ -15,6 +15,7 @@ import { acquireLock, detach } from './generate.ts';
 import { appendEvent, jobState, readEvents, reopenFailed } from './jobs.ts';
 import { countPdfPages } from './probe.ts';
 import { ISSUE_KINDS, type IssueKind } from './levels.ts';
+import { mapSchema, validateMap } from './map.ts';
 import { twoPrompts } from './merge.ts';
 import { judgedRows, parseRubric, type RubricRow } from './rubric.ts';
 
@@ -87,8 +88,12 @@ export function validateResult(value: unknown, context: JudgeContext): string[] 
 }
 
 const LOG = (batch: number): string => join('評分', `批${String(batch)}`, '事件.jsonl');
-export const resultFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '結果', judge, `${block}.json`);
-const jobOf = (block: Block, judge: Judge, again = false): string => `${block.name}-${judge.name}${again ? '-重評' : ''}`;
+/** 評分的階段（rule-test-d236.md §6-2）：卡組、地圖各一個對話；卡組的結果檔照舊叫 `<區組>.json`。 */
+export type Stage = '卡組' | '地圖';
+export const resultFile = (folder: Folder, batch: number, judge: string, block: string, stage: Stage = '卡組'): string => join(batchDir(folder, batch), '結果', judge, `${block}${stage === '卡組' ? '' : `-${stage}`}.json`);
+const jobOf = (block: Block, judge: Judge, again = false, stage: Stage = '卡組'): string => `${block.name}-${judge.name}${stage === '卡組' ? '' : `-${stage}`}${again ? '-重評' : ''}`;
+/** 一批要交的結果：每個區組兩位評審的卡組，有地圖的區組再加地圖。 */
+export const stagesOf = (block: Block): Stage[] => block.maps.length ? ['卡組', '地圖'] : ['卡組'];
 const rejudgeFile = (folder: Folder, batch: number, judge: string, block: string): string => join(batchDir(folder, batch), '重評', judge, `${block}.json`);
 
 /**
@@ -108,14 +113,15 @@ function rejudgePicks(folder: Folder, batch: number, blocks: readonly Block[]): 
   return picks;
 }
 
-interface Task { block: Block; judge: Judge; again: boolean }
-const taskFile = (folder: Folder, batch: number, task: Task): string => (task.again ? rejudgeFile : resultFile)(folder, batch, task.judge.name, task.block.name);
-/** 還沒交的評分：先是每個區組兩位評審，再是重評。 */
+interface Task { block: Block; judge: Judge; again: boolean; stage: Stage }
+const taskFile = (folder: Folder, batch: number, task: Task): string => task.again ? rejudgeFile(folder, batch, task.judge.name, task.block.name) : resultFile(folder, batch, task.judge.name, task.block.name, task.stage);
+const taskKey = (task: Task): string => jobOf(task.block, task.judge, task.again, task.stage);
+/** 還沒交的評分：先是每個區組兩位評審（卡組、有地圖的再加地圖），再是重評（只重評卡組）。 */
 function pendingTasks(folder: Folder, batch: number, blocks: readonly Block[]): Task[] {
   const picks = rejudgePicks(folder, batch, blocks);
-  const tasks = [
-    ...blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge, again: false }))),
-    ...folder.config.judges.flatMap(judge => (picks[judge.name] ?? []).map(name => ({ block: blocks.find(block => block.name === name)!, judge, again: true }))),
+  const tasks: Task[] = [
+    ...blocks.flatMap(block => stagesOf(block).flatMap(stage => folder.config.judges.map(judge => ({ block, judge, again: false, stage })))),
+    ...folder.config.judges.flatMap(judge => (picks[judge.name] ?? []).map(name => ({ block: blocks.find(block => block.name === name)!, judge, again: true, stage: '卡組' as const }))),
   ];
   return tasks.filter(task => !existsSync(taskFile(folder, batch, task)));
 }
@@ -156,35 +162,51 @@ export function judgePrompt(folder: Folder, block: Block, rows: readonly RubricR
 
 export interface JudgeOptions { adapters?: Partial<Record<'claude' | 'codex', Adapter>>; log?: (line: string) => void; temp?: string; batch?: number }
 
-/** 跑一位評審評一個區組：驗結果，不合就在同一個對話補正。 */
+/** 地圖評分的提示（rule-test-d236.md §5-3）：凍結的地圖評分說明，加這個區組有地圖的代號與列號。 */
+function mapPrompt(folder: Folder, block: Block, rows: readonly RubricRow[], attached: boolean): string {
+  return [
+    readFileSync(join(folder.root, '凍結', '範本', '地圖評分說明.md'), 'utf8').trim(),
+    [
+      '## 這一次',
+      '',
+      `- 地圖：${block.maps.map(code => `地圖/${code}.md`).join('、')}（共 ${String(block.maps.length)} 份）`,
+      `- 要逐列判的列（${String(judgedRows(rows).length)} 列）：${judgedRows(rows).map(row => row.id).join('、')}`,
+      `- 教材：${attached ? '附件（資料夾裡也有一份 教材.pdf）' : '資料夾裡的 教材.pdf'}`,
+    ].join('\n'),
+  ].join('\n\n');
+}
+
+/** 跑一位評審評一個區組的一個階段：驗結果，不合就在同一個對話補正。 */
 async function runOne(folder: Folder, batch: number, task: Task, adapter: Adapter, temp: string): Promise<AskOutcome> {
   const { block, judge } = task;
   const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
   const rows = parseRubric(readFileSync(rubricOf(folder, lesson), 'utf8'), new Set(readFrozenSnapshot(folder, lesson.code)?.targets.map(t => t.id) ?? []));
   const pdf = readFileSync(materialOf(folder, lesson));
-  const pages = countPdfPages(pdf);
-  const decks = new Map(block.codes.map(code => [code, readFileSync(join(batchDir(folder, batch), '卡組', block.lesson, `${code}.md`), 'utf8').split('\n')]));
+  const lines = (dir: string, codes: readonly string[]): Map<string, string[]> => new Map(codes.map(code => [code, readFileSync(join(batchDir(folder, batch), dir, block.lesson, `${code}.md`), 'utf8').split('\n')]));
   const cwd = mkdtempSync(join(temp, 'rule-test-judge-'));
-  copyDir(join(batchDir(folder, batch), '區組', block.name), cwd);
+  const common = { folder, log: LOG(batch), key: taskKey(task), who: judge, adapter, pdf, cwd, records: join(batchDir(folder, batch), '紀錄'), save: (value: unknown) => { writeOnce(taskFile(folder, batch, task), JSON.stringify(value, null, 2) + '\n'); } };
   try {
-    return await askJson({
-      folder, log: LOG(batch), key: jobOf(block, judge, task.again), who: judge, adapter, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), pdf, cwd,
-      schema: judgeSchema(block.codes), records: join(batchDir(folder, batch), '紀錄'),
-      validate: value => validateResult(value, { rows, codes: block.codes, decks, pages }),
-      save: value => { writeOnce(taskFile(folder, batch, task), JSON.stringify(value, null, 2) + '\n'); },
-    });
+    if (task.stage === '地圖') {
+      copyDir(mapBlockDir(folder, batch, block.name), cwd);
+      const maps = lines('地圖', block.maps);
+      return await askJson({ ...common, text: mapPrompt(folder, block, rows, judge.kind === 'claude'), schema: mapSchema(block.maps), validate: value => validateMap(value, { rows, codes: block.maps, maps }) });
+    }
+    copyDir(join(batchDir(folder, batch), '區組', block.name), cwd);
+    const pages = countPdfPages(pdf);
+    const decks = lines('卡組', block.codes);
+    return await askJson({ ...common, text: judgePrompt(folder, block, rows, pages, judge.kind === 'claude'), schema: judgeSchema(block.codes), validate: value => validateResult(value, { rows, codes: block.codes, decks, pages }) });
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 
-/** 一批的每個區組兩位都交了：每個結果檔的雜湊寫進 鎖定.md（§5-7）。回傳有沒有鎖定。 */
+/** 一批的每個區組、每個階段兩位都交了：每個結果檔的雜湊寫進 鎖定.md（§5-7；rule-test-d236.md §6-2 列全部階段）。回傳有沒有鎖定。 */
 function lockBatch(folder: Folder, batch: number, blocks: readonly Block[]): boolean {
   const file = join(batchDir(folder, batch), '鎖定.md');
   if (existsSync(file)) return true;
-  const files = blocks.flatMap(block => folder.config.judges.map(judge => ({ block, judge, path: resultFile(folder, batch, judge.name, block.name) })));
+  const files = blocks.flatMap(block => stagesOf(block).flatMap(stage => folder.config.judges.map(judge => ({ block, judge, stage, path: resultFile(folder, batch, judge.name, block.name, stage) }))));
   if (!files.every(each => existsSync(each.path))) return false;
   const time = new Date().toISOString();
   writeOnce(file, [`# 批 ${String(batch)} 鎖定`, '', '| 課 | 區組 | 評審 | 結果檔 | sha256 | 鎖定（UTC） |', '|---|---|---|---|---|---|',
-    ...files.map(each => `| ${each.block.lesson} | ${each.block.name} | ${each.judge.name} | 結果/${each.judge.name}/${each.block.name}.json | ${sha256File(each.path)} | ${time} |`), ''].join('\n'));
+    ...files.map(each => `| ${each.block.lesson} | ${each.block.name} | ${each.judge.name} | ${relative(batchDir(folder, batch), each.path).split(sep).join('/')} | ${sha256File(each.path)} | ${time} |`), ''].join('\n'));
   return true;
 }
 
@@ -197,12 +219,12 @@ export async function runJudges(folder: Folder, options: JudgeOptions = {}): Pro
   const blocks = readBlocks(folder, batch);
   const adapters: Record<string, Adapter | undefined> = { claude: options.adapters?.claude ?? claudeAdapter(), codex: options.adapters?.codex ?? codexAdapter() };
   const release = acquireLock(folder, 'judge', LOG(batch));
-  const todo = pendingTasks(folder, batch, blocks).filter(task => jobState(readEvents(folder, LOG(batch)), jobOf(task.block, task.judge, task.again)).status !== 'failed');
+  const todo = pendingTasks(folder, batch, blocks).filter(task => jobState(readEvents(folder, LOG(batch)), taskKey(task)).status !== 'failed');
   let stopped: string | null = null;
   try {
     const worker = async (): Promise<void> => {
       for (let next = todo.shift(); next && !stopped; next = todo.shift()) {
-        const key = jobOf(next.block, next.judge, next.again);
+        const key = taskKey(next);
         log(`評分 ${key}`);
         const outcome = await runOne(folder, batch, next, adapters[next.judge.kind]!, temp);
         log(`${key}：${outcome}`);
@@ -228,7 +250,7 @@ export async function judge(): Promise<void> {
   if (!numbers.length) throw Error('還沒匿名（先跑 blind）');
   const batch = numbers.at(-1)!, retry = flags.includes('--retry');
   const events = readEvents(folder, LOG(batch));
-  const keys = pendingTasks(folder, batch, readBlocks(folder, batch)).map(task => jobOf(task.block, task.judge, task.again));
+  const keys = pendingTasks(folder, batch, readBlocks(folder, batch)).map(taskKey);
   const failed = keys.filter(key => jobState(events, key).status === 'failed');
   const todo = retry ? keys : keys.filter(key => !failed.includes(key));
   // 放棄的不重開就鎖不了這一批（兩位都要交）。

@@ -170,7 +170,7 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   }
   // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明，凍結一份，評分與裁定照這一份。
   const templates = join(import.meta.dirname, 'templates');
-  const names = ['評分說明.md', '裁定說明.md', '拿不準說明.md', ...[...new Set(config.lessons.map(lesson => lesson.subjectKey))].map(key => `口徑/${key}.md`).filter(name => existsSync(join(templates, name)))];
+  const names = ['評分說明.md', '地圖評分說明.md', '裁定說明.md', '拿不準說明.md', ...[...new Set(config.lessons.map(lesson => lesson.subjectKey))].map(key => `口徑/${key}.md`).filter(name => existsSync(join(templates, name)))];
   checkInherited(folder, steps, templateHashes(names, templates));
   for (const name of names) writes.push([join(folder.root, '凍結', '範本', name), readFileSync(join(templates, name))]);
   writes.push([join(folder.root, '凍結', '提示.json'), JSON.stringify(steps, null, 2) + '\n']);

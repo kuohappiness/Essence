@@ -15,12 +15,14 @@ import { acquireLock, detach } from './generate.ts';
 import { resultFile, type JudgeResult } from './judge.ts';
 import { jobState, readEvents } from './jobs.ts';
 import { QUALITY_KINDS, type QualityKind } from './levels.ts';
+import { mergeMap, type MapResult, type MergedMap } from './map.ts';
 import { mergeDeck, type MergedDeck } from './merge.ts';
 import { countPdfPages } from './probe.ts';
 
 
-interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck }
-interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>> }
+/** map：這一份在這個區組的地圖評分合併（沒有地圖是 null，rule-test-d236.md §5-3）。 */
+interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck; map: MergedMap | null }
+interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>>; maps: Map<string, Map<string, MapResult>> }
 
 /** 一批鎖定了才合併：鎖定.md 記的每個結果檔，雜湊都要對得上（§5-7 鎖定、§5-9）。 */
 export function mergeBatch(folder: Folder, n: number): BatchMerge {
@@ -33,17 +35,19 @@ export function mergeBatch(folder: Folder, n: number): BatchMerge {
     const path = join(dir, cells[4]);
     if (!existsSync(path) || sha256File(path) !== cells[5]) throw Error(`批 ${String(n)} 鎖定之後，${cells[4]} 改過或不見了`);
   }
-  const results = new Map<string, Map<string, JudgeResult>>();
+  const results = new Map<string, Map<string, JudgeResult>>(), maps = new Map<string, Map<string, MapResult>>();
   const entries: MergedEntry[] = [];
   for (const block of readBlocks(folder, n)) {
     const mine = new Map(folder.config.judges.map(judge => [judge.name, JSON.parse(readFileSync(resultFile(folder, n, judge.name, block.name), 'utf8')) as JudgeResult]));
     results.set(block.name, mine);
+    const mapResults = block.maps.length ? new Map(folder.config.judges.map(judge => [judge.name, JSON.parse(readFileSync(resultFile(folder, n, judge.name, block.name, '地圖'), 'utf8')) as MapResult])) : null;
+    if (mapResults) maps.set(block.name, mapResults);
     for (const code of block.codes) {
       const deck = readFileSync(join(dir, '卡組', block.lesson, `${code}.md`), 'utf8');
-      entries.push({ block, code, deck, merged: mergeDeck(code, deck, mine) });
+      entries.push({ block, code, deck, merged: mergeDeck(code, deck, mine), map: mapResults && block.maps.includes(code) ? mergeMap(code, mapResults) : null });
     }
   }
-  return { entries, results };
+  return { entries, results, maps };
 }
 
 export interface MajorDispute { id: string; lesson: string; block: string; code: string; at: string; lines: number[]; rubric: string; judge: string; note: string }

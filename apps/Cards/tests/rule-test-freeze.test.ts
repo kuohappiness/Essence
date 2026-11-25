@@ -197,7 +197,7 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
   assert.ok(!candidate.includes('加深'));
   assert.ok(candidate.includes('  - aaaaa2 borrow 英翻中｜國二上 L1｜第一題：borrow :: v. 借入'));
   assert.equal(steps[1].rulesChars, '## 核心規則\n- 一'.length + '## 英文規則\n- 二'.length);
-  assert.deepEqual(Object.keys(lock.files).sort(), ['<課庫>/英文L3/教材.pdf', '凍結/已有目標/英文L3.json', '凍結/提示.json', '凍結/提示/候選-英文L3.md', '凍結/提示/分段-英文L3-1.md', '凍結/提示/分段-英文L3-2.md', '凍結/提示/現行-英文L3.md', '凍結/範本/拿不準說明.md', '凍結/範本/裁定說明.md', '凍結/範本/評分說明.md', '提示/分段.md', '測試.yaml']);
+  assert.deepEqual(Object.keys(lock.files).sort(), ['<課庫>/英文L3/教材.pdf', '凍結/已有目標/英文L3.json', '凍結/提示.json', '凍結/提示/候選-英文L3.md', '凍結/提示/分段-英文L3-1.md', '凍結/提示/分段-英文L3-2.md', '凍結/提示/現行-英文L3.md', '凍結/範本/地圖評分說明.md', '凍結/範本/拿不準說明.md', '凍結/範本/裁定說明.md', '凍結/範本/評分說明.md', '提示/分段.md', '測試.yaml']);
   assert.ok(lines.some(line => line.includes('評分表還沒有')));
 
   // 重跑：已經凍結，什麼都不寫。

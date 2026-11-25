@@ -191,7 +191,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
   const unchecked = batch.entries.filter(entry => readFormat(folder, jobs.find(each => each.key === entry.job)!) === null);
   if (unchecked.length) throw Error(`還有 ${String(unchecked.length)} 份沒做格式檢查（先跑 check）`);
   const steps = readFrozenSteps(folder);
-  const decks: DeckMetrics[] = merge.entries.map(({ block, code, deck, merged }) => {
+  const decks: DeckMetrics[] = merge.entries.map(({ block, code, deck, merged, map }) => {
     const entry = batch.entries.find(each => each.lesson === block.lesson && each.code === code)!;
     const job = jobs.find(each => each.key === entry.job)!;
     const rows = effectiveRows(rubrics.get(block.lesson)!, effects.get(block.lesson) ?? []);
@@ -225,6 +225,14 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
     const pairs = issues.filter(issue => issue.kind === '近義重複').map(issue => issue.at);
     const duplicates = duplicateGroups(pairs);
     const sure = count('必備', '有').length;
+    // 地圖（rule-test-d236.md §5、§2-1）：不交是 null；應交沒交是全部必備漏、問題 0。
+    const required = rows.filter(each => each.kind === '必備');
+    let mapMetrics: DeckMetrics['map'] = null;
+    if (entry.map.kind === 'missing') mapMetrics = { missing: true, missed: required.length, issues: 0 };
+    else if (entry.map.kind === 'ok') {
+      if (!map) throw Error(`${block.name} ${code} 有地圖，卻沒有地圖的評分`);
+      mapMetrics = { missing: false, missed: required.filter(each => map.rows[each.row.id] === '沒有').length, issues: map.issues.length };
+    }
     const results = merge.results.get(block.name)!;
     return {
       batch: n, lesson: block.lesson, block: block.name, code, group: entry.group, generator: entry.generator, copy: entry.copy, replacement: entry.replacement, late,
@@ -241,7 +249,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       unsaveable,
       rulesChars: sum(mine.map(step => step.rulesChars)), promptChars: sum(mine.map(step => step.chars)),
       generationMs: generation.ms, costUsd: generation.cost, tokens: generation.tokens,
-      map: null, deepen: null,
+      map: mapMetrics, deepen: null,
       leakCandidates: leakCandidates(deck, issues), worthLearning: merged.worthLearning,
       byJudge: Object.fromEntries([...results].map(([judge, result]: [string, JudgeResult]) => [judge, {
         missed: result.rows.filter(row => rows.some(each => each.kind === '必備' && each.row.id === row.row) && row.decks.find(each => each.deck === code)?.verdict === '沒有').length,

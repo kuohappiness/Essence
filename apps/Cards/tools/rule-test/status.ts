@@ -6,7 +6,7 @@ import { batchDir, batchNumbers, readBlocks } from './blind.ts';
 import { readFormat } from './check.ts';
 import { openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
-import { resultFile } from './judge.ts';
+import { resultFile, stagesOf } from './judge.ts';
 import { readReports } from './unblind.ts';
 import { jobState, planJobs, readEvents, readExtensions, type JobState } from './jobs.ts';
 
@@ -54,11 +54,12 @@ export function statusLines(folder: Folder): string[] {
     const blocks = readBlocks(folder, n);
     const decks = new Set(blocks.flatMap(block => block.codes.map(code => `${block.lesson}/${code}`))).size;
     const dir = batchDir(folder, n);
-    const judged = blocks.flatMap(block => folder.config.judges.filter(judge => existsSync(resultFile(folder, n, judge.name, block.name)))).length;
+    const wanted = blocks.flatMap(block => stagesOf(block).flatMap(stage => folder.config.judges.map(judge => resultFile(folder, n, judge.name, block.name, stage))));
+    const judged = wanted.filter(path => existsSync(path)).length;
     const state = unblinded.has(n) ? '已解開（結果/）'
       : existsSync(join(dir, '裁定.md')) ? '已裁定（教學選擇填好後：unblind）'
         : existsSync(join(dir, '鎖定.md')) ? '已鎖定（下一步：disputes）'
-          : `評分 ${String(judged)}／${String(blocks.length * folder.config.judges.length)}（下一步：judge）`;
+          : `評分 ${String(judged)}／${String(wanted.length)}（下一步：judge）`;
     lines.push(`批 ${String(n)}：${String(decks)} 份、${String(blocks.length)} 個區組｜${state}`);
     const judging = readEvents(folder, join('評分', `批${String(n)}`, '事件.jsonl'));
     for (const key of new Set(judging.flatMap(event => event.job ?? []))) {

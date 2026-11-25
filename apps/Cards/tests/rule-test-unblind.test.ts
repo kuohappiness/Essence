@@ -8,6 +8,7 @@ import { checkFolder } from '../tools/rule-test/check.ts';
 import { runDisputes } from '../tools/rule-test/disputes.ts';
 import type { Folder } from '../tools/rule-test/folder.ts';
 import { runJudges, type JudgeResult } from '../tools/rule-test/judge.ts';
+import type { MapResult } from '../tools/rule-test/map.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
 import { tokensOf, unblindFolder } from '../tools/rule-test/unblind.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
@@ -136,4 +137,46 @@ void test('token（rule-test-d236.md §9）：輸入＝input＋快取寫入＋�
   assert.deepEqual(tokensOf([step, undefined]), { input: null, output: null });
   assert.deepEqual(tokensOf([{ input_tokens: 5 }]), { input: null, output: null });
   assert.deepEqual(tokensOf([]), { input: null, output: null });
+});
+
+void test('地圖（rule-test-d236.md §5、§13 第 6 條）：交三段的組另評地圖、鎖定列全部階段；漏的必備與問題照合併算；應交沒交是全部必備漏；不交的組是不適用', async () => {
+  const map = (frame: string): string => ['<<<全貌>>>', '- 這一課學借與還', '<<<架構>>>', frame, '<<<卡組>>>', '國二上英文 L3 單字', '- borrow 英翻中', '    - borrow :: v. 借入', '<<<完>>>'].join('\n');
+  const three = '組乙：照三段交\n\n<<<卡組>>>\n\n{{任務段}}';
+  const run = async (frame: string): Promise<{ folder: Folder; codes: string[] }> => {
+    const folder = await blinded({ 乙: map(frame) }, '', undefined, ['甲', '乙'], { 乙: three });
+    let codes: string[] = [];
+    // 兩位都判 R1 在地圖裡沒有；同一個錨點（第 2 行）都記判準不清：算一筆。
+    const shapeMap = (result: MapResult, maps: string[]): void => {
+      codes = maps;
+      result.rows.find(each => each.row === 'R1')!.decks.forEach(cell => { cell.verdict = '沒有'; cell.lines = []; cell.evidence = ''; });
+      result.issues.push({ deck: maps[0], kind: '判準不清', anchor: 2, lines: [2], rubric: '', note: '' });
+    };
+    await runJudges(folder, { adapters: { codex: fakeJudge({ shapeMap }).adapter, claude: fakeJudge({ shapeMap }).adapter }, log: () => {} });
+    return { folder, codes };
+  };
+  const { folder, codes } = await run('- 能分辨 borrow 與 lend');
+  assert.equal(codes.length, 1);
+  const lock = readFileSync(join(folder.root, '評分', '批1', '鎖定.md'), 'utf8');
+  assert.match(lock, /\| 結果\/codex\/L3-B01-地圖\.json \| [0-9a-f]{64} \|/);
+  assert.match(lock, /\| 結果\/claude\/L3-B01\.json \| [0-9a-f]{64} \|/);
+  assert.ok(statusLines(folder).includes('批 1：2 份、1 個區組｜已鎖定（下一步：disputes）'));
+  await runDisputes(folder, { adapters: { claude: () => Promise.reject(Error('沒有要裁定的')) }, log: () => {} });
+  checkFolder(folder, () => {});
+  const report = unblindFolder(folder, { log: () => {} });
+  const byGroup = Object.fromEntries(report.decks.map(deck => [deck.group, deck]));
+  assert.equal(byGroup.甲.map, null);
+  assert.deepEqual(byGroup.乙.map, { missing: false, missed: 1, issues: 1 });
+
+  // 改了鎖定的地圖結果檔：拒絕。
+  const tampered = await run('- 能分辨 borrow 與 lend');
+  writeFileSync(join(tampered.folder.root, '評分', '批1', '結果', 'codex', 'L3-B01-地圖.json'), '{}');
+  await assert.rejects(runDisputes(tampered.folder, { adapters: {}, log: () => {} }), /鎖定之後，結果\/codex\/L3-B01-地圖\.json 改過或不見了/);
+
+  // 架構是空的：沒有地圖評分，全部必備漏（R1 一列）。
+  const empty = await run('');
+  assert.equal(empty.codes.length, 0);
+  await runDisputes(empty.folder, { adapters: {}, log: () => {} });
+  checkFolder(empty.folder, () => {});
+  const missing = unblindFolder(empty.folder, { log: () => {} }).decks.find(deck => deck.group === '乙')!;
+  assert.deepEqual(missing.map, { missing: true, missed: 1, issues: 0 });
 });
