@@ -199,10 +199,11 @@ interface StateLike {
 const STATE_METHODS = ['ready', 'close', 'unread', 'decks', 'history', 'blocked', 'canAnswer', 'input', 'today'];
 
 /** 讀完的 state 換成比較資料。到期照整份紀錄算（下次到期），但照那一版的 state 停掉的目標不算。 */
-function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
+function read(state: StateLike, study: unknown, input: AdapterInput, version: string): Snapshot {
   const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
-  // 題型（D-181）是 0.4.0 之後才有：沒有就是 null，比較時不比。
-  const questionType = typeof (study as Fields).questionType === 'function' ? need(study, 'questionType') : null;
+  // 題型（D-181）與卡上的 blanks 是 0.4.0 開始才有：更早的版本沒有就是 null，比較時不比；0.4.0 以後沒有是接不上（L2 第二輪 F3）。
+  const modern = !/^0\.[0-3]\./.test(version);
+  const questionType = modern || typeof (study as Fields).questionType === 'function' ? need(study, 'questionType') : null;
   const dayNumber = (at: number): number => integer(dayOf(at, input.offset), 'dayOf()');
   const blocked = state.blocked();
   const deckSnaps = unique<DeckSnap>(array<{ path: unknown; deck: DeckLike }>(state.decks(), 'decks()').map(({ path, deck: { props, targets, problems } }) => ({
@@ -267,11 +268,15 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
       if (next.kind !== 'card') throw wrongType('nextCard()');
       const card = fields(next.card, 'nextCard() 的 card');
       const lead = text(card.lt, 'nextCard() 的 lt'), prompt = text(fields(card.prompt, 'nextCard() 的 prompt').fingerprint, 'nextCard() 的 fingerprint');
+      // 選中的目標一定在還沒出的範圍裡（L2 第二輪 F3）；範圍外的格可以照實記。
+      if (!left.some(each => each.lt === lead)) throw wrongType('nextCard() 的 lt');
+      if (modern && card.blanks === undefined) throw wrongType('nextCard() 的 blanks');
       // 每一格只讀對哪個目標、哪一題；那一版的卡沒有 blanks（0.3.0 以前）只有選中的那個目標，題型、格數、每一格都是 null。
       const blanks = card.blanks === undefined ? null : array<unknown>(card.blanks, 'nextCard() 的 blanks').map(each => {
         const blank = fields(each, 'nextCard() 的 blanks');
         return { lt: text(blank.lt, 'blanks 的 lt'), prompt: text(fields(blank.prompt, 'blanks 的 prompt').fingerprint, 'blanks 的 fingerprint') };
       });
+      if (blanks !== null && !blanks.some(blank => blank.lt === lead)) throw wrongType('nextCard() 的 blanks');
       const lts = blanks === null ? [lead] : [...new Set(blanks.map(blank => blank.lt))];
       const type = questionType ? text(questionType(card), 'questionType()') : null;
       const fresh = lts.filter(lt => left.some(each => each.lt === lt));
@@ -356,7 +361,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
     await state.ready();
     const unread = strings(state.unread(), 'unread()');
     if (unread.length) throw Error('讀不到：' + unread.join('、'));
-    result = read(state, study, input);
+    result = read(state, study, input, version);
   } finally {
     // 版本行被拒絕之後，close 重試時也會拒絕，拒絕的是同一個物件。
     await state.close().catch(failed);

@@ -458,6 +458,18 @@ void test('再複習一些照它自己的範圍出卡：英文另一個方向今
   assert.notEqual(en?.prompt, null, '只有錯題補強：再複習一些照出這張');
 });
 
+void test('nextCard 的卡要接得上：主目標要在還沒出的範圍裡、有自己的格；0.4.0 以後的卡一定有 blanks（L2 第二輪 F3）', async t => {
+  const input = { now: NOW, offset: 480, files };
+  const plain = 'const plain = (): Card => ({ lt, deck, target, prompt, isNew, typed: prompt.kind === \'qa\' && prompt.typed !== null, early, blanks: [{ lt, target, prompt }] });';
+  // 主目標換成範圍外的 ID、格子照舊。
+  await assert.rejects(snapshot(await patched(t, 'src/core/study/compose.ts', plain, plain.replace('({ lt, deck,', "({ lt: 'ghost0', deck,")), input), /nextCard\(\) 的 lt.*型別不同/);
+  // 主目標沒有自己的格：格子換成範圍外的 ID。
+  await assert.rejects(snapshot(await patched(t, 'src/core/study/compose.ts', plain, plain.replace('blanks: [{ lt, target', "blanks: [{ lt: 'ghost0', target")), input), /nextCard\(\) 的 blanks.*型別不同/);
+  // 0.4.0 以後的版本卡上沒有 blanks、或沒有 questionType：不能當成舊版略過。
+  await assert.rejects(snapshot(await patched(t, 'src/core/study/compose.ts', plain, plain.replace(', early, blanks: [{ lt, target, prompt }] });', ', early });')), input), /nextCard\(\) 的 blanks.*型別不同/);
+  await assert.rejects(snapshot(await patched(t, 'src/core/study/index.ts', 'pickPreviewCards, questionType }', 'pickPreviewCards }'), input), /這個版本沒有 questionType/);
+});
+
 void test('接不上就丟錯（比較的一方寫無法比較）：版號不是正式版號、state 沒有閘門、沒有讀取能力的模組、比較時想寫版本行以外的內容', async t => {
   const input = { now: NOW, offset: 480, files };
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: string };
@@ -696,9 +708,11 @@ const fakeGood = () => ({
       slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }], ['bbb222', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
     conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
   },
-  // 每一次都出同一張卡：兩格各對一個目標，兩個佇列各出一次就都出過了（L2 第一輪 R1：照同一張卡上的目標拿掉再出）。
+  // 今天的份出 nextCard、再複習一些（{ more: true }）出 nextMore（L2 第二輪 F1）。今天的份那張兩格各對一個目標：另一格的 bbb222 不在今天的份，
+  // 照實記在那張卡上，bbb222 自己在再複習一些出（L2 第一輪 R1：照同一張卡上還沒出的目標拿掉再出）。
   study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 0.5, dayOf: 20000, questionType: 'flip',
-    nextCard: { kind: 'card', card: { lt: 'aaa111', prompt: { fingerprint: '11111111' }, blanks: [{ lt: 'aaa111', prompt: { fingerprint: '11111111' } }, { lt: 'bbb222', prompt: { fingerprint: '33333333' } }] } } },
+    nextCard: { kind: 'card', card: { lt: 'aaa111', prompt: { fingerprint: '11111111' }, blanks: [{ lt: 'aaa111', prompt: { fingerprint: '11111111' } }, { lt: 'bbb222', prompt: { fingerprint: '33333333' } }] } },
+    nextMore: { kind: 'card', card: { lt: 'bbb222', prompt: { fingerprint: '33333333' }, blanks: [{ lt: 'bbb222', prompt: { fingerprint: '33333333' } }] } } },
 });
 const fakeSnapshot: Snapshot = {
   gates: { decks: [C], held: ['hld111'], incomplete: false, conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }] },
@@ -709,7 +723,7 @@ const fakeSnapshot: Snapshot = {
     problems: [{ line: 1, level: 'error', code: 'x' }] }],
   due: { aaa111: NOW + 0.5, ord111: null },
   today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, seconds: 8.5, prompt: '11111111', direction: 'en-zh', type: 'flip', cells: 2, blanks: [['aaa111', '11111111'], ['bbb222', '33333333']] },
-    { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, seconds: 7.5, prompt: '33333333', direction: 'en-zh', type: 'flip', cells: 2, blanks: [['aaa111', '11111111'], ['bbb222', '33333333']] }],
+    { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, seconds: 7.5, prompt: '33333333', direction: 'en-zh', type: 'flip', cells: 1, blanks: [['bbb222', '33333333']] }],
   days: days(1),
 };
 const WRONG: [string, () => unknown][] = [
@@ -744,9 +758,8 @@ const kind = (value: unknown): string => typeof value === 'number' ? (Number.isI
 const OPAQUE = new Set(['state.history.reviews.0', 'study.replay.aaa111']);
 const CAN_BE_NULL = new Set<string | number | undefined>(['id', 'term', 'subject', 'unit', 'direction']);
 /** 這個位置該不該接受這個值：和正常的值同一種；小數的位置也接受整數；能是 null 的欄位。 */
-// 0.3.0 以前的卡沒有 blanks：沒有就是 null（不比），不算型別不同。
-// 沒有卡型的目標沒有 kind（題型模組任務說明 §1-7）：拿掉就是 null。
-const CAN_BE_MISSING = new Set(['study.nextCard.card.blanks', 'state.decks.0.deck.targets.1.kind']);
+// 沒有卡型的目標沒有 kind（題型模組任務說明 §1-7）：拿掉就是 null。假版本是 9.9.9：卡上沒有 blanks 是接不上（只有 0.3.0 以前可以沒有，L2 第二輪 F3）。
+const CAN_BE_MISSING = new Set(['state.decks.0.deck.targets.1.kind']);
 function fits(good: unknown, value: unknown, position: Position): boolean {
   if (OPAQUE.has(position.join('.')) || kind(good) === kind(value)) return true;
   if (value === undefined && CAN_BE_MISSING.has(position.join('.'))) return true;
@@ -775,7 +788,8 @@ void test('被比較的版本回傳的每個位置換成每一種不對的值：
     'package.json': '{"type":"module"}',
     'manifest.json': '{"version":"9.9.9"}',
     'src/core/version/index.ts': 'export const releaseOf = () => globalThis.fake.study.releaseOf;\n',
-    'src/core/study/index.ts': Object.keys(studyValues).map(name => `export const ${name} = () => globalThis.fake.study.${name};\n`).join(''),
+    'src/core/study/index.ts': Object.keys(studyValues).filter(name => name !== 'nextCard').map(name => `export const ${name} = () => globalThis.fake.study.${name};\n`).join('')
+      + 'export const nextCard = (_today, _input, pick) => \'more\' in pick ? globalThis.fake.study.nextMore : globalThis.fake.study.nextCard;\n',
     'src/state/index.ts': `export const createState = () => ({ ready: async () => {}, close: async () => {}, ${Object.keys(stateValues).map(name => method('state', name)).join(' ')} });\n`,
   })) {
     await mkdir(dirname(join(dir, path)), { recursive: true });
