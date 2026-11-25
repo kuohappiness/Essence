@@ -15,6 +15,9 @@ import { blindFolder } from '../tools/rule-test/blind.ts';
 import { planCopy, readPlan, runDeepen } from '../tools/rule-test/deepen.ts';
 import { mergeDeepen, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
 import { resultFile, runJudges } from '../tools/rule-test/judge.ts';
+import { checkFolder } from '../tools/rule-test/check.ts';
+import { runDisputes } from '../tools/rule-test/disputes.ts';
+import { unblindFolder } from '../tools/rule-test/unblind.ts';
 import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
 import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
@@ -291,4 +294,38 @@ void test('加深評分：每個有加深的區組、每位評審另開一個對
   }
   const lock = readFileSync(join(folder.root, '評分', '批1', '鎖定.md'), 'utf8');
   assert.match(lock, new RegExp(`${block.name}-加深\\.json`));
+});
+
+void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接錯、歧見；只有一位記的加深重大照裁定；卡組存不了的份加深機會全漏、確定接錯不算', async () => {
+  const broken = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>';
+  const folder = await generated({ 乙: broken }, 'L1', '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |\n| D2 | 加深機會 | 用到 R1：借貸的片語 | p.3 | | |');
+  await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
+  const batch = blindFolder(folder, { log: () => {} });
+  const [block] = batch.blocks;
+  assert.equal(block.deepens.length, 1);
+  const mark = (result: DeepenResult, item: string, reason: '接錯目標' | '沒有加深'): void => { Object.assign(result.items.find(each => each.item === item)!, { verdict: '接錯', reason }); };
+  const noD2 = (result: DeepenResult): void => { result.rows.find(row => row.row === 'D2')!.decks.forEach(cell => Object.assign(cell, { verdict: '沒有', evidence: '', items: [] })); };
+  const fable = fakeJudge({ shapeDeepen: result => { mark(result, '1-2', '接錯目標'); noD2(result); } });
+  // 只有 Codex 記的重大錯誤（第 1 項那一行）：送裁定。
+  const { items } = JSON.parse(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${block.deepens[0]}.json`), 'utf8')) as { items: { id: string; line: number }[] };
+  const codex = fakeJudge({ shapeDeepen: (result, codes) => {
+    mark(result, '1-2', '接錯目標'); mark(result, '1-3', '沒有加深'); noD2(result);
+    result.issues.push({ deck: [...codes.keys()][0], kind: '重大錯誤', item: '1-1', lines: [items[0].line], note: 'lend 的方向教反了' });
+  } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
+  const seen: string[] = [];
+  await runDisputes(folder, { adapters: { claude: request => {
+    request.record('{}', '');
+    seen.push(request.text, ...['加深', '卡組'].filter(sub => existsSync(join(request.cwd, sub))));
+    const value = { verdict: '不成立', quality: '判錯', reason: 'lend 沒教反，但答案只收一種說法' };
+    return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 's', warnings: [], ms: 1, models: [], structured: value });
+  } }, log: () => {} });
+  assert.match(seen[0], /這一筆在加深裡/);
+  assert.match(seen[0], /- 位置：加深 項 1-1/);
+  assert.deepEqual(seen.slice(1), ['加深']);
+  checkFolder(folder, () => {});
+  const report = unblindFolder(folder, { log: () => {} });
+  const byGroup = Object.fromEntries(report.decks.map(deck => [deck.group, deck]));
+  assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1 });
+  assert.deepEqual(byGroup.乙.deepen, { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: 2, wrong: null, disputed: 0, major: 0, harm: 0 });
 });

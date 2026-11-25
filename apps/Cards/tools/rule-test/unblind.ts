@@ -5,14 +5,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { join } from 'node:path';
 import { batchDir, batchNumbers, openBatch, type Batch } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
-import { collectDisputes, mergeBatch } from './disputes.ts';
+import { collectDisputes, deepenAt, mergeBatch } from './disputes.ts';
 import { levelOf, QUALITY_KINDS, type Level, type QualityKind } from './levels.ts';
 import { lessonDir, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSteps, verifyLock } from './freeze.ts';
 import { readFormat } from './check.ts';
 import { jobState, planJobs, readEvents } from './jobs.ts';
 import { duplicateGroups, leakCandidates, type MergedIssue, type Verdict } from './merge.ts';
-import { parseRubric, type RubricRow } from './rubric.ts';
+import { deepenChances, parseRubric, type RubricRow } from './rubric.ts';
 import type { JudgeResult } from './judge.ts';
 import { allGates } from './gates.ts';
 import { summaryLines } from './report.ts';
@@ -98,9 +98,12 @@ export interface DeckMetrics {
 
 /** 一份的加深（§6-3）：放棄的篇不算進來，另外報。 */
 export interface DeepenMetrics {
-  pieces: number; abandoned: number; items: number;
+  /** 評了幾篇（放棄的不算）、放棄幾篇、加深存不了幾篇、幾項。 */
+  pieces: number; abandoned: number; unsavable: number; items: number;
+  /** 卡組存不了、不能模擬加深（§2-1）：加深機會漏掉記全部列，確定接錯這一份不算（null）。 */
+  undeepened: boolean;
   /** 加深機會漏掉（兩位都判沒有的列數）；確定接錯、歧見（兩位不同）；加深的重大（含加深存不了）與傷到學習。 */
-  missed: number; wrong: number; disputed: number; major: number; harm: number;
+  missed: number; wrong: number | null; disputed: number; major: number; harm: number;
 }
 
 export interface BatchReport {
@@ -191,7 +194,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
   const unchecked = batch.entries.filter(entry => readFormat(folder, jobs.find(each => each.key === entry.job)!) === null);
   if (unchecked.length) throw Error(`還有 ${String(unchecked.length)} 份沒做格式檢查（先跑 check）`);
   const steps = readFrozenSteps(folder);
-  const decks: DeckMetrics[] = merge.entries.map(({ block, code, deck, merged, map }) => {
+  const decks: DeckMetrics[] = merge.entries.map(({ block, code, deck, merged, map, deepen }) => {
     const entry = batch.entries.find(each => each.lesson === block.lesson && each.code === code)!;
     const job = jobs.find(each => each.key === entry.job)!;
     const rows = effectiveRows(rubrics.get(block.lesson)!, effects.get(block.lesson) ?? []);
@@ -233,13 +236,38 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       if (!map) throw Error(`${block.name} ${code} 有地圖，卻沒有地圖的評分`);
       mapMetrics = { missing: false, missed: required.filter(each => map.rows[each.row.id] === '沒有').length, issues: map.issues.length };
     }
+    // 加深（§6-3、§2-1）：卡組存不了是加深機會全漏、確定接錯不算；只有一位記的重大照裁定，不成立改記的照那一種算級。
+    const chances = deepenChances(rubrics.get(block.lesson)!).length;
+    let deepenMetrics: DeckMetrics['deepen'] = null;
+    if (entry.deepen.kind === 'unsavable') deepenMetrics = { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: chances, wrong: null, disputed: 0, major: 0, harm: 0 };
+    else if (entry.deepen.kind === 'ok') {
+      const { pieces, abandoned, unsavable, items } = entry.deepen;
+      const kinds: string[] = [];
+      let deepenMajor = 0;
+      for (const issue of deepen?.issues ?? []) {
+        if (issue.kind !== '重大錯誤') { kinds.push(issue.kind); continue; }
+        if (issue.judges.length > 1) { deepenMajor++; continue; }
+        const dispute = disputes.majors.find(each => each.stage === '加深' && each.block === block.name && each.code === code && each.at === deepenAt(issue))!;
+        const ruling = rulings.majors.get(dispute.id)!;
+        if (ruling.verdict === '成立') deepenMajor++;
+        else if (ruling.quality) kinds.push(ruling.quality);
+      }
+      const verdicts = Object.values(deepen?.items ?? {});
+      deepenMetrics = {
+        pieces: pieces - abandoned, abandoned, unsavable, items, undeepened: false,
+        missed: deepen ? Object.values(deepen.rows).filter(verdict => verdict === '沒有').length : 0,
+        wrong: verdicts.filter(each => each === '錯').length, disputed: verdicts.filter(each => each === '歧見').length,
+        major: deepenMajor + unsavable,
+        harm: kinds.filter(kind => levelOf(kind as QualityKind, folder.config.levels) === '傷到學習').length,
+      };
+    }
     const results = merge.results.get(block.name)!;
     return {
       batch: n, lesson: block.lesson, block: block.name, code, group: entry.group, generator: entry.generator, copy: entry.copy, replacement: entry.replacement, late,
       required: { 有: sure, 部分: count('必備', '部分').length, 沒有: missed.length }, missed, partial: count('必備', '部分'),
       bonus: { 有: count('加分', '有').length, 部分: count('加分', '部分').length, 沒有: count('加分', '沒有').length },
       disagreements: merged.disagreements.filter(id => rows.some(each => each.row.id === id)).length,
-      major, majorBoth, majorRuled, majorTotal: major + (unsaveable ? 1 : 0),
+      major, majorBoth, majorRuled, majorTotal: major + (unsaveable ? 1 : 0) + (deepenMetrics?.major ?? 0),
       quality, qualityTotal: qualityIssues.length, qualityBoth: qualityIssues.filter(issue => issue.judges.length > 1).length, qualityOne: qualityIssues.filter(issue => issue.judges.length === 1).length,
       harm, minor: levelCount('小問題'),
       nearDuplicates: pairs.length, duplicateGroups: duplicates.groups, extraPrompts: duplicates.extra,
@@ -249,7 +277,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       unsaveable,
       rulesChars: sum(mine.map(step => step.rulesChars)), promptChars: sum(mine.map(step => step.chars)),
       generationMs: generation.ms, costUsd: generation.cost, tokens: generation.tokens,
-      map: mapMetrics, deepen: null,
+      map: mapMetrics, deepen: deepenMetrics,
       leakCandidates: leakCandidates(deck, issues), worthLearning: merged.worthLearning,
       byJudge: Object.fromEntries([...results].map(([judge, result]: [string, JudgeResult]) => [judge, {
         missed: result.rows.filter(row => rows.some(each => each.kind === '必備' && each.row.id === row.row) && row.decks.find(each => each.deck === code)?.verdict === '沒有').length,

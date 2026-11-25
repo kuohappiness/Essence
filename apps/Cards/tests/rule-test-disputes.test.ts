@@ -53,7 +53,7 @@ void test('合併：那一批鎖定前停下；鎖定後結果檔改過也停下
 void test('要裁定的：只有一位記的重大錯誤（兩位都記的不用），與評審寫了的拿不準', async () => {
   const { folder, codes } = await judged();
   const { majors, unsure } = collectDisputes(mergeBatch(folder, 1));
-  assert.deepEqual(majors, [{ id: 'M1', lesson: 'L3', block: 'L3-B01', code: codes[1], at: '目標 2 第 1 題', lines: [5], rubric: 'M1', judge: 'codex', note: 'lend 教成借入' }]);
+  assert.deepEqual(majors, [{ id: 'M1', stage: '卡組', lesson: 'L3', block: 'L3-B01', code: codes[1], at: '目標 2 第 1 題', lines: [5], rubric: 'M1', judge: 'codex', note: 'lend 教成借入' }]);
   assert.deepEqual(unsure, [{ id: 'U1', lesson: 'L3', block: 'L3-B01', judge: 'codex', text: '列 R1 只考英翻中算不算有' }]);
 });
 

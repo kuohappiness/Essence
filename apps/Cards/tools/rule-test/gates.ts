@@ -31,7 +31,8 @@ const EPSILON = 1e-9;
 const ENOUGH = 3;
 const ALPHA = 0.05;
 
-type Value = number | 'na' | 'unknown';
+/** drop：這一份不算進這個指標（卡組存不了、不能加深時的確定接錯，rule-test-d236.md §2-1）。 */
+type Value = number | 'na' | 'unknown' | 'drop';
 
 /** 學習面指標的值（§7-2 第 4 道的清單）；na 是這一組不適用（不交地圖、沒跑加深）。 */
 function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
@@ -43,7 +44,7 @@ function learningValue(deck: DeckMetrics, metric: LearningMetric): Value {
     case '地圖漏的必備': return deck.map ? deck.map.missed : 'na';
     case '地圖問題': return deck.map ? deck.map.issues : 'na';
     case '加深機會漏掉': return deck.deepen ? deck.deepen.missed : 'na';
-    case '確定接錯': return deck.deepen ? deck.deepen.wrong : 'na';
+    case '確定接錯': return deck.deepen ? deck.deepen.wrong ?? 'drop' : 'na';
   }
 }
 function secondaryValue(deck: DeckMetrics, metric: SecondaryMetric): Value {
@@ -77,8 +78,9 @@ function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetric
     if (kept(c).length < c.length || kept(b).length < b.length) return { unknown: '有份的加深整份都放棄了' };
     c = kept(c); b = kept(b);
   }
-  const values = (decks: readonly DeckMetrics[]): Value[] => decks.map(pick);
+  const values = (decks: readonly DeckMetrics[]): Value[] => decks.map(pick).filter(value => value !== 'drop');
   const vc = values(c), vb = values(b);
+  if (!vc.length || !vb.length) return { unknown: '不算的份（卡組存不了、不能加深）拿掉之後沒有份了' };
   if (vc.every(each => each === 'na') || vb.every(each => each === 'na')) return { skip: vb.every(each => each === 'na') ? '基準不適用（凍結時就知道）' : '候選不適用（凍結時就知道）' };
   if ([...vc, ...vb].some(each => typeof each !== 'number')) return { unknown: '有份沒有資料' };
   return { c: vc as number[], b: vb as number[], meanC: mean(vc as number[]), meanB: mean(vb as number[]) };
@@ -88,7 +90,7 @@ const allowed = (tolerance: Tolerance, meanB: number): number => Math.max(tolera
 
 /** 確定接錯的兩端（§6-3）：兩組交叉，一端候選的歧見當對、基準的當錯，另一端反過來。 */
 function ends(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[]): { favorable: SeriesOr; unfavorable: SeriesOr } {
-  const pick = (withDisputed: boolean) => (deck: DeckMetrics): Value => deck.deepen ? deck.deepen.wrong + (withDisputed ? deck.deepen.disputed : 0) : 'na';
+  const pick = (withDisputed: boolean) => (deck: DeckMetrics): Value => !deck.deepen ? 'na' : deck.deepen.wrong === null ? 'drop' : deck.deepen.wrong + (withDisputed ? deck.deepen.disputed : 0);
   const both = (c: boolean, b: boolean): SeriesOr => {
     const sc = series(candidate, candidate, pick(c), '確定接錯'), sb = series(baseline, baseline, pick(b), '確定接錯');
     if (!isSeries(sc)) return sc;

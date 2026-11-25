@@ -129,7 +129,7 @@ void test('不交地圖、沒跑加深的指標跳過，不會讓結果變成未
   assert.equal(result.verdict, '打平');
 });
 
-const deepen = (more: Partial<DeepenMetrics> = {}): DeepenMetrics => ({ pieces: 2, abandoned: 0, items: 5, missed: 0, wrong: 0, disputed: 0, major: 0, harm: 0, ...more });
+const deepen = (more: Partial<DeepenMetrics> = {}): DeepenMetrics => ({ pieces: 2, abandoned: 0, unsavable: 0, items: 5, undeepened: false, missed: 0, wrong: 0, disputed: 0, major: 0, harm: 0, ...more });
 
 void test('確定接錯的兩端：兩組各 0 筆確定接錯、各 3 筆歧見，兩端是 0 對 3、3 對 0，結論不同，未定', () => {
   const result = judgeGates(GATES, same('候選', 3, { deepen: deepen({ disputed: 3 }) }), same('現行', 3, { deepen: deepen({ disputed: 3 }) }));
@@ -143,6 +143,13 @@ void test('加深放棄的篇：兩組差 2 篇以上，加深的指標是未定
   const result = judgeGates(GATES, same('候選', 3, { deepen: deepen({ abandoned: 1 }) }), same('現行', 3, { deepen: deepen() }));
   const missed = result.noWorse.find(each => each.metric === '加深機會漏掉');
   assert.deepEqual([missed?.state, missed?.text], ['unknown', '不能變差 加深機會漏掉：未定（加深放棄的篇：候選 3、基準 0，差 2 篇以上）']);
+});
+
+void test('卡組存不了、不能加深的份（§2-1）：確定接錯不算那一份，其餘照比；加深機會漏掉照記的全部列比', () => {
+  const candidate = [...same('候選', 3, { deepen: deepen({ wrong: 0 }) }), deck('候選', { deepen: deepen({ undeepened: true, wrong: null, missed: 2, pieces: 0, items: 0 }) })];
+  const result = judgeGates(GATES, candidate, same('現行', 3, { deepen: deepen() }));
+  assert.deepEqual(result.noWorse.find(each => each.metric === '確定接錯')?.text, '不能變差 確定接錯：候選 0.0、基準 0.0（容許多 0.50）→ 過');
+  assert.match(result.noWorse.find(each => each.metric === '加深機會漏掉')?.text ?? '', /^不能變差 加深機會漏掉：候選 0\.5、基準 0\.0/);
 });
 
 void test('配對：只收和基準同一個區組的候選份，混在一起比；沒有基準的區組不進門檻，總結果未定；不算門檻的生成器只報告', () => {

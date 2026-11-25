@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeAdapter, codexAdapter, type Adapter } from './adapters.ts';
 import { askJson } from './ask.ts';
-import { batchDir, batchNumbers, readBlocks, type Block } from './blind.ts';
+import { batchDir, batchNumbers, deepenBlockDir, readBlocks, type Block } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import { copyDir, materialOf, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { verifyLock } from './freeze.ts';
@@ -18,11 +18,12 @@ import { QUALITY_KINDS, type QualityKind } from './levels.ts';
 import { mergeMap, type MapResult, type MergedMap } from './map.ts';
 import { mergeDeck, type MergedDeck } from './merge.ts';
 import { countPdfPages } from './probe.ts';
+import { mergeDeepen, type DeepenResult, type MergedDeepen } from './deepen-judge.ts';
 
 
-/** map：這一份在這個區組的地圖評分合併（沒有地圖是 null，rule-test-d236.md §5-3）。 */
-interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck; map: MergedMap | null }
-interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>>; maps: Map<string, Map<string, MapResult>> }
+/** map、deepen：這一份在這個區組的地圖、加深評分合併（沒有是 null，rule-test-d236.md §5-3、§6-3）。 */
+interface MergedEntry { block: Block; code: string; deck: string; merged: MergedDeck; map: MergedMap | null; deepen: MergedDeepen | null }
+interface BatchMerge { entries: MergedEntry[]; results: Map<string, Map<string, JudgeResult>>; maps: Map<string, Map<string, MapResult>>; deepens: Map<string, Map<string, DeepenResult>> }
 
 /** 一批鎖定了才合併：鎖定.md 記的每個結果檔，雜湊都要對得上（§5-7 鎖定、§5-9）。 */
 export function mergeBatch(folder: Folder, n: number): BatchMerge {
@@ -35,29 +36,41 @@ export function mergeBatch(folder: Folder, n: number): BatchMerge {
     const path = join(dir, cells[4]);
     if (!existsSync(path) || sha256File(path) !== cells[5]) throw Error(`批 ${String(n)} 鎖定之後，${cells[4]} 改過或不見了`);
   }
-  const results = new Map<string, Map<string, JudgeResult>>(), maps = new Map<string, Map<string, MapResult>>();
+  const results = new Map<string, Map<string, JudgeResult>>(), maps = new Map<string, Map<string, MapResult>>(), deepens = new Map<string, Map<string, DeepenResult>>();
   const entries: MergedEntry[] = [];
   for (const block of readBlocks(folder, n)) {
     const mine = new Map(folder.config.judges.map(judge => [judge.name, JSON.parse(readFileSync(resultFile(folder, n, judge.name, block.name), 'utf8')) as JudgeResult]));
     results.set(block.name, mine);
     const mapResults = block.maps.length ? new Map(folder.config.judges.map(judge => [judge.name, JSON.parse(readFileSync(resultFile(folder, n, judge.name, block.name, '地圖'), 'utf8')) as MapResult])) : null;
     if (mapResults) maps.set(block.name, mapResults);
+    const deepenResults = block.deepens.length ? new Map(folder.config.judges.map(judge => [judge.name, JSON.parse(readFileSync(resultFile(folder, n, judge.name, block.name, '加深'), 'utf8')) as DeepenResult])) : null;
+    if (deepenResults) deepens.set(block.name, deepenResults);
     for (const code of block.codes) {
       const deck = readFileSync(join(dir, '卡組', block.lesson, `${code}.md`), 'utf8');
-      entries.push({ block, code, deck, merged: mergeDeck(code, deck, mine), map: mapResults && block.maps.includes(code) ? mergeMap(code, mapResults) : null });
+      entries.push({
+        block, code, deck, merged: mergeDeck(code, deck, mine), map: mapResults && block.maps.includes(code) ? mergeMap(code, mapResults) : null,
+        deepen: deepenResults && block.deepens.includes(code) ? mergeDeepen(code, deepenResults) : null,
+      });
     }
   }
-  return { entries, results, maps };
+  return { entries, results, maps, deepens };
 }
 
-export interface MajorDispute { id: string; lesson: string; block: string; code: string; at: string; lines: number[]; rubric: string; judge: string; note: string }
+/** stage：卡組或加深（rule-test-d236.md §6-2「裁定」）；加深的位置寫成 `加深 項 1-2`（不在項裡的寫行號）。 */
+export interface MajorDispute { id: string; stage: '卡組' | '加深'; lesson: string; block: string; code: string; at: string; lines: number[]; rubric: string; judge: string; note: string }
+
+/** 加深的一筆問題在裁定.md 與解開時的位置。 */
+export const deepenAt = (issue: { item: string; lines: readonly number[] }): string => issue.item ? `加深 項 ${issue.item}` : `加深 第 ${issue.lines.join('、')} 行`;
 interface UnsureNote { id: string; lesson: string; block: string; judge: string; text: string }
 
 /** 要裁定的：只有一位記的重大錯誤（M1…）、評審寫了的拿不準（U1…）。 */
 export function collectDisputes(merge: BatchMerge): { majors: MajorDispute[]; unsure: UnsureNote[] } {
-  const majors = merge.entries.flatMap(entry => entry.merged.issues.filter(issue => issue.kind === '重大錯誤' && issue.judges.length === 1)
-    .map(issue => ({ lesson: entry.block.lesson, block: entry.block.name, code: entry.code, at: issue.at.join('＋'), lines: issue.lines, rubric: issue.rubric, judge: issue.judges[0], note: issue.notes.join('／') })))
-    .map((each, i) => ({ id: `M${String(i + 1)}`, ...each }));
+  const majors = merge.entries.flatMap(entry => [
+    ...entry.merged.issues.filter(issue => issue.kind === '重大錯誤' && issue.judges.length === 1)
+      .map(issue => ({ stage: '卡組' as const, lesson: entry.block.lesson, block: entry.block.name, code: entry.code, at: issue.at.join('＋'), lines: issue.lines, rubric: issue.rubric, judge: issue.judges[0], note: issue.notes.join('／') })),
+    ...(entry.deepen?.issues ?? []).filter(issue => issue.kind === '重大錯誤' && issue.judges.length === 1)
+      .map(issue => ({ stage: '加深' as const, lesson: entry.block.lesson, block: entry.block.name, code: entry.code, at: deepenAt(issue), lines: issue.lines, rubric: '', judge: issue.judges[0], note: issue.notes.join('／') })),
+  ]).map((each, i) => ({ id: `M${String(i + 1)}`, ...each }));
   const unsure = [...merge.results].flatMap(([block, results]) => [...results].filter(([, result]) => result.unsure.trim())
     .map(([judge, result]) => ({ lesson: merge.entries.find(entry => entry.block.name === block)!.block.lesson, block, judge, text: result.unsure.trim() })))
     .map((each, i) => ({ id: `U${String(i + 1)}`, ...each }));
@@ -104,19 +117,22 @@ function validateUnsure(value: unknown, ids: readonly string[]): string[] {
 
 const template = (folder: Folder, name: string): string => readFileSync(join(folder.root, '凍結', '範本', name), 'utf8').trim();
 /** 評審拿到的評分說明與那一科的口徑：裁定照同一份定義。 */
-function judgingRules(folder: Folder, lessons: readonly string[]): string {
+function judgingRules(folder: Folder, lessons: readonly string[], rules = '評分說明.md'): string {
   const keys = new Set(lessons.map(code => folder.config.lessons.find(each => each.code === code)!.subjectKey));
   const subjects = [...keys].map(key => join(folder.root, '凍結', '範本', '口徑', `${key}.md`)).filter(existsSync).map(path => readFileSync(path, 'utf8').trim());
-  return ['## 附：評審拿到的評分說明（定義照這一份）', template(folder, '評分說明.md').replace(/^# /m, '### '), ...subjects].join('\n\n');
+  return ['## 附：評審拿到的評分說明（定義照這一份）', template(folder, rules).replace(/^# /m, '### '), ...subjects].join('\n\n');
 }
 
-function majorPrompt(folder: Folder, dispute: MajorDispute, pages: number | null, attached: boolean): string {
+function majorPrompt(folder: Folder, n: number, dispute: MajorDispute, pages: number | null, attached: boolean): string {
+  const where = dispute.stage === '加深'
+    ? [`- 這一筆在加深裡（rule-test-d236.md §6-2）：加深/${dispute.code}.md 前面是那一份的草稿（加入的卡組，ID 是程式給的）、後面是每一篇的加深回覆，同樣有行號；評審記的是加深回覆裡的問題。草稿是之前的卡組，不用重判。${existsSync(join(deepenBlockDir(folder, n, dispute.block), '地圖', `${dispute.code}.md`)) ? `地圖在 地圖/${dispute.code}.md。` : ''}`]
+    : [`- 卡組：卡組/${dispute.code}.md`];
   return [
     template(folder, '裁定說明.md'),
-    ['## 這一筆', '', `- 卡組：卡組/${dispute.code}.md`, `- 位置：${dispute.at}（行號 ${dispute.lines.join('、')}）`,
+    ['## 這一筆', '', ...where, `- 位置：${dispute.at}（行號 ${dispute.lines.join('、')}）`,
       `- 評審記的：重大錯誤${dispute.rubric ? `，對到評分表的 ${dispute.rubric}` : '（沒有對到評分表的列）'}；說明：${dispute.note || '（沒寫）'}`,
       `- 教材：${attached ? '附件（資料夾裡也有一份 教材.pdf）' : '資料夾裡的 教材.pdf'}${pages === null ? '' : `，共 ${String(pages)} 頁`}`].join('\n'),
-    judgingRules(folder, [dispute.lesson]),
+    judgingRules(folder, [dispute.lesson], dispute.stage === '加深' ? '加深評分說明.md' : '評分說明.md'),
   ].join('\n\n');
 }
 
@@ -178,13 +194,17 @@ export async function runDisputes(folder: Folder, options: DisputeOptions = {}):
       const pdf = readFileSync(materialOf(folder, lesson));
       const cwd = mkdtempSync(join(temp, 'rule-test-ruling-'));
       try {
-        const block = join(dir, '區組', dispute.block);
+        // 卡組的給那一份卡組；加深的給那一份的草稿與加深回覆、地圖（有的話，§6-2）。
+        const block = dispute.stage === '加深' ? deepenBlockDir(folder, n, dispute.block) : join(dir, '區組', dispute.block);
         for (const name of ['評分表.md', '教材.pdf', '已有目標.json']) copyFileSync(join(block, name), join(cwd, name));
-        mkdirSync(join(cwd, '卡組'));
-        copyFileSync(join(block, '卡組', `${dispute.code}.md`), join(cwd, '卡組', `${dispute.code}.md`));
+        for (const sub of dispute.stage === '加深' ? ['加深', '地圖'] : ['卡組']) {
+          if (!existsSync(join(block, sub, `${dispute.code}.md`))) continue;
+          mkdirSync(join(cwd, sub));
+          copyFileSync(join(block, sub, `${dispute.code}.md`), join(cwd, sub, `${dispute.code}.md`));
+        }
         log(`裁定 ${dispute.id}（${dispute.block} ${dispute.code} ${dispute.at}）`);
         const outcome = await askJson({
-          folder, log: LOG(n), key: dispute.id, who, adapter, text: majorPrompt(folder, dispute, countPdfPages(pdf), who.kind === 'claude'), pdf, cwd,
+          folder, log: LOG(n), key: dispute.id, who, adapter, text: majorPrompt(folder, n, dispute, countPdfPages(pdf), who.kind === 'claude'), pdf, cwd,
           schema: MAJOR_SCHEMA, validate: validateMajor, records: join(dir, '裁定', '紀錄'),
           save: value => { writeOnce(rulingFile(folder, n, dispute.id), JSON.stringify(value, null, 2) + '\n'); },
         });
