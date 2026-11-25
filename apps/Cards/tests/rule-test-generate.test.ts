@@ -5,7 +5,9 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inspectReply, type CardForm, type ExistingNow } from '../src/core/ai/index.ts';
 import { claudeAdapter, type Adapter, type StepRequest } from '../tools/rule-test/adapters.ts';
+import { blindFolder } from '../tools/rule-test/blind.ts';
 import { cutDeck, validity } from '../tools/rule-test/deck-cut.ts';
 import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
@@ -20,6 +22,25 @@ void test('切卡組段：三段的只留卡組到最後一個完；外層程式
   // 卡組段裡的程式碼區塊不是外層的框：只看頭尾一行。
   assert.deepEqual(cutDeck('- a\n    ```\n    x\n    ```\n<<<完>>>', false), { ok: true, deck: '- a\n    ```\n    x\n    ```\n' });
   assert.deepEqual(cutDeck('<<<全貌>>>\n只有全貌\n<<<完>>>', true), { ok: false, why: '找不到 <<<卡組>>>' });
+});
+
+void test('切卡組段和外掛認的卡組段同一個範圍（§8 第 8 條）：格式沒錯時，切出的行就是 inspectReply 每篇涵蓋的行；兩個完的切到最後一個', () => {
+  const form: CardForm = { subject: 'english', term: '國二上', unit: 'L3', purpose: '準備段考', supplement: false, pick: false, adjust: '', material: '' };
+  const none = (): ExistingNow => ({ kind: 'none' });
+  const three = '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n\n國二上英文 L3 文法\n- 現在完成式的用法\n    - I ==have== lived here. :: 現在完成式\n<<<完>>>\n';
+  const flat = '國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n<<<完>>>\n';
+  for (const [reply, r3] of [[three, true], [flat, false]] as const) {
+    const inspection = inspectReply(reply, form, { subject: '英文', r3 }, [], none);
+    assert.deepEqual(inspection.errors, []);
+    const lines = reply.split('\n');
+    const covered = inspection.pieces.flatMap(piece => [...piece.line === null ? [] : [piece.line], ...piece.lines].map(i => lines[i])).filter(line => line.trim());
+    const cut = cutDeck(reply, r3);
+    assert.ok(cut.ok);
+    assert.deepEqual(cut.deck.split('\n').filter(line => line.trim()), covered);
+  }
+  // 兩個完是格式錯誤（外掛停在第一個）；評內容照第一輪切到最後一個。
+  const twice = three.replace('<<<架構>>>', '<<<完>>>\n<<<架構>>>');
+  assert.deepEqual(cutDeck(twice, true), { ok: true, deck: twice.slice(twice.indexOf('國二上英文 L3 單字'), twice.lastIndexOf('<<<完>>>')) });
 });
 
 void test('有效原稿：有 <<<完>>>、卡組段不是空的；不是卡組的步驟只要不是空的', () => {
@@ -134,6 +155,20 @@ void test('同時跑兩份：兩份一起在跑，事件檔每一行都完整', 
   const lines = readFileSync(join(folder.root, '生成', '事件.jsonl'), 'utf8').split('\n').filter(Boolean);
   const parsed = lines.map(line => JSON.parse(line) as { type: string });
   assert.deepEqual(['start', 'done'].map(type => parsed.filter(event => event.type === type).length), [6, 6]);
+});
+
+void test('匿名時多步的把卡組步驟的卡組段照順序接起來（§8 第 8 條）', async () => {
+  const groups = '  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }\n  - { 名稱: 乙, 步驟: [{ 對話: A, 規則: { 自備: { L3: 一.md } }, 卡組: 是 }, { 對話: B, 規則: { 自備: { L3: 二.md } }, 卡組: 是 }] }';
+  const folder = await frozenFolder(groups, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  const three = new Map(readFrozenSteps(folder).map(step => [`${step.group}-${String(step.step)}`, step.threeSections]));
+  const deck = (word: string, sections: boolean): string => `${sections ? '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n' : ''}國二上英文 L3 單字\n- ${word} 英翻中\n    - ${word} :: 意思\n<<<完>>>`;
+  const { adapter } = fake(request => request.text.startsWith('組一') ? ok(deck('borrow', three.get('乙-1')!)) : request.text.startsWith('組二') ? ok(deck('lend', three.get('乙-2')!)) : ok(deck('keep', three.get('甲-1')!)));
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  const batch = blindFolder(folder, { log: () => {} });
+  const code = batch.entries.find(entry => entry.group === '乙')!.code;
+  assert.equal(readFileSync(join(folder.root, '評分', '批1', '卡組', 'L3', `${code}.md`), 'utf8'),
+    '國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 意思\n\n國二上英文 L3 單字\n- lend 英翻中\n    - lend :: 意思\n');
 });
 
 void test('額度用完：整個佇列停下、記下重置時間、不重試；下一次開跑接著做沒做完的', async () => {
