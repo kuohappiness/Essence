@@ -96,6 +96,16 @@ function providerShapeProblem(p: ProviderSpec): string | null {
     if (!Number.isInteger(value) || value <= 0) return `limits 的 ${key} 要是正整數`;
   }
   if (Object.values(p.headers ?? {}).some(v => typeof v !== 'string')) return 'headers 的值要是字串';
+  // 送出時直接用到的欄位也驗：checkPath 是數字時 check() 會在 replace 丟例外（L2 第二輪 延續 R14）。
+  if (isObject(p.auth) && p.auth.scheme !== undefined && typeof p.auth.scheme !== 'string') return 'auth.scheme 要是字串';
+  const o = p.options ?? {};
+  for (const key of ['checkPath', 'maxTokensField'] as const) {
+    if (o[key] !== undefined && (typeof o[key] !== 'string' || !o[key])) return `options.${key} 要是字串`;
+  }
+  if (o.streamUsage !== undefined && typeof o.streamUsage !== 'boolean') return 'options.streamUsage 要是 true 或 false';
+  if (o.systemRole !== undefined && o.systemRole !== 'system' && o.systemRole !== 'developer') return 'options.systemRole 要是 system 或 developer';
+  const max = isObject(p.defaults) ? p.defaults.maxOutputTokens : undefined;
+  if (max !== undefined && (!Number.isInteger(max) || max <= 0)) return 'defaults.maxOutputTokens 要是正整數';
   return null;
 }
 
@@ -149,18 +159,20 @@ export function mergeCatalog(base: Catalog, extra: CatalogOverrides | undefined)
   for (const add of extra.providers as unknown[]) {
     const existing = isObject(add) ? (providers as ProviderSpec[]).find(p => isObject(p) && p.id === add.id) : undefined;
     if (!isObject(add) || !existing) {
-      providers.push(isObject(add) ? { ...add, models: add.models ?? [] } : add);
+      // 新的廠商原樣放進去：models 是 null 也交給 validateCatalog 回報，不默默變成空的（L2 第二輪 延續 R14）。
+      providers.push(isObject(add) ? { ...add } : add);
       continue;
     }
     const { models, ...fields } = add;
     Object.assign(existing, fields);
     if (models === undefined) continue;
-    if (!Array.isArray(models)) {
-      (existing as { models: unknown }).models = models;
+    // 同一家前一筆覆寫已經把 models 寫壞了：留著壞的，交給 validateCatalog 回報（L2 第二輪 延續 R14）。
+    if (!Array.isArray(models) || !Array.isArray(existing.models)) {
+      if (!Array.isArray(models)) (existing as { models: unknown }).models = models;
       continue;
     }
     for (const m of models as unknown[]) {
-      const i = isObject(m) ? existing.models.findIndex(x => x.id === m.id) : -1;
+      const i = isObject(m) ? existing.models.findIndex(x => isObject(x) && x.id === m.id) : -1;
       if (i === -1) existing.models.push(m as ModelSpec);
       else existing.models[i] = { ...existing.models[i], ...(m as Partial<ModelSpec>) };
     }
