@@ -18,7 +18,7 @@
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 入口網站與網頁版的 Cards | 討論中 | 請 Codex 回答第 7 節（D-215），雙方一致後把第 2 節談定的寫成 D-ID；同時和使用者談第 6 節 | Codex、使用者 | [入口網站討論稿](<../apps/Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>) |
-| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 待審 | L2 第四輪照 Fable 的條件修完（[修正表](<Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)），Claude 請使用者的電腦重跑 Windows 兩個檢查；使用者看〈13〉D-232、在這個分支開新雲端 session 驗雲端設定第 ① 件 | Claude、使用者 | [任務說明](tasks/ai-client.md) |
+| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 待審 | L2 收尾了（[第四輪修正表](<Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)，雲端與 Windows 都過）；合併只差使用者同意〈13〉D-232，另在這個分支開新雲端 session 驗雲端設定第 ① 件 | 使用者 | [任務說明](tasks/ai-client.md) |
 
 ## 等觸發點
 
