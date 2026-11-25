@@ -1,6 +1,6 @@
 # AI 連線套件第一步（Codex L2 審查請求）
 
-狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md --note 第二輪` 請 Codex 審〈第二輪〉，報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
+狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md --note 第三輪` 請 Codex 審〈第三輪〉，報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -100,3 +100,19 @@
 - **驗證**：`packages/ai-client/` 的 `npm run check`（175 個離線測試）；`tools/` 的 `npm run self-check`。Windows 上請再跑一次這兩個（R15、R18 只有 Windows 能驗），結果寫進報告。
 - **回報**：接在審查報告後面，標「第二輪」；格式與權限照上面〈回報與權限〉。
 
+## 第三輪（只審第二輪的修正）
+
+第二輪的 14 項：11 項修了，延續 R7、延續 R5 記進[已知的限制](../backlog.md#已知的限制)，延續 R19 等使用者同意 D-232。Claude 的核對與每一項的 commit、測試在[審查報告〈Claude 核對（第二輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第二輪>)。
+
+- **待審**：`e35aeed0` 到這份請求這一節所在的 commit（`git log -1 --format=%H -- docs/tasks/ai-client-l2.md`）；`git diff e35aeed0...<那個 commit>`。一項一個 commit，commit 訊息的結尾標著 `(L2 round 2, Rn)`。
+- **要看**：每一項修了沒有、修法有沒有帶進新的問題、同一類的其他值有沒有一起涵蓋。第二輪的發現都是第 2 代，回歸測試是整類的性質測試；這一輪再報出同一類沒處理到的值就是第 3 代，照 [code-quality〈review〉修正後收尾](../../.claude/skills/code-quality/review.md#修正後收尾)不再加機制，會改前提或交使用者選不修，所以請一併判斷「這一類現在的前提站不站得住」。前兩輪已經看過、修正沒碰到的程式不用重審。
+- **實作者沒有照建議做、或另外選的做法**（請判斷站不站得住）：
+  1. 延續 R1：短於 8 個字的金鑰**不遮**（報告的兩字元例子照樣留著）。理由：真的金鑰沒有這麼短，這麼短的多半是本機服務的假金鑰，遮了會把回覆裡正常的字換成 `***`。
+  2. 延續 R3：不再解析 shell 的引號，改成在入口原文裡找 repo 已有的每一個 `tools/` 路徑；正規式只管樹裡沒有的路徑。
+  3. 延續 R7、延續 R5：記進已知的限制，不修。R7 的窗口「通常不到一秒」是推斷，第二步的冒煙測試會記下標頭花的時間。
+  4. 延續 R9：`check()` 的錯誤本文改走 `readErrorBody`（64 KiB 上限、照狀態碼分類），原本讀到 4 MiB；成功本文仍是 4 MiB，收滿就停、算形狀不對。
+  5. 延續 R12：「本文好好結束卻沒有任何串流事件」算 `server`，不看 `Content-Type`（沒有 `Content-Type` 的空本文也算）；有事件但沒有結束事件的照舊是 `network`。模型清單有東西卻讀不出一筆模型算形狀不對，混著幾筆壞的照樣交回讀得出的那幾筆。
+  6. 延續 R6：驗的時候另外找到超過約 24.8 天的期限會被計時器當成 1 ms，一起修（照上限算）。`null` 當成沒給、照預設。
+  7. 延續 R13：服務回報的模型在這一家目錄裡才改照它估價；不認得的名稱（快照名稱）照請求的，不改成「費用不明」。
+- **驗證**：`packages/ai-client/` 的 `npm run check`（192 個離線測試）；`tools/` 的 `npm run self-check`。Windows 上請再跑一次這兩個，結果寫進報告。
+- **回報**：接在審查報告後面，標「第三輪」；格式與權限照上面〈回報與權限〉。照 D-171，第四輪之後還有擋合併的發現就停下來交給使用者。
