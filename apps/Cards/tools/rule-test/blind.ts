@@ -143,7 +143,8 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
     }
   }
   const usedBlocks = previous.flatMap(each => each.blocks);
-  const blocks = makeBlocks(folder, entries, lesson => 1 + usedBlocks.filter(block => block.lesson === lesson).length);
+  // 區組裡的順序也打亂（§5-6）：評審的提示照 codes 列卡組，不打亂的話基準組永遠在第一個。
+  const blocks = makeBlocks(folder, entries, lesson => 1 + usedBlocks.filter(block => block.lesson === lesson).length).map(block => ({ ...block, codes: shuffle(block.codes, random) }));
 
   const dir = batchDir(folder, batch);
   for (const entry of entries) writeOnce(join(dir, '卡組', entry.lesson, `${entry.code}.md`), decks.get(entry.job)!);
@@ -154,7 +155,7 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
     copyFileSync(rubricOf(folder, lesson), join(at, '評分表.md'));
     copyFileSync(materialOf(folder, lesson), join(at, '教材.pdf'));
     writeOnce(join(at, '已有目標.json'), JSON.stringify(readFrozenSnapshot(folder, lesson.code)?.pool ?? [], null, 2) + '\n');
-    for (const code of shuffle(block.codes, random)) writeOnce(join(at, '卡組', `${code}.md`), numbered(decks.get(entries.find(each => each.lesson === block.lesson && each.code === code)!.job)!));
+    for (const code of block.codes) writeOnce(join(at, '卡組', `${code}.md`), numbered(decks.get(entries.find(each => each.lesson === block.lesson && each.code === code)!.job)!));
   }
   writeOnce(join(dir, '區組.json'), JSON.stringify(blocks, null, 2) + '\n');
   const result: Batch = { batch, commit: git(['rev-parse', 'HEAD']), time: new Date().toISOString(), entries, blocks };

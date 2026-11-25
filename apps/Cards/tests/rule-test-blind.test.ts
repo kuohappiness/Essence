@@ -82,6 +82,17 @@ void test('blind：卡組段原字照留、每課打亂代號、每組各取一�
   assert.throws(() => blindFolder(folder, { log: () => {} }), /評分表在鎖定之後改過/);
 });
 
+void test('blind：區組裡的順序也打亂，評審拿到的清單不會總是基準組在前（PR #54 Codex P2）', async () => {
+  const folder = await folderWith(['甲', '乙'], 1);
+  await runQueue(folder, { adapters: { claude: reply(() => GOOD) }, log: () => {} });
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  // random 回 0：兩份時一定對調，區組裡的順序就不是組的順序（基準組在前）。
+  const batch = blindFolder(folder, { random: () => 0, log: () => {} });
+  const group = (code: string): string => batch.entries.find(entry => entry.code === code)!.group;
+  assert.deepEqual(batch.blocks[0].codes.map(group), ['乙', '甲']);
+  assert.deepEqual(readBlocks(folder, 1)[0].codes, batch.blocks[0].codes);
+});
+
 void test('blind：掃到洩漏字樣或切不出卡組段就停下給人看；看過可以 --accept-leaks', async () => {
   const folder = await folderWith(['甲', '乙'], 1);
   writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
