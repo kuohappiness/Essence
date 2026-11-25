@@ -8,7 +8,7 @@
 // 拒答是 HTTP 200 加 stop_reason: refusal。
 import type { ContentPart, StopReason } from '../types.ts';
 import { Binary } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, code, emptyUsage, httpError, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 const ANTHROPIC_VERSION = '2026-10-21';
@@ -87,7 +87,7 @@ export const anthropicMessages: Dialect = {
     }
     const usage = emptyUsage();
     applyUsage(usage, obj(r.usage));
-    const raw = str(r.stop_reason);
+    const raw = code(r.stop_reason);
     const output: Output = {
       text, stopReason: stopOf(raw), rawStopReason: raw, usage,
       resolvedModel: str(r.model), responseId: str(r.id), reportedCost: null, warnings: [],
@@ -128,7 +128,7 @@ export const anthropicMessages: Dialect = {
           return {};
         }
         if (type === 'message_delta') {
-          raw = str(obj(data.delta).stop_reason) ?? raw;
+          raw = code(obj(data.delta).stop_reason) ?? raw;
           applyUsage(usage, obj(data.usage));
           return {};
         }

@@ -115,7 +115,7 @@ packages/ai-client/
    - 回應標頭逾時：送出後 120 秒加每 100 KB 本文 1 秒還沒拿到狀態碼，算 `timeout`、不自動重送：請求已經送出，服務可能已經在做（或中間的代理把串流整段收完才交），重送可能做兩次、付兩次錢（L2 R7）；`responseTimeoutMs: null` 關掉。
    - 逾時或取消時：中止底層請求、丟 `timeout` 或 `cancelled`、不開下一次重試。傳輸層不理 `signal` 的，照樣立刻交回錯誤，之後才到的資料丟掉（請求可能還在跑、仍會計費）；本文的讀取直接取消，晚到的 `Response` 也取消本文，不留著沒停的讀取（L2 R9）。進度回呼裡取消的，回呼一結束就停：不送出、不重送，最後一段文字之後取消也是 `cancelled`；取消之後一個進度事件都不再交，回呼裡排到下一步才取消的也一樣（L2 第三輪 延續 R8）；`timeoutMs` 是 0 或負數時不送出、直接 `timeout`（L2 R8）。整體期限管的是送出與等待：送出前已經過了就不送；結果已經完整收到時，回呼拖過期限也照樣交回，和做完沒關的串流同一個前提，不作廢可能已經付錢的結果（L2 R10、第三輪 延續 R8）。
 5. **重試**：只在還沒拿到成功的回應時（連不上、408、429、5xx、529；連不上分不出請求送到了沒有，記在[已知的限制](../backlog.md#已知的限制)，L2 第二輪 延續 R7）；共最多 3 次（`maxAttempts` 只能調少，L2 R6）；等 2 秒、8 秒，各加減 20% 的隨機；服務給 `Retry-After` 或 `retry-after-ms` 照它，要等超過 60 秒就不重試，秒數放在錯誤的 `retryAfterMs`。拿到 200 之後才出錯（串流中斷、沒有結束事件、串流裡的錯誤）一律不自動重試，錯誤標 `afterResponse: true`、帶 `partialText`，由呼叫端問家長（推理模型想了十分鐘才斷，自動重送就多付一次）。等待中取消就立刻停。
-6. **停止原因**：各家的結束原因對應成 `end`、`length`、`content_filter`、`refusal`、`other`，原文放在 `trace.rawStopReason`。完全沒有輸出又被擋（內容過濾、拒答、Gemini 的 `promptFeedback.blockReason`）算錯誤 `content_blocked`；有部分輸出算結果。成功一定要有服務說的停止原因，而且有文字：只有輸出上限到了可以是空的結果，其餘少了停止原因或一個字都沒有的 2xx 算 `server`、帶 `partialText`（L2 第三輪 延續 R12）。
+6. **停止原因**：各家的結束原因對應成 `end`、`length`、`content_filter`、`refusal`、`other`，原文放在 `trace.rawStopReason`。完全沒有輸出又被擋（內容過濾、拒答、Gemini 的 `promptFeedback.blockReason`）算錯誤 `content_blocked`；有部分輸出算結果。成功一定要有服務說的停止原因，而且有文字：只有輸出上限到了可以是空的結果，其餘少了停止原因或一個字都沒有的 2xx 算 `server`、帶 `partialText`（L2 第三輪 延續 R12）。停止原因是空字串和沒有一樣，各家在讀的地方就當成沒有，後面一塊的空字串不會蓋掉前面的值；Responses 只有結束的狀態（`completed`、`incomplete`）算停止原因，`in_progress` 這類不算（L2 第四輪 第 6 項）。
 7. **錯誤種類**：
 
    | 種類 | 例子 | 可重試 |

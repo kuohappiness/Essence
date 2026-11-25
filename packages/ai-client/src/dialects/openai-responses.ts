@@ -4,7 +4,7 @@
 // 不用背景模式（2026-07 有過背景模式加檔案一直不結束的回報）；長時間的生成用串流撐。送 store: false。
 import type { ContentPart, StopReason } from '../types.ts';
 import { dataUrl } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, code, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart, role: 'user' | 'assistant'): Json {
@@ -13,6 +13,7 @@ function part(p: ContentPart, role: 'user' | 'assistant'): Json {
   return { type: 'input_file', filename: p.name ?? 'file.pdf', file_data: dataUrl(p.mediaType, p.data) };
 }
 
+/** 只有結束的狀態（completed、incomplete）是停止原因；in_progress、queued 這類還沒做完的不是（L2 第四輪 第 6 項）。 */
 function stopOf(status: string | null, reason: string | null): { stopReason: StopReason; raw: string | null } {
   if (status === 'completed') return { stopReason: 'end', raw: status };
   if (status === 'incomplete') {
@@ -20,7 +21,7 @@ function stopOf(status: string | null, reason: string | null): { stopReason: Sto
     if (reason === 'content_filter') return { stopReason: 'content_filter', raw: reason };
     return { stopReason: 'other', raw: reason ?? status };
   }
-  return { stopReason: 'other', raw: status };
+  return { stopReason: 'other', raw: null };
 }
 
 function usageOf(u: Json) {
@@ -58,7 +59,7 @@ function outputOf(response: Json, streamedText?: string): Output {
       else if (cc.type === 'refusal') refusal += str(cc.refusal) ?? '';
     }
   }
-  const { stopReason, raw } = stopOf(str(response.status), str(obj(response.incomplete_details).reason));
+  const { stopReason, raw } = stopOf(code(response.status), code(obj(response.incomplete_details).reason));
   const warnings: string[] = [];
   const out: Output = {
     text: streamedText ?? text,

@@ -6,7 +6,7 @@
 // 先用它，之後另加 gemini-interactions 方言（docs/tasks/ai-client.md〈6〉）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { Binary } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, code, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -78,8 +78,8 @@ function errorOf(e: Json, httpStatus: number | null): ParsedError {
 
 function outputOf(chunk: Json, text: string): Output {
   const candidate = obj(arr(chunk.candidates)[0]);
-  const raw = str(candidate.finishReason);
-  const blockReason = str(obj(chunk.promptFeedback).blockReason);
+  const raw = code(candidate.finishReason);
+  const blockReason = code(obj(chunk.promptFeedback).blockReason);
   return {
     text,
     stopReason: blockReason ? 'content_filter' : stopOf(raw),
@@ -137,8 +137,8 @@ export const geminiGenerateContent: Dialect = {
       push(event) {
         const data = obj(JSON.parse(event.data));
         if (data.error) return { error: errorOf(obj(data.error), null) };
-        finishReason = str(obj(arr(data.candidates)[0]).finishReason) ?? finishReason;
-        blockReason = str(obj(data.promptFeedback).blockReason) ?? blockReason;
+        finishReason = code(obj(arr(data.candidates)[0]).finishReason) ?? finishReason;
+        blockReason = code(obj(data.promptFeedback).blockReason) ?? blockReason;
         modelVersion = str(data.modelVersion) ?? modelVersion;
         responseId = str(data.responseId) ?? responseId;
         // 用量逐欄合併：轉接服務可能把欄位分在好幾塊送，後面一塊只帶總數也不蓋掉前面的（L2 第二輪 R11）。

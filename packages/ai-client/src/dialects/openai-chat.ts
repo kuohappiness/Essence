@@ -4,7 +4,7 @@
 // （maxTokensField、streamUsage、systemRole，見 types.ts 的 ProviderOptions）。
 import type { ContentPart, StopReason } from '../types.ts';
 import { dataUrl } from '../body.ts';
-import { arr, badShape, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
+import { arr, badShape, code, emptyUsage, httpError, isObject, modelList, num, obj, parseJson, str, type Json } from './shared.ts';
 import type { BuildContext, Dialect, HttpCall, Output, ParsedError, StreamParser } from './types.ts';
 
 function part(p: ContentPart): Json {
@@ -76,7 +76,7 @@ export const openaiChat: Dialect = {
     if (!isObject(first.message)) return badShape('message');
     const choice = first;
     const message = first.message;
-    const raw = str(choice.finish_reason);
+    const raw = code(choice.finish_reason);
     const u = obj(r.usage);
     const output: Output = {
       text: str(message.content) ?? '',
@@ -128,7 +128,7 @@ export const openaiChat: Dialect = {
           cost = num(obj(data.usage).cost) ?? cost;
         }
         const choice = obj(arr(data.choices)[0]);
-        const reason = str(choice.finish_reason);
+        const reason = code(choice.finish_reason);
         if (reason === 'error') return { error: { kind: 'server', message: 'stream ended with finish_reason error', providerCode: reason } };
         if (reason) raw = reason;
         refusal += str(obj(choice.delta).refusal) ?? '';

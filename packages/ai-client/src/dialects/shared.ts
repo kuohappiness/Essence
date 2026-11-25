@@ -9,6 +9,8 @@ export const isObject = (value: unknown): value is Json => typeof value === 'obj
 export const obj = (value: unknown): Json => (isObject(value) ? value : {});
 export const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 export const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+/** 停止原因這類代碼：空字串和沒給一樣，後面一塊的空字串不會蓋掉前面的值（L2 第四輪 第 6 項）。 */
+export const code = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
 export const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 export function parseJson(text: string): unknown {

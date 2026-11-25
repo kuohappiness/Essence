@@ -260,7 +260,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         }
         // 成功一定要有服務說的停止原因，而且有文字；只有輸出上限到了（想完了還沒開始寫）是空的結果。
         // 不管哪一家、少了哪一塊，其餘都不是成功的形狀，算 server（L2 第三輪 延續 R12）。
-        if (output.rawStopReason === null) throw fail('server', 'response has no stop reason', after);
+        if (!output.rawStopReason) throw fail('server', 'response has no stop reason', after);
         if (!output.text && output.stopReason !== 'length') throw fail('server', `response has no text: ${output.rawStopReason}`, after);
         progress({ type: 'done' });
         // 服務說回答的是目錄裡另一個模型（相容服務、代理、路由換了模型）：照回答的那一個估價；不認得的（快照名稱）照請求的（L2 第二輪 R13）。

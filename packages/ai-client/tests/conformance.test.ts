@@ -277,6 +277,45 @@ for (const c of cases) {
       assert.deepEqual([cut.text, cut.stopReason], ['', 'length'], c.dialect);
     });
 
+    void test('停止原因的空字串和沒有一樣，各家在讀的地方就當成沒有；前面已經有的，不會被後面一塊的空字串蓋掉（L2 第四輪 第 6 項）', async () => {
+      // 停止原因的欄位換成某個值（Responses 的 status 也在每一個輸出項上，一起換）。
+      const withStop = (value: unknown, stop: unknown): unknown =>
+        Array.isArray(value) ? value.map(v => withStop(v, stop))
+          : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, STOP_KEYS.includes(k) ? stop : withStop(v, stop)]))
+          : value;
+      const mapSse = (sse: string, change: (data: unknown) => unknown) => sse.split(/\n\n/).filter(Boolean).map(e => e.split('\n').map(line => {
+        const data = line.startsWith('data: ') ? line.slice(6) : null;
+        return data && data !== '[DONE]' ? `data: ${JSON.stringify(change(JSON.parse(data)))}` : line;
+      }).join('\n')).map(e => `${e}\n\n`).join('');
+      // 沒有、null、空字串；Responses 另外加不是結束的狀態（還在做、排隊中）。
+      const stops: unknown[] = [undefined, null, '', ...(c.dialect === 'openai-responses' ? ['in_progress', 'queued'] : [])];
+      for (const stop of stops) {
+        const label = stop === undefined ? '沒有' : JSON.stringify(stop);
+        const json = await rejects(run([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(withStop(c.json.body, stop))] }]).promise);
+        assert.deepEqual([json.kind, json.afterResponse, json.retryable], ['server', true, false], `${c.dialect} JSON 停止原因 ${label}`);
+        const streamed = await rejects(run([sseReply(mapSse(readSse(c, c.stream.file), data => withStop(data, stop)))]).promise);
+        assert.deepEqual([streamed.afterResponse, streamed.retryable, streamed.partialText], [true, false, c.stream.text], `${c.dialect} 串流停止原因 ${label}`);
+        // 沒有結束事件的（Gemini）等不到做完的訊號，算 network；其餘算 server。都不是成功。
+        assert.equal(streamed.kind, c.dialect === 'gemini-generate-content' ? 'network' : 'server', `${c.dialect} 串流停止原因 ${label}`);
+      }
+      // 先有停止原因，後面一塊（用量、轉接服務補的）帶空字串：照前面的，結果是成功。Responses 的結束事件只有一個，不適用。
+      const LATER_EMPTY: Record<string, { event: unknown; before: string | null }> = {
+        'openai-chat': { event: { id: 'x', choices: [{ index: 0, delta: {}, finish_reason: '' }] }, before: '[DONE]' },
+        'anthropic-messages': { event: { type: 'message_delta', delta: { stop_reason: '' } }, before: '"message_stop"' },
+        'gemini-generate-content': { event: { candidates: [{ finishReason: '' }] }, before: null },
+      };
+      const later = LATER_EMPTY[c.dialect];
+      if (later) {
+        const events = readSse(c, c.stream.file).split(/\n\n/).filter(Boolean).map(e => `${e}\n\n`);
+        const at = later.before === null ? events.length : events.findIndex(e => e.includes(later.before!));
+        assert.ok(at >= 0, c.dialect);
+        events.splice(at, 0, `data: ${JSON.stringify(later.event)}\n\n`);
+        const result = await run([sseReply(events.join(''))]).promise;
+        assert.deepEqual([result.text, result.stopReason, result.trace.rawStopReason], [c.stream.text, c.stream.stopReason, c.stream.rawStopReason ?? result.trace.rawStopReason], c.dialect);
+        assert.ok(result.trace.rawStopReason, `${c.dialect}：前面的停止原因不見了`);
+      }
+    });
+
     void test('輸出上限到了：算結果，停止原因 length', async () => {
       const { promise } = run([sseReply(readSse(c, c.length.file))]);
       const result = await promise;
