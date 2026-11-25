@@ -23,6 +23,19 @@ before(async () => {
         res.end();
         return;
       }
+      // 整段本文：/whole 和標頭一起送（同一次寫入），/later 標頭先送、本文 10 ms 後才送（L2 第四輪 第 8 項）。
+      if (req.url === '/whole/chat/completions' || req.url === '/later/chat/completions') {
+        const body = `${event({ id: 'c1', model: 'local', choices: [{ delta: { content: '完整' }, finish_reason: 'stop' }] })}data: [DONE]\n\n`;
+        if (req.url.startsWith('/whole')) {
+          res.writeHead(200, { 'content-type': 'text/event-stream', 'content-length': String(Buffer.byteLength(body)) });
+          res.end(body);
+        } else {
+          res.writeHead(200, { 'content-type': 'text/event-stream' });
+          res.flushHeaders();
+          setTimeout(() => res.end(body), 10);
+        }
+        return;
+      }
       if (req.url === '/hang/chat/completions') {
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.write(event({ choices: [{ delta: { content: '開始' } }] }));
@@ -80,4 +93,17 @@ void test('轉址不跟（金鑰不會被帶到別的網址）', async () => {
   });
   await assert.rejects(promise, (e: unknown) => isAiError(e) && e.kind === 'network');
   assert.equal(received.length, before + 1);
+});
+
+void test('waiting 的回呼拖過整體期限：回呼結束時本文已經收在本機的照樣交回；還要等網路的，過期的計時器先跑，算 timeout（L2 第四輪 第 8 項）', async () => {
+  // 同步的回呼：整個行程（連同這個伺服器）都停住，計時器與網路都要等它結束才輪得到。
+  const spin = (ms: number) => { const until = Date.now() + ms; while (Date.now() < until) { /* 忙著 */ } };
+  const run = (path: string) => createAiClient().generate({
+    endpoint: endpoint(path), apiKey: KEY, model: 'local', input: [{ role: 'user', content: '你好' }], timeoutMs: 300, maxAttempts: 1,
+    onProgress: e => { if (e.type === 'waiting') spin(400); },
+  });
+  // 標頭與整段本文一起到：回呼結束時結果已經完整，和做完沒關的串流同一個前提，不作廢（L2 R10、第三輪 延續 R8）。
+  assert.equal((await run('/whole')).text, '完整');
+  // 本文還在路上：讀它要等網路，過期的整體計時器先跑。
+  await assert.rejects(run('/later'), (e: unknown) => isAiError(e) && e.kind === 'timeout' && e.afterResponse && e.partialText === null);
 });

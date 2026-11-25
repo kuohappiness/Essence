@@ -1245,3 +1245,20 @@ void test('Responses 結束事件裡的完整文字：已交的是它的開頭�
     else assert.deepEqual(notes, [], label);
   }
 });
+
+void test('retrying 的回呼拖到等完會過期限：不等、不再送，丟原本的錯誤（L2 第四輪 第 8 項）', async () => {
+  const busy: MockReply = { status: 503, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"busy"}}'] };
+  let now = Date.parse('2026-11-25T00:00:00Z');
+  const sleeps: number[] = [];
+  const clock = { now: () => now, sleep: (ms: number) => { sleeps.push(ms); return Promise.resolve(); }, random: () => 0.5 };
+  const fetch = mockFetch([busy, OK]);
+  // 期限 10 秒、退避 2 秒：回呼之前等得完；回呼忙了 9 秒，等完就過期限了。
+  const error = await rejects(createAiClient({ fetch, clock }).generate(request({ timeoutMs: 10_000, onProgress: e => { if (e.type === 'retrying') now += 9_000; } })));
+  const first = await rejects(createAiClient({ fetch: mockFetch([busy]), clock: instantClock() }).generate(request({ maxAttempts: 1 })));
+  assert.deepEqual([error.kind, error.message, fetch.requests.length, sleeps], [first.kind, first.message, 1, []]);
+  // 回呼沒拖過的照常等、照常重送。
+  now = Date.parse('2026-11-25T00:00:00Z');
+  const fine = mockFetch([busy, OK]);
+  const result = await createAiClient({ fetch: fine, clock }).generate(request({ timeoutMs: 10_000, onProgress: e => { if (e.type === 'retrying') now += 1_000; } }));
+  assert.deepEqual([result.text, fine.requests.length, sleeps], [openai.stream.text, 2, [2_000]]);
+});

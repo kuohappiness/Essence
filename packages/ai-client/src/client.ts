@@ -298,6 +298,12 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const onCancel = () => waitAbort.abort();
         request.signal?.addEventListener('abort', onCancel, { once: true });
         progress({ type: 'retrying', attempt: attempt + 1, delayMs, reason: error.kind });
+        // 回呼可能拖過期限：回呼之後再看一次「等完還在期限內」，和回呼之前同一個檢查；不等、不再送，丟原本的錯誤。
+        // 放在下面的 try 外面：那裡的 catch 一律換成 cancelled（L2 第四輪 第 8 項）。回呼裡取消的照舊算 cancelled。
+        if (!request.signal?.aborted && clock.now() + delayMs >= deadline) {
+          request.signal?.removeEventListener('abort', onCancel);
+          throw error;
+        }
         try {
           // 回呼裡取消的，不等、不再送（L2 R8）。
           if (request.signal?.aborted) throw new Error('cancelled');
