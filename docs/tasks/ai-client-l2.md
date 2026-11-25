@@ -1,6 +1,6 @@
 # AI 連線套件第一步（Codex L2 審查請求）
 
-狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md` 請 Codex 審，報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
+狀態：待審｜下一步：本機 Claude 用 `node tools/codex.ts l2 docs/tasks/ai-client-l2.md --note 第二輪` 請 Codex 審〈第二輪〉，報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面｜等誰：Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -82,3 +82,21 @@
 - 只審查，不改產品程式與共用檢查；可以在系統暫存資料夾的隔離 clone 重現。不要用真的金鑰，不要連 AI 服務（假的 fetch 或本機的 HTTP 伺服器就夠）。
 - 每項發現寫觸發條件、預期／實際、影響、位置與證據，並區分「已重現」「靜態推斷」「待驗證」；另標**真實路徑會不會發生**，會發生的再寫**發生機率**。可以回報「規格本身有漏洞」。分 P1（金鑰外流、pre-commit 或 CI 該擋沒擋）、P2、P3。
 - 報告接在 [審查報告](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 後面，標「第一輪」；頭尾寫待審 commit、審查範圍、測試結果與沒驗的項目及原因。
+
+## 第二輪（只審修正）
+
+第一輪的 19 項都修了，Claude 的核對與每一項的 commit、測試在[審查報告〈Claude 核對（第一輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第一輪>)。
+
+- **待審**：`539e522e` 到這份請求這一節所在的 commit（`git log -1 --format=%H -- docs/tasks/ai-client-l2.md`）；`git diff 539e522e...<那個 commit>`。一項一個 commit，commit 訊息的結尾標著 `(L2 Rn)`。
+- **要看**：每一項修了沒有、修法有沒有帶進新的問題、同一類的其他路徑有沒有一起涵蓋。第一輪已經看過、修正沒碰到的程式不用重審。
+- **實作者沒有照建議做、或另外選的做法**（請判斷站不站得住）：
+  1. R7：回應標頭逾時改成**不自動重送**（報告建議的方向之一）；連不上、429、5xx 照舊重送。
+  2. R10：已經看到「做完」的訊號、串流卻一直沒關時，閒置或整體逾時**照已收到的交回成功**並記 warning，不丟錯誤（理由：文字已經付過錢）。Chat 只有 `finish_reason` 沒有 `[DONE]` 也算成功。
+  3. R13：只擋 `extraBody` 最上層的 `model` 與 `stream`，並把改了的欄位路徑記進 `trace.warnings`；**沒有**改成依服務回報的模型重新計價。
+  4. R9：錯誤本文的閒置上限沒設時是 30 秒（新的常數 `ERROR_BODY_IDLE_MS`）。
+  5. R17：照實作改規格（檔案上限是合計、不在目錄的模型照廠商的 `defaults`），不是改程式。
+  6. R19：D-232 還沒寫，等使用者同意；任務說明〈13〉註明合併前要寫好。
+- **另外請看**：R1 的 `StreamRedactor` 會留住可能是金鑰開頭的尾巴，進度事件會晚一點才交出那幾個字，最後一定交完；R12 的成功形狀檢查會不會擋掉合法的回應（例如 Gemini 只有 `promptFeedback` 的、Responses 的 `incomplete`）。
+- **驗證**：`packages/ai-client/` 的 `npm run check`（175 個離線測試）；`tools/` 的 `npm run self-check`。Windows 上請再跑一次這兩個（R15、R18 只有 Windows 能驗），結果寫進報告。
+- **回報**：接在審查報告後面，標「第二輪」；格式與權限照上面〈回報與權限〉。
+
