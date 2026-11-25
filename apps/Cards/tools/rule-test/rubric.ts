@@ -1,6 +1,8 @@
 // 比較測試工具：評分表（任務說明 tasks/rule-test-tool.md §5-2）。Markdown 表
 // `| 列 | 類別 | 要考的知識或判準 | 頁碼 | 可以接受的等價做法 | 跨單元 |`；類別是必備、加分或重大錯誤；
 // 跨單元寫 `加題 <ID>`、`另立`、`疑似重複 <ID>` 或空白。檢查列號不重複、類別合法、ID 在已有目標快照裡。
+import { readFileSync } from 'node:fs';
+
 type RowKind = '必備' | '加分' | '重大錯誤';
 export interface RubricRow { id: string; kind: RowKind; text: string; pages: string; equivalents: string; cross: string }
 
@@ -24,6 +26,14 @@ export function parseRubric(text: string, knownIds: ReadonlySet<string> | null =
   if (!rows.some(row => row.kind === '必備')) problems.push('沒有必備的列');
   if (problems.length) throw Error(`評分表有 ${String(problems.length)} 個問題：\n${problems.map(each => `- ${each}`).join('\n')}`);
   return rows;
+}
+
+/**
+ * 課庫裡一課的評分表要讀得通才鎖（凍結、匿名時）：格式不合的鎖進去就換不掉了（2026-11-25 使用者電腦：第一輪的評分表欄位順序不同，凍結照樣鎖了）。
+ */
+export function checkRubricFile(path: string, lesson: string, knownIds: ReadonlySet<string> | null): void {
+  try { parseRubric(readFileSync(path, 'utf8'), knownIds); }
+  catch (error) { throw Error(`課「${lesson}」的評分表不能用（${path}）：${error instanceof Error ? error.message : String(error)}`); }
 }
 
 /** 評審要逐列判的（必備與加分）。 */

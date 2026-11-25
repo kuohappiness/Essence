@@ -13,6 +13,7 @@ import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { acquireLock, runQueue, savePasted, writeManual } from '../tools/rule-test/generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
+import { RUBRIC } from './helpers/rule-test.ts';
 
 const DECK = '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n<<<完>>>';
 
@@ -164,7 +165,7 @@ void test('匿名時多步的把卡組步驟的卡組段照順序接起來（§8
   const deck = (word: string, sections: boolean): string => `${sections ? '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n' : ''}國二上英文 L3 單字\n- ${word} 英翻中\n    - ${word} :: 意思\n<<<完>>>`;
   const { adapter } = fake(request => request.text.startsWith('組一') ? ok(deck('borrow', three.get('乙-1')!)) : request.text.startsWith('組二') ? ok(deck('lend', three.get('乙-2')!)) : ok(deck('keep', three.get('甲-1')!)));
   await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   const batch = blindFolder(folder, { log: () => {} });
   const code = batch.entries.find(entry => entry.group === '乙')!.code;
   assert.equal(readFileSync(join(folder.root, '評分', '批1', '卡組', 'L3', `${code}.md`), 'utf8'),

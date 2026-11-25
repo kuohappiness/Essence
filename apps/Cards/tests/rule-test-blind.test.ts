@@ -11,14 +11,16 @@ import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder } from '../tools/rule-test/freeze.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
+import { RUBRIC } from './helpers/rule-test.ts';
 
 const GOOD = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 const BROKEN = '- borrow 英翻中\n    - borrow ::\n<<<完>>>';
 
-async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }'): Promise<Folder> {
+async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }', rubric?: string): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-blind-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
+  if (rubric !== undefined) writeFileSync(join(root, '課', 'L3', '評分表.md'), rubric);
   mkdirSync(join(root, '提示'));
   for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
   writeFileSync(join(root, '測試.yaml'), `
@@ -55,7 +57,7 @@ void test('blind：卡組段原字照留、每課打亂代號、每組各取一�
   const folder = await folderWith(['甲', '乙'], 2);
   await runQueue(folder, { adapters: { claude: reply(() => GOOD) }, log: () => {} });
   assert.throws(() => blindFolder(folder, { log: () => {} }), /還沒有評分表/);
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 | 類別 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   const batch = blindFolder(folder, { random: max => max - 1, log: () => {} });
   assert.equal(batch.entries.length, 4);
   assert.deepEqual(batch.entries.map(entry => entry.code).sort(), ['S1', 'S2', 'S3', 'S4']);
@@ -78,14 +80,14 @@ void test('blind：卡組段原字照留、每課打亂代號、每組各取一�
   // 一批一次：再跑沒有新的原稿。
   assert.throws(() => blindFolder(folder, { log: () => {} }), /沒有新的有效原稿/);
   // 評分表鎖定後改了就停下。
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 | 類別 | 改過 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), `${RUBRIC}\n| R3 | 必備 | 改過加的一列 | p.4 | | |`);
   assert.throws(() => blindFolder(folder, { log: () => {} }), /評分表在鎖定之後改過/);
 });
 
 void test('blind：區組裡的順序也打亂，評審拿到的清單不會總是基準組在前（PR #54 Codex P2）', async () => {
   const folder = await folderWith(['甲', '乙'], 1);
   await runQueue(folder, { adapters: { claude: reply(() => GOOD) }, log: () => {} });
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   // random 回 0：兩份時一定對調，區組裡的順序就不是組的順序（基準組在前）。
   const batch = blindFolder(folder, { random: () => 0, log: () => {} });
   const group = (code: string): string => batch.entries.find(entry => entry.code === code)!.group;
@@ -95,7 +97,7 @@ void test('blind：區組裡的順序也打亂，評審拿到的清單不會總�
 
 void test('blind：掃到洩漏字樣或切不出卡組段就停下給人看；看過可以 --accept-leaks', async () => {
   const folder = await folderWith(['甲', '乙'], 1);
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   await runQueue(folder, { adapters: { claude: reply(prompt => prompt.startsWith('組乙') ? GOOD.replace('v. 借出', 'v. 借出（ChatGPT 版）') : GOOD) }, log: () => {} });
   assert.throws(() => blindFolder(folder, { log: () => {} }), /乙-L3-claude-1 第 5 行有「chatgpt」[\s\S]*乙-L3-claude-1 第 5 行有「gpt」/);
   assert.equal(blindFolder(folder, { acceptLeaks: true, log: () => {} }).entries.length, 2);
@@ -116,11 +118,25 @@ void test('status：凍結、生成、格式、匿名各做到哪裡', async () 
   assert.ok(statusLines(folder).some(line => line.startsWith('上一次停下：額度用完') && line.includes('2027-01-15T08:00:00.000Z')));
   await runQueue(folder, { adapters: { claude: reply(() => GOOD) }, log: () => {} });
   checkFolder(folder, () => {});
-  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), '| 列 |\n');
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
   blindFolder(folder, { log: () => {} });
   const lines = statusLines(folder);
   assert.ok(lines.includes('格式：2／2 份檢查過'));
   assert.ok(lines.includes('批 1：2 份、1 個區組｜評分 0／2（下一步：judge）'));
   assert.ok(!lines.some(line => line.startsWith('上一次停下')));
   assert.ok(!existsSync(join(folder.root, '生成', '執行中.json')));
+});
+
+/** 第一輪的評分表：欄位順序不同（類別在第 4 欄），重大錯誤另外放一節。 */
+const ROUND_ONE_RUBRIC = '| 編號 | 要考的知識或判準 | 頁碼或圖號 | 必備或加分 | 可以接受的等價做法 | 跨單元去向 |\n|---|---|---|---|---|---|\n| R1 | borrow 的字義 | p.3 | 必備 | | |';
+
+void test('凍結與匿名：評分表格式不合就停下、不鎖（2026-11-25 使用者電腦：第一輪的評分表凍結照樣鎖進去，之後換不掉）', async () => {
+  await assert.rejects(folderWith(['甲', '乙'], 1, undefined, ROUND_ONE_RUBRIC), /評分表[\s\S]*類別「要考的知識或判準」不是 必備、加分、重大錯誤/);
+  const folder = await folderWith(['甲', '乙'], 1);
+  await runQueue(folder, { adapters: { claude: reply(() => GOOD) }, log: () => {} });
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), ROUND_ONE_RUBRIC);
+  assert.throws(() => blindFolder(folder, { log: () => {} }), /評分表[\s\S]*不是 必備、加分、重大錯誤/);
+  assert.equal(existsSync(join(folder.root, '凍結', '評分表', 'L3.sha256')), false);
+  writeFileSync(join(folder.root, '課', 'L3', '評分表.md'), RUBRIC);
+  assert.equal(blindFolder(folder, { log: () => {} }).entries.length, 2);
 });
