@@ -201,6 +201,7 @@ packages/ai-client/
 - 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、144 個離線測試）通過。
 - 共用檢查：`tools/` 的 `npm run self-check` 通過；分派、gate、hook、雲端設定、邊界的測試都補了套件的案例。
 - 真的連線（雲端，假金鑰，2026-11-25）：Anthropic 回 401 `authentication_error` 並帶 `request-id`，分類成 `auth`；Google 回 400 `API_KEY_INVALID`，分類成 `auth`；OpenAI 與 OpenRouter 被雲端的網路設定擋住，沒測到。
-- 還沒做：L2；改 `cloud-setup.mjs` 要另開雲端 session 驗的兩件事；冒煙測試（第二步）。
+- 改 `cloud-setup.mjs` 的第 ② 件（2026-11-25，這個雲端 session）：另開沒有 `node_modules` 的 worktree（`1c993b62`），PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑 hook，原文：「雲端環境設定：PATH 上的 Node 是 22.23.5；/opt/node24/bin 有 v24.22.3，但沒有 CLAUDE_ENV_FILE，之後的指令仍是舊版，跑指令前先 export PATH="/opt/node24/bin:$PATH"；core.hooksPath 已設為 .githooks；tools：npm ci 完成；apps/Cards：npm ci 完成；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：npm ci 完成」。
+- 還沒做：L2；第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
 
 延後的測試：沒有。
