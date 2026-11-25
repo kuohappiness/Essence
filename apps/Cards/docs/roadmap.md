@@ -11,7 +11,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 國小國語預設 | 實作中 | 跑 L8 測跨課比對與 v0.10、v0.11 的改動；v0.11 的多音字跟著外掛 0.7.0 上線（[任務說明](tasks/polyphone-pick.md)） | Claude | [預設草稿](card-rules/elementary-chinese.md) |
-| 多音字的點選填空 | 實作中 | 使用者選一張卡出幾句（§3）與舊版遇到這種卡怎麼辦（§4-6），程式先照建議做完（〈結果〉）；PR #53 的 L2 第四輪之後怎麼收尾（決定卡，[報告](<Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)）、Windows 看畫面 | 使用者 | [任務說明](tasks/polyphone-pick.md) |
+| 多音字的點選填空 | 實作中 | 使用者選 PR #53 的 L2 第四輪之後怎麼收尾（決定卡，[報告](<Claude Codex Discussion/2026-11-25-polyphone-pick-l2.md>)）、Windows 看畫面 | 使用者 | [任務說明](tasks/polyphone-pick.md) |
 | 入口與目錄 | 討論中 | 決定第三批（管理模式）要不要進 v1 | 使用者 | [四批](plans/entry-and-catalog.md) |
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
