@@ -144,7 +144,7 @@ export function tokensOf(usages: readonly unknown[]): DeckMetrics['tokens'] {
 
 /** 照教學選擇調整後的評分表列（拿掉、改加分、改必備）。 */
 function effectiveRows(rows: readonly RubricRow[], effects: readonly Effect[]): { row: RubricRow; kind: '必備' | '加分'; effect: string | null }[] {
-  return rows.filter(row => row.kind !== '重大錯誤').flatMap(row => {
+  return rows.filter(row => row.kind === '必備' || row.kind === '加分').flatMap(row => {
     const effect = effects.filter(each => each.row === row.id).at(-1);
     if (effect?.to === '拿掉') return [];
     return [{ row, kind: effect ? effect.to : row.kind as '必備' | '加分', effect: effect ? `改${effect.to}` : null }];
@@ -176,7 +176,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
   for (const choice of rulings.choices) {
     const lessons = [...new Set(choice.notes.map(id => disputes.unsure.find(each => each.id === id)?.lesson).filter((each): each is string => each !== undefined))];
     for (const effect of choice.effects) {
-      const hits = lessons.filter(lesson => rubrics.get(lesson)?.some(row => row.id === effect.row && row.kind !== '重大錯誤'));
+      const hits = lessons.filter(lesson => rubrics.get(lesson)?.some(row => row.id === effect.row && (row.kind === '必備' || row.kind === '加分')));
       if (!hits.length) effectProblems.push(`${choice.id}：「${effect.row}」不是 ${lessons.join('、')} 評分表的必備或加分列`);
       for (const lesson of hits) effects.set(lesson, [...effects.get(lesson) ?? [], effect]);
     }
@@ -264,7 +264,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
     batch: n, unblinded: new Date().toISOString(), commit, late,
     rows: Object.fromEntries([...new Set(decks.map(deck => deck.lesson))].map(lesson => [lesson, rubrics.get(lesson)!.map(row => {
       const effect = effectiveRows([row], effects.get(lesson) ?? []).at(0);
-      return { id: row.id, kind: row.kind, text: row.text, effect: row.kind === '重大錯誤' ? null : effect ? effect.effect : '拿掉' };
+      return { id: row.id, kind: row.kind, text: row.text, effect: row.kind === '重大錯誤' || row.kind === '加深機會' ? null : effect ? effect.effect : '拿掉' };
     })])),
     rulings: [
       ...disputes.majors.map(each => ({ id: each.id, text: `${each.block} ${each.code} ${each.at}：${rulings.majors.get(each.id)!.verdict}${rulings.majors.get(each.id)!.quality ? `，改記${rulings.majors.get(each.id)!.quality}` : ''}` })),

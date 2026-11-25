@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Adapter } from '../tools/rule-test/adapters.ts';
 import { jobState, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { judgePrompt, judgeSchema, rejudgeStats, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
-import { parseRubric } from '../tools/rule-test/rubric.ts';
+import { deepenChances, judgedRows, parseRubric } from '../tools/rule-test/rubric.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
@@ -15,9 +15,26 @@ void test('評分表：讀列號、類別與跨單元；列號重複、類別不
   assert.deepEqual(rows.map(row => [row.id, row.kind, row.cross]), [['R1', '必備', ''], ['R2', '加分', '加題 aaaaa2'], ['M1', '重大錯誤', '']]);
   const broken = RUBRIC + '\n| R1 | 必要 | x | | | |\n| R3 | 必備 | y | | | 加題 zzzzz9 |\n| R4 | 必備 | z | | | 合併 |';
   assert.throws(() => parseRubric(broken, new Set(['aaaaa2'])), (error: Error) => {
-    assert.match(error.message, /類別「必要」不是 必備、加分、重大錯誤/);
+    assert.match(error.message, /類別「必要」不是 必備、加分、重大錯誤、加深機會/);
     assert.match(error.message, /跨單元 ID「zzzzz9」不在已有目標快照裡/);
     assert.match(error.message, /列「R4」的跨單元「合併」要寫/);
+    return true;
+  });
+});
+
+void test('評分表的加深機會（rule-test-d236.md §6-3）：用到哪幾個必備、要問什麼、課外的來源；不逐列判卡組；寫法不對列出來', () => {
+  const rows = parseRubric(RUBRIC + '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |\n| D2 | 加深機會 | 用到 R1：借貸的英文說法（課外：高中英文 第一冊 L2） | p.3 | | |');
+  assert.deepEqual(deepenChances(rows), [
+    { id: 'D1', uses: ['R1'], ask: 'borrow 和 lend 的方向怎麼分', outside: null, pages: 'p.3' },
+    { id: 'D2', uses: ['R1'], ask: '借貸的英文說法（課外：高中英文 第一冊 L2）', outside: '高中英文 第一冊 L2', pages: 'p.3' },
+  ]);
+  assert.deepEqual(judgedRows(rows).map(row => row.id), ['R1', 'R2']);
+  const broken = RUBRIC + '\n| D1 | 加深機會 | 問更深的 | | | |\n| D2 | 加深機會 | 用到 R2、R9：x | | | |\n| D3 | 加深機會 | 用到 R1：y（課外：） | | | 另立 |';
+  assert.throws(() => parseRubric(broken), (error: Error) => {
+    assert.match(error.message, /列「D1」是加深機會，判準要寫成「用到 R1、R3：往下一層要問什麼」/);
+    assert.match(error.message, /列「D2」用到的 R2、R9 不是這張表的必備列/);
+    assert.match(error.message, /列「D3」是加深機會，跨單元要空著/);
+    assert.match(error.message, /列「D3」是課外，要在最後寫「（課外：可以查的來源）」/);
     return true;
   });
 });
