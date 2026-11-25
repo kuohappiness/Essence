@@ -345,3 +345,15 @@ void test('status 顯示加深做到哪裡：還沒算計畫的份、篇數與�
   await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
   assert.ok(statusLines(folder).includes('加深：2 份、1 篇｜完成 1、跑中 0、待跑 0、放棄 0；卡組存不了、不能加深 1 份'));
 });
+
+void test('外掛的加深任務段（deepen-prompt.ts）在凍結之後改過：deepen 停下，說用凍結時的 commit 跑', async () => {
+  const folder = await generated();
+  // 模擬原始碼改過：把凍結記的雜湊換掉，並讓鎖跟著（只測這一道核對，不改真的原始碼）。
+  const rules = join(folder.root, '凍結', '加深', '規則.json');
+  writeFileSync(rules, readFileSync(rules, 'utf8').replace(/"prompt": "[0-9a-f]{64}"/, `"prompt": "${'0'.repeat(64)}"`));
+  const lockFile = join(folder.root, '凍結', '鎖.json');
+  const lock = JSON.parse(readFileSync(lockFile, 'utf8')) as { files: Record<string, string> };
+  lock.files['凍結/加深/規則.json'] = sha256File(rules);
+  writeFileSync(lockFile, JSON.stringify(lock, null, 2) + '\n');
+  await assert.rejects(runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} }), /deepen-prompt\.ts）在凍結之後改過：用凍結時的 commit 跑/);
+});

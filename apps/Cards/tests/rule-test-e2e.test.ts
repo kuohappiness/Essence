@@ -16,7 +16,7 @@ import { freezeFolder, readLock } from '../tools/rule-test/freeze.ts';
 import { allGates } from '../tools/rule-test/gates.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { initFolder } from '../tools/rule-test/init.ts';
-import { runJudges } from '../tools/rule-test/judge.ts';
+import { runJudges, type JudgeResult } from '../tools/rule-test/judge.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
 import { unblindFolder, type BatchReport } from '../tools/rule-test/unblind.ts';
 import { fakeJudge } from './helpers/rule-test.ts';
@@ -79,12 +79,13 @@ const fakeDeepener: Adapter = (request: StepRequest) => {
 };
 
 /** 假的評審：照卡組上的記號記判錯（每份幾筆照 harm），其他照 fakeJudge 的預設（每列有）。 */
-function taggedJudge(harm: Record<string, number> = {}): Adapter {
+function taggedJudge(harm: Record<string, number> = {}, more?: (result: JudgeResult, code: string, tag: string) => void): Adapter {
   let cwd = '';
   const { adapter } = fakeJudge({ shape: (result, codes) => {
     for (const code of codes) {
       const tag = /單字 (\w+)/.exec(readFileSync(join(cwd, '卡組', `${code}.md`), 'utf8'))![1];
       for (const line of [3, 5].slice(0, harm[tag] ?? 0)) result.issues.push({ deck: code, kind: '判錯', lines: [line], rubric: '', note: '另一個說法也對' });
+      more?.(result, code, tag);
     }
   } });
   return request => { cwd = request.cwd; return adapter(request); };
@@ -145,6 +146,14 @@ void test('端到端：init 到 unblind，一課三組各兩份；交三段的�
 
 /** 兩組各三份、指定每一份的判錯（記號 a1～a3 是基準、b1～b3 是候選），跑完整個流程，回門檻的總結果。 */
 async function verdictOf(harm: Record<string, number>): Promise<string> {
+  const { folder, report } = await twoGroups(harm);
+  const [gate] = allGates(folder.config.gates, report.decks);
+  const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8');
+  assert.ok(summary.includes(`### L3｜claude｜乙 對 甲：${gate.verdict}\n`));
+  return `${gate.verdict}：${gate.basis}`;
+}
+
+async function twoGroups(harm: Record<string, number>, more?: (result: JudgeResult, code: string, tag: string) => void, extra = ''): Promise<{ folder: Folder; report: BatchReport }> {
   const folder = initialized(`
 名稱: 精確的總結果
 課庫: 課
@@ -156,13 +165,9 @@ async function verdictOf(harm: Record<string, number>): Promise<string> {
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 3 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
 門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 20% }], 打平較省: 只報告 }
-`, { 甲: '組甲\n\n{{任務段}}', 乙: '組乙\n\n{{任務段}}' });
+${extra}`, { 甲: '組甲\n\n{{任務段}}', 乙: '組乙\n\n{{任務段}}' });
   await freezeFolder(folder, { log: () => {} });
-  const report = await through(folder, () => taggedJudge(harm));
-  const [gate] = allGates(folder.config.gates, report.decks);
-  const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8');
-  assert.ok(summary.includes(`### L3｜claude｜乙 對 甲：${gate.verdict}\n`));
-  return `${gate.verdict}：${gate.basis}`;
+  return { folder, report: await through(folder, () => taggedJudge(harm, more)) };
 }
 
 void test('端到端的精確總結果：三份對三份，過、沒過、未定、打平各一個（收益只列一項：k＝1 時 3 對 3 全贏 p＝5% 算明顯）', async () => {
@@ -174,4 +179,20 @@ void test('端到端的精確總結果：三份對三份，過、沒過、未定
   assert.equal(await verdictOf({ b1: 1 }), '未定：傷到學習未定');
   // 打平：兩組都是 0，三份以上、每一項都在容許量內，沒有設定次要指標。
   assert.equal(await verdictOf({}), '打平：學習面打平');
+});
+
+void test('傷到學習照後果加總、分級跟著設定變：判錯 2、洩漏 1、漏的必備 1 合計 4；一題多事預設是小問題，調成傷到學習就算進去，報告的數字跟著變', async () => {
+  const more = (result: JudgeResult, code: string, tag: string): void => {
+    if (tag !== 'b1') return;
+    result.issues.push({ deck: code, kind: '洩漏', lines: [5], rubric: '', note: '題幹露出答案' }, { deck: code, kind: '一題多事', lines: [3], rubric: '', note: '一題問兩件事' });
+    Object.assign(result.rows.find(row => row.row === 'R1')!.decks.find(cell => cell.deck === code)!, { verdict: '沒有', evidence: '', lines: [] });
+  };
+  const b1 = (report: BatchReport): BatchReport['decks'][number] => report.decks.find(deck => deck.group === '乙' && deck.copy === 1)!;
+  const plain = (await twoGroups({ b1: 2 }, more)).report;
+  assert.deepEqual([b1(plain).harm, b1(plain).minor], [{ 判錯: 2, 洩漏: 1, 漏的必備: 1, 其他: 0, total: 4 }, 1]);
+  const { folder, report } = await twoGroups({ b1: 2 }, more, '錯誤分級: { 一題多事: 傷到學習 }');
+  assert.deepEqual([b1(report).harm, b1(report).minor], [{ 判錯: 2, 洩漏: 1, 漏的必備: 1, 其他: 1, total: 5 }, 0]);
+  // 學習面的表：乙三份的傷到學習平均 5÷3；評估規格的分級表也跟著。
+  assert.ok(readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8').includes('| 乙 | 3 | 0.0 | 1.7 | 0.7 | 0.3 | 0.3 | 0.3 |'));
+  assert.match(readFileSync(join(folder.root, '凍結', '評估規格.md'), 'utf8'), /\| 一題多事 \| 傷到學習 \|/);
 });
