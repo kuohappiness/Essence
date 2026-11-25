@@ -9,7 +9,7 @@ import { SETTINGS_FILE } from '../src/core/settings/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import { cliPath } from './cli-path.ts';
 import type { AdapterInput } from './compare/adapter.ts';
-import { diffSnapshots, gateLines } from './compare/snapshot.ts';
+import { diffSnapshots, gateLines, uncomparedLines } from './compare/snapshot.ts';
 import { git, gitEnv, pluginRoot } from './git.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
@@ -132,8 +132,13 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
   if (!comparable) {
     lines.push('## 無法比較', '');
     for (const [name, one] of sides) if (!one.result.ok) lines.push(`- ${name}：${one.result.reason}`);
-  } else if (differences.length === 0) lines.push('## 差異', '', '沒有差異。');
-  else lines.push(`## 差異（${differences.length} 項）`, '', '每一項都要對得到這一版的更新說明（tag 的說明）。', '', ...differences.map(line => '- ' + line));
+  } else if (old.result.ok && next.result.ok) {
+    // 一邊的版本沒有的欄位不比，照實寫出來，不算進差異。
+    const skipped = uncomparedLines(old.result.snapshot, next.result.snapshot);
+    if (skipped.length) lines.push('## 沒比的欄位', '', ...skipped.map(line => '- ' + line), '');
+    if (differences.length === 0) lines.push('## 差異', '', '沒有差異。');
+    else lines.push(`## 差異（${differences.length} 項）`, '', '每一項都要對得到這一版的更新說明（tag 的說明）。', '', ...differences.map(line => '- ' + line));
+  }
   const folder = options.out ?? dirname(options.backup);
   const report = join(folder, `發布前比較 ${stamp.slice(0, 10)} ${stamp.slice(11, 19).replaceAll(':', '')} ${old.build} 到 ${next.build}.md`);
   await writeFile(report, lines.join('\n') + '\n', { flag: 'wx' });

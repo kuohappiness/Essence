@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { backupVault } from '../tools/backup.ts';
 import { snapshot } from '../tools/compare/adapter.ts';
 import type { AdapterInput } from '../tools/compare/adapter.ts';
-import { diffSnapshots } from '../tools/compare/snapshot.ts';
-import type { AdapterResult, Snapshot, TodaySnap } from '../tools/compare/snapshot.ts';
+import { diffSnapshots, uncomparedLines } from '../tools/compare/snapshot.ts';
+import type { AdapterResult, KindSnap, Snapshot, TodaySnap } from '../tools/compare/snapshot.ts';
 import { adapterInput, compareVersions } from '../tools/compare-versions.ts';
 import { openBackup } from '../src/core/backup/index.ts';
 import { nextCard, questionType } from '../src/core/study/index.ts';
@@ -43,8 +43,8 @@ const base = (): Snapshot => ({
   gates: { decks: [], held: [], incomplete: false, conflicts: [] },
   decks: [{ path: 'Essence Cards/A.md', props: { status: 'active', isTranscript: false, term: null, subject: null, unit: null, categories: [] },
     targets: [
-      { key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: null },
-      { key: 'bbb222', id: 'bbb222', name: 'B', line: 2, ok: true, fingerprints: ['22222222'], importance: 'medium', paused: false, direction: null },
+      { key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: null, kind: null },
+      { key: 'bbb222', id: 'bbb222', name: 'B', line: 2, ok: true, fingerprints: ['22222222'], importance: 'medium', paused: false, direction: null, kind: null },
     ], problems: [] }],
   due: { aaa111: Date.UTC(2026, 10, 1), bbb222: Date.UTC(2026, 10, 5) },
   today: [], days: [0, 0, 0, 1, 0, 0, 0, 1, ...Array.from({ length: 22 }, () => 0)],
@@ -61,7 +61,7 @@ void test('比較：兩個目標互換到期日時 30 天的總數相同，逐�
 
 void test('比較：沒 ID 的目標多出或消失、題目指紋、問題與屬性的改變都抓得到', () => {
   const after = base();
-  after.decks[0].targets.push({ key: '@4:新的', id: null, name: '新的', line: 4, ok: true, fingerprints: ['33333333'], importance: 'medium', paused: false, direction: null });
+  after.decks[0].targets.push({ key: '@4:新的', id: null, name: '新的', line: 4, ok: true, fingerprints: ['33333333'], importance: 'medium', paused: false, direction: null, kind: null });
   after.decks[0].targets[0].fingerprints = ['44444444'];
   after.decks[0].problems = [{ line: 4, level: 'error', code: 'missing-answer' }];
   after.decks[0].props.status = 'paused';
@@ -77,8 +77,8 @@ void test('比較：同一個 key 出現好幾次（重複的 ID）時每一個�
   const twice = (): Snapshot => {
     const snap = base();
     snap.decks[0].targets = [
-      { key: 'abc234', id: 'abc234', name: 'First', line: 0, ok: true, fingerprints: ['84fee6d9'], importance: 'medium', paused: false, direction: null },
-      { key: 'abc234', id: 'abc234', name: 'Second', line: 2, ok: true, fingerprints: ['b9987b45'], importance: 'medium', paused: false, direction: null },
+      { key: 'abc234', id: 'abc234', name: 'First', line: 0, ok: true, fingerprints: ['84fee6d9'], importance: 'medium', paused: false, direction: null, kind: null },
+      { key: 'abc234', id: 'abc234', name: 'Second', line: 2, ok: true, fingerprints: ['b9987b45'], importance: 'medium', paused: false, direction: null, kind: null },
     ];
     return snap;
   };
@@ -122,10 +122,36 @@ void test('比較：讀取閘門的改變都抓得到；一邊沒有重複 ID �
 
 void test('比較：今天的份順序不同一定報，ID 裡有分隔符也一樣；從 share 搬到 more 也算（Codex 第五次審查 F6）', () => {
   const today = (...items: [TodaySnap['list'], string][]): Snapshot => ({ ...base(), today: items.map(([list, lt]) =>
-    ({ list, lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: null, direction: null })) });
+    ({ list, lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: null, direction: null, type: null, cells: null })) });
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'a,share:a']), today(['share', 'a,share:a'], ['share', 'a']), time), ['今天的份的順序不同：a、a,share:a → a,share:a、a']);
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'b']), today(['share', 'a'], ['share', 'b']), time), []);
   assert.deepEqual(diffSnapshots(today(['share', 'a']), today(['more', 'a']), time), ['今天的份的順序不同：a → a', '今天的份裡 a 的 list："share" → "more"']);
+});
+
+void test('比較：卡型摘要改了報得出來，兩個方向都要（題型模組任務說明 §1-7）', () => {
+  const group: KindSnap = { id: 'group', style: null, items: [['寨'], ['寨', '塞']], marks: [] };
+  const after = base();
+  after.decks[0].targets[0].kind = group;
+  const line = `Essence Cards/A.md 的 aaa111 的 kind：null → ${JSON.stringify(group)}`;
+  assert.deepEqual(diffSnapshots(base(), after, time), [line]);
+  const other = structuredClone(after);
+  other.decks[0].targets[0].kind = { ...group, items: [['塞'], ['寨', '塞']] };
+  assert.deepEqual(diffSnapshots(after, other, time), [`Essence Cards/A.md 的 aaa111 的 kind：${JSON.stringify(group)} → ${JSON.stringify(other.decks[0].targets[0].kind)}`]);
+});
+
+void test('比較：今天的份的題型與格數，有一邊是 null（那一版沒有）就不比，報告列出沒比的張數；兩邊都有就比（題型模組任務說明 §1-7）', () => {
+  const today = (...items: [string, string | null, number | null][]): Snapshot => ({ ...base(), today: items.map(([lt, type, cells]) =>
+    ({ list: 'share', lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: null, direction: null, type, cells })) });
+  const old = today(['a', null, null], ['b', null, null], ['c', 'flip', 1]);
+  const now = today(['a', 'pick', 2], ['b', 'flip', 1], ['c', 'flip', 1]);
+  assert.deepEqual(diffSnapshots(old, now, time), []);
+  assert.deepEqual(uncomparedLines(old, now), ['今天的份的題型：舊版沒有這一欄，2 張沒比', '今天的份的格數：舊版沒有這一欄，2 張沒比']);
+  assert.deepEqual(uncomparedLines(now, old), ['今天的份的題型：新版沒有這一欄，2 張沒比', '今天的份的格數：新版沒有這一欄，2 張沒比']);
+  assert.deepEqual(uncomparedLines(now, now), []);
+  assert.deepEqual(uncomparedLines(old, old), []);
+  const changed = today(['a', 'order', 3], ['b', 'flip', 1], ['c', 'typed', 2]);
+  assert.deepEqual(diffSnapshots(now, changed, time), [
+    '今天的份裡 a 的 type："pick" → "order"', '今天的份裡 a 的 cells：2 → 3', '今天的份裡 c 的 type："flip" → "typed"', '今天的份裡 c 的 cells：1 → 2']);
 });
 
 void test('比較：單元與問題的切法不同就是不同，接起來的字串一樣也要報', () => {
@@ -290,7 +316,9 @@ void test('發布比較：有標記的混合卡組，舊版整篇擋、新版出
   assert.deepEqual(before.decks.map(deck => deck.path), [A]);
   assert.deepEqual(after.decks.map(deck => deck.path), [A, C]);
   assert.deepEqual(after.decks[0], before.decks[0], '其他篇照常');
-  assert.deepEqual(after.today.filter(item => item.deck === A), before.today, '其他篇今天的份不變');
+  // 0.3.0 沒有 questionType、卡沒有 blanks：題型與格數是 null，不比（題型模組任務說明 §1-7）。
+  assert.ok(before.today.every(item => item.type === null && item.cells === null));
+  assert.deepEqual(after.today.filter(item => item.deck === A).map(item => ({ ...item, type: null, cells: null })), before.today, '其他篇今天的份不變');
   assert.deepEqual(after.today.filter(item => item.deck === C).map(item => [item.lt, item.list, item.lane, item.seconds]), [['zhai00', 'share', 'new', 7.5], ['sai000', 'share', 'new', 7.5]], '新版整組進今天的份；一張卡的預設 15 秒兩個目標分（國語沒有紀錄）');
   const lines = diffSnapshots(before, after, time);
   assert.deepEqual(lines.filter(line => !line.startsWith('今天的份的順序不同')), [`${C}：需要新版才讀得懂 → 讀得懂`, 'sai000 的下次到期：（沒有這個目標） → （新卡）', 'zhai00 的下次到期：（沒有這個目標） → （新卡）']);
@@ -312,6 +340,58 @@ void test('發布比較：有標記的混合卡組，舊版整篇擋、新版出
   assert.deepEqual(compare.card.group?.members, ['寨', '塞']);
   const flip = nextCard(state.today(), state.input(), { deck: A });
   assert.equal(flip.kind === 'card' ? questionType(flip.card) : null, 'flip');
+});
+
+// 每一種卡型各一個目標（tests/card-kinds.test.ts 的卡型範例）。預期的摘要照筆記手寫：題型模組 A1 搬動前後都要是這些值（任務說明 §1-7）。
+const KINDS_ZH = '---\n科目: 國語\n---\n' + `- 寨（寨、塞） 相似字 ^zhai00
+    - 山＿＿ :: 寨
+- 塞（寨、塞） 相似字 ^sai000
+    - 大＿＿車 :: 塞
+- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^chang0
+    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ
+    - 這條路很長（＿＿）。 :: ㄔㄤˊ
+- 能說明擴散 ^flip00
+    - 擴散是什麼？ :: 粒子散開
+
+## 鳥鳴澗
+
+- 鳥鳴澗 全詩 排序 ^poem00
+    - ==人閒桂花落==，==夜靜春山空==。
+- 鳥鳴澗 第 1 句 接句 ^coup00
+    - 人閒桂花落，==夜靜春山空==。
+`;
+const KINDS_EN = '---\n科目: 英文\n---\n' + `- go 過去式 ^gopast
+    - Yesterday I ＿＿ to school.（去） :: went
+- 現在完成式 文法 ^gram00
+    - I ＿＿ Tom since I was six. (know) :: have known
+- 間接問句 排序 ^order0
+    - 我不知道他住在哪裡。I don't know ==where== ==he== ==lives==.
+- borrow 英翻中 ^borrow
+    - borrow :: 借入
+`;
+
+void test('卡型摘要：每一種卡型照筆記寫出卡型、樣子與內容，沒有卡型是 null（題型模組任務說明 §1-7）', async () => {
+  const snap = await snapshot(root, { now: NOW, offset: 480, files: { [A]: KINDS_ZH, [B]: KINDS_EN } });
+  const kinds = Object.fromEntries(snap.decks.flatMap(deck => deck.targets.map(target => [target.key, target.kind])));
+  assert.deepEqual(kinds, {
+    zhai00: { id: 'group', style: null, items: [['寨'], ['寨', '塞']], marks: [] },
+    sai000: { id: 'group', style: null, items: [['塞'], ['寨', '塞']], marks: [] },
+    chang0: { id: 'polyphone', style: null, items: [['長'], ['ㄓㄤˇ', 'ㄔㄤˊ']], marks: [[0, 1]] },
+    flip00: null,
+    poem00: { id: 'order', style: 'poem', items: [['人閒桂花落', '夜靜春山空']], marks: [] },
+    coup00: { id: 'couplet', style: null, items: [['人閒桂花落，', '==夜靜春山空==。']], marks: [] },
+    gopast: { id: 'typing', style: 'inflection', items: [['go'], ['go']], marks: [[false]] },
+    gram00: { id: 'typing', style: 'grammar', items: [['現在完成式'], []], marks: [] },
+    order0: { id: 'order', style: 'sentence', items: [['where', 'he', 'lives']], marks: [[false, false, false]] },
+    borrow: null,
+  });
+  assert.deepEqual(snap.decks.flatMap(deck => deck.problems), []);
+  // 今天的份每張卡的題型與格數（都是新卡）：多音字兩個讀音、只有兩句，一張兩格（tasks/polyphone-pick.md 出題第 1 點）；全詩兩格、句子排序三格。
+  const today = Object.fromEntries(snap.today.map(item => [item.lt, [item.type, item.cells]]));
+  assert.deepEqual(today, {
+    zhai00: ['pick', 1], sai000: ['pick', 1], chang0: ['pick', 2], flip00: ['flip', 1], poem00: ['pick', 2], coup00: ['flip', 1],
+    gopast: ['typed', 1], gram00: ['typed', 1], order0: ['pick', 3], borrow: ['flip', 1],
+  });
 });
 
 void test('接不上就丟錯（比較的一方寫無法比較）：版號不是正式版號、state 沒有閘門、沒有讀取能力的模組、比較時想寫版本行以外的內容', async t => {
@@ -538,7 +618,10 @@ const fakeGood = () => ({
     unread: [] as string[],
     decks: [{ path: A, deck: {
       props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back' }, categories: ['單字'] },
-      targets: [{ id: 'aaa111', name: 'A', line: 0, ok: true, prompts: [{ fingerprint: '11111111' }], fields: { importance: 'medium', paused: false }, direction: 'en-zh' }],
+      targets: [{ id: 'aaa111', name: 'A', line: 0, ok: true, prompts: [{ fingerprint: '11111111' }], fields: { importance: 'medium', paused: false }, direction: 'en-zh' },
+        // 有卡型的目標（新版的 kind）；方向也給字串，換錯值時才照字串的型別判斷。
+        { id: 'ord111', name: 'O', line: 2, ok: true, prompts: [{ fingerprint: '22222222' }], fields: { importance: 'medium', paused: false }, direction: 'en-zh',
+          kind: { id: 'order', order: { style: 'sentence', prompts: [{ words: ['where', 'he'], starts: [true, false] }] } } }],
       problems: [{ line: 1, level: 'error', code: 'x' }],
     } }],
     history: { reviews: [{}] },
@@ -549,15 +632,17 @@ const fakeGood = () => ({
       slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }], ['bbb222', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
     conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
   },
-  study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 0.5, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' } } } },
+  study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 0.5, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' }, blanks: [{}] } }, questionType: 'flip' },
 });
 const fakeSnapshot: Snapshot = {
   gates: { decks: [C], held: ['hld111'], incomplete: false, conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }] },
   decks: [{ path: A, props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back' }, categories: ['單字'] },
-    targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
+    targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh', kind: null },
+      { key: 'ord111', id: 'ord111', name: 'O', line: 2, ok: true, fingerprints: ['22222222'], importance: 'medium', paused: false, direction: 'en-zh',
+        kind: { id: 'order', style: 'sentence', items: [['where', 'he']], marks: [[true, false]] } }],
     problems: [{ line: 1, level: 'error', code: 'x' }] }],
-  due: { aaa111: NOW + 0.5 },
-  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, seconds: 8.5, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, seconds: 7.5, prompt: '11111111', direction: 'en-zh' }],
+  due: { aaa111: NOW + 0.5, ord111: null },
+  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, seconds: 8.5, prompt: '11111111', direction: 'en-zh', type: 'flip', cells: 1 }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, seconds: 7.5, prompt: '11111111', direction: 'en-zh', type: 'flip', cells: 1 }],
   days: days(1),
 };
 const WRONG: [string, () => unknown][] = [
@@ -589,14 +674,18 @@ const at = (value: unknown, position: Position): unknown => position.reduce<unkn
 const kind = (value: unknown): string => typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : Number.isFinite(value) ? 'number' : 'NaN')
   : typeof value === 'object' ? Object.prototype.toString.call(value) : typeof value;
 // 交回同一版處理、轉接器不讀內容的（〈第四次審查〉的表）；其他位置型別不對就要拒絕。只影響分支的值（canAnswer、unread）不會進比較資料，看輸出看不出來（Codex L2 F1）。
-const OPAQUE = new Set(['state.history.reviews.0', 'study.replay.aaa111']);
+const OPAQUE = new Set(['state.history.reviews.0', 'study.replay.aaa111', 'study.nextCard.card.blanks.0']);
 const CAN_BE_NULL = new Set<string | number | undefined>(['id', 'term', 'subject', 'unit', 'direction']);
 /** 這個位置該不該接受這個值：和正常的值同一種；小數的位置也接受整數；能是 null 的欄位。 */
+// 0.3.0 以前的卡沒有 blanks：沒有就是 null（不比），不算型別不同。
+// 沒有卡型的目標沒有 kind（題型模組任務說明 §1-7）：拿掉就是 null。
+const CAN_BE_MISSING = new Set(['study.nextCard.card.blanks', 'state.decks.0.deck.targets.1.kind']);
 function fits(good: unknown, value: unknown, position: Position): boolean {
   if (OPAQUE.has(position.join('.')) || kind(good) === kind(value)) return true;
+  if (value === undefined && CAN_BE_MISSING.has(position.join('.'))) return true;
   return kind(good) === 'number' && kind(value) === 'integer' || value === null && CAN_BE_NULL.has(position.at(-1));
 }
-const NULLABLE = new Set(['id', 'term', 'subject', 'unit', 'direction', 'prompt', 'conflicts']);
+const NULLABLE = new Set(['id', 'term', 'subject', 'unit', 'direction', 'prompt', 'conflicts', 'kind', 'type', 'cells']);
 /** 比較資料的形狀：和正常的那一份同型別；能是 null 的欄位才能是 null。 */
 function sameShape(out: unknown, good: unknown, key: string): void {
   if (out === null) { assert.ok(NULLABLE.has(key), key); return; }
@@ -653,13 +742,27 @@ void test('被比較的版本回傳的每個位置換成每一種不對的值：
   // 型別都對，內容矛盾：擋下的卡組又有內容。比較端兩邊都擋下就不比內容，這一份差異比不到。
   hooks.fake = replaced(fakeGood(), ['state', 'blocked', 'decks'], [A]);
   await assert.rejects(snapshot(dir, input), /decks\(\).*擋下/);
+
+  // 卡型：舊版的欄位（句子排序是 sentence）和新版的 kind 是同一份摘要；兩種都有、舊版有兩個卡型欄位就接不上（題型模組任務說明 §1-7）。
+  const withTarget = (change: (target: Record<string, unknown>) => void): ReturnType<typeof fakeGood> => {
+    const fake = fakeGood();
+    change(fake.state.decks[0].deck.targets[1]);
+    return fake;
+  };
+  const legacy = { title: 'O', prompts: [{ head: '', words: ['where', 'he'], tails: [' ', '.'], starts: [true, false] }] };
+  hooks.fake = withTarget(target => { delete target.kind; target.sentence = legacy; });
+  assert.deepEqual(await snapshot(dir, input), fakeSnapshot);
+  hooks.fake = withTarget(target => { target.sentence = legacy; });
+  await assert.rejects(snapshot(dir, input), /target\.kind 型別不同/);
+  hooks.fake = withTarget(target => { delete target.kind; target.sentence = legacy; target.group = { word: '寨', members: ['寨', '塞'] }; });
+  await assert.rejects(snapshot(dir, input), /兩個卡型：group、sentence/);
 });
 
 void test('比較：比較資料裡任何一個值不同都報得出來，少了一筆也是，兩個方向都要（Codex 第五次審查 F7）', () => {
   // 每個能是 null、'stopped' 的欄位都有例子。
   const rich = structuredClone(fakeSnapshot);
   rich.decks.push({ path: B, props: { status: 'draft', isTranscript: true, term: null, subject: null, unit: null, categories: [] },
-    targets: [{ key: '@2:B', id: null, name: 'B', line: 2, ok: false, fingerprints: [], importance: 'low', paused: true, direction: null }], problems: [] });
+    targets: [{ key: '@2:B', id: null, name: 'B', line: 2, ok: false, fingerprints: [], importance: 'low', paused: true, direction: null, kind: null }], problems: [] });
   rich.due = { ...rich.due, new111: null, hld111: 'stopped' };
   rich.today[1] = { ...rich.today[1], prompt: null, direction: null };
   assert.deepEqual(diffSnapshots(rich, structuredClone(rich), time), []);
@@ -680,7 +783,7 @@ void test('比較：比較資料裡任何一個值不同都報得出來，少了
 
   // 沒有 ID 的目標，替代的 key 和別的目標的 ID 相同：只有 id 不同，也要報。
   const target = (id: string | null, line: number, name: string): Snapshot['decks'][number]['targets'][number] =>
-    ({ key: id ?? `@${line}:${name}`, id, name, line, ok: true, fingerprints: [], importance: 'medium', paused: false, direction: null });
+    ({ key: id ?? `@${line}:${name}`, id, name, line, ok: true, fingerprints: [], importance: 'medium', paused: false, direction: null, kind: null });
   const aliased = (first: string | null): Snapshot => ({ ...structuredClone(rich), decks: [{ ...structuredClone(rich.decks[1]), path: A, targets: [target(first, 0, 'A'), target('@0:A', 2, 'B')] }], due: { '@0:A': 'stopped' }, today: [] });
   assert.deepEqual(diffSnapshots(aliased(null), aliased('@0:A'), time).filter(line => line.startsWith(A)), [`${A} 的 @0:A 第 1 個的 id：null → "@0:A"`]);
 });
@@ -695,6 +798,8 @@ void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘�
   const text = await readFile(result.report, 'utf8');
   assert.match(text, /舊版：\n\n- 需要新版才讀得懂的卡組：Essence Cards\/C\.md（內容沒有比到）\n- 讀不懂的紀錄行停掉的學習目標：hld111\n- 整份紀錄不完整（全部學習目標都停）：否\n- 重複的學習目標 ID（這些目標都停）：這一版沒有這個判斷\n/);
   assert.match(text, /新版：\n\n[^]*- 重複的學習目標 ID（這些目標都停）：dup111（Essence Cards\/A\.md 第 3 行「第一份」、Essence Cards\/B\.md 第 1 行「第二份」）\n/);
+  // v0.2.0 沒有 questionType、卡沒有 blanks：兩邊都在今天的份的兩張沒比，照實列出（題型模組任務說明 §1-7）。
+  assert.match(text, /## 沒比的欄位\n\n- 今天的份的題型：舊版沒有這一欄，2 張沒比\n- 今天的份的格數：舊版沒有這一欄，2 張沒比\n\n## 差異/);
   assert.match(text, /## 差異（\d+ 項）/);
   assert.match(text, /今天的份的順序不同：aaa111、dup111、new111 → aaa111、new111/);
   assert.doesNotMatch(text, /沒有差異。/);
