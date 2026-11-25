@@ -1,6 +1,6 @@
 # 題型模組：照形式分、每一科通用（給 Claude，L2 在本機）
 
-狀態：待審｜下一步：A1、A2 做完（PR #56，〈結果〉），L2 三輪審完、發現都修完（[報告與核對](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md>)）；合併前在使用者的電腦跑兩個正式 vault 的 `compare-versions`（§1-7）、Windows 看一次畫面，使用者同意合併；使用者回 §6 第 1～3 題與第 4 題的兩件（不擋 A）｜等誰：Claude、使用者
+狀態：待審｜下一步：A1、A2 做完（PR #56，〈結果〉），L2 三輪審完、發現都修完（[報告與核對](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md>)）；兩個正式 vault 的 `compare-versions` 照預期（〈結果〉）；合併前 Windows 看一次畫面，使用者同意合併；使用者回 §6 第 1～3 題與第 4 題的兩件（不擋 A）｜等誰：Claude、使用者
 
 來自：使用者 2026-11-25：「我要做的不是每一科目不同的題型，是一個通用模組，例如每一科都有填空題，配對題，單選題等等」「現在做，進0.7.0」；[題型模組規劃稿](<../Claude Codex Discussion/2026-11-25-question-type-modules.md>)（第 2 版，Fable 5.2 xhigh 第一輪審過）的 §2、§5 第 1、2 段。
 
@@ -792,7 +792,14 @@ Fable 5.2 xhigh，2026-11-25，只核對第 3 版（`fca61ca7`）有沒有把 G1
 
 **漏接**：預期在暫存的工作樹加一個假的卡型（`Kind` 多 `{ id: 'fake'; fake: true }`）時，`tsc` 報這 8 處：`core/deck/question-types.ts:43`（`KIND_NEEDS`）、`core/study/compose.ts:27`、`core/study/session.ts:135`、`core/study/practice.ts:230`、`review/preview.ts:40`、`core/ai/existing.ts:255`（各一個 `switch` 的 `never`）、`tests/card-kinds.test.ts:14`（`kindOf` 的 `switch` 沒有結尾的 `return`）、`tests/card-kinds.test.ts:167`（`PICKED`）。實際報的就是這 8 處，沒有別的。
 
-**兩個正式 vault 的 `compare-versions`**：A 合併前在使用者的電腦跑（§1-7）。
+**兩個正式 vault 的 `compare-versions`**（2026-11-25，在使用者的電腦，L2 結案後的 `f76e7440`；兩個 vault 都是 `0.6.0+037b359`，只讀備份）：
+
+| vault | A1 前後（`e7304dff` → `74fb12f6`） | `main`（`a8973f9f`）→ 這個 PR（`f76e7440`） | 今天的份／再複習一些 | 轉接器單邊 |
+|---|---|---|---|---|
+| 甲 | 零差異 | 7 項，都是句子排序卡的 `type`：`"pick"` → `"order"`，格數不變；這個 vault 的排序卡正好 7 個，都在今天的份或再複習一些，沒有全詩 | 169／137 | 2.8～4.8 秒 |
+| 乙 | 零差異 | 零差異（沒有排序卡，今天的份都是翻面卡） | 120／19 | 2.9～4.3 秒 |
+
+四次都比得了，〈沒比的欄位〉沒有，〈讀取閘門〉兩邊都是沒有、否。每次整趟約 33 秒，三分之二是兩邊的 `npm ci`；再複習一些最多 137 筆，L2 第三輪 G3 說的變慢看不出來。報告與備份留在使用者的電腦。
 
 ### A2（`cc872dc0`）
 
