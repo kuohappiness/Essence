@@ -136,7 +136,7 @@ void test('blind 的地圖（rule-test-d236.md §5-1、§5-2）：交三段的�
 
 void test('區組：組多於 4 時拆開，每個區組都有基準組的同一份；候選一定和基準同一區組', () => {
   const folder = { config: { gates: { baseline: '甲', candidates: ['乙'] }, groups: ['甲', '乙', '丙', '丁', '戊', '己'].map(name => ({ name })) } } as unknown as Folder;
-  const entries: BlindEntry[] = ['甲', '乙', '丙', '丁', '戊', '己'].map((group, i) => ({ lesson: 'L3', code: `S${String(i + 1)}`, job: `${group}-1`, group, generator: 'claude', copy: 1, replacement: false, raws: [], rawSha256: [], deckSha256: '', chars: 0, blocks: [], map: i === 2 ? { kind: 'ok' as const, sha256: '' } : { kind: 'none' as const } }));
+  const entries: BlindEntry[] = ['甲', '乙', '丙', '丁', '戊', '己'].map((group, i) => ({ lesson: 'L3', code: `S${String(i + 1)}`, job: `${group}-1`, group, generator: 'claude', copy: 1, replacement: false, raws: [], rawSha256: [], deckSha256: '', chars: 0, blocks: [], map: i === 2 ? { kind: 'ok' as const, sha256: '' } : { kind: 'none' as const }, deepen: { kind: 'none' as const } }));
   const blocks = makeBlocks(folder, entries, () => 1);
   assert.deepEqual(blocks.map(block => [block.name, block.codes, block.maps]), [['L3-B01', ['S1', 'S2', 'S3', 'S4'], ['S3']], ['L3-B02', ['S1', 'S5', 'S6'], []]]);
   assert.deepEqual(entries[0].blocks, ['L3-B01', 'L3-B02']);

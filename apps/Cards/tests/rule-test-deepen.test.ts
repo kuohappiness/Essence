@@ -81,9 +81,14 @@ async function generated(replies: Partial<Record<'甲' | '乙', string>> = {}, u
 /** 假的生成器：記下每次的請求，回一份加深。 */
 function fakeDeepener(): { requests: StepRequest[]; adapter: (request: StepRequest) => Promise<{ kind: 'ok'; reply: string; session: null; warnings: string[]; ms: number; models: string[] }> } {
   const requests: StepRequest[] = [];
-  const deck = '## 文法\n- borrow 和 lend 的差別\n    - 出處：p.3\n    - 向別人拿是 ＿＿ :: borrow\n<<<完>>>';
   return { requests, adapter: request => {
     requests.push(request);
+    const id = /^ {2}- (\w{6}) borrow 英翻中｜/m.exec(request.text)![1];
+    const deck = [
+      '## 文法', '- borrow 和 lend 的差別', '    - 出處：p.3', '    - 向別人拿是 ＿＿ :: borrow', '',
+      '> [!note] 加進已有的學習目標', `> - ${id} borrow 英翻中`, '>     - 出處：p.3', '>     - I ＿＿ a pen from him. :: borrow', '>     - 借書 :: borrow a book', '',
+      '> [!note]- 候選卡片', '> - lend 的片語', '>     - 理由：課外', '>     - lend a hand :: 幫忙', '<<<完>>>',
+    ].join('\n');
     const reply = request.text.includes('照規則交全貌') ? `<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n${deck}` : deck;
     return Promise.resolve({ kind: 'ok', reply, session: null, warnings: [], ms: 900, models: [] });
   } };
@@ -165,7 +170,26 @@ void test('deepen：一篇一個新對話、附教材、模型推理同生成；
   // 重跑：做完的篇不重做。
   await runDeepen(folder, { adapters: { claude: fake.adapter }, log: () => {} });
   assert.equal(fake.requests.length, 2);
-  blindFolder(folder, { log: () => {} });
+  const batch = blindFolder(folder, { log: () => {} });
+  // 給評審的加深（§6-2）：草稿帶假 ID、標記換成標題；新目標一項、加題每一題一項，候選不算；行號對得到那一行。
+  const entry = batch.entries.find(each => each.group === '甲')!;
+  assert.deepEqual(entry.deepen.kind === 'ok' && [entry.deepen.pieces, entry.deepen.abandoned, entry.deepen.unsavable, entry.deepen.items], [1, 0, 0, 3]);
+  const sheet = readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${entry.code}.md`), 'utf8').split('\n');
+  const { items } = JSON.parse(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${entry.code}.json`), 'utf8')) as { items: { id: string; kind: string; target: string | null; line: number; text: string }[] };
+  assert.deepEqual(items.map(item => [item.id, item.kind, item.target, item.text]), [
+    ['1-1', '新目標', null, '- borrow 和 lend 的差別'],
+    ['1-2', '加題', plan.pieces[0].ids[0], '- I ＿＿ a pen from him. :: borrow'],
+    ['1-3', '加題', plan.pieces[0].ids[0], '- 借書 :: borrow a book'],
+  ]);
+  for (const item of items) assert.equal(sheet[item.line - 1].replace(/^>\s?/, '').trim(), item.text);
+  assert.ok(sheet.includes(`- borrow 英翻中 ^${plan.pieces[0].ids[0]}`));
+  assert.ok(!sheet.some(line => line.includes('<<<')));
+  const other = batch.entries.find(each => each.group === '乙')!;
+  assert.ok(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${other.code}.md`), 'utf8').includes('\n## 全貌\n- 借與借出\n'));
+  const [block] = batch.blocks;
+  assert.deepEqual([...block.deepens].sort(), [entry.code, other.code].sort());
+  assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '加深', `${entry.code}.md`)));
+  assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '地圖', `${other.code}.md`)));
 });
 
 void test('§13-7 加深的提示和外掛一字不差：假 vault 放凍結的卡組與模擬加入的那一篇、孩子都記穩了、這個單元有小考，外掛走一次 copy()', async t => {

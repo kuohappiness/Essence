@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildDeepenPrompt, deepenTargets, inspectDeepen, inspectReply, issueText, learnedWords, planDraft, readSnapshot as readNote, unitSiblings, type CardForm, type ExistingNow,
+  buildDeepenPrompt, deepenTargets, inspectDeepen, inspectReply, issueText, learnedWords, planDraft, readSnapshot as readNote, unitSiblings, type CardForm, type DeepenInspection, type ExistingNow,
 } from '../../src/core/ai/index.ts';
 import { buildIndex } from '../../src/core/catalog/index.ts';
 import { blockIds, newId, parseDeck, type Deck } from '../../src/core/deck/index.ts';
@@ -178,6 +178,74 @@ function todos(folder: Folder, plans: readonly DeepenPlan[]): Todo[] {
   return plans.flatMap(plan => plan.pieces.map(piece => ({ job: jobs.get(plan.job)!, plan, piece })));
 }
 
+/** 外掛的 inspectDeepen（§6-1 第 7 點）：這一篇模擬加入的卡組、這一組交不交三段。 */
+function inspectPiece(folder: Folder, plan: DeepenPlan, piece: DeepenPiece, reply: string): DeepenInspection {
+  const lesson = folder.config.lessons.find(each => each.code === plan.lesson)!;
+  const deck = parseDeck(piece.deck);
+  const targets = new Map(deck.targets.flatMap(t => t.id !== null && t.ok && !t.implicit ? [[t.id, t.name] as const] : []));
+  return inspectDeepen(reply, lesson.form, { subject: subjectOf(lesson.subjectKey).subject, r3: piece.threeSections }, { path: piece.path, targets });
+}
+
+/** 加深的一項（§6-2）：新的學習目標一項，加進已有目標的每一題一項；候選卡片不是。line 是給評審的檔的行號（從 1 算）。 */
+interface DeepenItem { id: string; kind: '新目標' | '加題'; target: string | null; line: number; text: string }
+/** 給評審的一份加深：草稿（帶假 ID）與每一篇的加深回覆；放棄的篇不評。 */
+export interface DeepenSheet { text: string; items: DeepenItem[]; pieces: { n: number; abandoned: boolean }[]; unsavable: number }
+
+const MARK = /^\s{0,3}<<<([^<>\n]*)>>>\s*$/;
+const QUOTE = /^\s{0,3}>\s?/;
+const bodyOf = (text: string): string[] => {
+  const lines = text.replace(/\n$/, '').split('\n');
+  const close = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  const body = lines.slice(close + 1);
+  while (body.length && !body[0].trim()) body.shift();
+  return body;
+};
+
+/** 一份原稿的加深給評審的檔與項（§6-2）：標記行換成標題（同地圖），`<<<完>>>` 拿掉；加深存不了的篇數另外記（§6-1 第 7 點）。 */
+function deepenSheet(folder: Folder, plan: DeepenPlan): DeepenSheet {
+  const events = readEvents(folder, LOG);
+  const out: string[] = ['# 草稿', '', '家長把這一份的草稿全部加入、孩子都記穩了，然後第一次按加深。學習目標的 ID 是程式給的。', ''];
+  for (const piece of plan.pieces) out.push(`## 第 ${String(piece.n)} 篇：${piece.name}`, '', ...bodyOf(piece.deck), '');
+  const items: DeepenItem[] = [], pieces: DeepenSheet['pieces'] = [];
+  let unsavable = 0;
+  for (const piece of plan.pieces) {
+    out.push(`# 第 ${String(piece.n)} 篇的加深`, '');
+    const abandoned = jobState(events, piece.key).status !== 'done';
+    pieces.push({ n: piece.n, abandoned });
+    if (abandoned) { out.push('（這一篇沒有加深回覆，不評。）', ''); continue; }
+    const inspection = inspectPiece(folder, plan, piece, readFileSync(replyFile(folder, piece.key), 'utf8'));
+    if (inspection.errors.length) unsavable++;
+    const { lines } = inspection.normalized;
+    const at = new Map<number, number>();
+    lines.forEach((line, i) => {
+      const mark = MARK.exec(line);
+      if (mark?.[1].trim() === '完') return;
+      out.push(mark ? `## ${mark[1].trim()}` : line);
+      at.set(i, out.length);
+    });
+    out.push('');
+    // 新的學習目標：名稱行，候選卡片裡的不算；加題：每一個加進已有目標的項目底下的每一題。
+    const found: Omit<DeepenItem, 'id'>[] = inspection.names.filter(line => !inspection.candidates.includes(line)).map(line => ({ kind: '新目標', target: null, line: at.get(line)!, text: lines[line].trim() }));
+    const adds = [...inspection.adds].sort((a, b) => a.line - b.line);
+    adds.forEach((add, i) => {
+      const segment = inspection.existing.filter(line => line >= add.line && (i + 1 >= adds.length || line < adds[i + 1].line));
+      const deck = parseDeck(segment.map(line => lines[line].replace(QUOTE, '')).join('\n'));
+      for (const prompt of deck.targets[0]?.prompts ?? []) found.push({ kind: '加題', target: add.id, line: at.get(segment[prompt.line])!, text: lines[segment[prompt.line]].replace(QUOTE, '').trim() });
+    });
+    found.sort((a, b) => a.line - b.line).forEach((item, k) => items.push({ id: `${String(piece.n)}-${String(k + 1)}`, ...item }));
+  }
+  while (out.at(-1) === '') out.pop();
+  return { text: out.join('\n') + '\n', items, pieces, unsavable };
+}
+
+/** 一份原稿給評審的加深（blind 用）：沒跑加深是 null；卡組存不了的回原因；其他回給評審的檔。 */
+export function deepenOf(folder: Folder, job: Job): { why: string[] } | DeepenSheet | null {
+  if (!deepenJobs(folder, [job]).length) return null;
+  const plan = readPlan(folder, job.key);
+  if (!plan) throw Error(`${job.key} 還沒跑 deepen`);
+  return plan.savable ? deepenSheet(folder, plan) : { why: plan.why };
+}
+
 /** 跑一篇：一個新對話，模型、推理同生成那一份；回覆存 加深/原稿/，外掛的 inspectDeepen 結果存 加深/格式/。 */
 async function runPiece(folder: Folder, todo: Todo, adapter: Adapter, temp: string): Promise<StepResult['kind'] | 'done'> {
   const { config } = folder;
@@ -207,10 +275,7 @@ async function runPiece(folder: Folder, todo: Todo, adapter: Adapter, temp: stri
     }
     writeOnce(replyFile(folder, piece.key), result.reply);
     // 外掛存不存得了（§6-1 第 7 點）：有錯誤記「加深存不了」，內容照評。
-    const subject = subjectOf(lesson.subjectKey);
-    const deck = parseDeck(piece.deck);
-    const targets = new Map(deck.targets.flatMap(t => t.id !== null && t.ok && !t.implicit ? [[t.id, t.name] as const] : []));
-    const inspection = inspectDeepen(result.reply, lesson.form, { subject: subject.subject, r3: piece.threeSections }, { path: piece.path, targets });
+    const inspection = inspectPiece(folder, todo.plan, piece, result.reply);
     writeOnce(formatFile(folder, piece.key), JSON.stringify({ job: piece.key, ended: inspection.ended, errors: inspection.errors.map(issueText), hints: inspection.hints.map(issueText) }, null, 2) + '\n');
     appendEvent(folder, { type: 'done', job: piece.key, attempt, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, sent: text.length, chars: result.reply.length, ...codex ? { material: CODEX_MATERIAL } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } }, LOG);
     return 'done';
