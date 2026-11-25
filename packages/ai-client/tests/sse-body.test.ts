@@ -1,5 +1,7 @@
 // 串流解碼與請求本文編碼的單元測試。預期值來自規格（WHATWG SSE）與 Node 的 Buffer（獨立的 base64 實作）。
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { Binary, dataUrl, encodeBody } from '../src/body.ts';
 import { SseDecoder } from '../src/sse.ts';
@@ -56,4 +58,14 @@ void test('本文：使用者的文字裡有 NUL 或像記號的字也不會被�
   const parsed = JSON.parse(new TextDecoder().decode(encodeBody(body))) as Record<string, string>;
   assert.equal(parsed.text, '\u0000ai-client-x-0\u0000');
   assert.equal(parsed.file, 'AQID');
+});
+
+void test('範例回應的換行和 checkout 設定無關：fixtures 裡沒有 CR（L2 R15，Windows 的 core.autocrlf=true）', () => {
+  const root = join(import.meta.dirname, '..', 'fixtures');
+  const withCr = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter(d => d.isFile())
+    .map(d => join(d.parentPath, d.name))
+    .filter(file => readFileSync(file).includes(13))
+    .map(file => file.slice(root.length + 1));
+  assert.deepEqual(withCr, []);
 });
