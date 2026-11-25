@@ -12,14 +12,15 @@
 ## 準備
 
 - 在 `apps/Cards` 跑 `npm ci`。指令都是 `npm run rule-test -- <指令> <測試資料夾> …`，也在 `apps/Cards` 跑。
-- `claude` 與 `codex` 要裝好、登入。不在 PATH 上時，用環境變數 `CLAUDE_CLI`、`CODEX_CLI` 指向執行檔。Claude 桌面版內建的 `claude.exe` 沒有自己的登入，不能用（2026-11-25 探針）。
+- `claude` 與 `codex` 要裝好、登入。不在 PATH 上時，用環境變數 `CLAUDE_CLI`、`CODEX_CLI` 指向執行檔。Claude 桌面版內建的 `claude.exe` 沒有自己的登入，不能用；要另外裝 Claude Code CLI 並登入（2026-11-25 探針）。
 - 新電腦或 CLI 改版後，先跑一次探針，把結果和任務說明 §9 比：
 
   ```
-  npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long]
+  npm run rule-test -- probe <教材.pdf> <輸出資料夾> [--pages <頁數>] [--skip-long] [--clipboard]
   ```
 
   輸出資料夾也放 repo 外面。結果在 `probe.md`，每個探針的原始回覆在 `raw/`。
+- 剪貼簿（P9）加 `--clipboard` 才測：會暫時借用使用者的剪貼簿，先告訴使用者。剪貼簿裡有圖片或網頁格式時不借；放不回去時，原本的內容存在輸出資料夾的 `剪貼簿原本的內容.txt`，請使用者複製回去再刪掉。
 
 ## 一輪的步驟
 
@@ -56,8 +57,7 @@
 
 ## 還沒做的
 
-- Claude CLI 的探針（任務說明 §9 的 P1～P5、P7、P8 與 P9 的 stdout）要等使用者電腦上的 `claude` 登入後才能跑。在那之前，`claude` 生成器與評審的旗標照雲端的 2.1.331 寫，還沒在使用者電腦上驗過。
-- `materials`（把教材轉成頁面圖）：只有探針判定要轉頁時才做（§5-1）。Codex 讀得了 PDF（P6）；`claude` 的 P3a、P3b 還沒探。
+- `materials`（把教材轉成頁面圖）不做：`claude` 與 Codex 都讀得了整份 PDF（2026-11-25 探針，任務說明 §5-1、§9）。CLI 改版後探針的 P3a 或 P6 不過，才照 §5-1 做。
 
 ## 手動用的提示
 
