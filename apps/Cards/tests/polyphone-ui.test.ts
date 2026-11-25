@@ -95,7 +95,8 @@ void test('紀錄：一行，最差的格在最上層，其他格放 also；沒�
   assert.equal(stage(s), 'retry');
   tap(h, s, answers(s)[1]);
   assert.equal(stage(s), 'result');
-  const prints = view(s).card.blanks.map(blank => blank.prompt.fingerprint);
+  // 送出之前記下這張卡的每一格（送出之後畫面換到下一張）。
+  const prints = view(s).card.blanks.map(blank => blank.prompt.fingerprint), shown = answers(s);
   h.clock.now += RATE_DELAY;
   assert.equal(s.commit(), true);
   await h.state.flush();
@@ -103,7 +104,7 @@ void test('紀錄：一行，最差的格在最上層，其他格放 also；沒�
   assert.equal(log.length, 1);
   const [line] = log;
   assert.deepEqual([line.lt, line.r, line.v, line.pick, line.retry], ['k3m9qa', 'near', prints[1], wrong, 'right']);
-  assert.deepEqual(line.also, [{ v: prints[0], r: 'good', pick: answers(s)[0] }, { v: prints[2], r: 'good', pick: answers(s)[2] }]);
+  assert.deepEqual(line.also, [{ v: prints[0], r: 'good', pick: shown[0] }, { v: prints[2], r: 'good', pick: shown[2] }]);
   assert.ok(!('with' in line) && !('cell' in line));
   assert.equal(new Set([line.v, ...(line.also as { v: string }[]).map(each => each.v)]).size, 3);
 });

@@ -129,7 +129,7 @@ function choiceCell(lt: string, target: Target, choice: Choice, prompt: Prompt):
 
 /**
  * 這一張出的句子（§3-1）：照出題順序（指紋相同的算一句），每個讀音先挑順序最前面的一句（照括號的順序），再照順序補到讀音數加一；
- * 池裡不夠就全出。回傳照出題順序，畫面的順序由 choiceAssembled 打亂。
+ * 池裡不夠就全出。回傳照筆記的順序：同一組句子出題歷史不同，打亂前的順序也一樣（L2 R5）；畫面的順序由 choiceAssembled 打亂。
  */
 function choicePrompts(target: Target, choice: Choice, shown: Shown): Prompt[] {
   const order = rotation(target, shown);
@@ -143,7 +143,7 @@ function choicePrompts(target: Target, choice: Choice, shown: Shown): Prompt[] {
     if (picked.size >= choice.options.length + 1) break;
     picked.add(prompt);
   }
-  return order.filter(prompt => picked.has(prompt));
+  return target.prompts.filter(prompt => picked.has(prompt));
 }
 
 /** 格子定了之後的一張多音字卡：打散格子與字鍵（字鍵三個以上時順序一定和括號不同，同比較卡）。 */

@@ -56,6 +56,17 @@ void test('同一張重來不變；下一次照出題歷史換句', () => {
   assert.deepEqual([...heads(second)].sort(), ['他是', '夏天', '妹妹'].sort());
 });
 
+void test('同一組句子，出題歷史不同，畫面的順序也一樣（L2 R5）', () => {
+  // 池裡剛好三句：每次都全出，只有出題順序跟著歷史變。
+  const three = targetOf(deckOf(LONG.split('\n').filter(line => !/小樹苗|班長（|妹妹/.test(line)).join('\n')));
+  assert.equal(three.prompts.length, 3);
+  const none = make(three);
+  const history: Shown = new Map([[three.prompts[0].fingerprint, { at: 100, count: 2 }], [three.prompts[1].fingerprint, { at: 100, count: 1 }]]);
+  const after = make(three, history);
+  assert.deepEqual(heads(after), heads(none));
+  assert.deepEqual(after.group?.keys, none.group?.keys);
+});
+
 void test('三個讀音：出四句；池裡只有讀音數那麼多句時全出；某個讀音只有一句也一定出', () => {
   const three = deckOf(`- 行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音 ^xing01
     - 他行（＿＿）走得很快。 :: ㄒㄧㄥˊ
