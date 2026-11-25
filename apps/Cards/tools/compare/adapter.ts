@@ -254,7 +254,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   // 每一張卡照那一版真的複習怎麼出（L2 第一輪 R1）：同一個佇列、同一篇的目標一起放進今天的份，nextCard 出一張，這張上的目標拿掉再出下一張。
   // 比較卡併同組的目標看的是範圍，只放一個目標就併不到。不模擬作答：記的是每個目標還沒作答時出現在哪一張卡。今天已經答對的是 done；時間是固定的，不會是 stale。
   // 再複習一些照它自己的入口（{ more: true }，跨篇一起出、跳過英文另一個方向今天已經一般作答的目標）；它跳過的目標沒有卡（L2 第二輪 F1）。
-  const shown = new Map<string, Pick<TodaySnap, 'prompt' | 'type' | 'cells' | 'lts'>>();
+  const shown = new Map<string, Pick<TodaySnap, 'prompt' | 'type' | 'cells' | 'blanks'>>();
   const buckets = lists.flatMap(({ list, items }) => (list === 'more' ? [items] : [...new Set(items.map(each => each.deck))].map(deck => items.filter(each => each.deck === deck))).map(group => ({ list, items: group })));
   for (const { list, items } of buckets) {
     const deck = items[0]?.deck;
@@ -267,7 +267,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
       if (next.kind !== 'card') throw wrongType('nextCard()');
       const card = fields(next.card, 'nextCard() 的 card');
       const lead = text(card.lt, 'nextCard() 的 lt'), prompt = text(fields(card.prompt, 'nextCard() 的 prompt').fingerprint, 'nextCard() 的 fingerprint');
-      // 每一格只讀對哪個目標、哪一題；那一版的卡沒有 blanks（0.3.0 以前）只有選中的那個目標，題型、格數、同一張卡的目標都是 null。
+      // 每一格只讀對哪個目標、哪一題；那一版的卡沒有 blanks（0.3.0 以前）只有選中的那個目標，題型、格數、每一格都是 null。
       const blanks = card.blanks === undefined ? null : array<unknown>(card.blanks, 'nextCard() 的 blanks').map(each => {
         const blank = fields(each, 'nextCard() 的 blanks');
         return { lt: text(blank.lt, 'blanks 的 lt'), prompt: text(fields(blank.prompt, 'blanks 的 prompt').fingerprint, 'blanks 的 fingerprint') };
@@ -278,16 +278,16 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
       // 這張卡上沒有還沒出的目標：再叫一次也一樣，那一版的 nextCard 不對。
       if (!fresh.length) throw wrongType('nextCard()');
       for (const lt of fresh) {
-        shown.set(lt, { prompt: lt === lead ? prompt : blanks!.find(blank => blank.lt === lt)!.prompt, type, cells: blanks?.length ?? null, lts: blanks === null ? null : lts });
+        shown.set(lt, { prompt: lt === lead ? prompt : blanks!.find(blank => blank.lt === lt)!.prompt, type, cells: blanks?.length ?? null, blanks: blanks?.map(blank => [blank.lt, blank.prompt]) ?? null });
       }
       left = left.filter(each => !fresh.includes(each.lt));
     }
   }
   const items: TodaySnap[] = [];
   for (const { list, items: each } of lists) for (const { item, lt, deck, slot } of each) {
-    const card = shown.get(lt) ?? { prompt: null, type: null, cells: null, lts: null };
+    const card = shown.get(lt) ?? { prompt: null, type: null, cells: null, blanks: null };
     items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
-      prompt: card.prompt, direction: textOrNull(slot.target.direction, 'today().slots 的 direction'), type: card.type, cells: card.cells, lts: card.lts });
+      prompt: card.prompt, direction: textOrNull(slot.target.direction, 'today().slots 的 direction'), type: card.type, cells: card.cells, blanks: card.blanks });
   }
   return {
     gates: { decks: gated, held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),

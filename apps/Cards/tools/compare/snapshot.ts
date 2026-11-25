@@ -47,8 +47,11 @@ export interface TodaySnap {
   type: string | null;
   /** 那張卡有幾格；那一版的卡沒有 blanks 是 null，同上。 */
   cells: number | null;
-  /** 那張卡上的學習目標，照畫面的順序、不重複（比較卡併同組的目標，L2 第一輪 R1）；那一版的卡沒有 blanks 是 null，同上。 */
-  lts: string[] | null;
+  /**
+   * 那張卡的每一格對哪個目標、哪一題（[lt, 指紋]），照畫面的順序：比較卡併同組的目標（L2 第一輪 R1）、多放的那一句（L2 第二輪 F2）都看得到。
+   * 那一版的卡沒有 blanks 是 null，同上。
+   */
+  blanks: [string, string][] | null;
 }
 /** 用了同一個學習目標 ID 的目標（D-157）；line 從 0 算。 */
 interface Conflict { id: string; targets: { path: string; line: number; name: string }[] }
@@ -122,13 +125,13 @@ function groupBy<T>(list: readonly T[], key: (item: T) => string): Map<string, T
 }
 
 /**
- * 只有一邊的版本有、所以沒比的欄位（今天的份的題型、格數與同一張卡的目標），給報告看；兩邊都有或都沒有是空的。
+ * 只有一邊的版本有、所以沒比的欄位（今天的份的題型、格數與每一格的目標與題目），給報告看；兩邊都有或都沒有是空的。
  * 有卡（prompt 不是 null）而這一欄是 null 才是那一版沒有；今天已經答對、這次沒有卡的不算，兩版一邊有卡一邊沒有由 prompt 報（L2 第一輪 R2）。
  */
 export function uncomparedLines(before: Snapshot, after: Snapshot): string[] {
   const todayA = new Map(before.today.map(item => [item.lt, item]));
   const out: string[] = [];
-  for (const [field, label] of [['type', '題型'], ['cells', '格數'], ['lts', '同一張卡的目標']] as const) {
+  for (const [field, label] of [['type', '題型'], ['cells', '格數'], ['blanks', '每一格的目標與題目']] as const) {
     let older = 0, newer = 0;
     for (const item of after.today) {
       const old = todayA.get(item.lt);
@@ -191,9 +194,9 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
   for (const item of after.today) {
     const old = todayA.get(item.lt);
     if (!old) continue;
-    for (const field of ['list', 'deck', 'lane', 'retention', 'seconds', 'prompt', 'direction', 'type', 'cells', 'lts'] as const) {
-      // 題型、格數與同一張卡的目標：一邊的版本沒有這一欄（null）時不比，uncomparedLines 列出來。
-      if ((field === 'type' || field === 'cells' || field === 'lts') && (old[field] === null || item[field] === null)) continue;
+    for (const field of ['list', 'deck', 'lane', 'retention', 'seconds', 'prompt', 'direction', 'type', 'cells', 'blanks'] as const) {
+      // 題型、格數與每一格：一邊的版本沒有這一欄（null）時不比，uncomparedLines 列出來。
+      if ((field === 'type' || field === 'cells' || field === 'blanks') && (old[field] === null || item[field] === null)) continue;
       if (!same(old[field], item[field])) out.push(`今天的份裡 ${item.lt} 的 ${field}：${JSON.stringify(old[field])} → ${JSON.stringify(item[field])}`);
     }
   }
