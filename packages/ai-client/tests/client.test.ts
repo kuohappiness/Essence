@@ -254,6 +254,7 @@ void test('onProgress 丟例外：不影響結果，記一則 warning', async ()
 
 void test('費用：照牌價估計、快取讀另計；超過長上下文門檻整筆改價；換價日之後用新價', async () => {
   const usage = (input: number, cached: number) => sse([
+    { event: 'response.output_text.delta', data: { type: 'response.output_text.delta', delta: '好' } },
     { event: 'response.completed', data: { type: 'response.completed', response: { id: 'r', status: 'completed', model: 'm', output: [{ type: 'message', content: [{ type: 'output_text', text: '好' }] }], usage: { input_tokens: input, input_tokens_details: { cached_tokens: cached }, output_tokens: 350 } } } },
   ]);
   const run = async (provider: string, model: string, body: string, now = Date.parse('2026-11-25T00:00:00Z')) =>

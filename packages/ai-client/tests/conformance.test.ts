@@ -38,6 +38,7 @@ const SUCCESS_SHAPE: Record<string, { lists: (string | number)[][]; items: (stri
   'gemini-generate-content': { lists: [['candidates']], items: [['candidates', 0]], models: 'models' },
 };
 const NOT_LIST = [null, 0, 'x', {}];
+const STOP_KEYS = ['finish_reason', 'finishReason', 'stop_reason', 'status'];
 const NOT_OBJECT = [null, 0, 'x', []];
 const ERROR_ITEM = { error: { message: 'upstream failed', code: 502 } };
 
@@ -210,6 +211,70 @@ for (const c of cases) {
       }
       const none = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ [shape.models]: [] })] }]);
       assert.deepEqual(await createAiClient({ fetch: none, clock: instantClock() }).check({ endpoint: listed, apiKey: KEY }), { ok: true, models: [] });
+    });
+
+    void test('200 的成功一定要有服務說的停止原因、而且有文字，整類：只有輸出上限到了算空的結果，被擋算 content_blocked，其餘都算 server（L2 第三輪 延續 R12）', async () => {
+      const shape = SUCCESS_SHAPE[c.dialect];
+      // 各家放停止原因的欄位（Responses 的 status 也在每一個輸出項上，一起拿掉）。
+      const withoutStop = (value: unknown): unknown =>
+        Array.isArray(value) ? value.map(withoutStop)
+          : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !STOP_KEYS.includes(k)).map(([k, v]) => [k, withoutStop(v)]))
+          : value;
+      // 把範例裡屬於回答文字的字串都換成空的：成功的形狀照舊，只是沒有文字。
+      const blank = (value: unknown, text: string): unknown =>
+        typeof value === 'string' ? (value && text.includes(value) ? '' : value)
+          : Array.isArray(value) ? value.map(v => blank(v, text))
+          : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, blank(v, text)]))
+          : value;
+      const mapSse = (sse: string, change: (data: unknown) => unknown) => sse.split(/\n\n/).filter(Boolean).map(e => e.split('\n').map(line => {
+        const data = line.startsWith('data: ') ? line.slice(6) : null;
+        return data && data !== '[DONE]' ? `data: ${JSON.stringify(change(JSON.parse(data)))}` : line;
+      }).join('\n')).map(e => `${e}\n\n`).join('');
+      const blankSse = (sse: string, text: string) => mapSse(sse, data => blank(data, text));
+
+      const bodies: [string, unknown][] = [
+        ['文字都是空的', blank(c.json.body, c.json.text)],
+        ['沒有停止原因', withoutStop(c.json.body)],
+        ...shape.lists.map(path => [`${path.join('.')} = []`, replaced(c.json.body, path, [])] as [string, unknown]),
+        ...shape.items.flatMap(path => [
+          [`${path.join('.')} = {}`, replaced(c.json.body, path, {})],
+          [`${path.join('.')} 只有 error`, replaced(c.json.body, path, ERROR_ITEM)],
+        ] as [string, unknown][]),
+      ];
+      for (const [label, body] of bodies) {
+        const { promise } = run([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(body)] }]);
+        const error = await rejects(promise);
+        assert.deepEqual([error.afterResponse, error.retryable], [true, false], `${c.dialect} JSON ${label}`);
+        if (!label.endsWith('error')) assert.equal(error.kind, 'server', `${c.dialect} JSON ${label}`);
+      }
+
+      const streams: [string, string][] = [
+        ['文字都是空的', blankSse(readSse(c, c.stream.file), c.stream.text ?? '')],
+        ['沒有停止原因', mapSse(readSse(c, c.stream.file), withoutStop)],
+      ];
+      if (shape.terminal) {
+        const { type, field } = shape.terminal;
+        for (const [label, v] of [['{}', {}], ['只有 error', ERROR_ITEM]] as const) {
+          const events = readSse(c, c.stream.file).split(/\n\n/).filter(Boolean).map(e => {
+            const data = e.split('\n').find(line => line.startsWith('data: '))?.slice(6);
+            if (!data || data === '[DONE]') return `${e}\n\n`;
+            const json = JSON.parse(data) as Record<string, unknown>;
+            if (json.type !== type) return `${e}\n\n`;
+            return `${e.split('\n').filter(line => !line.startsWith('data: ')).join('\n')}\ndata: ${JSON.stringify({ ...json, [field]: v })}\n\n`;
+          });
+          streams.push([`${type}.${field} ${label}`, events.join('')]);
+        }
+      }
+      for (const [label, body] of streams) {
+        const error = await rejects(run([sseReply(body)]).promise);
+        assert.deepEqual([error.afterResponse, error.retryable], [true, false], `${c.dialect} 串流 ${label}`);
+        // 串流沒有停止原因的，有的方言因此等不到做完的訊號，算 network；一樣不是成功。
+        if (!label.endsWith('error') && label !== '沒有停止原因') assert.equal(error.kind, 'server', `${c.dialect} 串流 ${label}`);
+      }
+
+      // 輸出上限到了、一個字都沒寫（推理模型想完了還沒開始寫）：是結果，不是錯誤。
+      const cut = await run([sseReply(blankSse(readSse(c, c.length.file), c.length.text ?? ''))]).promise;
+      assert.deepEqual([cut.text, cut.stopReason], ['', 'length'], c.dialect);
     });
 
     void test('輸出上限到了：算結果，停止原因 length', async () => {

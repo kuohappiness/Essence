@@ -229,10 +229,15 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const { output, requestId } = await runAttempt(attempt);
         // 交出結果前最後一個停下來的點：回呼裡排到下一步才取消的也是取消，不交 done（L2 第三輪 延續 R8）。
         if (request.signal?.aborted) throw fail('cancelled', 'cancelled', { provider: r.providerId, requestId, secrets, partialText: output.text || null, afterResponse: true });
+        // 已經拿到 2xx，服務可能已經計費：以下的錯誤都標 afterResponse，不自動重送（L2 R12）。
+        const after = { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets, partialText: output.text || null, afterResponse: true };
         if (!output.text && (output.stopReason === 'content_filter' || output.stopReason === 'refusal')) {
-          // 已經拿到 2xx，服務可能已經計費：afterResponse，不自動重送（L2 R12）。
-          throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets, afterResponse: true });
+          throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, after);
         }
+        // 成功一定要有服務說的停止原因，而且有文字；只有輸出上限到了（想完了還沒開始寫）是空的結果。
+        // 不管哪一家、少了哪一塊，其餘都不是成功的形狀，算 server（L2 第三輪 延續 R12）。
+        if (output.rawStopReason === null) throw fail('server', 'response has no stop reason', after);
+        if (!output.text && output.stopReason !== 'length') throw fail('server', `response has no text: ${output.rawStopReason}`, after);
         progress({ type: 'done' });
         // 服務說回答的是目錄裡另一個模型（相容服務、代理、路由換了模型）：照回答的那一個估價；不認得的（快照名稱）照請求的（L2 第二輪 R13）。
         const answered = output.resolvedModel === null ? undefined : r.models.find(m => m.id === output.resolvedModel);
