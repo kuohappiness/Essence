@@ -116,3 +116,48 @@ void test('合併整類：同一家分好幾筆寫、每一筆的 models 省略�
     }
   }
 });
+
+void test('服務端點整類：目錄的每一家與自訂服務用同一個驗法，每個欄位換成每一種錯的值，目錄的跳過並回報、自訂的回 invalid_request，都不送出（L2 第三輪 延續 R14）', async () => {
+  // 每個欄位的錯的值（合法的拿掉：checkPath 的 'x'、streamUsage 的 true、headers 的 {} 都是合法的）。
+  const NOT_STRING = [null, {}, [], [null], 7, 0, Number.NaN, true];
+  const NOT_OBJECT = [null, [], [null], 7, 'x', '', true];
+  const FIELDS: Record<string, unknown[]> = {
+    'options.maxTokensField': [...NOT_STRING, '', 'x', 'model', 'stream', 'messages', 'stream_options', '__proto__', 'max_output_tokens'],
+    'options.checkPath': [...NOT_STRING, ''],
+    'options.streamUsage': [null, {}, [], 7, 0, 'x', '', 'true'],
+    'options.systemRole': [...NOT_STRING, '', 'x', 'user', 'assistant'],
+    options: NOT_OBJECT,
+    dialect: [...NOT_STRING, '', 'x', 'openai-chatx'],
+    baseUrl: [...NOT_STRING, '', 'x', 'http://api.example.com/v1', 'https://u:p@api.example.com/v1'],
+    auth: [{}, [], 7, 'x', true],
+    'auth.header': [...NOT_STRING, ''],
+    'auth.scheme': NOT_STRING,
+    headers: NOT_OBJECT,
+    'headers.x-extra': NOT_STRING,
+  };
+  const customBase = { dialect: 'openai-chat', baseUrl: 'https://api.example.com/v1' };
+  for (const [field, values] of Object.entries(FIELDS)) {
+    for (const value of values) {
+      const label = `${field}=${JSON.stringify(value)}`;
+      const listed = createAiClient({ catalog: { providers: [withValue({ id: 'openrouter' }, field, value)] } as unknown as Overrides });
+      assert.ok(listed.catalogProblems.some(p => p.provider === 'openrouter'), `目錄 ${label}`);
+      const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'application/json' }, chunks: ['{"data":[]}'] }]);
+      const client = createAiClient({ fetch, clock: instantClock() });
+      const custom = withValue(customBase, field, value) as never;
+      const error = await client.generate({ endpoint: { custom }, apiKey: KEY, model: 'm', maxOutputTokens: 5, input: [{ role: 'user', content: '你好' }] })
+        .then(() => assert.fail(`自訂 ${label}：應該失敗`), (caught: unknown) => caught);
+      assert.ok(isAiError(error), `自訂 ${label}：丟了 ${String(error)}`);
+      assert.equal(error.kind, 'invalid_request', `自訂 ${label}`);
+      const checked = await client.check({ endpoint: { custom }, apiKey: KEY });
+      assert.deepEqual(checked.ok ? 'ok' : checked.error.kind, 'invalid_request', `自訂 check ${label}`);
+      assert.equal(fetch.requests.length, 0, `自訂 ${label}：不該送出`);
+    }
+  }
+  // 合法的值照用：OpenAI 自己的欄位名稱。
+  const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [readSse(loadCases().find(c => c.dialect === 'openai-chat')!, 'stream.sse')] }]);
+  await createAiClient({ fetch, clock: instantClock() }).generate({
+    endpoint: { custom: { ...customBase, options: { maxTokensField: 'max_completion_tokens' } } }, apiKey: KEY, model: 'm', maxOutputTokens: 5, input: [{ role: 'user', content: '你好' }],
+  });
+  const sent = JSON.parse(fetch.requests[0].body ?? '') as Record<string, unknown>;
+  assert.deepEqual([sent.max_completion_tokens, sent.max_tokens, sent.model], [5, undefined, 'm']);
+});

@@ -1,6 +1,6 @@
 // createAiClient：找端點 → 檢查輸入與大小 → 組請求 → 送出 → 串流與逾時 → 重試 → 結果（docs/tasks/ai-client.md〈5〉〈7〉）。
 import { encodeBody } from './body.ts';
-import { BUILTIN_CATALOG, isAllowedUrl, isLocalUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
+import { BUILTIN_CATALOG, endpointProblem, isLocalUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
 import { AiError, asError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
@@ -117,9 +117,10 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
   function resolve(endpoint: EndpointRef, modelId: string | null): Resolved {
     if ('custom' in endpoint) {
       const custom = endpoint.custom;
-      const dialect = DIALECTS.get(custom.dialect);
-      if (!dialect) throw fail('invalid_request', `unknown dialect: ${custom.dialect}`);
-      if (!isAllowedUrl(custom.baseUrl)) throw fail('invalid_request', 'baseUrl must be https, or http on localhost');
+      // 自訂服務和目錄的每一家用同一個驗法：送出時用到的欄位壞了，不送出（L2 第三輪 延續 R14）。
+      const problem = isPlain(custom) ? endpointProblem(custom, dialectIds) : 'custom 要是物件';
+      if (problem) throw fail('invalid_request', `custom endpoint: ${problem}`);
+      const dialect = DIALECTS.get(custom.dialect) as Dialect;
       return {
         providerId: 'custom', dialect, baseUrl: custom.baseUrl.replace(/\/+$/, ''),
         auth: custom.auth === undefined ? dialect.defaultAuth : custom.auth,

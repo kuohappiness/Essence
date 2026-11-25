@@ -14,7 +14,7 @@ export interface CatalogProblem {
 }
 
 /** 網址只能是 https，或本機的 http（localhost、127.0.0.1、::1，給 Ollama 這類本機模型）。 */
-export function isAllowedUrl(raw: string): boolean {
+function isAllowedUrl(raw: string): boolean {
   let url: URL;
   try {
     url = new URL(raw);
@@ -110,14 +110,31 @@ function providerShapeProblem(p: ProviderSpec): string | null {
   // 送出時直接用到的欄位也驗：checkPath 是數字時 check() 會在 replace 丟例外（L2 第二輪 延續 R14）。
   if (isObject(p.auth) && p.auth.scheme !== undefined && typeof p.auth.scheme !== 'string') return 'auth.scheme 要是字串';
   const o = p.options ?? {};
-  for (const key of ['checkPath', 'maxTokensField'] as const) {
-    if (o[key] !== undefined && (typeof o[key] !== 'string' || !o[key])) return `options.${key} 要是字串`;
-  }
+  if (o.checkPath !== undefined && (typeof o.checkPath !== 'string' || !o.checkPath)) return 'options.checkPath 要是字串';
+  // 只准已知的欄位名稱：寫成 model、stream 這類請求本來就有的欄位，會把它們蓋掉（L2 第三輪 延續 R14）。
+  if (o.maxTokensField !== undefined && !MAX_TOKENS_FIELDS.includes(o.maxTokensField)) return `options.maxTokensField 要是 ${MAX_TOKENS_FIELDS.join(' 或 ')}`;
   if (o.streamUsage !== undefined && typeof o.streamUsage !== 'boolean') return 'options.streamUsage 要是 true 或 false';
   if (o.systemRole !== undefined && o.systemRole !== 'system' && o.systemRole !== 'developer') return 'options.systemRole 要是 system 或 developer';
   const max = isObject(p.defaults) ? p.defaults.maxOutputTokens : undefined;
   if (max !== undefined && (!Number.isInteger(max) || max <= 0)) return 'defaults.maxOutputTokens 要是正整數';
   return null;
+}
+
+const MAX_TOKENS_FIELDS: readonly unknown[] = ['max_tokens', 'max_completion_tokens'];
+
+/**
+ * 一個服務端點的設定：目錄的每一家與呼叫端的自訂服務都用這一個驗（L2 第三輪 延續 R14）。
+ * 送出時直接用到的欄位都在這裡驗，壞的不會走到組請求或 check() 才出錯。auth 沒寫的（自訂服務照方言的預設）不在這裡擋。
+ */
+export function endpointProblem(p: Record<string, unknown>, dialects: ReadonlySet<string>): string | null {
+  if (typeof p.dialect !== 'string' || !dialects.has(p.dialect)) return `方言 ${typeof p.dialect === 'string' ? p.dialect : typeof p.dialect} 沒有登記`;
+  if (typeof p.baseUrl !== 'string' || !isAllowedUrl(p.baseUrl)) return 'baseUrl 要是 https，或本機的 http';
+  if (p.auth !== undefined && p.auth !== null && (!isObject(p.auth) || typeof p.auth.header !== 'string' || !p.auth.header)) return 'auth 要是 { header, scheme? } 或 null';
+  const spec = p as unknown as ProviderSpec;
+  const shape = providerShapeProblem(spec);
+  if (shape) return shape;
+  const defaults = inputsProblem(spec.defaults?.inputs) ?? reasoningProblem(spec.defaults?.reasoning);
+  return defaults ? `defaults：${defaults}` : null;
 }
 
 /** 驗一份目錄：回傳能用的部分與每個問題。dialects 是登記過的方言名稱。 */
@@ -131,13 +148,9 @@ export function validateCatalog(input: unknown, dialects: ReadonlySet<string>): 
     const fail = (problem: string) => problems.push({ provider: id, problem });
     if (id === '(沒有 id)') { fail('廠商沒有 id'); continue; }
     if (seen.has(id)) { fail('id 重複'); continue; }
-    if (!dialects.has(p.dialect)) { fail(`方言 ${String(p.dialect)} 沒有登記`); continue; }
-    if (typeof p.baseUrl !== 'string' || !isAllowedUrl(p.baseUrl)) { fail('baseUrl 要是 https，或本機的 http'); continue; }
-    if (p.auth !== null && (typeof p.auth !== 'object' || typeof p.auth.header !== 'string' || !p.auth.header)) { fail('auth 要是 { header, scheme? } 或 null'); continue; }
-    const shape = providerShapeProblem(p);
-    if (shape) { fail(shape); continue; }
-    const defaultsProblem = inputsProblem(p.defaults?.inputs) ?? reasoningProblem(p.defaults?.reasoning);
-    if (defaultsProblem) { fail(`defaults：${defaultsProblem}`); continue; }
+    // 目錄的每一家都要寫 auth（不用金鑰的寫 null）；其餘和自訂服務同一個驗法。
+    const problem = p.auth === undefined ? 'auth 要是 { header, scheme? } 或 null' : endpointProblem(p as unknown as Record<string, unknown>, dialects);
+    if (problem) { fail(problem); continue; }
     const models: ModelSpec[] = [];
     for (const m of Array.isArray(p.models) ? p.models : []) {
       const problem = modelProblem(m);

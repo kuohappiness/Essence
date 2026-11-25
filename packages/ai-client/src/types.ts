@@ -65,14 +65,14 @@ export interface ModelSpec {
 
 /**
  * 方言自己的選項。openai-chat 用來寫各家相容服務的差異：
- *   maxTokensField：輸出上限的欄位，預設 max_tokens（OpenAI 自己的是 max_completion_tokens）。
+ *   maxTokensField：輸出上限的欄位，預設 max_tokens（OpenAI 自己的是 max_completion_tokens）；只能是這兩個，不會蓋掉請求的其他欄位（L2 第三輪 延續 R14）。
  *   streamUsage：要不要送 stream_options.include_usage，預設 true。
  *   systemRole：instructions 用的角色，預設 system（OpenAI 新模型可用 developer）。
  * 每一種方言都認得：
  *   checkPath：「測試連線」改打這個路徑（接在 baseUrl 後，GET）。列模型不用金鑰的服務（OpenRouter）要設。
  */
 export interface ProviderOptions {
-  maxTokensField?: string;
+  maxTokensField?: 'max_tokens' | 'max_completion_tokens';
   streamUsage?: boolean;
   systemRole?: 'system' | 'developer';
   checkPath?: string;
