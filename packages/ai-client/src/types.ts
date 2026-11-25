@@ -145,7 +145,7 @@ export interface GenerateRequest {
   timeoutMs?: number;
   /** 多久沒收到任何資料就算逾時；預設不設（推理模型思考時可能很久沒有資料）。 */
   idleTimeoutMs?: number;
-  /** 最多送幾次（含第一次），預設 3。只有還沒拿到成功的回應時才會自動重送。 */
+  /** 最多送幾次（含第一次），1～3，預設 3；超過 3 照 3。只有還沒拿到成功的回應時才會自動重送。 */
   maxAttempts?: number;
   /** false：不照目錄擋模型不收的輸入（目錄過期時用）。預設 true。 */
   checkInputs?: boolean;

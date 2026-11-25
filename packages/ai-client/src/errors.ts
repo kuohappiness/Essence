@@ -19,7 +19,7 @@ export type AiErrorKind =
   | 'content_blocked'
   | 'unknown';
 
-/** 可以重試的種類。client 只在還沒拿到成功的回應時自動重送（見 afterResponse）。 */
+/** 可以重試的種類。client 只在還沒拿到成功的回應時自動重送（見 afterResponse）；408 歸 server（服務說請求沒收完，還沒開始做）。 */
 const RETRYABLE: ReadonlySet<AiErrorKind> = new Set(['rate_limit', 'overloaded', 'server', 'network']);
 const isRetryableKind = (kind: AiErrorKind): boolean => RETRYABLE.has(kind);
 
@@ -40,6 +40,7 @@ export interface AiErrorInit {
 
 export class AiError extends Error {
   readonly kind: AiErrorKind;
+  /** 自動重送是安全的：種類可以重試，而且還沒拿到成功的回應。 */
   readonly retryable: boolean;
   readonly status: number | null;
   /** 服務自己的錯誤代碼，例如 insufficient_quota、overloaded_error、RESOURCE_EXHAUSTED。 */
@@ -50,8 +51,8 @@ export class AiError extends Error {
   readonly partialText: string | null;
   readonly provider: string | null;
   /**
-   * true：服務已經回了成功的狀態碼才出錯（串流中途斷線、串流裡的錯誤）。推理可能已經計費，套件不自動重送；
-   * retryable 仍照種類，由呼叫端決定要不要問使用者再試一次。
+   * true：服務已經回了成功的狀態碼才出錯（串流中途斷線、串流裡的錯誤、內容被擋）。推理可能已經計費，套件不自動重送，
+   * retryable 也是 false（〈7〉第 7 點的表）；要不要再試一次由呼叫端問使用者。
    */
   readonly afterResponse: boolean;
   /** 送了幾次（client 填）。 */
@@ -63,7 +64,7 @@ export class AiError extends Error {
     super(redact(init.message, secrets), cause === undefined ? undefined : { cause });
     this.name = 'AiError';
     this.kind = init.kind;
-    this.retryable = isRetryableKind(init.kind);
+    this.retryable = isRetryableKind(init.kind) && !(init.afterResponse ?? false);
     this.status = init.status ?? null;
     this.providerCode = init.providerCode ? redact(init.providerCode, secrets) : null;
     this.requestId = init.requestId ? redact(init.requestId, secrets) : null;

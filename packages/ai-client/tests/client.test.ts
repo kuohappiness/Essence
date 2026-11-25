@@ -389,3 +389,18 @@ void test('寫進快取的輸入：OpenAI Responses 與 OpenRouter 的 cache_wri
   })]), clock: instantClock() }).generate(request({ endpoint: { provider: 'openrouter' }, model: 'openai/gpt-5.6-terra' }));
   assert.deepEqual([chat.usage.cachedInputTokens, chat.usage.cacheWriteInputTokens], [10, 90]);
 });
+
+void test('重送的規則一致：maxAttempts 最多 3 次；408 照 5xx 重送；拿到 200 後才出錯的 retryable 是 false（L2 R6）', async () => {
+  const fail500: MockReply = { status: 500, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"boom"}}'] };
+  const many = mockFetch([fail500, fail500, fail500, fail500, OK]);
+  const error = await rejects(createAiClient({ fetch: many, clock: instantClock() }).generate(request({ maxAttempts: 10 })));
+  assert.deepEqual([many.requests.length, error.attempts, error.kind], [3, 3, 'server']);
+
+  const timeout408 = mockFetch([{ status: 408, chunks: [] }, OK]);
+  await createAiClient({ fetch: timeout408, clock: instantClock() }).generate(request());
+  assert.equal(timeout408.requests.length, 2);
+
+  const events = readSse(openai, openai.stream.file).split(/\n\n/).filter(Boolean).map(e => `${e}\n\n`);
+  const cut = await rejects(createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: events.slice(0, 3) }]), clock: instantClock() }).generate(request()));
+  assert.deepEqual([cut.kind, cut.afterResponse, cut.retryable], ['network', true, false]);
+});

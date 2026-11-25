@@ -16,6 +16,7 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 30 * 60_000;
 const CHECK_TIMEOUT_MS = 30_000;
+/** 最多送幾次（含第一次），也是上限。 */
 const DEFAULT_MAX_ATTEMPTS = 3;
 /** 第 n 次失敗後等多久（再加減 20%）。 */
 const BACKOFF_MS = [2_000, 8_000];
@@ -176,7 +177,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const responseTimeoutMs = options.responseTimeoutMs === undefined
       ? RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000
       : options.responseTimeoutMs;
-    const maxAttempts = Math.max(1, request.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+    // 共最多 3 次（〈7〉第 5 點，L2 R6）：呼叫端只能調少，不能調多。
+    const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Math.max(1, Math.floor(request.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)));
     const attempts: AttemptTrace[] = [];
     const progress = (event: ProgressEvent) => {
       try {
