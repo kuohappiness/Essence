@@ -86,7 +86,7 @@ packages/ai-client/
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄、費用與證據都照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。
 - **推理等級**：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。目錄寫每個模型或廠商每一級送什麼；那一家沒有的等級取最近的一級（一樣近取高的），`trace.warnings` 記一則；不指定就不送，`trace.reasoningSent` 是 `null`。
 - **用量的意思**：`inputTokens` 是全部輸入（含快取讀到與寫進快取的）；`cachedInputTokens` 是其中從快取讀到的；`cacheWriteInputTokens` 是其中寫進快取的；`outputTokens` 是全部計費的輸出（含推理）；`reasoningTokens` 是其中的推理。拿不到的寫 `null`，不寫 0。
-- **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（照牌價的 `estimated`，或服務自己回報的 `reported`，都帶查價日期；不在目錄的模型是 `null`）、`message`（可以原樣放回下一輪的 `input`）、`trace`。
+- **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（服務在回應裡回報金額的（OpenRouter）用它：`estimated: false`、`pricesAsOf: null`，不在目錄的模型也有；其他照目錄的牌價估：`estimated: true`、`pricesAsOf` 是目錄的查價日期；不在目錄又沒有回報的是 `null`，L2 R19）、`message`（可以原樣放回下一輪的 `input`）、`trace`。
 - **進度事件**：`sent`、`waiting`、`text`（`delta` 與累計字數）、`retrying`（第幾次、等幾毫秒、原因）、`done`。呼叫端的 `onProgress` 丟例外不影響請求。
 
 ## 6. 四種方言與目錄
@@ -137,7 +137,7 @@ packages/ai-client/
 
    錯誤的 `retryable` 是「自動重送是安全的」：種類可以重試，而且 `afterResponse` 是 false（拿到成功的回應後才出錯的一律 false，L2 R6）。分類看回應內容，不只看狀態碼。分不出是不是額度用完的 429 算 `rate_limit`，重試用完仍失敗時說明加一句「如果一直這樣，可能是額度用完了」。每種方言的錯誤範例各測一次。
 8. **金鑰**：情境表在每一種錯誤、每一種結果的 `JSON.stringify` 與例外訊息裡找不到測試用的金鑰；`http://` 的遠端網址、帶帳密的網址在送出前就擋；轉址不跟。
-9. **用量與費用**：照〈5〉的意思對應；費用照牌價（含快取讀寫與長輸入的價），不含免費額度；OpenRouter 回報的金額用回報的。
+9. **用量與費用**：照〈5〉的意思對應；費用照牌價（含快取讀寫與長輸入的價），不含免費額度；服務回報的金額（OpenRouter）優先，欄位照〈5〉〈結果〉。
 10. **目錄驗證**：方言要在登記表裡、網址照〈3〉第 4 點、價格是非負數、日期是合法日期、`schemaVersion` 對得上；壞掉的那一筆跳過並回報。
 11. **情境表**：每一種方言都跑同一張表：純文字、文字加圖片、文字加 PDF、推理等級、串流成功（每個位元組切開、CRLF）、非串流、服務回 JSON、輸出上限、內容被擋、串流裡的錯誤、沒有結束事件、中途斷線、格式壞掉、每一種錯誤回應、429 帶 `Retry-After` 後成功、500 兩次後成功、金鑰遮蔽、串流中途取消、結束之後串流沒關、測試連線。新增方言時登記了卻沒有範例，測試會失敗。
 
@@ -192,7 +192,7 @@ packages/ai-client/
 ## 13. 要寫的決定
 
 - **只接 API、取消訂閱接法**：已寫成 [D-231](../decisions.md#d-231-外掛直接呼叫-ai-只走-api-金鑰取消訂閱接法)（原本寫成 D-230，和 PR #50 撞號後改號）。
-- **D-232 AI 連線做成共用套件**（等使用者看過才寫）：這份的〈3〉〈5〉〈8〉〈9〉；修改 [D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛)（一種介面 → 四種方言的共用套件）與 D-208 第 10 點（新類別 `packages/`；軟體經自己的轉接檔、用相對路徑 import 表上套件的入口檔，不用 npm 相依；套件不 import 軟體、別的套件與最上層的程式）。
+- **D-232 AI 連線做成共用套件**（等使用者看過才寫；合併 PR #51 前要寫好，不然 D-059 與 D-208 第 10 點和這個分支的程式矛盾，L2 R19）：這份的〈3〉〈5〉〈8〉〈9〉；修改 [D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛)（一種介面 → 四種方言的共用套件）與 D-208 第 10 點（新類別 `packages/`；軟體經自己的轉接檔、用相對路徑 import 表上套件的入口檔，不用 npm 相依；套件不 import 軟體、別的套件與最上層的程式）。
 
 ## 結果
 
