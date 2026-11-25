@@ -574,10 +574,12 @@ void test('§A3 分派表：入口寫到的 tools/ 檔，檔名有任何 shell �
 });
 
 void test('§A3 分派表：入口寫到的 tools/ 檔改了、刪了、改名了，暫存區與 range 都跑那個外掛（L2 ai-client 第三輪 延續 R3）', async t => {
-  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a\\b.ts', '檢查 工具.mjs', 'x.js'];
+  // 只動索引（不寫工作樹）。Git for Windows 連索引都不收 <、>、:、"、|、?、*、\ 這些字（Invalid path，L2 第四輪 第 5 項），
+  // 所以 Windows 只跑它表示得了的檔名，其餘的在其他系統驗。
+  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a\\b.ts', '檢查 工具.mjs', 'x.js']
+    .filter(name => process.platform !== 'win32' || !/[<>:"|?*\\]/.test(name));
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
-  // 只動索引（不寫工作樹）：Windows 的檔名不能有 <、|、" 這些字，Git 的索引可以。
   for (const name of names) {
     for (const kind of ['modify', 'delete', 'rename'] as const) {
       const root = await mkdtemp(join(tmpdir(), 'essence-dispatch-entry-'));
