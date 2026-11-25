@@ -3,9 +3,9 @@
 
 /**
  * 8 個字以上的才遮（〈3〉第 4 點）：各家真的金鑰都是幾十個字；更短的是本機服務的假金鑰（例如 ollama），
- * 遮了會把模型回的正常文字改掉（L2 第二輪 延續 R1）。
+ * 遮了會把模型回的正常文字改掉（L2 第二輪 延續 R1）。更短的只准送到本機，送不到別人那裡（client.ts 的 checkKey，L2 第三輪 延續 R1）。
  */
-const MIN_SECRET_LENGTH = 8;
+export const MIN_SECRET_LENGTH = 8;
 export const usable = (secrets: readonly string[]): string[] => secrets.filter(s => typeof s === 'string' && s.length >= MIN_SECRET_LENGTH);
 
 export function redactText(text: string, secrets: readonly string[]): string {

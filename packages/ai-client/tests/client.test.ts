@@ -747,6 +747,39 @@ void test('短於 8 個字的金鑰不遮（不是真的金鑰，遮了會改掉
   assert.equal((await local('光合作用把光能轉')).text, '***成化學能。');
 });
 
+void test('金鑰整類：短於 8 個字的只送本機、不遮；送到遠端的一律 8 個字以上，回來的每個出口都遮（L2 第三輪 延續 R1）', async () => {
+  const remote = [{ custom: { dialect: 'openai-chat' as const, baseUrl: 'https://api.example.com/v1' } }, { provider: 'openrouter' }];
+  const local = [{ custom: { dialect: 'openai-chat' as const, baseUrl: 'http://localhost:11434/v1' } }, { custom: { dialect: 'openai-chat' as const, baseUrl: 'https://127.0.0.1:8443/v1' } }];
+  // 服務把金鑰原樣回在文字、錯誤訊息與模型清單裡。
+  const echo = (key: string): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [sse([
+    { data: { id: 'x', model: 'm', choices: [{ index: 0, delta: { content: `key=${key}.` } }] } },
+    { data: { id: 'x', model: 'm', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] } },
+    { data: '[DONE]' },
+  ])] });
+  const rejected = (key: string): MockReply => ({ status: 401, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ error: { message: `bad key ${key}` } })] });
+  for (let length = 1; length <= 12; length++) {
+    const key = 'k7Q-9zX_w2Lm'.slice(0, length);
+    for (const endpoint of [...remote, ...local]) {
+      const label = `${length} 個字 → ${JSON.stringify(endpoint)}`;
+      const isLocal = local.includes(endpoint as (typeof local)[number]);
+      const fetch = mockFetch([echo(key)]);
+      const events: ProgressEvent[] = [];
+      const generated = createAiClient({ fetch, clock: instantClock() }).generate(request({ apiKey: key, endpoint, model: 'm', onProgress: e => events.push(e) }));
+      const checkFetch = mockFetch([rejected(key)]);
+      const checked = await createAiClient({ fetch: checkFetch, clock: instantClock() }).check({ endpoint, apiKey: key });
+      if (length < 8 && !isLocal) {
+        assert.deepEqual([(await rejects(generated)).kind, fetch.requests.length], ['invalid_request', 0], label);
+        assert.deepEqual([checked.ok ? 'ok' : checked.error.kind, checkFetch.requests.length], ['invalid_request', 0], label);
+        continue;
+      }
+      const result = await generated;
+      const shown = JSON.stringify([result, events, checked]);
+      if (length < 8) assert.ok(result.text.includes(key), `${label}：本機的短金鑰不是秘密，不遮`);
+      else assert.ok(!shown.includes(key), `${label}：${shown.slice(0, 300)}`);
+    }
+  }
+});
+
 void test('遮蔽只動服務回的字串：金鑰剛好等於固定的值時，結構照舊、可以原樣放回下一輪（L2 第二輪 R1 修正引入）', async () => {
   const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
   for (const apiKey of ['assistant', 'openai-chat', 'localhost:11434']) {

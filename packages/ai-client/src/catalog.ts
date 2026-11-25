@@ -23,7 +23,18 @@ export function isAllowedUrl(raw: string): boolean {
   }
   if (url.username || url.password) return false;
   if (url.protocol === 'https:') return true;
-  return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  return url.protocol === 'http:' && LOCAL_HOSTS.includes(url.hostname);
+}
+
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+/** 送到這台電腦自己（http 或 https）：短的金鑰只准送這裡（L2 第三輪 延續 R1）。 */
+export function isLocalUrl(raw: string): boolean {
+  try {
+    return LOCAL_HOSTS.includes(new URL(raw).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** 日曆上真的有的日期：2026-02-30 這類 Date.parse 會往後推的也擋（L2 R14）。 */

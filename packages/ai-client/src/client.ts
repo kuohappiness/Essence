@@ -1,11 +1,11 @@
 // createAiClient：找端點 → 檢查輸入與大小 → 組請求 → 送出 → 串流與逾時 → 重試 → 結果（docs/tasks/ai-client.md〈5〉〈7〉）。
 import { encodeBody } from './body.ts';
-import { BUILTIN_CATALOG, isAllowedUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
+import { BUILTIN_CATALOG, isAllowedUrl, isLocalUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
 import { AiError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
-import { redactDeep, redactText, StreamRedactor } from './redact.ts';
+import { MIN_SECRET_LENGTH, redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
 import { bodyChunks, defaultFetch, readText, type FetchLike } from './transport.ts';
 import {
@@ -169,6 +169,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     }
     const startedAt = clock.now();
     const r = resolve(request.endpoint, request.model);
+    checkKey(r, request.apiKey);
     const input = normalize(request.input);
     checkInputs(r, input, request.checkInputs !== false);
     const warnings: string[] = [];
@@ -422,6 +423,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     try {
       checkNumbers({ timeoutMs: request.timeoutMs });
       r = resolve(request.endpoint, null);
+      checkKey(r, request.apiKey);
     } catch (caught) {
       if (isAiError(caught)) return { ok: false, error: caught };
       throw caught;
@@ -506,6 +508,15 @@ const MAX_TIMER_MS = 2_147_483_647;
 const later = (fn: () => void, ms: number): ReturnType<typeof setTimeout> => setTimeout(fn, Math.min(MAX_TIMER_MS, Math.max(0, ms)));
 
 // ── 送出前 ──
+
+/**
+ * 短於 8 個字的金鑰只准送到本機（L2 第三輪 延續 R1）：這麼短的不會是真的金鑰，遮了又會改掉正常的字，
+ * 所以不遮；改成不讓它離開這台電腦。各家真的金鑰都是幾十個字，送到遠端的一律遮得到。
+ */
+function checkKey(r: Resolved, apiKey: string | undefined): void {
+  if (!r.auth || !apiKey || apiKey.length >= MIN_SECRET_LENGTH || isLocalUrl(r.baseUrl)) return;
+  throw fail('invalid_request', `API key is shorter than ${String(MIN_SECRET_LENGTH)} characters; keys that short are only sent to localhost`, { provider: r.providerId });
+}
 
 /** 數字欄位：給了就要是有限的數字。NaN 讓次數上限失效、Infinity 與字串讓計時器立刻到（L2 第二輪 R6）。沒給或 null 照預設。 */
 function checkNumbers(fields: Record<string, unknown>): void {
