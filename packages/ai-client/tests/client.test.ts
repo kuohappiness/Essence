@@ -180,12 +180,12 @@ void test('服務要等超過 60 秒：不重試，把等待時間交給呼叫�
   assert.equal(fetch.requests.length, 1);
 });
 
-void test('送出後拿不到回應標頭：算連不上、重送', async () => {
+void test('送出後拿不到回應標頭：服務可能已經在做，丟 timeout、不自動重送（L2 R7）', async () => {
   const fetch = mockFetch([{ headersDelayMs: 200, ...OK }, OK]);
-  const result = await createAiClient({ fetch, clock: instantClock(), responseTimeoutMs: 20 }).generate(request());
-  assert.equal(result.text, openai.stream.text);
-  assert.equal(fetch.requests.length, 2);
-  assert.equal(result.trace.attempts[0].error, 'network');
+  const error = await rejects(createAiClient({ fetch, clock: instantClock(), responseTimeoutMs: 20 }).generate(request()));
+  assert.deepEqual([error.kind, error.retryable, error.afterResponse], ['timeout', false, false]);
+  assert.match(error.message, /no response headers within 20 ms/);
+  assert.equal(fetch.requests.length, 1);
 });
 
 void test('整體逾時：丟 timeout、帶已收到的文字、不重送；之後不再有進度', async () => {

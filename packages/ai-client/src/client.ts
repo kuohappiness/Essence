@@ -38,7 +38,7 @@ export interface AiClientOptions {
   /** 和標準 fetch 同形狀的函式；不給就用執行環境的 fetch。 */
   fetch?: FetchLike;
   /**
-   * 送出後多久沒拿到回應標頭就算連不上（會自動重試）。預設 120 秒加每 100 KB 本文 1 秒。
+   * 送出後多久沒拿到回應標頭就停下，丟 timeout、不自動重送（服務可能已經在做，L2 R7）。預設 120 秒加每 100 KB 本文 1 秒。
    * 傳輸層要等整段本文收完才交出 Response 的（例如 Obsidian 的 requestUrl）要設 null。
    */
   responseTimeoutMs?: number | null;
@@ -323,7 +323,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())
           : reason === 'timeout' ? fail('timeout', `timed out after ${timeoutMs} ms`, meta())
           : reason === 'idle' ? fail('timeout', `no data for ${request.idleTimeoutMs} ms`, meta())
-          : reason === 'response' ? fail('network', `no response within ${responseTimeoutMs} ms`, meta())
+          // 請求已經送出、服務可能已經在做（或中間的代理把串流整段收完才交），重送可能讓同一件事做兩次、付兩次錢（L2 R7）。
+          : reason === 'response' ? fail('timeout', `no response headers within ${responseTimeoutMs} ms`, meta())
           : isAiError(caught) ? caught
           : fail('network', caught instanceof Error ? caught.message : String(caught), { ...meta(), cause: caught });
         log.error = error.kind;
