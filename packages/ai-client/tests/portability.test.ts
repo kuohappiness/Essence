@@ -2,13 +2,30 @@
 import assert from 'node:assert/strict';
 import { builtinModules } from 'node:module';
 import { test } from 'node:test';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Linter } from 'eslint';
+import ts from 'typescript';
 import tseslint from 'typescript-eslint';
 import { portability } from '../eslint-portability.ts';
 
 const linter = new Linter({ configType: 'flat' });
 const config = [{ files: ['**/*.ts'], languageOptions: { parser: tseslint.parser, sourceType: 'module' as const }, ...portability }];
 const problems = (code: string) => linter.verify(code, config, 'src/probe.ts').map(m => m.ruleId);
+
+const SRC_CONFIG = join(dirname(fileURLToPath(import.meta.url)), '..', 'tsconfig.src.json');
+/** 用套件本體的編譯設定檢查一段程式（虛擬的 src/probe.ts），回傳型別錯誤的數目。 */
+function typeErrors(code: string, options: ts.CompilerOptions): number {
+  const file = join(dirname(SRC_CONFIG), 'src', 'probe.ts');
+  const host = ts.createCompilerHost(options);
+  const read = host.readFile.bind(host);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.readFile = path => (path === file ? code : read(path));
+  host.fileExists = path => path === file || ts.sys.fileExists(path);
+  host.getSourceFile = (path, version, onError) => (path === file ? ts.createSourceFile(path, code, version) : getSourceFile(path, version, onError));
+  const program = ts.createProgram([file], options, host);
+  return ts.getPreEmitDiagnostics(program).filter(d => d.file?.fileName === file).length;
+}
 
 void test('可攜性：Node 內建模組（裸名稱、node:、子路徑、型別）、obsidian、動態 import、require、Node 的全域都擋', () => {
   const blocked = [
@@ -55,4 +72,22 @@ void test('可攜性：每一個 Node 內建模組（含 _ 開頭的）、每一
     const forms = [`void ${name};`, `void globalThis.${name};`, `void globalThis['${name}'];`, `void self.${name};`, `void window.${name};`, `const { ${name}: x } = globalThis;`];
     for (const code of forms) assert.notDeepEqual(problems(code), [], code);
   }
+});
+
+void test('可攜性：不叫全域物件，取別名、解構、轉型都一樣擋；套件本體的型別裡沒有 Node 的全域（L2 第三輪 延續 R4）', () => {
+  for (const name of NODE_GLOBALS) {
+    const forms = [
+      `const g = globalThis; void g.${name};`,
+      `const s = self; const { ${name}: x } = s;`,
+      `const w = window as unknown as Record<string, unknown>; void w['${name}'];`,
+      `const pick = (o: typeof globalThis) => o; void pick(globalThis);`,
+    ];
+    for (const code of forms) assert.notDeepEqual(problems(code), [], code);
+  }
+  // 型別這一層：用 tsconfig.src.json 的設定編譯一段程式，每一個 Node 的全域都是型別錯誤。
+  const options = ts.parseJsonConfigFileContent(ts.readConfigFile(SRC_CONFIG, path => ts.sys.readFile(path)).config, ts.sys, dirname(SRC_CONFIG)).options;
+  for (const name of NODE_GLOBALS) {
+    assert.ok(typeErrors(`void ${name};\nexport {};\n`, options) > 0, `${name} 在套件本體的型別裡應該不存在`);
+  }
+  assert.equal(typeErrors("void fetch;\nvoid new AbortController();\nvoid new TextDecoder();\nexport {};\n", options), 0, '標準的 API 照用');
 });

@@ -41,7 +41,7 @@ Fable 建議第一步再拆成「repo 認得 `packages/`」與「套件本體」
 
 ## 3. 不可破壞的性質
 
-1. **套件不認識呼叫它的人**：不 import Obsidian、Node 專用模組、Essence 或任何軟體的程式（ESLint 擋 `src/`，`tools/check-app-imports.ts` 擋相對路徑跑出資料夾）；執行期零相依，只用標準的 `fetch`、`AbortController`、`TextDecoder`、`TextEncoder`。Node 24、瀏覽器、Electron、Cloudflare Workers 都能跑。測試與 `tools/smoke.ts` 可以用 Node 模組。
+1. **套件不認識呼叫它的人**：不 import Obsidian、Node 專用模組、Essence 或任何軟體的程式（ESLint 擋 `src/`，`tools/check-app-imports.ts` 擋相對路徑跑出資料夾；`src/` 不叫全域物件 `globalThis`、`self`、`window`，另用沒有 Node 型別的 `tsconfig.src.json` 型別檢查一次，L2 第三輪 延續 R4）；執行期零相依，只用標準的 `fetch`、`AbortController`、`TextDecoder`、`TextEncoder`。Node 24、瀏覽器、Electron、Cloudflare Workers 都能跑。測試與 `tools/smoke.ts` 可以用 Node 模組。
 2. **對外只有入口檔**：`src/index.ts` 與 `src/testing.ts` export 的就是全部公開介面；其他檔是內部，改了不算破壞。knip 擋沒用到的 export。
 3. **換廠商改資料、加方言加一個檔**：講四種方言之一的廠商只要一筆目錄資料（或呼叫端自己加）；新方言是新增一個實作同一個介面的檔與一組範例回應，自動套上同一張情境表（〈7〉第 11 點）。
 4. **金鑰不存、不記、不外流**：金鑰每次由呼叫端交進來；不寫進結果、錯誤、例外訊息與 `JSON.stringify`（服務回的訊息裡出現就換成 `***`；傳輸層丟的例外，連它自己丟的 `AiError`、例外的名稱與 `cause`，都在交給呼叫端的唯一出口再遮一次；8 個字以上的才遮，更短的是本機服務的假金鑰，遮了會改掉正常的字，L2 第二輪 延續 R1）；只放在那一家設定的認證標頭，不放網址；不跟轉址；網址只准 `https`，`http` 只准本機（`localhost`、`127.0.0.1`、`[::1]`），不准帶帳密。

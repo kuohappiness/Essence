@@ -14,7 +14,7 @@ export interface FetchInit {
 
 export type FetchLike = (url: string, init: FetchInit) => Promise<Response>;
 
-export const defaultFetch: FetchLike = (url, init) => globalThis.fetch(url, init as RequestInit);
+export const defaultFetch: FetchLike = (url, init) => fetch(url, init as RequestInit);
 
 /**
  * 回應本文一段一段讀；呼叫端提早停止時放掉連線。

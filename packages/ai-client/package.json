@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "lint": "eslint .",
     "knip": "node tools/knip.mjs",
     "check": "npm run typecheck && npm run lint && npm run knip && npm test",
