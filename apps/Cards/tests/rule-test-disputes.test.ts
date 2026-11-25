@@ -25,13 +25,13 @@ async function judged(): Promise<{ folder: Folder; codes: string[] }> {
   return { folder, codes };
 }
 
-/** 假的裁定者：記下每次的提示與當時資料夾裡的檔（對話結束就刪了）；拿不準第一次交的漏了一筆。 */
+/** 假的裁定者：記下每次的提示與當時資料夾裡的檔（對話結束就刪了；路徑一律用 /，Windows 上也一樣）；拿不準第一次交的漏了一筆。 */
 function fakeAdjudicator(): { adapter: Adapter; requests: { request: StepRequest; files: string[] }[] } {
   const requests: { request: StepRequest; files: string[] }[] = [];
   return {
     requests,
     adapter: request => {
-      requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(String).sort() });
+      requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(each => String(each).replaceAll('\\', '/')).sort() });
       request.record('{}', '');
       const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '多解', reason: 'p.3 寫的是借出' }
         : request.resume === null ? { items: [] } : { items: [{ notes: ['U1'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
