@@ -468,3 +468,13 @@ void test('停下來時本文的讀取也停：卡住的本文、晚到的回應
   assert.deepEqual([limited.kind, errorStall.cancels()], ['rate_limit', 1]);
   assert.ok(Date.now() - started < 1_000, `錯誤本文卡住時等了 ${Date.now() - started} ms`);
 });
+
+void test('OpenAI 相容服務有 finish_reason 卻沒有 [DONE] 就關了：文字照交、用量不明時記 warning（L2 R10）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  const cut = readSse(chat, chat.stream.file).split(/\n\n/).filter(e => !e.includes('"usage"') && !e.includes('[DONE]')).map(e => `${e}\n\n`).join('');
+  const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [cut] }]);
+  const result = await createAiClient({ fetch, clock: instantClock() }).generate(request({ endpoint: { provider: 'openrouter' }, model: chat.model }));
+  assert.equal(result.text, chat.stream.text);
+  assert.deepEqual([result.usage.inputTokens, result.cost], [null, null]);
+  assert.ok(result.trace.warnings.some(w => w.includes('[DONE]')), result.trace.warnings.join('; '));
+});

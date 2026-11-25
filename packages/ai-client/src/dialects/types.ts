@@ -49,8 +49,13 @@ export interface Output {
 export interface StreamParser {
   /** 一個事件：回傳新的文字片段，或服務在串流裡送來的錯誤。 */
   push(event: SseEvent): { delta?: string; error?: ParsedError };
-  /** 收到結束的事件了沒（沒收到就斷線算 network）。 */
+  /** 服務說這次的回應做完了沒（沒收到就斷線算 network）。 */
   readonly complete: boolean;
+  /**
+   * 服務說串流傳完了：之後不會再有資料，不再讀、直接組結果（L2 R10）。
+   * 沒有結束事件的格式（Gemini）一直是 false，讀到服務關掉串流為止。
+   */
+  readonly ended: boolean;
   result(): Output;
 }
 

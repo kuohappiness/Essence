@@ -108,6 +108,10 @@ export const openaiResponses: Dialect = {
       get complete() {
         return final !== null;
       },
+      // response.completed／incomplete 帶著完整的 response，之後沒有要讀的。
+      get ended() {
+        return final !== null;
+      },
       push(event) {
         if (event.data === '[DONE]') return {};
         const data = obj(JSON.parse(event.data));

@@ -151,6 +151,22 @@ for (const c of cases) {
       assert.equal(fetch.requests.length, 1);
     });
 
+    void test('結束之後串流沒關：有結束事件的不等，Gemini 這類沒有的在逾時時照已收到的交回（L2 R10）', async () => {
+      const started = Date.now();
+      if (c.dialect === 'gemini-generate-content') {
+        const { promise } = run([{ ...success(), keepOpen: true }], { idleTimeoutMs: 30 });
+        const result = await promise;
+        assert.equal(result.text, c.stream.text);
+        assert.ok(result.trace.warnings.some(w => w.includes('stayed open')), result.trace.warnings.join('; '));
+        return;
+      }
+      const { promise } = run([{ ...success(), keepOpen: true }], { timeoutMs: 5_000 });
+      const result = await promise;
+      assert.equal(result.text, c.stream.text);
+      assert.deepEqual(result.usage, c.stream.usage);
+      assert.ok(Date.now() - started < 1_000, `等了 ${Date.now() - started} ms`);
+    });
+
     void test('串流沒有結束事件就斷了：network，帶已收到的文字，不自動重試', async () => {
       const full = readSse(c, c.stream.file);
       const events = full.split(/\n\n/).filter(Boolean);

@@ -326,14 +326,26 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
             if (shown) progress({ type: 'text', delta: shown, totalChars: visible.length });
           }
         };
-        for await (const chunk of chunks) {
-          for (const event of decoder.push(chunk)) handle(event);
+        let lingered = false;
+        try {
+          read: for await (const chunk of chunks) {
+            for (const event of decoder.push(chunk)) {
+              handle(event);
+              // 服務說傳完了：不等它關串流（L2 R10）。
+              if (parser.ended) break read;
+            }
+          }
+          if (!parser.ended) for (const event of decoder.end()) handle(event);
+        } catch (caught) {
+          // 已經看到做完的訊號、只是串流一直沒關（沒有結束事件的格式、代理沒關）：逾時時照已收到的交回，不讓已經付過錢的結果作廢（L2 R10）。
+          if (!(parser.complete && (reason === 'idle' || reason === 'timeout'))) throw caught;
+          lingered = true;
+          warnings.push(`stream stayed open after the response was complete; stopped by the ${reason === 'idle' ? 'idle' : 'overall'} timeout`);
         }
-        for (const event of decoder.end()) handle(event);
         if (!parser.complete) throw fail('network', 'stream ended before the response was complete', meta());
         const tail = visible.end();
         if (tail) progress({ type: 'text', delta: tail, totalChars: visible.length });
-        stopIfAborted();
+        if (!lingered) stopIfAborted();
         return { output: parser.result(), requestId: log.requestId };
       } catch (caught) {
         const error = reason === 'cancelled' ? fail('cancelled', 'cancelled', meta())

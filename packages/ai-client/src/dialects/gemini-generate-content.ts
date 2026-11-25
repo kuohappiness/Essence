@@ -123,6 +123,8 @@ export const geminiGenerateContent: Dialect = {
       get complete() {
         return finished;
       },
+      // 沒有結束事件：用量可能在 finishReason 之後的另一塊，讀到服務關掉串流為止。
+      ended: false,
       push(event) {
         const data = obj(JSON.parse(event.data));
         if (data.error) return { error: errorOf(obj(data.error), null) };

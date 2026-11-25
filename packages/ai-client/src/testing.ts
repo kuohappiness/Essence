@@ -14,6 +14,8 @@ export interface MockReply {
   networkError?: string;
   /** 交出這幾段後就斷線（模擬串流中途斷掉）。 */
   dropAfter?: number;
+  /** 本文送完也不關（模擬結束事件之後串流還開著的服務或代理），直到請求被中止。 */
+  keepOpen?: boolean;
 }
 
 export interface MockRequest {
@@ -66,7 +68,11 @@ export function mockFetch(handler: MockReply[] | ((request: MockRequest, index: 
     let i = 0;
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        if (i >= parts.length) { controller.close(); return; }
+        if (i >= parts.length) {
+          if (reply.keepOpen) return new Promise<void>(() => undefined);
+          controller.close();
+          return;
+        }
         if (reply.dropAfter !== undefined && i >= reply.dropAfter) { controller.error(new Error('connection reset')); return; }
         try {
           if (reply.delayMs) await wait(reply.delayMs, signal);

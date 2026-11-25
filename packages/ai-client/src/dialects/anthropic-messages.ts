@@ -105,6 +105,10 @@ export const anthropicMessages: Dialect = {
       get complete() {
         return stopped;
       },
+      // message_stop 是最後一個事件。
+      get ended() {
+        return stopped;
+      },
       push(event) {
         const data = obj(JSON.parse(event.data));
         const type = str(data.type) ?? event.event;

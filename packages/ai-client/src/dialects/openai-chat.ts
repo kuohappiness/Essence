@@ -94,6 +94,7 @@ export const openaiChat: Dialect = {
     let refusal = '';
     let raw: string | null = null;
     let done = false;
+    let sawUsage = false;
     let usage = emptyUsage();
     let cost: number | null = null;
     let model: string | null = null;
@@ -101,6 +102,10 @@ export const openaiChat: Dialect = {
     return {
       get complete() {
         return done || raw !== null;
+      },
+      // 用量在 finish_reason 之後、[DONE] 之前另外一塊（stream_options.include_usage），所以等 [DONE] 才停。
+      get ended() {
+        return done;
       },
       push(event) {
         if (event.data === '[DONE]') {
@@ -112,6 +117,7 @@ export const openaiChat: Dialect = {
         model = str(data.model) ?? model;
         id = str(data.id) ?? id;
         if (data.usage) {
+          sawUsage = true;
           usage = usageOf(obj(data.usage));
           cost = num(obj(data.usage).cost) ?? cost;
         }
@@ -129,6 +135,8 @@ export const openaiChat: Dialect = {
       },
       result() {
         const output: Output = { text, stopReason: stopOf(raw), rawStopReason: raw, usage, resolvedModel: model, responseId: id, reportedCost: cost, warnings: [] };
+        // 有 finish_reason 就算做完（文字已經付過錢），但沒等到 [DONE]：用量與回報的金額可能沒到（L2 R10）。
+        if (!done) output.warnings.push(sawUsage ? 'stream ended without [DONE]' : 'stream ended without [DONE] or usage; usage and cost are unknown');
         if (refusal) {
           output.warnings.push(`refusal: ${refusal.slice(0, 200)}`);
           output.stopReason = 'refusal';

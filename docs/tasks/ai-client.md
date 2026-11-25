@@ -98,7 +98,7 @@ packages/ai-client/
 | `gemini-generate-content` | Google AI Studio | `inlineData` | `inlineData` | `generationConfig.thinkingConfig.thinkingLevel` | 假金鑰確認網址與錯誤分類（2026-11-25） |
 | `anthropic-messages` | Anthropic | `document` 區塊的 base64（請求 128 MB、600 頁） | `image` 區塊 | `output_config.effort` | 假金鑰確認網址與錯誤分類（2026-11-25） |
 
-- 一律要求串流（SSE）；服務回 `application/json` 時照非串流讀。每種方言有自己的結束事件，連線正常關閉卻沒看到結束事件算 `network`，收到的文字放在 `partialText`。
+- 一律要求串流（SSE）；服務回 `application/json` 時照非串流讀。每種方言有自己的「做完」訊號，連線正常關閉卻沒看到算 `network`，收到的文字放在 `partialText`。看到傳完的事件就不再讀、直接交回（Responses 的 `response.completed`／`incomplete`、Anthropic 的 `message_stop`、Chat 的 `[DONE]`；Chat 的 `finish_reason` 只算做完，因為用量在它之後另一塊）。Chat 有 `finish_reason` 卻沒等到 `[DONE]` 就關了，照樣成功、記 warning（用量可能沒到）；Gemini 沒有傳完的事件，讀到服務關串流為止。已經看到做完的訊號、串流卻一直沒關時，閒置或整體逾時照已收到的交回，記 warning，不作廢已經付錢的結果（L2 R10）。
 - 每個 `fixtures/<方言>/case.json` 寫依據的官方文件網址與查的日期。
 - OpenAI 送 `store: false`，不用背景模式（之後要「斷線接回」就得開 `store`，那時再定）。Gemini 用 generateContent：Google 把它標成 Legacy 但寫明繼續完整支援，Interactions 還是 Beta；之後另加 `gemini-interactions` 方言。Anthropic 的 API 版號和方言綁在一起，不放在可覆蓋的標頭。
 - **目錄**：`catalog.json` 的 `schemaVersion` 是 1；一筆廠商寫方言、網址、認證標頭、上限（`maxRequestBytes`、`maxFileBytes`、`maxPdfPages`）、預設的輸入種類與推理寫法、`options`（`openai-chat` 各家的差異：`maxTokensField`、`streamUsage`、`systemRole`；`checkPath` 給列模型不用金鑰的服務）與模型。一筆模型寫能收的輸入、推理寫法、輸出上限、價格（可以有好幾筆，照 `effectiveFrom` 換；長輸入另一組價）與查價日期。壞掉的那一筆跳過、回報在 `catalogProblems`，不讓整個套件不能用。
@@ -139,7 +139,7 @@ packages/ai-client/
 8. **金鑰**：情境表在每一種錯誤、每一種結果的 `JSON.stringify` 與例外訊息裡找不到測試用的金鑰；`http://` 的遠端網址、帶帳密的網址在送出前就擋；轉址不跟。
 9. **用量與費用**：照〈5〉的意思對應；費用照牌價（含快取讀寫與長輸入的價），不含免費額度；OpenRouter 回報的金額用回報的。
 10. **目錄驗證**：方言要在登記表裡、網址照〈3〉第 4 點、價格是非負數、日期是合法日期、`schemaVersion` 對得上；壞掉的那一筆跳過並回報。
-11. **情境表**：每一種方言都跑同一張表：純文字、文字加圖片、文字加 PDF、推理等級、串流成功（每個位元組切開、CRLF）、非串流、服務回 JSON、輸出上限、內容被擋、串流裡的錯誤、沒有結束事件、中途斷線、格式壞掉、每一種錯誤回應、429 帶 `Retry-After` 後成功、500 兩次後成功、金鑰遮蔽、串流中途取消、測試連線。新增方言時登記了卻沒有範例，測試會失敗。
+11. **情境表**：每一種方言都跑同一張表：純文字、文字加圖片、文字加 PDF、推理等級、串流成功（每個位元組切開、CRLF）、非串流、服務回 JSON、輸出上限、內容被擋、串流裡的錯誤、沒有結束事件、中途斷線、格式壞掉、每一種錯誤回應、429 帶 `Retry-After` 後成功、500 兩次後成功、金鑰遮蔽、串流中途取消、結束之後串流沒關、測試連線。新增方言時登記了卻沒有範例，測試會失敗。
 
 ## 8. repo 要改的地方
 
