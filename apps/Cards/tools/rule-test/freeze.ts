@@ -7,6 +7,7 @@ import { RULE_SUBJECTS } from '../../src/core/ai/index.ts';
 import { cliPath } from '../cli-path.ts';
 import type { RuleSource } from './config.ts';
 import { lessonDir, libraryOf, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
+import { checkInherited, templateHashes } from './init.ts';
 import { APP_ROOT, buildFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
 import { parseSnapshotFile, readSnapshot, type Snapshot } from './snapshot.ts';
 
@@ -127,6 +128,8 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
 
   const files: Record<string, string> = {};
   const record = (path: string): void => { files[portable(relative(folder.root, path))] = sha256File(path); };
+  // 先組好、核對過沿用的那一輪（init --from）才寫檔：停下時什麼都沒寫，改好重跑不會撞到寫了一半的凍結檔。
+  const writes: [string, string | Buffer][] = [];
   const steps: FrozenStep[] = [];
   for (const lesson of config.lessons) {
     const subject = subjectOf(lesson.subjectKey);
@@ -134,17 +137,13 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
     if (lesson.existing && 'vault' in lesson.existing) snapshot = await readSnapshot(cliPath(lesson.existing.vault, 'rule-test'), subject.subject, lesson.form.term, version);
     else if (lesson.existing) snapshot = parseSnapshotFile(readFileSync(cliPath(lesson.existing.snapshot, 'rule-test', {}, folder.root), 'utf8'), version);
     if (snapshot) {
-      const path = join(folder.root, '凍結', '已有目標', `${lesson.code}.json`);
-      writeOnce(path, JSON.stringify(snapshot, null, 2) + '\n');
-      record(path);
+      writes.push([join(folder.root, '凍結', '已有目標', `${lesson.code}.json`), JSON.stringify(snapshot, null, 2) + '\n']);
     }
     for (const group of config.groups) {
       group.steps.forEach((step, i) => {
         const built = buildFor(step.rules, { lesson, snapshot, testFolder: folder.root, root });
         const file = promptFile(group.name, lesson.code, i + 1, group.steps.length);
-        const path = join(folder.root, '凍結', '提示', file);
-        writeOnce(path, built.text);
-        record(path);
+        writes.push([join(folder.root, '凍結', '提示', file), built.text]);
         if (step.rules.kind === 'own') record(join(folder.root, '提示', step.rules.files[lesson.code]));
         steps.push({
           group: group.name, lesson: lesson.code, step: i + 1, steps: group.steps.length, conversation: step.conversation, deck: step.deck,
@@ -158,16 +157,14 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   }
   // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明，凍結一份，評分與裁定照這一份。
   const templates = join(import.meta.dirname, 'templates');
-  const copyTemplate = (name: string): void => {
-    const path = join(folder.root, '凍結', '範本', name);
-    writeOnce(path, readFileSync(join(templates, name)));
+  const names = ['評分說明.md', '裁定說明.md', '拿不準說明.md', ...[...new Set(config.lessons.map(lesson => lesson.subjectKey))].map(key => `口徑/${key}.md`).filter(name => existsSync(join(templates, name)))];
+  checkInherited(folder, steps, templateHashes(names, templates));
+  for (const name of names) writes.push([join(folder.root, '凍結', '範本', name), readFileSync(join(templates, name))]);
+  writes.push([join(folder.root, '凍結', '提示.json'), JSON.stringify(steps, null, 2) + '\n']);
+  for (const [path, content] of writes) {
+    writeOnce(path, content);
     record(path);
-  };
-  for (const name of ['評分說明.md', '裁定說明.md', '拿不準說明.md']) copyTemplate(name);
-  for (const key of new Set(config.lessons.map(lesson => lesson.subjectKey))) if (existsSync(join(templates, '口徑', `${key}.md`))) copyTemplate(join('口徑', `${key}.md`));
-  const index = join(folder.root, '凍結', '提示.json');
-  writeOnce(index, JSON.stringify(steps, null, 2) + '\n');
-  record(index);
+  }
   record(join(folder.root, '測試.yaml'));
 
   const lock: Lock = { time: new Date().toISOString(), commit: git(['rev-parse', 'HEAD'], root), dirty: git(['status', '--porcelain'], root) !== '', version, files };

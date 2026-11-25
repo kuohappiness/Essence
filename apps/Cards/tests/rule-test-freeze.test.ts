@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { RULE_SUBJECTS, taskSection, type CardForm, type ExistingTarget } from '../src/core/ai/index.ts';
@@ -10,7 +10,8 @@ import { parseDeck } from '../src/core/deck/index.ts';
 import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
 import { openFolder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps, verifyLock } from '../tools/rule-test/freeze.ts';
-import { expandOwn, fillReplies, sectionText } from '../tools/rule-test/prompts.ts';
+import { initFolder } from '../tools/rule-test/init.ts';
+import { expandOwn, fillReplies, REPO_ROOT, sectionText } from '../tools/rule-test/prompts.ts';
 import { parseSnapshotFile, snapshotOf } from '../tools/rule-test/snapshot.ts';
 import { applyTaskOptions, leanList } from '../tools/rule-test/tasks.ts';
 
@@ -217,4 +218,61 @@ void test('freeze：外掛來源用到的檔有沒 commit 的修改就停下', a
 門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
 `);
   await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), /沒 commit 的修改/);
+});
+
+void test('init：建 測試.yaml 範本；已經有了、或在 repo 裡就停下', () => {
+  const root = join(mkdtempSync(join(tmpdir(), 'rule-test-init-')), '新的一輪');
+  initFolder(root);
+  assert.match(readFileSync(join(root, '測試.yaml'), 'utf8'), /^# 比較測試的設定/);
+  assert.ok(existsSync(join(root, '提示')));
+  assert.throws(() => initFolder(root), /已經有 測試\.yaml/);
+  assert.throws(() => initFolder(join(REPO_ROOT, '比較測試')), /測試資料夾在 repo 裡/);
+});
+
+void test('init --from：沿用組、生成器、評審與門檻只換課；凍結時課重複、設定或規則和那一輪不同就停下，什麼都不寫', async () => {
+  const { root, commit } = fixtureRepo();
+  const old = mkdtempSync(join(tmpdir(), 'rule-test-old-'));
+  for (const lesson of ['L3', 'L4', 'L5']) {
+    mkdirSync(join(old, '課', lesson), { recursive: true });
+    writeFileSync(join(old, '課', lesson, '教材.pdf'), '%PDF-1.4 假的');
+  }
+  writeFileSync(join(old, '測試.yaml'), `
+名稱: 第一輪
+課庫: 課
+課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
+組:
+  - { 名稱: 現行, 規則: { 外掛: english } }
+  - { 名稱: 候選, 規則: { commit: ${commit}, 檔案: [apps/Cards/docs/card-rules/next/core.md] } }
+生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 3 }]
+評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 20% }] }
+`);
+  await freezeFolder(openFolder(old), { root, log: () => {} });
+  const fresh = (): string => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'rule-test-new-')), '補跑');
+    initFolder(dir, { from: old });
+    return dir;
+  };
+  const next = fresh();
+  const yaml = readFileSync(join(next, '測試.yaml'), 'utf8');
+  assert.match(yaml, /^名稱: 第一輪（沿用）$/m);
+  assert.ok(yaml.includes(`課庫: ${join(old, '課')}`));
+  assert.equal((JSON.parse(readFileSync(join(next, '沿用.json'), 'utf8')) as { from: string }).from, old);
+  // 沒換課：停下，凍結的檔一個都沒寫。
+  await assert.rejects(freezeFolder(openFolder(next), { root, log: () => {} }), /課 L3 那一輪跑過（同一課多跑幾份用 extend）/);
+  assert.ok(!existsSync(join(next, '凍結')));
+  // 換了課：規則與範本都和那一輪相同，凍結得了。
+  writeFileSync(join(next, '測試.yaml'), yaml.replace('代號: L3', '代號: L4'));
+  await freezeFolder(openFolder(next), { root, log: () => {} });
+  // 改了門檻：停下。
+  const gates = fresh();
+  writeFileSync(join(gates, '測試.yaml'), readFileSync(join(gates, '測試.yaml'), 'utf8').replace('代號: L3', '代號: L5').replace('至少: 20%', '至少: 10%'));
+  await assert.rejects(freezeFolder(openFolder(gates), { root, log: () => {} }), /設定和那一輪不同（只能換課）/);
+  // 外掛的規則之後改了（commit 了）：現行組的規則不同，停下。
+  const file = join(root, subject('english').files[1].path);
+  writeFileSync(file, readFileSync(file, 'utf8') + '\n- 新加的一條\n');
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qam', 'change'], { cwd: root });
+  const rules = fresh();
+  writeFileSync(join(rules, '測試.yaml'), readFileSync(join(rules, '測試.yaml'), 'utf8').replace('代號: L3', '代號: L5'));
+  await assert.rejects(freezeFolder(openFolder(rules), { root, log: () => {} }), /- 組「現行」的規則和那一輪不同/);
 });

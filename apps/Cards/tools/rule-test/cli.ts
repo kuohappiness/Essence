@@ -6,6 +6,7 @@ import { disputes } from './disputes.ts';
 import { extend } from './extend.ts';
 import { freeze } from './freeze.ts';
 import { generate } from './generate.ts';
+import { init } from './init.ts';
 import { judge } from './judge.ts';
 import { paste } from './paste.ts';
 import { probe } from './probe.ts';
@@ -14,6 +15,7 @@ import { unblind } from './unblind.ts';
 
 const COMMANDS: Record<string, () => Promise<void>> = {
   probe,
+  init,
   freeze,
   generate,
   paste,
