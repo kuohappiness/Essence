@@ -191,7 +191,9 @@ function checkChoice(deck: Deck, issue: Report, subject: string | undefined): vo
     if (few.length) issue(line, '不符', 'choice-few-sentences', `每個讀音至少兩句，只有兩個讀音的每個至少三句：${few.map(option => `${option} ${String(prints.get(choice.options.indexOf(option))?.size ?? 0)} 句`).join('、')}（D-182）`);
     const bare = choice.options.filter((_, i) => choice.anchors[i] === null);
     if (bare.length) issue(line, '不符', 'choice-no-anchor', `記憶錨點沒有「${bare.join('、')}」的子項目：對答案後的對照只有讀音（預設〈讀音〉）`);
-    if (choice.anchors.some(anchor => anchor !== null && anchor.split('：').length > 2)) issue(line, '提醒', 'choice-anchor-colon', '記憶錨點的子項目有三個以上全形冒號；常用詞裡不要再用全形冒號');
+    // 對到讀音的（已經去掉讀音和第一個冒號）兩個以上、對不到接在後面的（整行）三個以上（L2 R8）。
+    const colons = (text: string): number => text.split('：').length - 1;
+    if (choice.anchors.some(anchor => anchor !== null && colons(anchor) >= 2) || choice.rest.some(text => colons(text) >= 3)) issue(line, '提醒', 'choice-anchor-colon', '記憶錨點的子項目有三個以上全形冒號；常用詞裡不要再用全形冒號');
   }
 }
 

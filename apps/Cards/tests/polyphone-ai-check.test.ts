@@ -77,6 +77,9 @@ void test('choice-no-anchor（不符）：有讀音在記憶錨點沒有子項�
   assert.deepEqual(found(draft(NAME, SIX, ANCHOR.slice(0, 2))), [['不符', 3, 'choice-no-anchor']]);
   const colons = [ANCHOR[0], '        - ㄓㄤˇ：長大：帶頭的人：成長', ANCHOR[2]];
   assert.deepEqual(found(draft(NAME, SIX, colons)), [['提醒', 3, 'choice-anchor-colon']]);
+  // 同一讀音的第二行（對照沒用、接在後面的）也檢查（L2 R8）；兩個冒號的不算。
+  assert.deepEqual(found(draft(NAME, SIX, [...ANCHOR, '        - ㄓㄤˇ：甲：乙：丙'])), [['提醒', 3, 'choice-anchor-colon']]);
+  assert.deepEqual(found(draft(NAME, SIX, [...ANCHOR, '        - ㄓㄤˇ：第二行：常用詞'])), []);
 });
 
 void test('choice-word（提醒，只在國語）：括號前面不是一個漢字', () => {
