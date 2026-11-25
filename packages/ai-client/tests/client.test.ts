@@ -885,3 +885,58 @@ void test('sent 的回呼拖過整體期限：不送出，丟 timeout（L2 第�
   const error = await rejects(createAiClient({ fetch, clock }).generate(request({ timeoutMs: 10, onProgress: e => { if (e.type === 'sent') now += 25; } })));
   assert.deepEqual([error.kind, fetch.requests.length], ['timeout', 0]);
 });
+
+void test('取消之後一個事件都不再交：每一條路的每一個事件，在回呼裡取消或排到下一步才取消，都是 cancelled，partialText 包含已交出的文字（L2 第三輪 延續 R8）', async () => {
+  const chat = loadCases().find(c => c.dialect === 'openai-chat')!;
+  const stream = (chunks: string[], extra: Partial<MockReply> = {}): MockReply => ({ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks, ...extra });
+  const chatEvents = readSse(chat, chat.stream.file).split(/\n\n/).filter(Boolean).map(e => `${e}\n\n`);
+  const routes: { name: string; replies: () => MockReply[]; extra: Partial<GenerateRequest> }[] = [
+    { name: 'SSE', replies: () => [OK], extra: {} },
+    { name: 'JSON', replies: () => [{ status: 200, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify(openai.json.body)] }], extra: {} },
+    { name: '500 後重送', replies: () => [{ status: 500, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"boom"}}'] }, OK], extra: {} },
+    // 遮蔽器扣住金鑰開頭的最後一段，做完與 [DONE] 在同一段本文（第三輪的例子）。
+    {
+      name: '扣住的尾段和結束同一段',
+      replies: () => [stream([[
+        'data: {"choices":[{"index":0,"delta":{"content":"before FAKE-"}}]}\n\n',
+        'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ].join('')])],
+      extra: { endpoint: { provider: 'openrouter' }, model: chat.model, apiKey: 'FAKE-key-not-real' },
+    },
+    // 做完卻沒關：閒置逾時後才補交扣住的尾段（R10 的路）。
+    {
+      name: '做完沒關',
+      replies: () => [stream([chatEvents.filter(e => !e.includes('[DONE]')).join('')], { keepOpen: true })],
+      extra: { endpoint: { provider: 'openrouter' }, model: chat.model, apiKey: '能。這不是真的金鑰', idleTimeoutMs: 30 },
+    },
+  ];
+  for (const route of routes) {
+    const all: ProgressEvent[] = [];
+    await createAiClient({ fetch: mockFetch(route.replies()), clock: instantClock() }).generate(request({ ...route.extra, onProgress: e => all.push(e) }));
+    assert.ok(all.some(e => e.type === 'text'), route.name);
+    for (let at = 0; at < all.length; at++) {
+      if (all[at].type === 'done') continue;
+      for (const mode of ['回呼裡', '排到下一步'] as const) {
+        const label = `${route.name}／第 ${String(at + 1)} 個事件（${all[at].type}）／${mode}`;
+        const controller = new AbortController();
+        const late: string[] = [];
+        let shown = '';
+        let seen = 0;
+        const error = await rejects(createAiClient({ fetch: mockFetch(route.replies()), clock: instantClock() }).generate(request({
+          ...route.extra, signal: controller.signal,
+          onProgress: e => {
+            if (controller.signal.aborted) late.push(e.type);
+            if (e.type === 'text') shown += e.delta;
+            if (seen++ !== at) return;
+            if (mode === '回呼裡') controller.abort();
+            else queueMicrotask(() => controller.abort());
+          },
+        })));
+        assert.deepEqual(late, [], `${label}：取消之後還交了事件`);
+        assert.equal(error.kind, 'cancelled', label);
+        assert.ok((error.partialText ?? '').startsWith(shown), `${label}：partialText ${JSON.stringify(error.partialText)} 不含已交出的 ${JSON.stringify(shown)}`);
+      }
+    }
+  }
+});

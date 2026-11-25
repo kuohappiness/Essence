@@ -211,7 +211,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     // 共最多 3 次（〈7〉第 5 點，L2 R6）：呼叫端只能調少，不能調多。
     const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Math.max(1, Math.floor(request.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)));
     const attempts: AttemptTrace[] = [];
+    /** 進度只從這裡交：呼叫端取消之後一個事件都不再交（L2 第三輪 延續 R8）。 */
     const progress = (event: ProgressEvent) => {
+      if (request.signal?.aborted) return;
       try {
         request.onProgress?.(event);
       } catch {
@@ -223,6 +225,8 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     for (let attempt = 1; ; attempt++) {
       try {
         const { output, requestId } = await runAttempt(attempt);
+        // 交出結果前最後一個停下來的點：回呼裡排到下一步才取消的也是取消，不交 done（L2 第三輪 延續 R8）。
+        if (request.signal?.aborted) throw fail('cancelled', 'cancelled', { provider: r.providerId, requestId, secrets, partialText: output.text || null, afterResponse: true });
         if (!output.text && (output.stopReason === 'content_filter' || output.stopReason === 'refusal')) {
           // 已經拿到 2xx，服務可能已經計費：afterResponse，不自動重送（L2 R12）。
           throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets, afterResponse: true });
