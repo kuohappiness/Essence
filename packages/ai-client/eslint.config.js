@@ -1,12 +1,6 @@
-// AI 連線模組自己的 ESLint 設定。套件不 import 呼叫它的軟體（docs/tasks/ai-client.md〈3〉第 1 點）：
-// src/ 不能用 Node 專用的模組，也不能 import obsidian（瀏覽器、Workers、Obsidian 手機都要能跑）。
+// AI 連線模組自己的 ESLint 設定。src/ 的可攜性規則在 eslint-portability.ts（docs/tasks/ai-client.md〈3〉第 1 點）。
 import tseslint from 'typescript-eslint';
-
-const portable = {
-  patterns: [
-    { group: ['node:*', 'obsidian', 'fs', 'path', 'http', 'https', 'child_process'], message: '套件要能在瀏覽器、Workers 與 Obsidian 手機跑，src/ 不用 Node 專用的模組（docs/tasks/ai-client.md〈3〉第 1 點）。' },
-  ],
-};
+import { portability } from './eslint-portability.ts';
 
 export default tseslint.config(
   { ignores: ['node_modules/**'] },
@@ -21,8 +15,5 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
   },
-  {
-    files: ['src/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', portable] },
-  },
+  { files: ['src/**/*.ts'], ...portability },
 );
