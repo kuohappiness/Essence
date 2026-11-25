@@ -141,7 +141,8 @@ export const geminiGenerateContent: Dialect = {
         blockReason = str(obj(data.promptFeedback).blockReason) ?? blockReason;
         modelVersion = str(data.modelVersion) ?? modelVersion;
         responseId = str(data.responseId) ?? responseId;
-        if (data.usageMetadata) usage = obj(data.usageMetadata);
+        // 用量逐欄合併：轉接服務可能把欄位分在好幾塊送，後面一塊只帶總數也不蓋掉前面的（L2 第二輪 R11）。
+        if (isObject(data.usageMetadata)) usage = { ...usage, ...data.usageMetadata };
         if (finishReason || blockReason) finished = true;
         const delta = textOf(data);
         if (delta) {

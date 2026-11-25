@@ -649,6 +649,30 @@ void test('服務說回答的是目錄裡另一個模型：整類照回答的那
   }
 });
 
+void test('Gemini 的用量欄位分在好幾塊送：整類照每一欄最後的值合起來，和一次送齊一樣（L2 第二輪 R11）', async () => {
+  const gemini = { endpoint: { provider: 'google' }, model: 'gemini-3.8-flash' } as const;
+  const full = { promptTokenCount: 7, candidatesTokenCount: 3, totalTokenCount: 15, cachedContentTokenCount: 2, thoughtsTokenCount: 5 };
+  const fields = Object.keys(full) as (keyof typeof full)[];
+  const text = { candidates: [{ content: { parts: [{ text: '光合作用' }], role: 'model' } }], modelVersion: 'gemini-3.8-flash-001', responseId: 'gem-3' };
+  const stop = { candidates: [{ content: { parts: [], role: 'model' }, finishReason: 'STOP' }] };
+  const usageOf = async (events: unknown[]) => {
+    const fetch = mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [sse(events.map(data => ({ data })))] }]);
+    return (await createAiClient({ fetch, clock: instantClock() }).generate(request(gemini))).usage;
+  };
+  const expected = await usageOf([text, { ...stop, usageMetadata: full }]);
+  assert.equal(expected.inputTokens, 7);
+  // 每一欄放進三塊中的一塊（3^5 種分法）；放在哪一塊都一樣。
+  for (let code = 0; code < 3 ** fields.length; code++) {
+    const parts: Record<string, number>[] = [{}, {}, {}];
+    fields.forEach((field, i) => { parts[Math.floor(code / 3 ** i) % 3][field] = full[field]; });
+    const events = [{ ...text, usageMetadata: parts[0] }, { ...stop, usageMetadata: parts[1] }, { usageMetadata: parts[2] }];
+    assert.deepEqual(await usageOf(events), expected, JSON.stringify(parts));
+  }
+  // 同一欄後面又送一次（累計值變大）：用最後的值。
+  const updated = await usageOf([{ ...text, usageMetadata: { ...full, candidatesTokenCount: 1, totalTokenCount: 13 } }, { ...stop, usageMetadata: { candidatesTokenCount: 3, totalTokenCount: 15 } }]);
+  assert.deepEqual(updated, expected);
+});
+
 void test('extraBody 不能改模型或串流；改了哪些欄位記在 trace，未登錄模型的推理欄位也查得到（L2 R13）', async () => {
   const fetch = mockFetch([OK]);
   const client = createAiClient({ fetch, clock: instantClock() });
