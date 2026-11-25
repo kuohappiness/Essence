@@ -3,7 +3,7 @@ import { encodeBody } from './body.ts';
 import { BUILTIN_CATALOG, isAllowedUrl, isLocalUrl, mergeCatalog, validateCatalog, type CatalogOverrides, type CatalogProblem } from './catalog.ts';
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
-import { AiError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
+import { AiError, asError, describeThrown, isAiError, withSecrets, type AiErrorKind } from './errors.ts';
 import { costOf } from './pricing.ts';
 import { MIN_SECRET_LENGTH, redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
@@ -687,7 +687,7 @@ function untilAbort<T>(promise: Promise<T>, signal: AbortSignal, onLate?: (value
         if (stopped) onLate?.(value);
         else resolve(value);
       },
-      (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(error instanceof Error ? error : new Error(String(error))); },
+      (error: unknown) => { signal.removeEventListener('abort', onAbort); reject(asError(error)); },
     );
   });
 }

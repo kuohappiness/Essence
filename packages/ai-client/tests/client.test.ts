@@ -2,7 +2,7 @@
 // 各家格式的部分在 conformance.test.ts；這裡用 openai-responses 的範例當代表。
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AiError, createAiClient, isAiError, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
+import { AiError, createAiClient, isAiError, type FetchLike, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
 import { mockFetch, sse, type MockReply } from '../src/testing.ts';
 import { KEY, instantClock, loadCases, readSse } from './helpers.ts';
 
@@ -733,6 +733,48 @@ void test('金鑰不出現在任何公開的出口：傳輸層丟的各種例外
     const checked = await createAiClient({ fetch, clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY });
     assert.ok(!checked.ok);
     assert.ok(!surface(checked.error).includes(KEY), surface(checked.error));
+  }
+});
+
+void test('丟出來的值整類：每一個讀取都會丟（getter、轉字串、Proxy 的每個 trap），從哪裡丟都回 AiError、不卡住、不帶金鑰（L2 第三輪 R1 修正引入）', async () => {
+  const boom = () => { throw new Error(`leak ${KEY}`); };
+  const adversaries: [string, () => unknown][] = [
+    ...['message', 'name', 'cause', 'stack', 'toString', 'valueOf', 'toJSON', 'constructor'].map(property => [`${property} getter`, () => {
+      const error = new Error('x');
+      Object.defineProperty(error, property, { get: boom });
+      return error;
+    }] as [string, () => unknown]),
+    ['Symbol.toPrimitive', () => ({ [Symbol.toPrimitive]: boom, toJSON: boom })],
+    ['每個 trap 都丟的 Proxy', () => new Proxy(new Error('x'), { get: boom, has: boom, ownKeys: boom, getPrototypeOf: boom, getOwnPropertyDescriptor: boom })],
+    ['撤銷的 Proxy', () => { const { proxy, revoke } = Proxy.revocable({}, {}); revoke(); return proxy; }],
+  ];
+  const surface = (error: unknown): string => {
+    assert.ok(isAiError(error), '要是 AiError');
+    const cause = error.cause as { name?: unknown; message?: unknown } | undefined;
+    return [error.message, JSON.stringify(error), cause?.name, cause?.message].map(String).join('\n');
+  };
+  // 傳輸層同步丟、回傳被拒絕的 promise、本文讀到一半丟。
+  const sources: [string, (value: unknown) => FetchLike][] = [
+    ['同步丟', value => () => { throw value; }],
+    ['被拒絕的 promise', value => () => Promise.resolve().then(() => { throw value; })],
+    ['讀本文時丟', value => () => Promise.resolve(new Response(new ReadableStream({ pull(controller) { controller.error(value); } }), { status: 200, headers: { 'content-type': 'application/json' } }))],
+  ];
+  for (const [label, make] of adversaries) {
+    for (const [where, source] of sources) {
+      const fetch = source(make());
+      const started = Date.now();
+      let generated: unknown;
+      try {
+        await createAiClient({ fetch, clock: instantClock() }).generate(request({ maxAttempts: 1, timeoutMs: 2_000 }));
+      } catch (error) { generated = error; }
+      assert.ok(!surface(generated).includes(KEY), `${label}／${where}：${surface(generated)}`);
+      assert.notEqual((generated as AiError).kind, 'timeout', `${label}／${where}：卡到逾時`);
+      const checked = await createAiClient({ fetch: source(make()), clock: instantClock() }).check({ endpoint: { provider: 'openai' }, apiKey: KEY, timeoutMs: 2_000 });
+      assert.ok(!checked.ok, `${label}／${where}`);
+      assert.ok(!surface(checked.error).includes(KEY), `${label}／${where}：${surface(checked.error)}`);
+      assert.notEqual(checked.error.kind, 'timeout', `${label}／${where}：卡到逾時`);
+      assert.ok(Date.now() - started < 1_500, `${label}／${where}：等了 ${String(Date.now() - started)} ms`);
+    }
   }
 });
 

@@ -84,7 +84,7 @@ export class AiError extends Error {
   }
 }
 
-export const isAiError = (value: unknown): value is AiError => value instanceof AiError;
+export const isAiError = (value: unknown): value is AiError => attempt(() => value instanceof AiError, false);
 
 /**
  * 傳輸層的例外可能帶著請求的細節：有金鑰要遮時，換成只留遮過的名稱與訊息的 Error（L2 R1）；
@@ -93,9 +93,25 @@ export const isAiError = (value: unknown): value is AiError => value instanceof 
 function sanitizeCause(cause: unknown, secrets: readonly string[]): unknown {
   if (cause === undefined || usable(secrets).length === 0) return cause;
   const copy = new Error(redact(describeThrown(cause), secrets));
-  if (cause instanceof Error) copy.name = redact(describeThrown(cause.name), secrets);
+  const name = attempt(() => (cause instanceof Error ? String(cause.name) : null), null);
+  if (name) copy.name = redact(name, secrets);
   return copy;
 }
+
+/**
+ * 碰丟出來的值的每一個動作（instanceof、讀屬性、轉字串）都可能再丟：getter、Proxy 的 trap、撤銷的 Proxy（L2 第三輪 R1 修正引入）。
+ * 都經過這裡，丟了就用 fallback。
+ */
+function attempt<T>(read: () => T, fallback: T): T {
+  try {
+    return read();
+  } catch {
+    return fallback;
+  }
+}
+
+/** 任何丟出來的值變成可以 reject 的 Error：本身是 Error 就原樣（instanceof 也可能丟）。 */
+export const asError = (value: unknown): Error => attempt(() => (value instanceof Error ? value : new Error(describeThrown(value))), new Error('[unprintable]'));
 
 /**
  * 任何丟出來的值都轉得成字串、不會再丟例外：循環物件、BigInt、沒有原型的物件、getter 會丟的都算（L2 第二輪 R1 修正引入）。
