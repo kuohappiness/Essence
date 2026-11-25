@@ -31,7 +31,7 @@ export interface LessonConfig {
   existing: { vault: string } | { snapshot: string } | null;
 }
 
-type AdapterKind = 'claude' | 'codex' | 'manual';
+export type AdapterKind = 'claude' | 'codex' | 'manual';
 export interface Generator { name: string; kind: AdapterKind; model: string; effort: string; count: number; lessons: string[] | null; service: string | null }
 interface Judge { name: string; kind: 'claude' | 'codex'; model: string; effort: string }
 

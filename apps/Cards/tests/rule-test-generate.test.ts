@@ -1,0 +1,200 @@
+// 比較測試工具的生成（tasks/rule-test-tool.md §4-2 有效原稿、多步，§5-4 事件、佇列、額度、斷路器、行程鎖、手貼，§5-6 切法）。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { claudeAdapter, type Adapter, type StepRequest } from '../tools/rule-test/adapters.ts';
+import { cutDeck, validity } from '../tools/rule-test/deck-cut.ts';
+import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
+import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
+import { acquireLock, runQueue, savePasted, writeManual } from '../tools/rule-test/generate.ts';
+import { appendEvent, jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
+
+const DECK = '<<<全貌>>>\n全貌\n<<<架構>>>\n架構\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n<<<完>>>';
+
+void test('切卡組段：三段的只留卡組到最後一個完；外層程式碼框只拿掉頭尾一行；不分段的整份留', () => {
+  assert.deepEqual(cutDeck('````markdown\n' + DECK + '\n````\n說明', true), { ok: true, deck: '國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: 借入\n' });
+  assert.deepEqual(cutDeck('````markdown\r\n- a\r\n    - q :: a\r\n<<<完>>>\r\n````\r\n', false), { ok: true, deck: '- a\n    - q :: a\n' });
+  // 卡組段裡的程式碼區塊不是外層的框：只看頭尾一行。
+  assert.deepEqual(cutDeck('- a\n    ```\n    x\n    ```\n<<<完>>>', false), { ok: true, deck: '- a\n    ```\n    x\n    ```\n' });
+  assert.deepEqual(cutDeck('<<<全貌>>>\n只有全貌\n<<<完>>>', true), { ok: false, why: '找不到 <<<卡組>>>' });
+});
+
+void test('有效原稿：有 <<<完>>>、卡組段不是空的；不是卡組的步驟只要不是空的', () => {
+  assert.deepEqual(validity(DECK, true, true), { valid: true, why: null });
+  assert.deepEqual(validity(DECK.replace('<<<完>>>', ''), true, true), { valid: false, why: '沒有 <<<完>>>' });
+  assert.deepEqual(validity('<<<全貌>>>\nx\n<<<卡組>>>\n\n<<<完>>>', true, true), { valid: false, why: '卡組段是空的' });
+  assert.deepEqual(validity('第一段的清單\n<<<第一段完>>>', false, true), { valid: true, why: null });
+  assert.deepEqual(validity('  \n', false, true), { valid: false, why: '回覆是空的' });
+});
+
+/** 自備提示的測試資料夾（不用 git 的檔案來源），凍結好。 */
+async function frozenFolder(groups: string, generators: string): Promise<Folder> {
+  const root = mkdtempSync(join(tmpdir(), 'rule-test-gen-folder-'));
+  mkdirSync(join(root, '課', 'L3'), { recursive: true });
+  writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
+  mkdirSync(join(root, '提示'));
+  for (const name of ['甲', '乙', '一', '二']) writeFileSync(join(root, '提示', `${name}.md`), name === '二' ? '組二第二步：前一步是「{{A.1}}」' : `組${name}\n\n{{任務段}}`);
+  writeFileSync(join(root, '測試.yaml'), `
+名稱: 生成測試
+課庫: 課
+同時: 1
+課: [{ 代號: L3, 表單: { 科目: english, 年級學期: 國二上, 單元: L3 } }]
+組:
+${groups}
+生成:
+${generators}
+評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+`);
+  await freezeFolder(openFolder(root), { log: () => {} });
+  return openFolder(root);
+}
+const TWO_GROUPS = '  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }\n  - { 名稱: 乙, 規則: { 自備: { L3: 乙.md } } }';
+
+/** 假的轉接器：照提示開頭的組名回覆；記下每一次的請求。 */
+function fake(reply: (request: StepRequest, n: number) => Awaited<ReturnType<Adapter>>): { adapter: Adapter; requests: StepRequest[] } {
+  const requests: StepRequest[] = [];
+  return {
+    requests,
+    adapter: request => { requests.push(request); request.record('{"type":"result"}', ''); return Promise.resolve(reply(request, requests.length)); },
+  };
+}
+const ok = (text: string, session = 's1'): Awaited<ReturnType<Adapter>> => ({ kind: 'ok', reply: text, session, warnings: [], ms: 5, models: ['claude-opus-5-5'] });
+
+void test('生成：每組每份一個新對話、附 PDF；無效原稿照記並自動補一份；原稿與事件都留著', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 2 }');
+  const { adapter, requests } = fake((request, n) => request.text.startsWith('組乙') && n === 3 ? ok('沒有結尾的回覆') : ok(DECK));
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  const events = readEvents(folder);
+  const jobs = planJobs(folder, readFrozenSteps(folder), events);
+  assert.deepEqual(jobs.map(job => [job.key, jobState(events, job.key).status]), [
+    ['甲-L3-claude-1', 'done'], ['甲-L3-claude-2', 'done'],
+    ['乙-L3-claude-1', 'invalid'], ['乙-L3-claude-2', 'done'], ['乙-L3-claude-3', 'done'],
+  ]);
+  assert.equal(requests.length, 5);
+  assert.ok(requests.every(request => request.pdf?.toString() === '%PDF-1.4 假的' && request.resume === null && request.model === 'claude-opus-5-5'));
+  assert.equal(readFileSync(join(folder.root, '生成', '原稿', '乙-L3-claude-1.md'), 'utf8'), '沒有結尾的回覆');
+  assert.deepEqual(events.find(event => event.type === 'invalid')?.detail, { why: ['沒有 <<<完>>>'] });
+  assert.equal(readdirSync(join(folder.root, '生成', '原稿')).length, 5);
+  assert.ok(!existsSync(join(folder.root, '生成', '執行中.json')));
+});
+
+void test('多步：同一個對話接著說（resume、不再附 PDF），{{A.1}} 代入前一步的回覆；卡組步驟各自存原稿', async () => {
+  const groups = '  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }\n  - { 名稱: 乙, 步驟: [{ 對話: A, 規則: { 自備: { L3: 一.md } }, 卡組: 否 }, { 對話: A, 規則: { 自備: { L3: 二.md } }, 卡組: 是 }] }';
+  const folder = await frozenFolder(groups, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  const { adapter, requests } = fake(request => request.text.startsWith('組一') ? ok('第一步的清單', 'conv-1') : ok(DECK, 'conv-1'));
+  await runQueue(folder, { adapters: { claude: adapter }, log: () => {} });
+  const second = requests.find(request => request.text.startsWith('組二'))!;
+  assert.equal(second.text, '組二第二步：前一步是「第一步的清單」');
+  assert.equal(second.resume, 'conv-1');
+  assert.equal(second.pdf, null);
+  assert.deepEqual(readdirSync(join(folder.root, '生成', '原稿')).sort(), ['乙-L3-claude-1-1.md', '乙-L3-claude-1-2.md', '甲-L3-claude-1.md']);
+  assert.equal(jobState(readEvents(folder), '乙-L3-claude-1').status, 'done');
+});
+
+void test('額度用完：整個佇列停下、記下重置時間、不重試；下一次開跑接著做沒做完的', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  const quota = fake(() => ({ kind: 'quota', message: '額度用完', resetsAt: 1_800_000_000 }));
+  await runQueue(folder, { adapters: { claude: quota.adapter }, log: () => {} });
+  assert.equal(quota.requests.length, 1);
+  const events = readEvents(folder);
+  assert.deepEqual(events.filter(event => event.type === 'quota' || event.type === 'stop').map(event => [event.type, event.detail?.resetsAt ?? event.detail?.reason]), [['quota', 1_800_000_000], ['stop', '額度用完']]);
+  const after = fake(() => ok(DECK));
+  await runQueue(folder, { adapters: { claude: after.adapter }, log: () => {} });
+  assert.equal(after.requests.length, 2);
+  assert.ok(planJobs(folder, readFrozenSteps(folder), readEvents(folder)).every(job => jobState(readEvents(folder), job.key).status === 'done'));
+});
+
+void test('斷路器：連續 3 份失敗就停；同一份最多試 3 次', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 2 }');
+  const failing = fake(() => ({ kind: 'fail', message: '壞了' }));
+  await runQueue(folder, { adapters: { claude: failing.adapter }, log: () => {} });
+  assert.equal(failing.requests.length, 3);
+  assert.equal(readEvents(folder).at(-1)?.detail?.reason, '連續 3 份失敗');
+  // 沒登入這類重試也沒用的錯誤：第一份就停。
+  const fatal = fake(() => ({ kind: 'fatal', message: 'claude 沒有登入' }));
+  await runQueue(folder, { adapters: { claude: fatal.adapter }, log: () => {} });
+  assert.equal(fatal.requests.length, 1);
+  // 試滿 3 次的那一份停在 failed，不再開。
+  for (let i = 0; i < 3; i++) {
+    appendEvent(folder, { type: 'start', job: '甲-L3-claude-2' });
+    appendEvent(folder, { type: 'timeout', job: '甲-L3-claude-2' });
+  }
+  assert.equal(jobState(readEvents(folder), '甲-L3-claude-2').status, 'failed');
+});
+
+void test('行程鎖：另一個還在跑就停下；上一次的行程已經不在時，跑到一半的工作記成中斷、可以重跑', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)']);
+  try {
+    mkdirSync(join(folder.root, '生成'), { recursive: true });
+    writeFileSync(join(folder.root, '生成', '執行中.json'), JSON.stringify({ pid: other.pid, command: 'generate', started: 'x' }));
+    assert.throws(() => acquireLock(folder, 'generate'), /已經有一個 generate 在跑/);
+  } finally { other.kill(); }
+  await new Promise(done => other.on('exit', done));
+  appendEvent(folder, { type: 'start', job: '甲-L3-claude-1', attempt: 1 });
+  const release = acquireLock(folder, 'generate');
+  release();
+  const state = jobState(readEvents(folder), '甲-L3-claude-1');
+  assert.equal(state.status, 'retry');
+  assert.equal(state.last?.type, 'interrupted');
+});
+
+void test('手貼：說明寫清楚服務、模型、PDF 與順序；貼回一步一步存，後一步的提示等前一步貼回才產生', async () => {
+  const groups = '  - { 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }\n  - { 名稱: 乙, 步驟: [{ 對話: A, 規則: { 自備: { L3: 一.md } }, 卡組: 否 }, { 對話: A, 規則: { 自備: { L3: 二.md } }, 卡組: 是 }] }';
+  const folder = await frozenFolder(groups, '  - { 生成器: claude, 模型: m, 份數: 1, 課: [] }\n  - { 生成器: 手貼, 服務: ChatGPT, 模型: GPT-6.2 Thinking, 份數: 1 }');
+  const job = planJobs(folder, readFrozenSteps(folder), readEvents(folder)).find(each => each.key === '乙-L3-ChatGPT-1')!;
+  const guide = readFileSync(writeManual(folder, job), 'utf8');
+  assert.match(guide, /服務：ChatGPT/);
+  assert.match(guide, /1\. 新對話，附 PDF：複製 凍結\/提示\/乙-L3-1\.md 的全文/);
+  assert.match(guide, /2\. 同一個對話接著：生成時才產生：貼回 A\.1 之後，複製 生成\/手貼\/乙-L3-ChatGPT-1-2\.md/);
+  assert.throws(() => savePasted(folder, job, 2, DECK), /要先貼第 1 步/);
+  const notes = savePasted(folder, job, 1, '第一步的清單');
+  assert.equal(readFileSync(join(folder.root, '生成', '手貼', '乙-L3-ChatGPT-1-2.md'), 'utf8'), '組二第二步：前一步是「第一步的清單」');
+  assert.match(notes[0], /第 2 步的提示/);
+  assert.match(savePasted(folder, job, 2, DECK).join('\n'), /貼完了：有效原稿/);
+  assert.throws(() => savePasted(folder, job, 2, DECK), /已經貼完了/);
+  assert.equal(jobState(readEvents(folder), job.key).status, 'done');
+});
+
+/** 假的 claude CLI：照 MODE 印 stream-json 事件；把收到的參數與 stdin 寫進 result。 */
+function fakeCli(mode: string): { command: string; prefix: string[]; found: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'rule-test-cli-'));
+  const script = join(dir, 'cli.mjs');
+  writeFileSync(script, `
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => {
+  const mode = ${JSON.stringify(mode)};
+  const say = event => process.stdout.write(JSON.stringify(event) + '\\n');
+  say({ type: 'system', subtype: 'init', model: 'claude-opus-5-5', tools: mode === 'tools' ? ['Bash'] : [], mcp_servers: [] });
+  if (mode === 'quota') say({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1800000000 } });
+  const text = mode === 'login' ? 'Not logged in · Please run /login' : JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) });
+  say({ type: 'result', subtype: 'success', is_error: mode === 'login' || mode === 'quota', result: text, session_id: 'sess-1', duration_ms: 7, modelUsage: { 'claude-opus-5-5': {} } });
+});
+`);
+  return { command: process.execPath, prefix: [script], found: script };
+}
+
+void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PDF 當附件；沒登入、隔離沒生效、額度用完分得出來', async () => {
+  const records: string[] = [];
+  const request = (over: Partial<StepRequest> = {}): StepRequest => ({ text: '提示', pdf: Buffer.from('%PDF'), resume: null, model: 'claude-opus-5-5', effort: 'high', systemPrompt: null, cwd: tmpdir(), timeoutMs: 20_000, record: out => { records.push(out); }, ...over });
+  const result = await claudeAdapter(() => fakeCli('ok'))(request());
+  assert.equal(result.kind, 'ok');
+  if (result.kind !== 'ok') return;
+  const seen = JSON.parse(result.reply) as { args: string[]; input: { message: { content: { type: string; source?: { data: string } }[] } } };
+  assert.deepEqual(seen.args, ['-p', '--safe-mode', '--strict-mcp-config', '--output-format', 'stream-json', '--verbose', '--input-format', 'stream-json', '--model', 'claude-opus-5-5', '--effort', 'high', '--tools', '']);
+  assert.deepEqual(seen.input.message.content.map(block => block.type), ['document', 'text']);
+  assert.equal(Buffer.from(seen.input.message.content[0].source!.data, 'base64').toString(), '%PDF');
+  assert.equal(result.session, 'sess-1');
+  assert.ok(records[0].includes('"subtype":"init"'));
+  const resumed = await claudeAdapter(() => fakeCli('ok'))(request({ resume: 'sess-1', pdf: null, systemPrompt: '系統' }));
+  assert.ok(resumed.kind === 'ok' && (JSON.parse(resumed.reply) as { args: string[] }).args.join(' ').endsWith('--tools  --resume sess-1 --system-prompt 系統'));
+  assert.deepEqual(await claudeAdapter(() => fakeCli('login'))(request()), { kind: 'fatal', message: 'claude 沒有登入（在終端機執行 claude 登入）' });
+  assert.deepEqual(await claudeAdapter(() => fakeCli('tools'))(request()), { kind: 'fatal', message: '隔離沒生效：工具 1 個、MCP 0 個' });
+  assert.equal((await claudeAdapter(() => fakeCli('quota'))(request())).kind, 'quota');
+  assert.deepEqual(await claudeAdapter(() => { throw Error('找不到 claude'); })(request()), { kind: 'fatal', message: '找不到 claude' });
+});
