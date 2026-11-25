@@ -1066,3 +1066,35 @@ void test('估價警告整類：只在費用真的照服務回報的另一個模
     }
   }
 });
+
+void test('請求物件用 getter 提供欄位（類別）整類：每一個欄位都照讀到的值，和一般物件一樣（L2 第四輪 第 3 項）', async () => {
+  const fail503: MockReply = { status: 503, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"message":"busy"}}'] };
+  /** 同一份請求，改成類別的 getter（自己沒有任何欄位）。 */
+  const viaGetters = (plain: GenerateRequest): GenerateRequest => {
+    class Wrapped {}
+    const fields: [string, unknown][] = Object.entries(plain);
+    for (const [key, value] of fields) Object.defineProperty(Wrapped.prototype, key, { get: () => value });
+    return new Wrapped() as GenerateRequest;
+  };
+  const outcome = async (given: GenerateRequest, replies: MockReply[]) => {
+    const fetch = mockFetch(replies);
+    const result = await createAiClient({ fetch, clock: instantClock() }).generate(given)
+      .then(r => r.text, (error: unknown) => (isAiError(error) ? `${error.kind}: ${error.message}` : String(error)));
+    return { result, sent: fetch.requests.map(q => q.body) };
+  };
+  const cancelled = new AbortController();
+  cancelled.abort();
+  const cases: [string, Partial<GenerateRequest>, MockReply[]][] = [
+    ['一般的請求', {}, [OK]],
+    ['已經取消的 signal', { signal: cancelled.signal }, [OK]],
+    ['maxAttempts: 1', { maxAttempts: 1 }, [fail503, OK]],
+    ['maxOutputTokens', { maxOutputTokens: 77 }, [OK]],
+    ['timeoutMs: 0', { timeoutMs: 0 }, [OK]],
+    ['maxAttempts: NaN', { maxAttempts: Number.NaN }, [OK]],
+  ];
+  for (const [label, extra, replies] of cases) {
+    const plain = request(extra);
+    assert.deepEqual(await outcome(viaGetters(plain), replies), await outcome(plain, replies), label);
+  }
+  assert.deepEqual((await outcome(viaGetters(request({ signal: cancelled.signal })), [OK])).sent, [], '取消了就不送');
+});

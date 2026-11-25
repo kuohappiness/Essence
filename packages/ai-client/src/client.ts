@@ -161,18 +161,15 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     }
   }
 
-  async function generateOnce(given: GenerateRequest): Promise<GenerateResult> {
-    // 數字欄位在入口正規化一次：null 和沒給一樣（照預設；閒置逾時是關），之後每一處讀到的都是這一份（L2 第三輪 延續 R6）。
-    const request: GenerateRequest = {
-      ...given, timeoutMs: given.timeoutMs ?? undefined, idleTimeoutMs: given.idleTimeoutMs ?? undefined,
-      maxAttempts: given.maxAttempts ?? undefined, maxOutputTokens: given.maxOutputTokens ?? undefined,
-    };
+  async function generateOnce(request: GenerateRequest): Promise<GenerateResult> {
+    // 數字欄位在入口讀一次、正規化成區域變數：null 和沒給一樣（照預設；閒置逾時是關），之後每一處用的都是這一份（L2 第三輪 延續 R6）。
+    // 請求本身不複製：欄位可能由類別的 getter 提供（例如 signal），展開只帶得到自己的欄位（L2 第四輪 第 3 項）。
+    const { timeoutMs: givenTimeoutMs, idleTimeoutMs: givenIdleMs, maxAttempts: givenMaxAttempts, maxOutputTokens: givenMaxOutput } = request;
+    const idleTimeoutMs = givenIdleMs ?? undefined;
+    const maxOutputTokens = givenMaxOutput ?? undefined;
     const secrets = request.apiKey ? [request.apiKey] : [];
-    checkNumbers({
-      maxAttempts: request.maxAttempts, timeoutMs: request.timeoutMs, idleTimeoutMs: request.idleTimeoutMs,
-      maxOutputTokens: request.maxOutputTokens, responseTimeoutMs: options.responseTimeoutMs,
-    });
-    if (request.maxOutputTokens != null && !(Number.isInteger(request.maxOutputTokens) && request.maxOutputTokens > 0)) {
+    checkNumbers({ maxAttempts: givenMaxAttempts, timeoutMs: givenTimeoutMs, idleTimeoutMs, maxOutputTokens, responseTimeoutMs: options.responseTimeoutMs });
+    if (maxOutputTokens !== undefined && !(Number.isInteger(maxOutputTokens) && maxOutputTokens > 0)) {
       throw fail('invalid_request', 'maxOutputTokens must be a positive integer');
     }
     const startedAt = clock.now();
@@ -183,7 +180,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const warnings: string[] = [];
     const call = r.dialect.buildGenerate({
       baseUrl: r.baseUrl, model: request.model, instructions: request.instructions, input,
-      maxOutputTokens: request.maxOutputTokens ?? r.maxOutputTokens, options: r.options,
+      maxOutputTokens: maxOutputTokens ?? r.maxOutputTokens, options: r.options,
     });
     const body = call.body ?? {};
     let reasoningSent = applyReasoning(body, r.reasoning, request.reasoning, warnings);
@@ -211,14 +208,14 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     headers['content-type'] = 'application/json';
     headers.accept = 'text/event-stream';
 
-    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutMs = givenTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     // 期限從開始算一次、照計時器上限：每一次重送都用剩下的，不重新給滿（L2 第三輪 延續 R6）。
     const deadline = startedAt + Math.min(timeoutMs, MAX_TIMER_MS);
     const responseTimeoutMs = options.responseTimeoutMs === undefined
       ? RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000
       : options.responseTimeoutMs;
     // 共最多 3 次（〈7〉第 5 點，L2 R6）：呼叫端只能調少，不能調多。
-    const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Math.max(1, Math.floor(request.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)));
+    const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Math.max(1, Math.floor(givenMaxAttempts ?? DEFAULT_MAX_ATTEMPTS)));
     const attempts: AttemptTrace[] = [];
     /** 進度只從這裡交：呼叫端取消之後一個事件都不再交（L2 第三輪 延續 R8）。 */
     const progress = (event: ProgressEvent) => {
@@ -314,9 +311,9 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       const waitHeaders = responseTimeoutMs === null ? undefined : later(() => abort('response'), responseTimeoutMs);
       let idle: ReturnType<typeof setTimeout> | undefined;
       const touch = () => {
-        if (request.idleTimeoutMs === undefined) return;
+        if (idleTimeoutMs === undefined) return;
         clearTimeout(idle);
-        idle = later(() => abort('idle'), request.idleTimeoutMs);
+        idle = later(() => abort('idle'), idleTimeoutMs);
       };
       let text = '';
       let gotResponse = false;
@@ -343,7 +340,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         log.status = response.status;
         log.requestId = r.dialect.requestIdHeader ? response.headers.get(r.dialect.requestIdHeader) : null;
         if (response.status < 200 || response.status >= 300) {
-          const errorBody = await readErrorBody(response, controller.signal, request.idleTimeoutMs ?? ERROR_BODY_IDLE_MS);
+          const errorBody = await readErrorBody(response, controller.signal, idleTimeoutMs ?? ERROR_BODY_IDLE_MS);
           throw toError(r.dialect.classifyError(response.status, errorBody), response.status, retryAfterOf(response.headers), meta());
         }
         gotResponse = true;
@@ -417,7 +414,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       } catch (caught) {
         const error = reason === 'cancelled' || request.signal?.aborted ? fail('cancelled', 'cancelled', meta())
           : reason === 'timeout' ? fail('timeout', `timed out after ${timeoutMs} ms`, meta())
-          : reason === 'idle' ? fail('timeout', `no data for ${request.idleTimeoutMs} ms`, meta())
+          : reason === 'idle' ? fail('timeout', `no data for ${String(idleTimeoutMs)} ms`, meta())
           // 請求已經送出、服務可能已經在做（或中間的代理把串流整段收完才交），重送可能讓同一件事做兩次、付兩次錢（L2 R7）。
           : reason === 'response' ? fail('timeout', `no response headers within ${responseTimeoutMs} ms`, meta())
           : isAiError(caught) ? caught
@@ -438,9 +435,10 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
 
   async function check(request: CheckRequest): Promise<CheckResult> {
     const secrets = request.apiKey ? [request.apiKey] : [];
+    const { timeoutMs } = request;
     let r: Resolved;
     try {
-      checkNumbers({ timeoutMs: request.timeoutMs });
+      checkNumbers({ timeoutMs });
       r = resolve(request.endpoint, null);
       checkKey(r, request.apiKey);
     } catch (caught) {
@@ -453,7 +451,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     let reason: 'timeout' | 'cancelled' | null = null;
     const onCancel = () => { reason = 'cancelled'; controller.abort(); };
     request.signal?.addEventListener('abort', onCancel, { once: true });
-    const limit = request.timeoutMs ?? CHECK_TIMEOUT_MS;
+    const limit = timeoutMs ?? CHECK_TIMEOUT_MS;
     const timer = later(() => { reason = 'timeout'; controller.abort(); }, limit);
     let requestId: string | null = null;
     let gotResponse = false;
