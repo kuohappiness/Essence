@@ -86,6 +86,8 @@ export interface DeckMetrics {
   generationMs: number | null; costUsd: number | null;
   /** token（§9）：輸入含快取寫入與讀取、輸出；有一步不知道就是 null。 */
   tokens: { input: number | null; output: number | null };
+  /** 加深的 token（§9）：評了的每一篇加總，和生成的分開；沒跑加深是 null。 */
+  deepenTokens: { input: number | null; output: number | null } | null;
   /** 地圖（§5）：這一組不交地圖是 null。 */
   map: { missing: boolean; missed: number; issues: number } | null;
   /** 加深（§6）：沒跑加深（手貼、設定沒寫）是 null。 */
@@ -122,13 +124,24 @@ export const readReports = (folder: Folder): BatchReport[] => existsSync(results
 const sum = (values: readonly number[]): number => values.reduce((total, each) => total + each, 0);
 
 /** 生成時間與用量：完成的那一次嘗試，每一步的時間加起來（手貼的沒有）。 */
-function generationOf(folder: Folder, job: string): { ms: number | null; cost: number | null; tokens: DeckMetrics['tokens'] } {
+/**
+ * 一份生成的用量：完成的那一次嘗試的每一步。實送字數（rule-test-d236.md §9，含代入的前一步回覆）在送出時記進事件；
+ * 舊的事件與手貼沒有記，照凍結的提示字數（sent 是 null）。
+ */
+function generationOf(folder: Folder, job: string): { ms: number | null; cost: number | null; tokens: DeckMetrics['tokens']; sent: number | null } {
   const events = readEvents(folder);
   const attempt = jobState(events, job).last?.attempt;
   const steps = events.filter(event => event.job === job && event.attempt === attempt && event.type === 'step');
   const ms = steps.map(event => event.detail?.ms).filter((value): value is number => typeof value === 'number');
   const cost = steps.map(event => event.detail?.costUsd).filter((value): value is number => typeof value === 'number');
-  return { ms: ms.length ? sum(ms) : null, cost: cost.length ? sum(cost) : null, tokens: tokensOf(steps.map(event => event.detail?.usage)) };
+  const sent = steps.map(event => event.detail?.sent).filter((value): value is number => typeof value === 'number');
+  return { ms: ms.length ? sum(ms) : null, cost: cost.length ? sum(cost) : null, tokens: tokensOf(steps.map(event => event.detail?.usage)), sent: sent.length && sent.length === steps.length ? sum(sent) : null };
+}
+
+/** 加深的 token（§9）：這一份每一篇完成的那一次。 */
+function deepenTokensOf(folder: Folder, job: string): DeckMetrics['tokens'] {
+  const events = readEvents(folder, join('加深', '事件.jsonl'));
+  return tokensOf(events.filter(event => event.type === 'done' && event.job?.startsWith(`${job}~加深~`)).map(event => event.detail?.usage));
 }
 
 /** token（rule-test-d236.md §9）：每一步的 usage 加總；輸入＝input＋快取寫入＋快取讀取，輸出＝output。有一步沒有就是不知道（null），不是 0。 */
@@ -275,8 +288,9 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       childPrompts, sureRequired: sure, perRequired: childPrompts / Math.max(sure, 0.5),
       targets: sum(pieces.map(piece => piece.targets)), prompts, candidates: sum(pieces.map(piece => piece.candidates)), adds: sum(pieces.map(piece => piece.adds)),
       unsaveable,
-      rulesChars: sum(mine.map(step => step.rulesChars)), promptChars: sum(mine.map(step => step.chars)),
+      rulesChars: sum(mine.map(step => step.rulesChars)), promptChars: generation.sent ?? sum(mine.map(step => step.chars)),
       generationMs: generation.ms, costUsd: generation.cost, tokens: generation.tokens,
+      deepenTokens: entry.deepen.kind === 'ok' ? deepenTokensOf(folder, entry.job) : null,
       map: mapMetrics, deepen: deepenMetrics,
       leakCandidates: leakCandidates(deck, issues), worthLearning: merged.worthLearning,
       byJudge: Object.fromEntries([...results].map(([judge, result]: [string, JudgeResult]) => [judge, {

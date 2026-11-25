@@ -17,7 +17,7 @@ function deck(group: string, more: Partial<DeckMetrics> = {}): DeckMetrics {
     harm: harm(), minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: 0, crossRows: 0, crossWrong: 0,
     childPrompts: 9, sureRequired: 3, perRequired: 3,
     targets: 9, prompts: 9, candidates: 0, adds: 0, unsaveable: false, rulesChars: 1000, promptChars: 5000, generationMs: 60_000, costUsd: null,
-    tokens: { input: 1000, output: 100 }, map: null, deepen: null,
+    tokens: { input: 1000, output: 100 }, deepenTokens: null, map: null, deepen: null,
     leakCandidates: [], worthLearning: 0, byJudge: {}, issues: [], ...more,
   };
 }

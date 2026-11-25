@@ -126,7 +126,7 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
       writeFileSync(join(dir, `${String(step.step)}.md`), result.reply, { encoding: 'utf8', flag: 'wx' });
       if (result.session) sessions.set(step.conversation, result.session);
       replies.set(replyName(job, step), result.reply);
-      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, chars: result.reply.length, ...note ? { material: note } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } });
+      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, sent: text.length, chars: result.reply.length, ...note ? { material: note } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } });
     }
     finalize(folder, job, attempt);
     return 'done';

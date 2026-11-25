@@ -115,6 +115,8 @@ void test('多步：同一個對話接著說（resume、不再附 PDF），{{A.1
   assert.equal(second.pdf, null);
   assert.deepEqual(readdirSync(join(folder.root, '生成', '原稿')).sort(), ['乙-L3-claude-1-1.md', '乙-L3-claude-1-2.md', '甲-L3-claude-1.md']);
   assert.equal(jobState(readEvents(folder), '乙-L3-claude-1').status, 'done');
+  // 實送字數（rule-test-d236.md §9）：含代入的前一步回覆，送出時記進事件。
+  assert.equal(readEvents(folder).find(event => event.job === '乙-L3-claude-1' && event.type === 'step' && event.step === 2)?.detail?.sent, '組二第二步：前一步是「第一步的清單」'.length);
 });
 
 void test('多步的後一步失敗：那一步開新的對話時，重跑從那一步接著做（沿用前一步的回覆、記下沿用哪一次）；接著同一個對話的從頭來', async () => {
