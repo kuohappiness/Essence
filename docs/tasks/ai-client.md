@@ -198,7 +198,8 @@ packages/ai-client/
 
 第一步做完（分支 `claude/project-thread-q0jv5f`：套件 `8a5223cb`、共用檢查與 CI `74143921`），還沒合併：
 
-- 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、144 個離線測試）通過。
+- 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、147 個離線測試）通過。
+- GitHub 上的 Codex 自動審查（PR #51，`1c993b62`）提了三項 P2，各先寫一個會失敗的測試再修，一項一個 commit：openai-chat 串流的拒答被丟掉（`1dc7db34`）、非串流回應分段慢到時被誤判閒置逾時（`e3761c6c`）、`extraBody` 改了推理等級時證據記錯（`1fc4d355`）。
 - 共用檢查：`tools/` 的 `npm run self-check` 通過；分派、gate、hook、雲端設定、邊界的測試都補了套件的案例。
 - 真的連線（雲端，假金鑰，2026-11-25）：Anthropic 回 401 `authentication_error` 並帶 `request-id`，分類成 `auth`；Google 回 400 `API_KEY_INVALID`，分類成 `auth`；OpenAI 與 OpenRouter 被雲端的網路設定擋住，沒測到。
 - 改 `cloud-setup.mjs` 的第 ② 件（2026-11-25，這個雲端 session）：另開沒有 `node_modules` 的 worktree（`1c993b62`），PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑 hook，原文：「雲端環境設定：PATH 上的 Node 是 22.23.5；/opt/node24/bin 有 v24.22.3，但沒有 CLAUDE_ENV_FILE，之後的指令仍是舊版，跑指令前先 export PATH="/opt/node24/bin:$PATH"；core.hooksPath 已設為 .githooks；tools：npm ci 完成；apps/Cards：npm ci 完成；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：npm ci 完成」。
