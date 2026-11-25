@@ -62,6 +62,8 @@ export interface Config {
   judges: Judge[];
   rejudge: number;
   adjudicator: Judge;
+  /** 評分表的三個對話（§5-2）：寫的一方（也回應核對）與核對的一方。 */
+  rubric: { writer: Judge; checker: Judge };
   gates: Gates;
 }
 
@@ -243,6 +245,11 @@ export function readConfig(source: string): Config {
   if (judges.length !== 2) errors.add('評審', '要剛好兩位（合併規則是兩位的，§6-2）');
   if (judges.length === 2 && judges[0].name === judges[1].name) errors.add('評審', '兩位的名稱一樣，寫「名稱」分開');
   const adjudicator = doc['裁定'] === undefined ? { name: 'claude', kind: 'claude' as const, model: 'claude-opus-5-5', effort: 'high' } : judge(doc['裁定'], '裁定', '裁定者');
+  const rawRubric = isRaw(doc['評分表']) ? doc['評分表'] : {};
+  const rubric = {
+    writer: rawRubric['寫'] === undefined ? { name: 'claude', kind: 'claude' as const, model: 'claude-fable-5-2', effort: 'high' } : judge(rawRubric['寫'], '評分表 寫', '評審'),
+    checker: rawRubric['核對'] === undefined ? { name: 'codex', kind: 'codex' as const, model: 'gpt-6.2-sol', effort: 'high' } : judge(rawRubric['核對'], '評分表 核對', '評審'),
+  };
 
   const rawGates = isRaw(doc['門檻']) ? doc['門檻'] : (errors.add('門檻', '少了門檻（開跑前一定要寫，§6-3）'), {});
   const baseline = need(rawGates, '基準', '門檻', errors);
@@ -280,6 +287,7 @@ export function readConfig(source: string): Config {
     lessons, groups, generators, judges,
     rejudge: Number(doc['評審重評'] ?? 0),
     adjudicator,
+    rubric,
     gates,
   };
   if (!(config.timeoutMinutes > 0)) errors.add('逾時分鐘', '要大於 0');

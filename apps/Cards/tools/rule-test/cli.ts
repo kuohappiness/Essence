@@ -10,6 +10,7 @@ import { init } from './init.ts';
 import { judge } from './judge.ts';
 import { paste } from './paste.ts';
 import { probe } from './probe.ts';
+import { rubric } from './rubric-chat.ts';
 import { status } from './status.ts';
 import { unblind } from './unblind.ts';
 
@@ -17,6 +18,7 @@ const COMMANDS: Record<string, () => Promise<void>> = {
   probe,
   init,
   freeze,
+  rubric,
   generate,
   paste,
   check,
