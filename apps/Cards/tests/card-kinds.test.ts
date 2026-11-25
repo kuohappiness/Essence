@@ -92,6 +92,17 @@ const ROWS: readonly [string, string, readonly string[], readonly string[]][] = 
   ['鳥鳴澗 第 1 句 接句', '夜靜春山空',
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip'],
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip']],
+  // 讀得出組又寫了排序、接句（題型模組任務說明 §1-3 第 3 點，Fable 第一輪的窮舉）：比較句照比較卡（比較卡先認）；兩格填空在國語是全詩順序，
+  // 英文沒寫全詩、句子排序又排除讀得出組的名稱，照翻面；一格填空是接句。多音字的括號讀不出組，只有一格填空的是接句。
+  ['寨（寨、塞） 排序', '寨',
+    ['flip flip', 'group pick', 'flip flip', 'poem-order pick'],
+    ['flip flip', 'group pick', 'flip flip', 'flip flip']],
+  ['寨（寨、塞） 接句', '寨',
+    ['flip flip', 'group pick', 'couplet flip', 'flip flip'],
+    ['flip flip', 'group pick', 'couplet flip', 'flip flip']],
+  ['長（ㄓㄤˇ、ㄔㄤˊ） 接句', 'ㄓㄤˇ',
+    ['flip flip', 'flip flip', 'couplet flip', 'flip flip'],
+    ['flip flip', 'flip flip', 'couplet flip', 'flip flip']],
   // 多音字（D-230 第 4 點）：題目裡沒有「長（＿＿）」這種句子時讀不成，照翻面並提示；讀得成的在下面自己的測試。
   ['長（ㄓㄤˇ、ㄔㄤˊ） 讀音', 'ㄓㄤˇ',
     ['flip flip pick-not-recognized', 'flip flip pick-not-recognized', 'flip flip pick-not-recognized', 'flip flip pick-not-recognized'],
@@ -150,3 +161,15 @@ for (const { kind, type, subject, text } of KIND_SAMPLES) {
     assert.equal(questionType(card), type);
   });
 }
+
+// 題型對得上（題型模組任務說明 §1-7，Fable G2 b）：卡型決定題型，questionType 只看卡片自己（compose.ts），兩邊在這裡對齊。
+// 比較卡、多音字、排序是點選；其他卡型和沒有卡型的照這張卡打不打字。多一種卡型時這張表編譯不過，要寫它是不是點選。
+const PICKED: Record<NonNullable<Target['kind']>['id'], boolean> = { group: true, polyphone: true, order: true, typing: false, couplet: false };
+void test('題型對得上：卡型範例的每一張卡，questionType 和卡型一致', async t => {
+  for (const { kind, subject, text } of KIND_SAMPLES) {
+    const h = await setup(t, { [`Essence Cards/${subject}/範例.md`]: `---\n科目: ${subject}\n---\n${text}` });
+    const card = view(await h.open({ subject })).card;
+    const own = card.target.kind;
+    assert.equal(questionType(card), own && PICKED[own.id] ? 'pick' : card.typed ? 'typed' : 'flip', kind);
+  }
+});
