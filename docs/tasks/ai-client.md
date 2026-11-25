@@ -83,7 +83,7 @@ packages/ai-client/
 - `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
-- **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄、費用與證據都照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。
+- **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄與證據照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。
 - **推理等級**：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。目錄寫每個模型或廠商每一級送什麼；那一家沒有的等級取最近的一級（一樣近取高的），`trace.warnings` 記一則；不指定就不送，`trace.reasoningSent` 是 `null`。
 - **用量的意思**：`inputTokens` 是全部輸入（含快取讀到與寫進快取的）；`cachedInputTokens` 是其中從快取讀到的；`cacheWriteInputTokens` 是其中寫進快取的；`outputTokens` 是全部計費的輸出（含推理）；`reasoningTokens` 是其中的推理。拿不到的寫 `null`，不寫 0。
 - **結果**：`text`、`stopReason`（`end`、`length`、`content_filter`、`refusal`、`other`；`length` 不算錯誤）、`usage`、`cost`（服務在回應裡回報金額的（OpenRouter）用它：`estimated: false`、`pricesAsOf: null`，不在目錄的模型也有；其他照目錄的牌價估：`estimated: true`、`pricesAsOf` 是目錄的查價日期；不在目錄又沒有回報的是 `null`，L2 R19）、`message`（可以原樣放回下一輪的 `input`）、`trace`。
@@ -137,7 +137,7 @@ packages/ai-client/
 
    錯誤的 `retryable` 是「自動重送是安全的」：種類可以重試，而且 `afterResponse` 是 false（拿到成功的回應後才出錯的一律 false，L2 R6）。分類看回應內容，不只看狀態碼。分不出是不是額度用完的 429 算 `rate_limit`，重試用完仍失敗時說明加一句「如果一直這樣，可能是額度用完了」。每種方言的錯誤範例各測一次。
 8. **金鑰**：情境表在每一種錯誤、每一種結果的 `JSON.stringify` 與例外訊息裡找不到測試用的金鑰；`http://` 的遠端網址、帶帳密的網址在送出前就擋；轉址不跟。
-9. **用量與費用**：照〈5〉的意思對應；費用照牌價（含快取讀寫與長輸入的價；寫進快取只照預設期限的價，見[已知的限制](../backlog.md#已知的限制)），不含免費額度；服務回報的金額（OpenRouter）優先，欄位照〈5〉〈結果〉。
+9. **用量與費用**：照〈5〉的意思對應；費用照牌價（含快取讀寫與長輸入的價；寫進快取只照預設期限的價，見[已知的限制](../backlog.md#已知的限制)），不含免費額度；服務說回答的是這一家目錄裡另一個模型（相容服務、代理、路由換了模型），照回答的那一個估價、`trace.warnings` 記一筆，不認得的模型名稱（快照名稱）照請求的（L2 第二輪 R13）；服務回報的金額（OpenRouter）優先，欄位照〈5〉〈結果〉。
 10. **目錄驗證**：方言要在登記表裡、網址照〈3〉第 4 點、價格是非負數、日期是合法日期、`schemaVersion` 對得上；壞掉的那一筆跳過並回報。
 11. **情境表**：每一種方言都跑同一張表：純文字、文字加圖片、文字加 PDF、推理等級、串流成功（每個位元組切開、CRLF）、非串流、服務回 JSON、輸出上限、內容被擋、串流裡的錯誤、沒有結束事件、中途斷線、格式壞掉、每一種錯誤回應、429 帶 `Retry-After` 後成功、500 兩次後成功、金鑰遮蔽、串流中途取消、結束之後串流沒關、測試連線。新增方言時登記了卻沒有範例，測試會失敗。
 

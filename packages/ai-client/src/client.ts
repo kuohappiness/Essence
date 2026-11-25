@@ -79,6 +79,8 @@ interface Resolved {
   options: ProviderOptions;
   limits: NonNullable<ProviderSpec['limits']>;
   model: ModelSpec | undefined;
+  /** 這一家目錄裡的模型：服務回報別的模型時拿來估價（L2 第二輪 R13）。 */
+  models: readonly ModelSpec[];
   inputs: InputKind[] | undefined;
   reasoning: ReasoningSpec | undefined;
   maxOutputTokens: number | undefined;
@@ -120,7 +122,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         providerId: 'custom', dialect, baseUrl: custom.baseUrl.replace(/\/+$/, ''),
         auth: custom.auth === undefined ? dialect.defaultAuth : custom.auth,
         headers: custom.headers ?? {}, options: custom.options ?? {}, limits: {},
-        model: undefined, inputs: undefined, reasoning: undefined, maxOutputTokens: undefined,
+        model: undefined, models: [], inputs: undefined, reasoning: undefined, maxOutputTokens: undefined,
       };
     }
     const provider = catalog.providers.find(p => p.id === endpoint.provider);
@@ -129,7 +131,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const model = modelId === null ? undefined : provider.models.find(m => m.id === modelId);
     return {
       providerId: provider.id, dialect, baseUrl: provider.baseUrl.replace(/\/+$/, ''), auth: provider.auth,
-      headers: provider.headers ?? {}, options: provider.options ?? {}, limits: provider.limits ?? {}, model,
+      headers: provider.headers ?? {}, options: provider.options ?? {}, limits: provider.limits ?? {}, model, models: provider.models,
       inputs: model?.inputs ?? provider.defaults?.inputs,
       reasoning: model?.reasoning ?? provider.defaults?.reasoning,
       maxOutputTokens: model?.maxOutputTokens ?? provider.defaults?.maxOutputTokens,
@@ -225,6 +227,10 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           throw fail('content_blocked', `no output: ${output.rawStopReason ?? output.stopReason}`, { provider: r.providerId, requestId, providerCode: output.rawStopReason, secrets, afterResponse: true });
         }
         progress({ type: 'done' });
+        // 服務說回答的是目錄裡另一個模型（相容服務、代理、路由換了模型）：照回答的那一個估價；不認得的（快照名稱）照請求的（L2 第二輪 R13）。
+        const answered = output.resolvedModel === null ? undefined : r.models.find(m => m.id === output.resolvedModel);
+        const pricedBy = answered ?? r.model;
+        if (answered && answered !== r.model) warnings.push(`cost priced as ${answered.id}: the service reported a different model than requested`);
         // 服務回送的字串裡有金鑰就遮掉（L2 R1）：文字、編號、模型名稱、warnings 都在這一處。
         return redactResult({
           text: output.text,
@@ -232,7 +238,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
           usage: output.usage,
           cost: output.reportedCost !== null
             ? { amount: output.reportedCost, currency: 'USD', estimated: false, pricesAsOf: null }
-            : costOf(output.usage, r.model, dayOf(startedAt)),
+            : costOf(output.usage, pricedBy, dayOf(startedAt)),
           message: { role: 'assistant', content: [{ type: 'text', text: output.text }] },
           trace: {
             provider: r.providerId, dialect: r.dialect.id, host: new URL(call.url).host, requestedModel: request.model,

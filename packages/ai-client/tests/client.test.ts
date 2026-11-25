@@ -100,7 +100,9 @@ void test('推理等級：沒有的用最接近的（一樣近取高的）並記
     const fetch = mockFetch([{ status: 200, headers: reply.stream.headers, chunks: [readSse(reply, reply.stream.file)] }]);
     const result = await createAiClient({ fetch, clock: instantClock() }).generate(request({ endpoint: { provider }, model, reasoning: level }));
     assert.equal(result.trace.reasoningSent, sent, `${provider} ${model} ${level}`);
-    assert.equal(result.trace.warnings.length, warnings, `${provider} ${model} ${level}: ${result.trace.warnings.join('; ')}`);
+    // 只數推理的 warning：範例回應報的是範例自己的模型，對某些列是目錄裡另一個模型，會多一筆估價的 warning（L2 第二輪 R13）。
+    const reasoningWarnings = result.trace.warnings.filter(w => !w.startsWith('cost priced as'));
+    assert.equal(reasoningWarnings.length, warnings, `${provider} ${model} ${level}: ${result.trace.warnings.join('; ')}`);
   }
 });
 
@@ -612,6 +614,39 @@ void test('Gemini 最後一塊只有用量：前面的停止原因、模型、�
     [result.text, result.stopReason, result.trace.rawStopReason, result.trace.resolvedModel, result.trace.responseId, result.usage.inputTokens],
     ['光合作用', 'content_filter', 'SAFETY', 'gemini-3.8-flash-001', 'gem-2', 10],
   );
+});
+
+void test('服務說回答的是目錄裡另一個模型：整類照回答的那一個估價、記 warning；不認得的照請求的（L2 第二輪 R13）', async () => {
+  const client = createAiClient({ fetch: mockFetch([OK]), clock: instantClock() });
+  for (const c of loadCases()) {
+    const providerId = 'provider' in c.endpoint ? c.endpoint.provider : null;
+    const provider = client.providers().find(p => p.id === providerId);
+    assert.ok(provider, c.dialect);
+    const sse = readSse(c, c.stream.file);
+    const run = async (requested: string, reported: string) => {
+      const baseline = await createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [sse] }]), clock: instantClock() })
+        .generate(request({ endpoint: c.endpoint, model: c.model }));
+      const original = baseline.trace.resolvedModel;
+      assert.ok(original, `${c.dialect} 的範例要回報模型`);
+      const body = sse.split(original).join(reported);
+      return createAiClient({ fetch: mockFetch([{ status: 200, headers: { 'content-type': 'text/event-stream' }, chunks: [body] }]), clock: instantClock() })
+        .generate(request({ endpoint: c.endpoint, model: requested }));
+    };
+    const ids = provider.models.map(m => m.id);
+    for (const a of ids) {
+      for (const b of ids) {
+        if (a === b) continue;
+        const swapped = await run(a, b);
+        const direct = await run(b, b);
+        assert.equal(swapped.trace.resolvedModel, b);
+        assert.deepEqual(swapped.cost, direct.cost, `${c.dialect}：請求 ${a}、服務說 ${b}`);
+        assert.ok(swapped.trace.warnings.some(w => w.includes(b)), `${c.dialect}：請求 ${a}、服務說 ${b}：${swapped.trace.warnings.join(' / ')}`);
+        assert.ok(!direct.trace.warnings.some(w => w.includes('different model')), `${c.dialect}：${b}`);
+      }
+      const unknown = await run(a, 'zz-unlisted-model');
+      assert.deepEqual(unknown.cost, (await run(a, a)).cost, `${c.dialect}：請求 ${a}、服務說不認得的模型`);
+    }
+  }
 });
 
 void test('extraBody 不能改模型或串流；改了哪些欄位記在 trace，未登錄模型的推理欄位也查得到（L2 R13）', async () => {
