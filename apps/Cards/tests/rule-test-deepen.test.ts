@@ -340,6 +340,26 @@ void test('加深評分：每個有加深的區組、每位評審另開一個對
   assert.match(lock, new RegExp(`${block.name}-加深\\.json`));
 });
 
+void test('加深裁定改記的去重（§3，L2 第 3 輪 2）：沒寫項的兩筆照行號有沒有重疊算同一筆，和合併同一條規則', async () => {
+  const broken = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>';
+  const folder = await generated({ 乙: broken }, 'L1', '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |');
+  await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
+  const [block] = blindFolder(folder, { log: () => {} }).blocks;
+  const { items } = JSON.parse(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${block.deepens[0]}.json`), 'utf8')) as { items: { id: string; line: number }[] };
+  // Codex 只記重大（第 1 項那一行、沒寫項）；Fable 記判錯（第 1、2 項兩行、沒寫項），行號有重疊。
+  const codex = fakeJudge({ shapeDeepen: (result, codes) => { result.issues.push({ deck: [...codes.keys()][0], kind: '重大錯誤', item: '', lines: [items[0].line], note: '' }); } });
+  const fable = fakeJudge({ shapeDeepen: (result, codes) => { result.issues.push({ deck: [...codes.keys()][0], kind: '判錯', item: '', lines: [items[0].line, items[1].line], note: '' }); } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
+  await runDisputes(folder, { adapters: { claude: request => {
+    request.record('{}', '');
+    const value = { verdict: '不成立', quality: '判錯', reason: '沒教反，但答案只收一種說法' };
+    return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 's', warnings: [], ms: 1, models: [], structured: value });
+  } }, log: () => {} });
+  checkFolder(folder, () => {});
+  const first = unblindFolder(folder, { log: () => {} }).decks.find(deck => deck.group === '甲')!;
+  assert.deepEqual([first.deepen?.major, first.deepen?.harm], [0, 1]);
+});
+
 void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接錯、歧見；只有一位記的加深重大照裁定；卡組存不了的份加深機會全漏、確定接錯不算', async () => {
   const broken = '<<<全貌>>>\n- 借與借出\n<<<架構>>>\n- 第一層：字義\n<<<卡組>>>\n國二上英文 L3 單字\n- borrow 英翻中\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>';
   const folder = await generated({ 乙: broken }, 'L1', '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |\n| D2 | 加深機會 | 用到 R1：借貸的片語 | p.3 | | |');
