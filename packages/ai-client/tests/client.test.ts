@@ -1,7 +1,7 @@
 // client 的共同行為（docs/tasks/ai-client.md〈7〉）：送出前的檢查、推理對應、逾時、重試、進度、金鑰與費用。
 // 各家格式的部分在 conformance.test.ts；這裡用 openai-responses 的範例當代表。
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { AiError, createAiClient, isAiError, type AiClientOptions, type FetchLike, type GenerateRequest, type ProgressEvent } from '../src/index.ts';
 import { mockFetch, sse, type MockReply } from '../src/testing.ts';
 import { KEY, instantClock, loadCases, readSse } from './helpers.ts';
@@ -199,6 +199,45 @@ void test('送出後拿不到回應標頭：服務可能已經在做，丟 timeo
   assert.deepEqual([error.kind, error.retryable, error.afterResponse], ['timeout', false, false]);
   assert.match(error.message, /no response headers within 20 ms/);
   assert.equal(fetch.requests.length, 1);
+});
+
+/** 假計時器下等結果：每一輪先讓排隊的工作跑完，再把時間往前推 1 秒，最多推 seconds 秒。 */
+async function settleWithFakeTime<T>(t: TestContext, promise: Promise<T>, seconds: number): Promise<PromiseSettledResult<T> | undefined> {
+  let settled: PromiseSettledResult<T> | undefined;
+  promise.then(value => { settled = { status: 'fulfilled', value }; }, (reason: unknown) => { settled = { status: 'rejected', reason }; });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  for (let s = 0; s < seconds && !settled; s++) {
+    await flush();
+    t.mock.timers.tick(1000);
+  }
+  await flush();
+  return settled;
+}
+
+void test('Gemini 想完才送回應標頭：預設不另外限時等標頭，其他家照舊約 2 分鐘（冒煙測試 2026-11-27）', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const gemini = loadCases().find(c => c.dialect === 'gemini-generate-content')!;
+  const slow = (reply: MockReply): MockReply => ({ headersDelayMs: 130_000, ...reply });
+  const google = await settleWithFakeTime(t, createAiClient({ fetch: mockFetch([slow({ ...OK, chunks: [readSse(gemini, gemini.stream.file)] })]), clock: instantClock() })
+    .generate(request({ endpoint: { provider: 'google' }, model: 'gemini-3.8-flash' })), 140);
+  assert.equal(google?.status, 'fulfilled', google?.status === 'rejected' ? String(google.reason) : '還沒結束');
+
+  const openaiFetch = mockFetch([slow(OK), OK]);
+  const other = await settleWithFakeTime(t, createAiClient({ fetch: openaiFetch, clock: instantClock() }).generate(request()), 140);
+  assert.ok(other?.status === 'rejected' && isAiError(other.reason), String(other?.status));
+  const error = other.reason;
+  assert.deepEqual([error.kind, error.retryable], ['timeout', false]);
+  assert.match(error.message, /no response headers within 121000 ms/);
+  assert.equal(openaiFetch.requests.length, 1);
+});
+
+void test('Gemini 也照呼叫端給的等標頭時限', async () => {
+  const gemini = loadCases().find(c => c.dialect === 'gemini-generate-content')!;
+  const fetch = mockFetch([{ headersDelayMs: 200, ...OK, chunks: [readSse(gemini, gemini.stream.file)] }]);
+  const error = await rejects(createAiClient({ fetch, clock: instantClock(), responseTimeoutMs: 20 })
+    .generate(request({ endpoint: { provider: 'google' }, model: 'gemini-3.8-flash' })));
+  assert.equal(error.kind, 'timeout');
+  assert.match(error.message, /no response headers within 20 ms/);
 });
 
 void test('整體逾時：丟 timeout、帶已收到的文字、不重送；之後不再有進度', async () => {

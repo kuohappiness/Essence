@@ -81,6 +81,7 @@ export const openaiResponses: Dialect = {
   id: 'openai-responses',
   defaultAuth: { header: 'Authorization', scheme: 'Bearer' },
   requestIdHeader: 'x-request-id',
+  headersAfterThinking: false,
 
   buildGenerate(ctx: BuildContext): HttpCall {
     const body: Json = {
