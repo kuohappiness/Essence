@@ -87,8 +87,10 @@ function reportCells(decks: readonly DeckMetrics[]): (string | number)[] {
 function conversationLine(folder: Folder, decks: readonly DeckMetrics[]): string {
   const judges = folder.config.judges.length;
   const blocks = (pick: (deck: DeckMetrics) => boolean): number => new Set(decks.filter(pick).map(deck => `${String(deck.batch)}/${deck.block}`)).size * judges;
-  const deepen = decks.reduce((total, deck) => total + (deck.deepen ? deck.deepen.pieces + deck.deepen.abandoned : 0), 0);
-  return `對話數（不含重試與重評）：生成 ${String(decks.length)}、加深 ${String(deepen)}、卡組評分 ${String(blocks(() => true))}、地圖評分 ${String(blocks(deck => deck.map !== null && !deck.map.missing))}、加深評分 ${String(blocks(deck => deck.deepen !== null && !deck.deepen.undeepened))}`;
+  // 生成與加深一份一次：同一份基準在拆開的區組評了幾次都只算一份（§5-6）；評分照區組算。
+  const once = uniqueDecks(decks);
+  const deepen = once.reduce((total, deck) => total + (deck.deepen ? deck.deepen.pieces + deck.deepen.abandoned : 0), 0);
+  return `對話數（不含重試與重評）：生成 ${String(once.length)}、加深 ${String(deepen)}、卡組評分 ${String(blocks(() => true))}、地圖評分 ${String(blocks(deck => deck.map !== null && !deck.map.missing))}、加深評分 ${String(blocks(deck => deck.deepen !== null && !deck.deepen.undeepened))}`;
 }
 
 function batchLines(reports: readonly BatchReport[]): string[] {

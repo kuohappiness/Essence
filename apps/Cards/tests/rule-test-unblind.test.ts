@@ -158,6 +158,16 @@ void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀
   assert.equal(readFileSync(log, 'utf8').split('\n').filter(Boolean).length, 1);
 });
 
+void test('對話數（L2 第 3 輪 5）：五組拆成兩個區組、同一份基準評兩次時，生成照份數算，評分照區組算', async () => {
+  const folder = await blinded({}, '', undefined, ['甲', '乙', '丙', '丁', '戊']);
+  await runJudges(folder, { adapters: { codex: fakeJudge().adapter, claude: fakeJudge().adapter }, log: () => {} });
+  await runDisputes(folder, { adapters: { claude: () => Promise.reject(Error('沒有要裁定的')) }, log: () => {} });
+  checkFolder(folder, () => {});
+  unblindFolder(folder, { log: () => {} });
+  const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8');
+  assert.ok(summary.includes('對話數（不含重試與重評）：生成 5、加深 0、卡組評分 4、地圖評分 0、加深評分 0'), summary.split('\n').find(line => line.startsWith('對話數')));
+});
+
 void test('token（rule-test-d236.md §9）：輸入＝input＋快取寫入＋快取讀取，輸出＝output；有一步沒有 usage 就是不知道', () => {
   const step = { input_tokens: 10, cache_creation_input_tokens: 200, cache_read_input_tokens: 3000, output_tokens: 40 };
   assert.deepEqual(tokensOf([step, { input_tokens: 5, output_tokens: 6 }]), { input: 3215, output: 46 });
