@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：待審｜下一步：L2 收尾了（[第四輪修正表](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)，雲端與 Windows 都過），[D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 也寫好了；合併前只差在這個分支開新雲端 session 驗雲端設定第 ① 件，再請使用者同意合併｜等誰：使用者
+狀態：實作中｜下一步：第一步已合併（PR #51）；第二步冒煙測試，使用者用真的金鑰在自己的電腦跑 `npm run smoke`；雲端設定第 ① 件記成[補測](../backlog.md#技術債)｜等誰：使用者
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -199,7 +199,7 @@ packages/ai-client/
 
 ## 結果
 
-第一步做完（分支 `claude/project-thread-q0jv5f`：套件 `8a5223cb`、共用檢查與 CI `74143921`），還沒合併：
+第一步做完（分支 `claude/project-thread-q0jv5f`：套件 `8a5223cb`、共用檢查與 CI `74143921`），PR #51 2026-11-26 合併（main `c0561bef`）：
 
 - 套件：`packages/ai-client/` 的 `npm run check`（型別、ESLint、knip、220 個離線測試）通過。
 - GitHub 上的 Codex 自動審查（PR #51，`1c993b62`）提了三項 P2，各先寫一個會失敗的測試再修，一項一個 commit：openai-chat 串流的拒答被丟掉（`1dc7db34`）、非串流回應分段慢到時被誤判閒置逾時（`e3761c6c`）、`extraBody` 改了推理等級時證據記錯（`1fc4d355`）。
@@ -211,6 +211,7 @@ packages/ai-client/
 - L2 第三輪（只審第二輪的修正）：13 項，12 項修了，延續 R8 的期限寫成前提，延續 R5、R7 照舊是已知的限制；每一項在[審查報告〈Claude 核對（第三輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第三輪>)。
 - L2 第四輪（最後一輪）：12 項，使用者 2026-11-25 說「用 fable 5.2 xhigh 看一次，如果他也同意就不再送審」；Fable 有條件同意，照條件修了 10 項、第 2 項記進已知的限制，不再送 Codex（[審查報告〈Claude 修正（第四輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)）。最後版本 `480470ec` 在雲端與使用者的 Windows 電腦上，套件 220 個測試、共用檢查都過。
 - D-232：使用者 2026-11-26 同意，已寫成 [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)。
-- 還沒做：第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
+- 第 ① 件：使用者 2026-11-26 在決定卡選「合併後我自己驗」。合併後用一次性排程開了新的專案討論串，它回報的原文：hook 的輸出「沒看到 hook 輸出」；`git log --oneline -1` 是 `c0561be`；`git config core.hooksPath` 空白（exit 1）；`node --version` 是 `v22.23.5`（`/opt/node22/bin/node`）；三個 `node_modules` 都不存在。原因是專案討論串的 session 專案資料夾是 repo 的上一層資料夾、repo clone 在它底下，不載 repo 的 `.claude/settings.json`（這個 session 的 `CLAUDE_PROJECT_DIR` 也是空的），所以 hook 根本沒被叫到，不是這次改壞的。要在 claude.ai/code 開的一般雲端 session 才驗得到，記成技術債；[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)補上要在哪裡開。
+- 還沒做：冒煙測試（第二步）。
 
-延後的測試：沒有。
+延後的測試：「補測：雲端設定第 ① 件」
