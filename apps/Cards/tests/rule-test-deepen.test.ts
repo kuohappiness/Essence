@@ -306,9 +306,12 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   assert.equal(block.deepens.length, 1);
   const mark = (result: DeepenResult, item: string, reason: '接錯目標' | '沒有加深'): void => { Object.assign(result.items.find(each => each.item === item)!, { verdict: '接錯', reason }); };
   const noD2 = (result: DeepenResult): void => { result.rows.find(row => row.row === 'D2')!.decks.forEach(cell => Object.assign(cell, { verdict: '沒有', evidence: '', items: [] })); };
-  const fable = fakeJudge({ shapeDeepen: result => { mark(result, '1-2', '接錯目標'); noD2(result); result.unsure = '1-3 是換句話問，還是往下一層，兩種讀法都說得通'; } });
-  // 只有 Codex 記的重大錯誤（第 1 項那一行）：送裁定。
+  // 只有 Codex 記的重大錯誤（第 1 項那一行）：送裁定。Fable 在同一項記判錯：裁定改記判錯時，同一項同一種只算一筆（§3 去重）。
   const { items } = JSON.parse(readFileSync(join(folder.root, '評分', '批1', '加深', 'L3', `${block.deepens[0]}.json`), 'utf8')) as { items: { id: string; line: number }[] };
+  const fable = fakeJudge({ shapeDeepen: (result, codes) => {
+    mark(result, '1-2', '接錯目標'); noD2(result); result.unsure = '1-3 是換句話問，還是往下一層，兩種讀法都說得通';
+    result.issues.push({ deck: [...codes.keys()][0], kind: '判錯', item: '1-1', lines: [items[0].line], note: '答案只收一種說法' });
+  } });
   const codex = fakeJudge({ shapeDeepen: (result, codes) => {
     mark(result, '1-2', '接錯目標'); mark(result, '1-3', '沒有加深'); noD2(result);
     result.issues.push({ deck: [...codes.keys()][0], kind: '重大錯誤', item: '1-1', lines: [items[0].line], note: 'lend 的方向教反了' });
