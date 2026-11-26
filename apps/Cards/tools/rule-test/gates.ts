@@ -71,6 +71,8 @@ const pText = (p: number): string => `p＝${percent(p)}`;
 interface Series { c: number[]; b: number[]; meanC: number; meanB: number }
 type SeriesOr = Series | { skip: string } | { unknown: string };
 const DEEPEN: readonly LearningMetric[] = ['加深機會漏掉', '確定接錯'];
+/** 值裡有加深那一半的指標：加深放棄的規則（§2-1）也套在它們身上。 */
+const WITH_DEEPEN: readonly string[] = [...DEEPEN, '傷到學習', '沒講為什麼'];
 
 /**
  * 一個指標兩組的值（§2-1）：任一組不適用是跳過；加深放棄的篇已經不在值裡，放棄到整份沒有加深的份不算，
@@ -78,7 +80,7 @@ const DEEPEN: readonly LearningMetric[] = ['加深機會漏掉', '確定接錯']
  */
 export function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], pick: (deck: DeckMetrics) => Value, metric: string): SeriesOr {
   const c = candidate, b = baseline;
-  if ((DEEPEN as readonly string[]).includes(metric) || metric === '傷到學習') {
+  if (WITH_DEEPEN.includes(metric)) {
     const gone = (decks: readonly DeckMetrics[]): number => decks.reduce((total, deck) => total + (deck.deepen?.abandoned ?? 0), 0);
     if (Math.abs(gone(c) - gone(b)) >= 2) return { unknown: `加深放棄的篇：候選 ${String(gone(c))}、基準 ${String(gone(b))}，差 2 篇以上` };
     // 整份都放棄（有篇、但一篇都沒留下）的份不能拿掉了事：那一份的加深指標沒有資料，整項未定。

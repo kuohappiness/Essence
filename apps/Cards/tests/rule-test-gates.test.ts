@@ -215,6 +215,18 @@ void test('沒講為什麼（rule-test-d236.md §17）：列成收益時候選�
   assert.equal(judgeGates(gates, many('候選', [0, 0, 0], deepened), many('現行', [2, 2, 2], deepened)).benefits[0].state, 'clear');
 });
 
+void test('沒講為什麼含加深的筆數，加深放棄的規則也套（§2-1）：兩組放棄差 2 篇、或有份整份放棄，這一項未定', () => {
+  const gates: Gates = { ...GATES, benefits: [{ metric: '沒講為什麼', atLeast: 0.2 }] };
+  const candidate = same('候選', 3, { deepen: deepen({ whyMissing: 1 }) });
+  // 基準每份放棄 1 篇（共 3 篇）：差 2 篇以上。
+  const differ = judgeGates(GATES, candidate, same('現行', 3, { deepen: deepen({ abandoned: 1 }) }));
+  assert.deepEqual([differ.noWorse.find(each => each.metric === '沒講為什麼')?.text, differ.verdict], ['不能變差 沒講為什麼：未定（加深放棄的篇：候選 0、基準 3，差 2 篇以上）', '未定']);
+  // 候選有一份整份放棄：收益也是未定，不會因為那一份沒有加深的筆數而判明顯達到。
+  const gone = [...same('候選', 2, { deepen: deepen() }), deck('候選', { deepen: deepen({ pieces: 0, abandoned: 1 }) })];
+  const benefit = judgeGates(gates, gone, same('現行', 3, { deepen: deepen({ whyMissing: 2 }) })).benefits[0];
+  assert.deepEqual([benefit.state, benefit.text], ['unknown', '收益 沒講為什麼：未定（有份的加深整份都放棄了）']);
+});
+
 void test('五組以上拆區組（§5-6）：同一份基準在每個拆開的區組各評一次，沒有候選的那一次不算缺；真的少了才算', () => {
   // 每一輪拆成兩個區組：B 單數是現行、候選、甲、乙，B 雙數是同一份現行和丙。
   const split = (n: number, m: number): DeckMetrics[] => Array.from({ length: m }, (_, i) => [
