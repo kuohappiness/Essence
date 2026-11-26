@@ -6,7 +6,7 @@ import { deepenGroups, LEARNING_METRICS, type Config, type Generator } from './c
 import { groupDifferences } from './contrast.ts';
 import type { FrozenStep } from './freeze.ts';
 import { judgeGates } from './gates.ts';
-import { EVALUATION, ISSUE_KINDS, levelOf } from './levels.ts';
+import { CHECKLIST, EVALUATION, ISSUE_KINDS, levelOf } from './levels.ts';
 import { bestP, permutationP } from './stats.ts';
 import type { DeckMetrics } from './unblind.ts';
 
@@ -100,14 +100,14 @@ const STATIC_METRICS = [
   ['重大', '卡組的重大錯誤（兩位都記，或一位記、裁定成立）＋卡組存不了（每份 1）＋加深的重大錯誤＋加深存不了的篇'],
   ['傷到學習', '判錯＋洩漏＋漏的必備＋其他算傷到學習的種類（照分級）＋加深的傷到學習'],
   ['判錯', '卡組裡判錯的筆數（兩位記的、一位記的都算；同一題同一種算一筆）'],
-  ['每個必備平均幾題', '孩子要複習的題（正式目標的題＋加題底下的每一題）÷ 確定考到的必備（兩位都判有）；確定考到 0 列時分母當 0.5'],
+  ['每個必備平均幾題', '孩子要複習的題（正式目標的題＋加題底下的每一題）÷ 確定考到的必備（兩位都判有）；確定考到 0 列時分母當 0.5。評分表沒有的「值得學」題也算成負擔，刪掉它們反而算省時間（照「最精華的卡」）'],
   ['多餘的題', '近義重複併成組，每組題數減一加總'],
   ['地圖漏的必備', '兩位都判地圖沒有的必備列；應交地圖沒交是全部必備列'],
   ['地圖問題', '地圖的問題筆數（兩位的合併）'],
   ['加深機會漏掉', '兩位都判沒有的加深機會列；卡組存不了是全部加深機會列'],
   ['確定接錯', '兩位都判接錯的項；兩位不同是歧見，門檻照兩端（有利、不利）各判一次，結論不同是未定'],
   ['規則字數、整份提示字數', '凍結的規則字數；實際送出的字（多步的含代入的前一步回覆）'],
-  ['token', '輸入＝input＋快取寫入＋快取讀取，輸出＝output；生成與加深分開；有一步缺 usage 就是不知道'],
+  ['token', '輸入＝input＋快取寫入＋快取讀取，輸出＝output；生成與加深分開報，打平時的次要指標只看生成的；有一步缺 usage 就是不知道'],
   ['生成時間', '每一份生成所有步驟的時間加總'],
 ] as const;
 
@@ -119,7 +119,7 @@ export function evaluationSpec(config: Config, steps: readonly FrozenStep[]): st
   const k = gates.correction ? Math.max(gates.benefits.length, 1) : 1;
   const lines: string[] = [
     `# 評估規格：${config.name}`, '',
-    `評估版本 ${EVALUATION}。freeze 照設定與工具的常數產生，鎖在 凍結/鎖.json；之後每一步都核對，改了就停下。`, '',
+    `評估版本 ${EVALUATION}；製卡檢查表 ${CHECKLIST}。freeze 照設定與工具的常數產生，鎖在 凍結/鎖.json；之後每一步都核對，改了就停下。`, '',
     '## 1. 適用表', '',
     '凍結時就知道的不適用，那一項的比較跳過，寫原因；不會因此變成未定。', '',
     ...table(['組', '交地圖（卡組步驟都交三段）', '跑加深'], config.groups.map(group => [group.name, maps.includes(group.name) ? '交' : '不交', deepenNames.includes(group.name) ? '跑' : '不跑'])), '',
@@ -180,15 +180,22 @@ export function evaluationSpec(config: Config, steps: readonly FrozenStep[]): st
     ...groupDifferences(config.groups.find(group => group.name === each.a)!, config.groups.find(group => group.name === each.b)!).map(line => `- ${line}`), '',
   ]) : ['（沒有設定對照）', ''], '只報告，不判過不過：逐課、逐生成器、逐批報兩組的平均、差、兩兩比的場數、明不明顯（單邊，5%，兩組都有 3 份以上才判）。', '');
   lines.push('## 7. 模擬加深', '', ...config.deepen ? [
-    `- 跑加深的生成器：${deepening.map(each => each.name).join('、') || '沒有'}；跑加深的組：${deepenNames.join('、')}。`,
-    '- 情境：家長把草稿全部加入、孩子都記穩了，第一次按加深；每一篇加深一次。提示照外掛的加深任務段（凍結時記了 deepen-prompt.ts 的雜湊），加深規則照凍結的全文。',
-    '- 學習目標的 ID 是工具照原稿給的假 ID，同一份原稿每次一樣。',
-    '- 這次全部當記穩了，測不到「常錯的先補」。',
+    `- 跑哪幾份：跑加深的生成器 ${deepening.map(each => each.name).join('、') || '沒有'}、跑加深的組 ${deepenNames.join('、')}，每一份有效原稿。卡組存不了的不模擬，照缺資料記最差值。`,
+    '- 情境：家長把草稿全部加入、孩子都記穩了，第一次按加深；每一篇一個新對話，模型與推理同生成那一份。',
+    '- 草稿：外掛做成草稿再改成啟用；學習目標的 ID 是工具照原稿給的假 ID，避開已有目標與原稿裡的 ID，同一份原稿每次一樣。',
+    '- 記穩了：照外掛啟用卡組的目標（暫停、重複 ID、紀錄停用的不在裡面），一律當記穩了；這次測不到「常錯的先補」。',
+    '- 其他欄位：同單元的其他篇只有這一份原稿的其他篇；地圖是這一份的全貌與架構（多步的組照步驟順序接起來），不交地圖的組沒有；以前出過的是空的（新課）；英文的已有單字照外掛的排法，凍結的卡組和模擬加入的放在一起；學習目的、家長調整、教材說明、點選填空照這一課的表單。',
+    '- 規則：外掛來源照外掛的嵌入規則；檔案、自備來源送凍結的加深規則全文（送出段加上「以下只在加深時送」那一段）。外掛的加深任務段凍結時記了 deepen-prompt.ts 的雜湊，模擬時核對。',
+    '- 三段：這一組的卡組步驟交不交三段，同一個值給加深的提示、外掛的檢查與切地圖。',
+    '- 外掛的檢查有錯誤的篇記「加深存不了」（重大），內容照評。',
+    '- 匿名之後那一份的加深就固定，不再加深。',
   ] : ['（設定沒有寫加深）'], '');
   lines.push('## 8. 限制', '',
     '- 候選和基準混在一起比，忽略同一個評分對話的共同偏差；結果偏保守，不會放寬。',
     '- 評分表由沒讀過規則的評審照課本列，寫、核對、回應三個對話；評分表本身錯了，各組會一起錯。',
     '- 兩位評審都是 AI；只有一位記的重大錯誤送裁定，其他的照兩位的合併。',
+    '- 評審看得到哪幾份有地圖、加深回覆有沒有三段，可以猜出哪幾份是三層的組。',
+    '- 兩組在同一課、同一個生成器少了一樣多份有效原稿時看不出來；這時兩組都只用留下的份比。',
     '- 模擬的機會照上面的假設，不是實際分數。', '');
   return lines.join('\n');
 }
