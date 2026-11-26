@@ -161,6 +161,21 @@ void test('不算的份拿掉之後不到 3 份：份數不夠照實際留下的
   assert.equal(result.chance['確定接錯'], 1);
 });
 
+void test('拿掉不算的份（整類，L2 第 1 輪 G）：份數不夠、贏的比例、打平都照每個指標留下的份算；確定接錯的判定和直接拿掉那幾份一樣', () => {
+  const gates: Gates = { ...GATES, benefits: [{ metric: '確定接錯', atLeast: 0.2 }] };
+  const undeepened = (group: string, i: number): DeckMetrics => deck(group, { code: `${group}x${String(i)}`, copy: 10 + i, deepen: deepen({ undeepened: true, wrong: null, pieces: 0, items: 0 }) });
+  for (const kept of [1, 2, 3, 4]) for (const dropped of [0, 1, 3]) for (const [c, b] of [[0, 2], [0, 0], [2, 0]]) {
+    const at = `留 ${String(kept)} 份、拿掉 ${String(dropped)} 份、候選 ${String(c)} 對基準 ${String(b)}`;
+    const candidate = [...same('候選', kept, { deepen: deepen({ wrong: c }) }), ...Array.from({ length: dropped }, (_, i) => undeepened('候選', i))];
+    const baseline = same('現行', kept + dropped, { deepen: deepen({ wrong: b }) });
+    const full = judgeGates(gates, candidate, baseline), lean = judgeGates(gates, candidate.slice(0, kept), baseline);
+    const pick = (result: typeof full): unknown => [result.benefits[0].state, result.noWorse.find(each => each.metric === '確定接錯')?.state];
+    assert.deepEqual(pick(full), pick(lean), at);
+    assert.equal(full.chance['確定接錯'], lean.chance['確定接錯'], at);
+    if (kept < 3) assert.ok(!full.verdict.startsWith('打平') && full.verdict !== '過', `${at}：${full.verdict}`);
+  }
+});
+
 void test('配對：只收和基準同一個區組的候選份，混在一起比；沒有基準的區組不進門檻，總結果未定；不算門檻的生成器只報告', () => {
   const decks = [
     deck('候選', { code: 'S1' }), deck('現行', { code: 'S2', ...wrong(1) }),

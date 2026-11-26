@@ -114,7 +114,9 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
   // 份數夠不夠、贏的比例，照每個指標拿掉不算的份之後實際留下的份算（不讓存不了、不能加深的份湊數）。
   const few = (s: { c: readonly number[]; b: readonly number[] }): boolean => s.c.length < ENOUGH || s.b.length < ENOUGH;
   const chance: GateResult['chance'] = {};
-  const note = (metric: string, s: Series): void => { chance[metric] = wins(s.c, s.b) / (s.c.length * s.b.length); };
+  // 每個指標實際留下幾份：打平也看它（每一項都要夠份數），不看整組的份數。
+  const kept: { c: number; b: number }[] = [];
+  const note = (metric: string, s: Series): void => { chance[metric] = wins(s.c, s.b) / (s.c.length * s.b.length); kept.push({ c: s.c.length, b: s.b.length }); };
 
   // 第 1 道：重大（D-234）。
   const majors = (decks: readonly DeckMetrics[]): string[] => decks.flatMap(deck => deck.issues.filter(issue => issue.kind === '重大錯誤').map(issue => issue.rubric || '沒對到評分表的列'));
@@ -231,7 +233,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     basis = unpaired > 0 ? `候選有 ${String(unpaired)} 份的區組沒有基準，配對的份數不夠` : alone > 0 ? lonelyBaseline(alone) : harm.pass === null ? '傷到學習未定' : '有指標缺資料或歧見會左右結果';
   } else if (benefits.some(each => each.state === 'clear')) { verdict = '過'; basis = '學習面有一項明顯比較好'; }
   else if (benefits.some(each => each.state === 'few')) { verdict = '未定'; basis = '收益平均達到，但份數不夠'; }
-  else if (n >= gates.tieMinCopies && m >= gates.tieMinCopies && harm.pass === true && noWorse.every(each => each.state === 'within' || each.state === 'skip')) {
+  else if (n >= gates.tieMinCopies && m >= gates.tieMinCopies && kept.every(each => each.c >= gates.tieMinCopies && each.b >= gates.tieMinCopies) && harm.pass === true && noWorse.every(each => each.state === 'within' || each.state === 'skip')) {
     const cheaper = secondary.some(each => each.pass === true) && !secondary.some(each => each.pass === false);
     if (!cheaper) { verdict = '打平'; basis = '學習面打平'; }
     else if (gates.tieCheaper === 'pass') { verdict = '過'; basis = '學習面打平、候選較省（設定：打平較省算過）'; }
