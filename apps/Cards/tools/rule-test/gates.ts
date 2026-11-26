@@ -47,6 +47,7 @@ export function learningValue(deck: DeckMetrics, metric: LearningMetric): Value 
     case '判錯': return deck.harm.判錯;
     case '每個必備平均幾題': return deck.perRequired;
     case '多餘的題': return deck.extraPrompts;
+    case '沒講為什麼': return deck.whyMissing + (deck.deepen?.whyMissing ?? 0);
     case '地圖漏的必備': return deck.map ? deck.map.missed : 'na';
     case '地圖問題': return deck.map ? deck.map.issues : 'na';
     case '加深機會漏掉': return deck.deepen ? deck.deepen.missed : 'na';

@@ -393,12 +393,12 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   checkFolder(folder, () => {});
   const report = unblindFolder(folder, { log: () => {} });
   const byGroup = Object.fromEntries(report.decks.map(deck => [deck.group, deck]));
-  assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1 });
-  assert.deepEqual(byGroup.乙.deepen, { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: 2, wrong: null, disputed: 0, major: 0, harm: 0 });
+  assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1, whyMissing: 0 });
+  assert.deepEqual(byGroup.乙.deepen, { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: 2, wrong: null, disputed: 0, major: 0, harm: 0, whyMissing: 0 });
   const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8'), detail = readFileSync(join(folder.root, '結果', '明細.md'), 'utf8');
   // 學習面的表：甲的傷到學習是加深裁定改記的判錯 1；乙存不了，加深機會全漏 2、確定接錯不算（—）。只報告的表：甲接對率 1／3。
-  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 2.0 | 0.0 | — | — | 1.0 | 1.0 | 1.0 |'));
-  assert.ok(summary.includes('| 乙 | 1 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 2.0 | — | 0.0 |'));
+  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 2.0 | 0.0 | 0.0 | — | — | 1.0 | 1.0 | 1.0 |'));
+  assert.ok(summary.includes('| 乙 | 1 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 2.0 | — | 0.0 |'));
   assert.ok(summary.includes('| 甲 | 0.0 | 1.0 | 1.0 | 0.0 | 2.0 | 2.0 | 0／1 | 1.0（0） | 3.0 | 33% | 0.0 |'));
   assert.ok(!summary.includes('兩種讀法'));
   assert.match(detail, /### 地圖與加深的拿不準（不送裁定，只列出來）\n\n- L3-B01 加深，claude：1-3 是換句話問，還是往下一層，兩種讀法都說得通\n/);

@@ -14,7 +14,7 @@ function deck(group: string, more: Partial<DeckMetrics> = {}): DeckMetrics {
     required: { 有: 3, 部分: 0, 沒有: 0 }, missed: [], partial: [], bonus: { 有: 0, 部分: 0, 沒有: 0 }, disagreements: 0,
     major: 0, majorBoth: 0, majorRuled: 0, majorTotal: 0,
     quality: { 判錯: 0, 洩漏: 0, 其他傷到學習: 0, 一題多事: 0, 池裡判準不同: 0, 小問題: 0 }, qualityTotal: 0, qualityBoth: 0, qualityOne: 0,
-    harm: harm(), minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: 0, crossRows: 0, crossWrong: 0,
+    harm: harm(), minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: 0, whyMissing: 0, crossRows: 0, crossWrong: 0,
     childPrompts: 9, sureRequired: 3, perRequired: 3,
     targets: 9, prompts: 9, candidates: 0, adds: 0, unsaveable: false, rulesChars: 1000, promptChars: 5000, generationMs: 60_000, costUsd: null,
     tokens: { input: 1000, output: 100 }, deepenTokens: null, map: null, deepen: null,
@@ -136,7 +136,7 @@ void test('不交地圖、沒跑加深的指標跳過，不會讓結果變成未
   assert.equal(result.verdict, '打平');
 });
 
-const deepen = (more: Partial<DeepenMetrics> = {}): DeepenMetrics => ({ pieces: 2, abandoned: 0, unsavable: 0, items: 5, undeepened: false, missed: 0, wrong: 0, disputed: 0, major: 0, harm: 0, ...more });
+const deepen = (more: Partial<DeepenMetrics> = {}): DeepenMetrics => ({ pieces: 2, abandoned: 0, unsavable: 0, items: 5, undeepened: false, missed: 0, wrong: 0, disputed: 0, major: 0, harm: 0, whyMissing: 0, ...more });
 
 void test('確定接錯的兩端：兩組各 0 筆確定接錯、各 3 筆歧見，兩端是 0 對 3、3 對 0，結論不同，未定', () => {
   const result = judgeGates(GATES, same('候選', 3, { deepen: deepen({ disputed: 3 }) }), same('現行', 3, { deepen: deepen({ disputed: 3 }) }));
@@ -201,6 +201,18 @@ void test('進門檻的份數少於設定的（§7-1 第 1 點）：候選的有
   assert.deepEqual([short.counts, short.verdict, short.basis], [{ candidate: 4, baseline: 4, unpaired: 0, alone: 1 }, '未定', '基準有 1 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
   const [none] = allGates(GATES, blocks('現行', 3, {}));
   assert.deepEqual([none.counts, none.verdict, none.basis], [{ candidate: 0, baseline: 0, unpaired: 0, alone: 3 }, '未定', '基準有 3 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
+});
+
+void test('沒講為什麼（rule-test-d236.md §17）：列成收益時候選少、3 對 3 全贏判明顯；不能變差照判錯的預設，候選多出 0.5 以上又明顯就沒過', () => {
+  const why = (value: number): Partial<DeckMetrics> => ({ whyMissing: value });
+  const gates: Gates = { ...GATES, benefits: [{ metric: '沒講為什麼', atLeast: 0.2 }] };
+  const better = judgeGates(gates, many('候選', [0, 0, 1], why), many('現行', [2, 3, 3], why));
+  assert.deepEqual([better.benefits[0].state, better.verdict], ['clear', '過']);
+  const worse = judgeGates(GATES, many('候選', [3, 3, 4], why), many('現行', [0, 1, 1], why));
+  assert.deepEqual([worse.noWorse.find(each => each.metric === '沒講為什麼')!.state, worse.verdict], ['worse', '沒過']);
+  // 加深的筆數也算進去：卡組都是 0，候選的加深 0、基準的加深 2，和卡組差 2 一樣判明顯。
+  const deepened = (value: number): Partial<DeckMetrics> => ({ deepen: deepen({ whyMissing: value }) });
+  assert.equal(judgeGates(gates, many('候選', [0, 0, 0], deepened), many('現行', [2, 2, 2], deepened)).benefits[0].state, 'clear');
 });
 
 void test('五組以上拆區組（§5-6）：同一份基準在每個拆開的區組各評一次，沒有候選的那一次不算缺；真的少了才算', () => {

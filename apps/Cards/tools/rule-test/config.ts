@@ -39,7 +39,7 @@ export interface Generator { name: string; kind: AdapterKind; model: string; eff
 export interface Judge { name: string; kind: 'claude' | 'codex'; model: string; effort: string }
 
 /** 學習面的指標（rule-test-d236.md §7-2，D-236 第 4 點）：收益與不能變差只收這幾個，都是越少越好。 */
-export const LEARNING_METRICS = ['傷到學習', '判錯', '每個必備平均幾題', '多餘的題', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯'] as const;
+export const LEARNING_METRICS = ['傷到學習', '判錯', '每個必備平均幾題', '多餘的題', '沒講為什麼', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯'] as const;
 export type LearningMetric = (typeof LEARNING_METRICS)[number];
 /** 次要指標（§9）：只報告，學習面打平時才用。 */
 export const SECONDARY_METRICS = ['規則字數', '整份提示字數', 'token', '生成時間'] as const;
@@ -49,7 +49,7 @@ export type SecondaryMetric = (typeof SECONDARY_METRICS)[number];
 export interface Tolerance { percent: number; floor: number }
 /** 不能變差的預設容許量（§7-2 的表）；傷到學習是第 3 道，另外設。 */
 export const NO_WORSE_DEFAULTS: Record<Exclude<LearningMetric, '傷到學習'>, Tolerance> = {
-  判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.1, floor: 0.2 }, 多餘的題: { percent: 0, floor: 0.5 },
+  判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.1, floor: 0.2 }, 多餘的題: { percent: 0, floor: 0.5 }, 沒講為什麼: { percent: 0, floor: 0.5 },
   地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
 };
 

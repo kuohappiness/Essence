@@ -83,7 +83,7 @@ void test('readConfig：任務說明的範例讀得出來，同 沿用被指的�
     benefits: [{ metric: '傷到學習', atLeast: 0.2 }, { metric: '每個必備平均幾題', atLeast: 0.1 }], correction: true,
     noWorse: {
       判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.15, floor: 0.3 }, 多餘的題: { percent: 0, floor: 0.5 },
-      地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
+      沒講為什麼: { percent: 0, floor: 0.5 }, 地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
     },
     secondary: [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }], tieMinCopies: 3, tieCheaper: 'report', timeBudget: 'gate',
   });

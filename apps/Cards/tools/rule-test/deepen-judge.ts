@@ -5,7 +5,7 @@ import { mergeVerdict, type Verdict } from './merge.ts';
 import type { DeepenChance } from './rubric.ts';
 
 /** 加深內容的問題種類：卡組的錯（§3），不含只有卡組才有的近義重複、跨單元去向與值得學。 */
-const DEEPEN_ISSUE_KINDS = ['重大錯誤', ...QUALITY_KINDS] as const;
+const DEEPEN_ISSUE_KINDS = ['重大錯誤', ...QUALITY_KINDS, '沒講為什麼'] as const;
 type DeepenIssueKind = (typeof DEEPEN_ISSUE_KINDS)[number];
 const REASONS = ['沒有加深', '層次不對', '接錯目標'] as const;
 

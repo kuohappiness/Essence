@@ -20,7 +20,7 @@ function deck(group: string, more: Partial<DeckMetrics> = {}): DeckMetrics {
     required: { 有: 3, 部分: 0, 沒有: 0 }, missed: [], partial: [], bonus: { 有: 0, 部分: 0, 沒有: 0 }, disagreements: 0,
     major: 0, majorBoth: 0, majorRuled: 0, majorTotal: 0,
     quality: { 判錯: 0, 洩漏: 0, 其他傷到學習: 0, 一題多事: 0, 池裡判準不同: 0, 小問題: 0 }, qualityTotal: 0, qualityBoth: 0, qualityOne: 0,
-    harm: harm(), minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: 0, crossRows: 0, crossWrong: 0,
+    harm: harm(), minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: 0, whyMissing: 0, crossRows: 0, crossWrong: 0,
     childPrompts: 9, sureRequired: 3, perRequired: 3,
     targets: 9, prompts: 9, candidates: 0, adds: 0, unsaveable: false, rulesChars: 1000, promptChars: 5000, generationMs: 60_000, costUsd: null,
     tokens: { input: 1000, output: 100 }, deepenTokens: null, map: null, deepen: null,

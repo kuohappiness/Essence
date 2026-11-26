@@ -47,14 +47,16 @@ function avgOf(decks: readonly DeckMetrics[], pick: (deck: DeckMetrics) => numbe
   return values.length ? one(mean(values)) : '—';
 }
 const deepenHarm = (deck: DeckMetrics): number => deck.deepen?.harm ?? 0;
+/** 沒講為什麼（§17）：卡組的加上加深的，和門檻用的同一個數。 */
+const whyMissing = (deck: DeckMetrics): number => deck.whyMissing + (deck.deepen?.whyMissing ?? 0);
 
 /** 三張表（rule-test-d236.md §3、§9）：學習面（門檻用的）、次要（打平時才看）、只報告。 */
-const LEARNING_HEAD = ['組', '份數', '重大（含存不了）', '傷到學習', '判錯', '洩漏', '漏的必備', '其他傷到學習', '加深的傷到學習', '每個必備平均幾題', '多餘的題', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯', '加深歧見'];
+const LEARNING_HEAD = ['組', '份數', '重大（含存不了）', '傷到學習', '判錯', '洩漏', '漏的必備', '其他傷到學習', '加深的傷到學習', '每個必備平均幾題', '多餘的題', '沒講為什麼', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯', '加深歧見'];
 function learningCells(decks: readonly DeckMetrics[]): (string | number)[] {
   return [
     decks.length, avg(decks, deck => deck.majorTotal), avg(decks, deck => deck.harm.total + deepenHarm(deck)),
     avg(decks, deck => deck.harm.判錯), avg(decks, deck => deck.harm.洩漏), avg(decks, deck => deck.harm.漏的必備), avg(decks, deck => deck.harm.其他), avg(decks, deepenHarm),
-    avg(decks, deck => deck.perRequired), avg(decks, deck => deck.extraPrompts),
+    avg(decks, deck => deck.perRequired), avg(decks, deck => deck.extraPrompts), avg(decks, whyMissing),
     avgOf(decks, deck => deck.map?.missed ?? null), avgOf(decks, deck => deck.map?.issues ?? null),
     avgOf(decks, deck => deck.deepen?.missed ?? null), avgOf(decks, deck => deck.deepen?.wrong ?? null), avgOf(decks, deck => deck.deepen?.disputed ?? null),
   ];
@@ -127,11 +129,11 @@ export function summaryLines(folder: Folder, reports: readonly BatchReport[], mo
     if (report.unsure?.length) lines.push('### 地圖與加深的拿不準（不送裁定，只列出來）', '', ...report.unsure.map(each => `- ${each.block} ${each.stage}，${each.judge}：${each.text}`), '');
   }
   for (const section of sections(folder, all)) {
-    lines.push(`## ${section.lesson}｜${section.generator} 逐份`, '', ...head(['批', '區組', '代號', '組', '份', '漏的必備', '部分的必備', '加分（有／部分）', '重大錯誤（兩位／裁定）', '傷到學習', '題目品質（兩位／一位）', '小問題', '多餘的題（近義重複幾對）', '跨單元錯／列', '孩子要複習的題', '每個必備平均幾題', '目標', '題', '候選', '加題', '存不了', '規則字數', '整份提示字數', '生成（分）', '歧見', '洩漏候選', '值得學']));
+    lines.push(`## ${section.lesson}｜${section.generator} 逐份`, '', ...head(['批', '區組', '代號', '組', '份', '漏的必備', '部分的必備', '加分（有／部分）', '重大錯誤（兩位／裁定）', '傷到學習', '題目品質（兩位／一位）', '小問題', '多餘的題（近義重複幾對）', '沒講為什麼', '跨單元錯／列', '孩子要複習的題', '每個必備平均幾題', '目標', '題', '候選', '加題', '存不了', '規則字數', '整份提示字數', '生成（分）', '歧見', '洩漏候選', '值得學']));
     for (const deck of section.groups.flatMap(each => each.decks)) {
       lines.push(row([
         deck.batch, deck.block, deck.code, deck.group, `${String(deck.copy)}${deck.replacement ? '（補）' : ''}`, deck.missed.join('、') || '0', deck.partial.join('、') || '0', `${String(deck.bonus.有)}／${String(deck.bonus.部分)}`,
-        `${String(deck.major)}（${String(deck.majorBoth)}／${String(deck.majorRuled)}）`, deck.harm.total, `${String(deck.qualityTotal)}（${String(deck.qualityBoth)}／${String(deck.qualityOne)}）`, deck.minor, `${String(deck.extraPrompts)}（${String(deck.nearDuplicates)}）`, `${String(deck.crossWrong)}／${String(deck.crossRows)}`,
+        `${String(deck.major)}（${String(deck.majorBoth)}／${String(deck.majorRuled)}）`, deck.harm.total, `${String(deck.qualityTotal)}（${String(deck.qualityBoth)}／${String(deck.qualityOne)}）`, deck.minor, `${String(deck.extraPrompts)}（${String(deck.nearDuplicates)}）`, whyMissing(deck), `${String(deck.crossWrong)}／${String(deck.crossRows)}`,
         deck.childPrompts, one(deck.perRequired), deck.targets, deck.prompts, deck.candidates, deck.adds, deck.unsaveable ? '是' : '', deck.rulesChars, deck.promptChars, minutes(deck.generationMs), deck.disagreements, deck.leakCandidates.length, deck.worthLearning,
       ]));
     }

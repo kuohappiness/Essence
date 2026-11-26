@@ -58,7 +58,7 @@ const poisson = (random: () => number, mean: number): number => {
 };
 
 /** 模擬的假設：每份的指標各自照這個平均的卜瓦松分布抽，兩組同一個分布（品質相同）。還沒有第二輪的實際分數，先用這幾個數。 */
-const ASSUMED = { 重大: 0.2, 判錯: 1, 洩漏: 0.5, 其他傷到學習: 0.5, 必備: 10, 漏必備的機會: 0.1, 每個必備的題: 2, 多餘的題: 0.5, 地圖漏的必備: 0.5, 地圖問題: 1, 加深機會漏掉: 0.5, 確定接錯: 0.5, 加深歧見: 0.5, 加深的傷到學習: 0.3, 目標: 12 };
+const ASSUMED = { 重大: 0.2, 判錯: 1, 洩漏: 0.5, 其他傷到學習: 0.5, 必備: 10, 漏必備的機會: 0.1, 每個必備的題: 2, 多餘的題: 0.5, 沒講為什麼: 1, 加深沒講為什麼: 0.3, 地圖漏的必備: 0.5, 地圖問題: 1, 加深機會漏掉: 0.5, 確定接錯: 0.5, 加深歧見: 0.5, 加深的傷到學習: 0.3, 目標: 12 };
 const RUNS = 400;
 
 function simulatedDeck(random: () => number, group: string, copy: number, map: boolean, deepen: boolean): DeckMetrics {
@@ -72,12 +72,12 @@ function simulatedDeck(random: () => number, group: string, copy: number, map: b
     required: { 有: sure, 部分: 0, 沒有: missed.length }, missed, partial: [], bonus: { 有: 0, 部分: 0, 沒有: 0 }, disagreements: 0,
     major: 0, majorBoth: 0, majorRuled: 0, majorTotal: poisson(random, ASSUMED.重大),
     quality: { 判錯: harm.判錯, 洩漏: harm.洩漏, 其他傷到學習: harm.其他, 一題多事: 0, 池裡判準不同: 0, 小問題: 0 }, qualityTotal: 0, qualityBoth: 0, qualityOne: 0,
-    harm, minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: poisson(random, ASSUMED.多餘的題), crossRows: 0, crossWrong: 0,
+    harm, minor: 0, nearDuplicates: 0, duplicateGroups: 0, extraPrompts: poisson(random, ASSUMED.多餘的題), whyMissing: poisson(random, ASSUMED.沒講為什麼), crossRows: 0, crossWrong: 0,
     childPrompts, sureRequired: sure, perRequired: childPrompts / Math.max(sure, 0.5),
     targets: poisson(random, ASSUMED.目標), prompts: childPrompts, candidates: 0, adds: 0, unsaveable: false, rulesChars: 1000, promptChars: 5000, generationMs: 60_000, costUsd: null,
     tokens: { input: 1000, output: 100 }, deepenTokens: null,
     map: map ? { missing: false, missed: poisson(random, ASSUMED.地圖漏的必備), issues: poisson(random, ASSUMED.地圖問題) } : null,
-    deepen: deepen ? { pieces: 2, abandoned: 0, unsavable: 0, items: 6, undeepened: false, missed: poisson(random, ASSUMED.加深機會漏掉), wrong: poisson(random, ASSUMED.確定接錯), disputed: poisson(random, ASSUMED.加深歧見), major: 0, harm: poisson(random, ASSUMED.加深的傷到學習) } : null,
+    deepen: deepen ? { pieces: 2, abandoned: 0, unsavable: 0, items: 6, undeepened: false, missed: poisson(random, ASSUMED.加深機會漏掉), wrong: poisson(random, ASSUMED.確定接錯), disputed: poisson(random, ASSUMED.加深歧見), major: 0, harm: poisson(random, ASSUMED.加深的傷到學習), whyMissing: poisson(random, ASSUMED.加深沒講為什麼) } : null,
     leakCandidates: [], worthLearning: 0, byJudge: {}, issues: [],
   };
 }
@@ -102,6 +102,7 @@ const STATIC_METRICS = [
   ['判錯', '卡組裡判錯的筆數（兩位記的、一位記的都算；同一題同一種算一筆）'],
   ['每個必備平均幾題', '孩子要複習的題（正式目標的題＋加題底下的每一題）÷ 確定考到的必備（兩位都判有）；確定考到 0 列時分母當 0.5。評分表沒有的「值得學」題也算成負擔，刪掉它們反而算省時間（照「最精華的卡」）'],
   ['多餘的題', '近義重複併成組，每組題數減一加總'],
+  ['沒講為什麼', '答案有道理可講（規則、因果、條件、字的組成）、背面卻沒有一句理由的題，卡組的加上加深的（兩位合併，同一題算一筆）；不進三級，§17'],
   ['地圖漏的必備', '兩位都判地圖沒有的必備列；應交地圖沒交是全部必備列'],
   ['地圖問題', '地圖的問題筆數（兩位的合併）'],
   ['加深機會漏掉', '兩位都判沒有的加深機會列；卡組存不了是全部加深機會列'],

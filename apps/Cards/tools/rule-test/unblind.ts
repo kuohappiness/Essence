@@ -80,6 +80,8 @@ export interface DeckMetrics {
   minor: number;
   /** 近義重複：對數、併成幾組、多餘的題（每組題數減一加總，§4）。 */
   nearDuplicates: number; duplicateGroups: number; extraPrompts: number;
+  /** 沒講為什麼（§17）：答案有道理可講、背面卻沒有一句理由的題數（兩位合併，同一題算一筆）。不進三級。 */
+  whyMissing: number;
   crossRows: number; crossWrong: number;
   /** 孩子要複習的題（正式目標的題＋加題底下的每一題）、確定考到的必備（兩位都判有）、每個必備平均幾題（§4）。 */
   childPrompts: number; sureRequired: number; perRequired: number;
@@ -108,6 +110,8 @@ export interface DeepenMetrics {
   undeepened: boolean;
   /** 加深機會漏掉（兩位都判沒有的列數）；確定接錯、歧見（兩位不同）；加深的重大（含加深存不了）與傷到學習。 */
   missed: number; wrong: number | null; disputed: number; major: number; harm: number;
+  /** 加深的沒講為什麼（§17），和卡組的一起算成學習面指標。 */
+  whyMissing: number;
 }
 
 export interface BatchReport {
@@ -257,7 +261,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
     // 加深（§6-3、§2-1）：卡組存不了是加深機會全漏、確定接錯不算；只有一位記的重大照裁定，不成立改記的照那一種算級。
     const chances = deepenChances(rubrics.get(block.lesson)!).length;
     let deepenMetrics: DeckMetrics['deepen'] = null;
-    if (entry.deepen.kind === 'unsavable') deepenMetrics = { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: chances, wrong: null, disputed: 0, major: 0, harm: 0 };
+    if (entry.deepen.kind === 'unsavable') deepenMetrics = { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: chances, wrong: null, disputed: 0, major: 0, harm: 0, whyMissing: 0 };
     else if (entry.deepen.kind === 'ok') {
       const { pieces, abandoned, unsavable, items } = entry.deepen;
       const kinds: string[] = [];
@@ -277,6 +281,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
         wrong: verdicts.filter(each => each === '錯').length, disputed: verdicts.filter(each => each === '歧見').length,
         major: deepenMajor + unsavable,
         harm: kinds.filter(kind => levelOf(kind as QualityKind, folder.config.levels) === '傷到學習').length,
+        whyMissing: kinds.filter(kind => kind === '沒講為什麼').length,
       };
     }
     const results = merge.results.get(block.name)!;
@@ -288,7 +293,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       major, majorBoth, majorRuled, majorTotal: major + (unsaveable ? 1 : 0) + (deepenMetrics?.major ?? 0),
       quality, qualityTotal: qualityIssues.length, qualityBoth: qualityIssues.filter(issue => issue.judges.length > 1).length, qualityOne: qualityIssues.filter(issue => issue.judges.length === 1).length,
       harm, minor: levelCount('小問題'),
-      nearDuplicates: pairs.length, duplicateGroups: duplicates.groups, extraPrompts: duplicates.extra,
+      nearDuplicates: pairs.length, duplicateGroups: duplicates.groups, extraPrompts: duplicates.extra, whyMissing: issues.filter(issue => issue.kind === '沒講為什麼').length,
       crossRows: crossIds.size, crossWrong: issues.filter(issue => issue.kind === '跨單元去向' && crossIds.has(issue.rubric)).length,
       childPrompts, sureRequired: sure, perRequired: childPrompts / Math.max(sure, 0.5),
       targets: sum(pieces.map(piece => piece.targets)), prompts, candidates: sum(pieces.map(piece => piece.candidates)), adds: sum(pieces.map(piece => piece.adds)),

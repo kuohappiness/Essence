@@ -136,6 +136,20 @@ void test('裁定改記的去重（§3）：比合併定下的位置；名稱行
   assert.deepEqual([two.quality.判錯, two.harm.判錯, two.major], [2, 2, 0]);
 });
 
+void test('沒講為什麼（rule-test-d236.md §17）：兩位在同一題記（名稱行、題目行）算一筆；不改傷到學習、小問題與題目品質', async () => {
+  const folder = await blinded({ 乙: SECOND });
+  const decks = join(folder.root, '評分', '批1', '卡組', 'L3');
+  const second = readdirSync(decks).map(name => name.replace('.md', '')).find(code => readFileSync(join(decks, `${code}.md`), 'utf8').includes('「借入」的英文'))!;
+  // 乙的第 2 行是有兩題的目標（第 3、4 行是題），第 5 行是只有一題的目標（第 6 行是題）。
+  const codex = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '沒講為什麼', lines: [3], rubric: '', note: '沒說 borrow 是「借入」的理由' }, { deck: second, kind: '沒講為什麼', lines: [6], rubric: '', note: '' }); } });
+  const fable = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '沒講為什麼', lines: [2], rubric: '', note: '' }); } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
+  await runDisputes(folder, { adapters: { claude: () => Promise.reject(Error('沒有要裁定的')) }, log: () => {} });
+  checkFolder(folder, () => {});
+  const deck = unblindFolder(folder, { log: () => {} }).decks.find(each => each.code === second)!;
+  assert.deepEqual([deck.whyMissing, deck.harm.total, deck.minor, deck.qualityTotal, deck.majorTotal], [2, 0, 0, 0, 0]);
+});
+
 void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀錄加一行；再跑不重算、不重記', async () => {
   const { folder } = await judged();
   await ruling(folder);
@@ -147,8 +161,8 @@ void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀
   for (const secret of ['borrow', 'lend', '借入', '借出', '字義', '假的', '詳解', '第 6 行']) assert.ok(!summary.includes(secret), `摘要裡有「${secret}」`);
   // 甲：多餘的題 1（近義重複一對）；乙：判錯 1、小問題 2，R1 是部分、確定考到的必備 0 列，每個必備平均幾題用最差值 3÷0.5。
   // 三張表：學習面、次要、只報告（§3、§9）；沒有地圖、加深的是 —。
-  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 2.0 | 1.0 | — | — | — | — | — |'));
-  assert.ok(summary.includes('| 乙 | 1 | 0.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 6.0 | 0.0 | — | — | — | — | — |'));
+  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 2.0 | 1.0 | 0.0 | — | — | — | — | — |'));
+  assert.ok(summary.includes('| 乙 | 1 | 0.0 | 1.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 6.0 | 0.0 | 0.0 | — | — | — | — | — |'));
   assert.ok(summary.includes('| 組 | 規則字數 | 整份提示字數 | 生成 token 輸入 | 生成 token 輸出 | 加深 token 輸入 | 加深 token 輸出 | 生成（分） |'));
   assert.ok(summary.includes('| 甲 | 0.0 | 1.0 | 0.0 | 0.0 | 2.0 | 2.0 | 0／1 | — | — | — | 0.0 |'));
   assert.ok(summary.includes('| 乙 | 1.0 | 0.0 | 1.0 | 2.0 | 3.0 | 2.0 | 0／1 | — | — | — | 0.0 |'));

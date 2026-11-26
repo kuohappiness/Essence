@@ -4,10 +4,10 @@
 /** 評估版本（rule-test-d236.md §2）：凍結時寫進鎖，之後每一步核對；評法改了就加一。 */
 export const EVALUATION = 'D-236 v1';
 /** 評分表與評分說明對到的製卡檢查表版本（rule-test-d236.md §16）：寫進〈評估規格〉，和評估版本一起凍結。 */
-export const CHECKLIST = '第二版（2026-11-26 使用者同意，定稿前；已對到 課1～3、門1～5、1a、1b，其餘等定稿）';
+export const CHECKLIST = '第二版（2026-11-26 使用者同意，定稿前；已對到 課1～3、門1～5、1a、1b、2a 與 2c 的理由（沒講為什麼），其餘等定稿）';
 
 /** 評審交的問題種類（評分說明的〈每份的問題〉）。 */
-export const ISSUE_KINDS = ['重大錯誤', '判錯', '洩漏', '其他傷到學習', '一題多事', '池裡判準不同', '小問題', '近義重複', '跨單元去向', '值得學'] as const;
+export const ISSUE_KINDS = ['重大錯誤', '判錯', '洩漏', '其他傷到學習', '一題多事', '池裡判準不同', '小問題', '近義重複', '跨單元去向', '沒講為什麼', '值得學'] as const;
 export type IssueKind = (typeof ISSUE_KINDS)[number];
 
 /** 題目品質：照題去重的錯（同一份、同一題、同一種算一筆），也是裁定「不成立」時可以改記的種類。 */
@@ -26,7 +26,7 @@ export const DEFAULT_LEVELS: Levels = { 一題多事: '傷到學習', 池裡判�
 
 const FIXED: Partial<Record<IssueKind, Level>> = { 重大錯誤: '重大', 判錯: '傷到學習', 洩漏: '傷到學習', 其他傷到學習: '傷到學習', 小問題: '小問題' };
 
-/** 一種錯算哪一級；近義重複（算孩子的時間）與值得學不是錯，回 null。 */
+/** 一種錯算哪一級；近義重複（算孩子的時間）、沒講為什麼（自己的學習面指標，rule-test-d236.md §17）與值得學不進三級，回 null。 */
 export function levelOf(kind: IssueKind, levels: Levels): Level | null {
   if ((ADJUSTABLE as readonly string[]).includes(kind)) return levels[kind as AdjustableKind];
   return FIXED[kind] ?? null;
