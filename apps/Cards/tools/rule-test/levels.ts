@@ -19,8 +19,8 @@ export const ADJUSTABLE = ['一題多事', '池裡判準不同', '跨單元去�
 type AdjustableKind = (typeof ADJUSTABLE)[number];
 export type Levels = Record<AdjustableKind, '傷到學習' | '小問題'>;
 
-/** 預設（rule-test-d236.md §3-1）：照 D-236 字面，沒點名的放小問題；使用者在〈評估規格〉看過再定（§12 第 1 題）。 */
-export const DEFAULT_LEVELS: Levels = { 一題多事: '小問題', 池裡判準不同: '小問題', 跨單元去向: '小問題' };
+/** 預設（rule-test-d236.md §3-1）：一題多事、池裡判準不同碰到「一格只對一個目標」，算傷到學習（使用者 2026-11-27 定，§12 第 1 題）；跨單元去向是小問題。 */
+export const DEFAULT_LEVELS: Levels = { 一題多事: '傷到學習', 池裡判準不同: '傷到學習', 跨單元去向: '小問題' };
 
 const FIXED: Partial<Record<IssueKind, Level>> = { 重大錯誤: '重大', 判錯: '傷到學習', 洩漏: '傷到學習', 其他傷到學習: '傷到學習', 小問題: '小問題' };
 

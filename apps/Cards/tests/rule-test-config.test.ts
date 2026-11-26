@@ -51,7 +51,7 @@ const EXAMPLE = `
   次要: [{ 指標: token, 至少: 10%, 容許: 10% }]
   打平較省: 只報告
   時間預算: 算門檻
-錯誤分級: { 一題多事: 傷到學習 }
+錯誤分級: { 一題多事: 小問題 }
 `;
 
 void test('readConfig：任務說明的範例讀得出來，同 沿用被指的那一組、只換寫到的部分', () => {
@@ -87,7 +87,7 @@ void test('readConfig：任務說明的範例讀得出來，同 沿用被指的�
     },
     secondary: [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }], tieMinCopies: 3, tieCheaper: 'report', timeBudget: 'gate',
   });
-  assert.deepEqual(config.levels, { 一題多事: '傷到學習', 池裡判準不同: '小問題', 跨單元去向: '小問題' });
+  assert.deepEqual(config.levels, { 一題多事: '小問題', 池裡判準不同: '傷到學習', 跨單元去向: '小問題' });
 });
 
 void test('readConfig：沒寫的照外掛的預設（任務段、補充與點選填空跟著科目、裁定用 Opus）', () => {
@@ -157,7 +157,7 @@ void test('readConfig：收益與不能變差只收學習面的指標（D-236 �
     .replace('收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 每個必備平均幾題, 至少: 10% }]', '收益: [{ 指標: 規則字數, 至少: 20% }, { 指標: token, 至少: 10% }]\n  近義重複多出: 1')
     .replace('不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]', '不能變差: [{ 指標: 生成時間, 容許: 10% }, { 指標: 傷到學習, 容許: 10% }]')
     .replace('打平較省: 只報告', '打平較省: 看情況\n  收益校正: 也許').replace('時間預算: 算門檻', '時間預算: 看看')
-    .replace('錯誤分級: { 一題多事: 傷到學習 }', '錯誤分級: { 重大錯誤: 小問題, 存不了: 小問題, 池裡判準不同: 重大 }');
+    .replace('錯誤分級: { 一題多事: 小問題 }', '錯誤分級: { 重大錯誤: 小問題, 存不了: 小問題, 池裡判準不同: 重大 }');
   assert.throws(() => readConfig(config), (error: Error) => {
     const lines = error.message.split('\n').slice(1);
     const at = (where: string): string[] => lines.filter(line => line.includes(where));

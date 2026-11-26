@@ -181,18 +181,19 @@ void test('端到端的精確總結果：三份對三份，過、沒過、未定
   assert.equal(await verdictOf({}), '打平：學習面打平');
 });
 
-void test('傷到學習照後果加總、分級跟著設定變：判錯 2、洩漏 1、漏的必備 1 合計 4；一題多事預設是小問題，調成傷到學習就算進去，報告的數字跟著變', async () => {
+void test('傷到學習照後果加總、分級跟著設定變：判錯 2、洩漏 1、漏的必備 1、一題多事 1 合計 5（一題多事預設是傷到學習，§12 第 1 題）；調成小問題就不算進去，報告的數字跟著變', async () => {
   const more = (result: JudgeResult, code: string, tag: string): void => {
     if (tag !== 'b1') return;
     result.issues.push({ deck: code, kind: '洩漏', lines: [5], rubric: '', note: '題幹露出答案' }, { deck: code, kind: '一題多事', lines: [3], rubric: '', note: '一題問兩件事' });
     Object.assign(result.rows.find(row => row.row === 'R1')!.decks.find(cell => cell.deck === code)!, { verdict: '沒有', evidence: '', lines: [] });
   };
   const b1 = (report: BatchReport): BatchReport['decks'][number] => report.decks.find(deck => deck.group === '乙' && deck.copy === 1)!;
-  const plain = (await twoGroups({ b1: 2 }, more)).report;
-  assert.deepEqual([b1(plain).harm, b1(plain).minor], [{ 判錯: 2, 洩漏: 1, 漏的必備: 1, 其他: 0, total: 4 }, 1]);
-  const { folder, report } = await twoGroups({ b1: 2 }, more, '錯誤分級: { 一題多事: 傷到學習 }');
+  const { folder, report } = await twoGroups({ b1: 2 }, more);
   assert.deepEqual([b1(report).harm, b1(report).minor], [{ 判錯: 2, 洩漏: 1, 漏的必備: 1, 其他: 1, total: 5 }, 0]);
   // 學習面的表：乙三份的傷到學習平均 5÷3；評估規格的分級表也跟著。
   assert.ok(readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8').includes('| 乙 | 3 | 0.0 | 1.7 | 0.7 | 0.3 | 0.3 | 0.3 |'));
   assert.match(readFileSync(join(folder.root, '凍結', '評估規格.md'), 'utf8'), /\| 一題多事 \| 傷到學習 \|/);
+  const minor = await twoGroups({ b1: 2 }, more, '錯誤分級: { 一題多事: 小問題 }');
+  assert.deepEqual([b1(minor.report).harm, b1(minor.report).minor], [{ 判錯: 2, 洩漏: 1, 漏的必備: 1, 其他: 0, total: 4 }, 1]);
+  assert.match(readFileSync(join(minor.folder.root, '凍結', '評估規格.md'), 'utf8'), /\| 一題多事 \| 小問題 \|/);
 });
