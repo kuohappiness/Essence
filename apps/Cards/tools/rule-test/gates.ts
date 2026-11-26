@@ -216,9 +216,10 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     const s = series(candidate, baseline, deck => secondaryValue(deck, metric), metric);
     if (!isSeries(s)) return { metric, pass: null, text: `次要 ${metric}：沒有資料` };
     const fixed = FIXED.includes(metric);
-    const change = s.meanB === 0 ? 0 : (s.meanC - s.meanB) / s.meanB;
+    // 基準是 0：候選也是 0 算一樣，候選多了就是多（和收益的寫法一樣）。
+    const change = s.meanB === 0 ? (s.meanC === 0 ? 0 : Infinity) : (s.meanC - s.meanB) / s.meanB;
     const clear = (a: number[], b: number[]): boolean => fixed || (!few(s) && permutationP(a, b) <= ALPHA + EPSILON);
-    const head = `次要 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（${change <= 0 ? `少 ${percent(-change)}` : `多 ${percent(change)}`}；設定至少少 ${percent(atLeast)}、最多多 ${percent(tolerance)}）`;
+    const head = `次要 ${metric}：候選 ${one(s.meanC)}、基準 ${one(s.meanB)}（${change === Infinity ? '基準是 0' : change <= 0 ? `少 ${percent(-change)}` : `多 ${percent(change)}`}；設定至少少 ${percent(atLeast)}、最多多 ${percent(tolerance)}）`;
     if (change > tolerance + EPSILON && clear(s.b, s.c)) return { metric, pass: false, text: `${head}→ 明顯比較多` };
     if (-change >= atLeast - EPSILON && clear(s.c, s.b)) return { metric, pass: true, text: `${head}→ 明顯比較省` };
     return { metric, pass: null, text: `${head}→ 沒有明顯的差` };

@@ -119,6 +119,13 @@ void test('打平與較省：字數省 10%、token 翻倍是打平；token 一�
   assert.equal(two.verdict, '未定');
 });
 
+void test('次要指標的基準是 0：候選多了就是多，不當成一樣（L2 第 1 輪 H）', () => {
+  const secondary: Gates['secondary'] = [{ metric: 'token', atLeast: 0.1, tolerance: 0.1 }, { metric: '規則字數', atLeast: 0.1, tolerance: 0.1 }];
+  const result = judgeGates({ ...GATES, secondary }, same('候選', 3, { rulesChars: 900, tokens: { input: 5000, output: 100 } }), same('現行', 3, { tokens: { input: 0, output: 0 } }));
+  assert.deepEqual([result.secondary[0].pass, result.secondary[0].text], [false, '次要 token：候選 5100.0、基準 0.0（基準是 0；設定至少少 10%、最多多 10%）→ 明顯比較多']);
+  assert.deepEqual([result.verdict, result.basis], ['打平', '學習面打平']);
+});
+
 void test('不交地圖、沒跑加深的指標跳過，不會讓結果變成未定', () => {
   const map = { missing: false, missed: 0, issues: 0 };
   const result = judgeGates(GATES, same('候選', 3, { map }), same('現行', 3));
