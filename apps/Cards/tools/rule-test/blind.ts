@@ -31,7 +31,7 @@ export interface Batch { batch: number; commit: string; time: string; entries: B
 const BLOCK_SIZE = 4;
 const MODEL_WORDS = ['claude', 'opus', 'sonnet', 'haiku', 'fable', 'chatgpt', 'gpt', 'codex', 'gemini'];
 
-/** 對照表只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。 */
+/** 代號和組別的對應只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。`blindedJobs`（folder.ts）只取工作名稱。 */
 const readBatch = (folder: Folder, n: number): Batch => JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as Batch;
 export const batchDir = (folder: Folder, n: number): string => join(folder.root, '評分', `批${String(n)}`);
 /** 地圖評分的區組資料夾（rule-test-d236.md §5-3）。 */
