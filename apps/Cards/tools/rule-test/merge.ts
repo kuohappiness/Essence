@@ -82,13 +82,13 @@ function same(a: Unit, b: Unit): boolean {
   return a.target === b.target && (a.prompt === null || b.prompt === null || a.prompt === b.prompt);
 }
 
-/** 兩筆問題的行算不算同一題（§3 去重）：各取指到的位置（issueUnit）再比（same），和合併兩位評審同一條規則。裁定改記時用。 */
-export function sameSpot(deck: string, a: readonly number[], b: readonly number[]): boolean {
-  const unitOf = unitsOf(deck);
-  return a.length > 0 && b.length > 0 && same(issueUnit(a.map(unitOf)), issueUnit(b.map(unitOf)));
-}
-
 const unitName = (unit: Unit): string => unit.target === null ? `第 ${String(unit.line)} 行` : `目標 ${String(unit.target + 1)}${unit.prompt === null ? '' : ` 第 ${String(unit.prompt + 1)} 題`}`;
+
+/**
+ * 兩筆問題算不算同一題（§3 去重），比合併定下的位置（unitName 的名稱）：就是 same，「目標 N」和「目標 N 第 M 題」算同一題。
+ * 裁定改記時用。不從行號重推，因為合併後的行號是兩位評審的聯集，推出來的位置可能比合併時看的寬（L2 第 3 輪 1）。
+ */
+export const sameAt = (a: string | undefined, b: string | undefined): boolean => a !== undefined && b !== undefined && (a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `));
 
 export interface MergedIssue { kind: Issue['kind']; at: string[]; lines: number[]; judges: string[]; rubric: string; notes: string[] }
 export interface MergedDeck {

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { JudgeResult } from '../tools/rule-test/judge.ts';
-import { duplicateGroups, mergeDeck, mergeVerdict, sameSpot, twoPrompts, type Verdict } from '../tools/rule-test/merge.ts';
+import { duplicateGroups, mergeDeck, mergeVerdict, sameAt, twoPrompts, type Verdict } from '../tools/rule-test/merge.ts';
 import { wins } from '../tools/rule-test/stats.ts';
 
 void test('合併表 §6-2 的九格：兩位都有是有、都沒有是沒有（漏），其他都是部分', () => {
@@ -59,19 +59,24 @@ void test('有兩題的目標：名稱行和其中一題算同一筆；同一位
   assert.deepEqual(merged.issues.map(each => [each.kind, each.at.join('＋'), each.judges.join('、'), each.lines.join(',')]), [['一題多事', '目標 2', 'codex、fable', '5,6']]);
 });
 
-void test('裁定改記時「同一題」（§3 去重）：和合併兩位評審同一條規則；名稱行和題目行兩個方向都算，同一個目標的兩題不算', () => {
-  // DECK：第 1 行標題（目標外），第 2 行只有一題的目標（第 3 行是題、第 4 行是它的詳解），第 5 行有兩題的目標（第 6、7 行）。
-  const cases: [number[], number[], boolean][] = [
-    [[5], [6], true], [[6], [5], true], [[6], [7], false], [[2], [3], true], [[3], [4], true],
-    [[6, 7], [6], true], [[1], [1], true], [[1], [2], false], [[3], [6], false], [[], [6], false],
+void test('裁定改記時「同一題」（§3 去重）：比合併定下的位置，和合併同一條規則；名稱行和題目行兩個方向都算，同一個目標的兩題不算', () => {
+  const cases: [string | undefined, string | undefined, boolean][] = [
+    ['目標 2', '目標 2 第 1 題', true], ['目標 2 第 1 題', '目標 2', true], ['目標 2 第 1 題', '目標 2 第 2 題', false],
+    ['目標 2', '目標 20 第 1 題', false], ['第 1 行', '第 1 行', true], ['第 1 行', '第 12 行', false], [undefined, '目標 2', false],
   ];
-  for (const [a, b, expected] of cases) assert.equal(sameSpot(DECK, a, b), expected, `${a.join('、')} 對 ${b.join('、')}`);
-  // 整類：任兩組行號，合併成一筆若且唯若 sameSpot 說是同一題。
-  const sets = [[1], [2], [3], [4], [5], [6], [7], [2, 3], [5, 6], [6, 7], [3, 6]];
-  for (const a of sets) for (const b of sets) {
-    const merged = mergeDeck('S1', DECK, new Map([['codex', result([], [issue('判錯', a)])], ['claude', result([], [issue('判錯', b)])]]));
-    assert.equal(merged.issues.length === 1, sameSpot(DECK, a, b), `${a.join('、')} 對 ${b.join('、')}`);
+  for (const [a, b, expected] of cases) assert.equal(sameAt(a, b), expected, `${String(a)} 對 ${String(b)}`);
+  // 整類：兩位各記一筆（行號 a、b）合併之後，第三筆（c，裁定改記的那一筆）照 sameAt 算不算已經有，
+  // 要和那一筆一開始就記成同一種、跟著合併時的筆數一樣（L2 第 3 輪 1：不能從合併後的行號聯集重推位置）。
+  // DECK：第 1 行標題（目標外），第 2 行只有一題的目標（第 3 行是題、第 4 行是它的詳解），第 5 行有兩題的目標（第 6、7 行）。
+  const sets = [[1], [2], [3], [4], [5], [6], [7], [2, 3], [5, 6], [6, 5], [6, 7], [3, 6]];
+  const merge = (...lines: number[][]): ReturnType<typeof mergeDeck> => mergeDeck('S1', DECK, new Map(lines.map((each, i) => [`評審${String(i)}`, result([], [issue('判錯', each)])])));
+  for (const a of sets) for (const b of sets) for (const c of sets) {
+    const two = merge(a, b), lone = merge(c).issues[0].at[0];
+    const relabeled = two.issues.length + (two.issues.some(each => sameAt(each.at[0], lone)) ? 0 : 1);
+    assert.equal(relabeled, merge(a, b, c).issues.length, `${a.join('、')}／${b.join('、')}／${c.join('、')}`);
   }
+  // 第 3 輪的反例：6 與 5（名稱行）合併成第 6 行那一題，第 7 行是另一題。
+  assert.equal(merge([6], [5]).issues.some(each => sameAt(each.at[0], merge([7]).issues[0].at[0])), false);
 });
 
 void test('引言框（候選卡片、加進已有的學習目標）裡的題分開算；目標範圍外的行（框的標題、備註）不歸給前一題（PR #54 Codex P2）', () => {

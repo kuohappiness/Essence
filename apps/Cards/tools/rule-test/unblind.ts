@@ -11,7 +11,7 @@ import { batchNumbers, lessonDir, openFolder, rubricOf, sha256File, writeOnce, t
 import { git, readFrozenSteps, verifyLock } from './freeze.ts';
 import { readFormat } from './check.ts';
 import { jobState, planJobs, readEvents } from './jobs.ts';
-import { duplicateGroups, leakCandidates, sameSpot, type MergedIssue, type Verdict } from './merge.ts';
+import { duplicateGroups, leakCandidates, sameAt, type MergedIssue, type Verdict } from './merge.ts';
 import { sameIssue } from './deepen-judge.ts';
 import { deepenChances, parseRubric, type RubricRow } from './rubric.ts';
 import type { JudgeResult } from './judge.ts';
@@ -225,7 +225,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       const ruling = rulings.majors.get(dispute.id)!;
       if (ruling.verdict === '成立') { majorRuled++; issues.push({ ...issue, notes: [...issue.notes, `裁定 ${dispute.id} 成立`] }); continue; }
       // 裁定不成立、改記成另一種時，同一題已經有評審記了那一種就不再記（§3 去重，和合併同一條規則）。
-      if (ruling.quality && !merged.issues.some(each => each.kind === ruling.quality && sameSpot(deck, each.lines, issue.lines))) issues.push({ ...issue, kind: ruling.quality, notes: [...issue.notes, `裁定 ${dispute.id} 不成立，改記${ruling.quality}`] });
+      if (ruling.quality && !merged.issues.some(each => each.kind === ruling.quality && sameAt(each.at[0], issue.at[0]))) issues.push({ ...issue, kind: ruling.quality, notes: [...issue.notes, `裁定 ${dispute.id} 不成立，改記${ruling.quality}`] });
     }
     const quality = Object.fromEntries(QUALITY_KINDS.map(kind => [kind, issues.filter(issue => issue.kind === kind).length])) as Record<QualityKind, number>;
     const qualityIssues = issues.filter(issue => (QUALITY_KINDS as readonly string[]).includes(issue.kind));
