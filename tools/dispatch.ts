@@ -9,21 +9,25 @@
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
+import { APPS_ROOT, DOCS_ONLY, FOLDERS, PACKAGES, PACKAGES_ROOT } from './apps.ts';
 
 export const APPS = ['cards', 'capture', 'mindboard'] as const;
 export type App = (typeof APPS)[number];
-/** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）與三個外掛。 */
-export const TARGETS = ['tools', ...APPS] as const;
-export type Target = (typeof TARGETS)[number];
+/** 套件（tools/apps.ts 的 PACKAGES，docs/tasks/ai-client.md〈8〉）。 */
+export type Package = keyof typeof PACKAGES;
+const PACKAGE_IDS = Object.keys(PACKAGES) as Package[];
+/** 分派的對象：共用工具（tools/ 自己的完整檢查，§A2）、三個外掛與套件。 */
+export const TARGETS = ['tools', ...APPS, ...PACKAGE_IDS] as const;
+export type Target = 'tools' | App | Package;
 /** 完整：在對象的資料夾跑完整檢查；相關測試（Cards 與共用工具）：只跑寫到這些路徑的測試檔；跳過。 */
 export type Run = 'full' | 'related' | 'skip';
-export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard' };
+export const NAMES: Record<Target, string> = { tools: '共用工具', cards: 'Cards', capture: 'Capture', mindboard: 'Mindboard', 'ai-client': 'AI 連線套件' };
+const isPackage = (target: Target): target is Package => Object.hasOwn(PACKAGES, target);
 
 /** Cards 的資料夾（D-208 第二步 §A6 搬進來）。 */
 export const CARDS: string = FOLDERS.cards;
-/** 對象的資料夾（相對 repo 的根）：外掛查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
-export const folder = (target: Target): string => (target === 'tools' ? 'tools' : FOLDERS[target]);
+/** 對象的資料夾（相對 repo 的根）：外掛與套件查 tools/apps.ts 的表，不用代號組字串（D-218 第 4 點）。 */
+export const folder = (target: Target): string => (target === 'tools' ? 'tools' : isPackage(target) ? PACKAGES[target] : FOLDERS[target]);
 /** 對象資料夾底下的路徑前綴；根目錄是空字串。 */
 const prefix = (target: Target) => (folder(target) === '.' ? '' : folder(target) + '/');
 
@@ -69,11 +73,17 @@ export const RULES: Rule[] = [
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
     // 只有文件的軟體（現在是 Portal，D-218）只跑共用檢查；寫第一行程式時移進 FOLDERS、加自己的檢查。
-    id: 4, name: 'Capture、Mindboard 與只有文件的軟體的資料夾',
-    matches: under(prefix('capture'), prefix('mindboard'), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
-    effect: path => (path.startsWith(prefix('capture')) ? { capture: 'full' } : path.startsWith(prefix('mindboard')) ? { mindboard: 'full' } : {}),
+    // 套件（docs/tasks/ai-client.md〈8〉）和 Capture 一樣，改到什麼都跑它自己的完整檢查。
+    id: 4, name: 'Capture、Mindboard、套件與只有文件的軟體的資料夾',
+    matches: under(prefix('capture'), prefix('mindboard'), ...PACKAGE_IDS.map(prefix), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
+    effect: path => {
+      if (path.startsWith(prefix('capture'))) return { capture: 'full' };
+      if (path.startsWith(prefix('mindboard'))) return { mindboard: 'full' };
+      const owner = PACKAGE_IDS.find(id => path.startsWith(prefix(id)));
+      return owner ? { [owner]: 'full' } : {};
+    },
   },
-  { id: 5, name: 'apps/ 底下不認得的路徑', matches: under(APPS_ROOT), effect: () => 'all' },
+  { id: 5, name: 'apps/、packages/ 底下不認得的路徑', matches: under(APPS_ROOT, PACKAGES_ROOT), effect: () => 'all' },
   {
     id: 6, name: '檢查怎麼啟動、怎麼跑（入口）', effect: () => 'all',
     matches: (path, _, ctx) => LAUNCH.has(path) || under(...LAUNCH_DIRS)(path) || (path.startsWith('tools/') && ctx.entries().has(path)),
@@ -154,12 +164,24 @@ export function relativeImports(text: string): string[] {
 /**
  * 文字裡寫到的 tools/… 程式檔（前面可以有 ../），照 base 資料夾解開成 repo 相對的路徑；解開後不在最上層 tools/ 的不算。
  * 只認程式（.ts、.mts、.cts、.mjs、.cjs、.js）：check.yml 的快取寫到 tools/package-lock.json，鎖檔是第 7 條。
+ *
+ * 兩種一起算，寧可多算（L2 ai-client 第二輪 延續 R3，比照 relativeImports 換前提）：
+ * 1. known（repo 裡現有的 tools/ 程式檔，加上這次改動的路徑：刪掉、改名的檔不在比較的樹裡，L2 ai-client 第三輪 延續 R3）：
+ *    文字裡出現那個路徑就算，不管怎麼加引號或跳脫（先拿掉反斜線再找一次）。
+ *    不解析 shell 的引號：第一輪、第二輪都是正規式在引號裡的特殊字元停下來漏算的。多算只會多跑檢查。
+ * 2. 正規式：給 known 裡沒有的（這次刪掉或還沒加的檔）。引號括住的整段算檔名，沒有引號的到空白或 shell 的符號為止。
  */
-function toolPaths(text: string, base: string | undefined): string[] {
+const QUOTED_TOOL = /(["'])((?:\.\.\/)*tools\/[^\n"']*?\.(?:ts|mts|cts|mjs|cjs|js))\1/gu;
+const BARE_TOOL = /(?<![\p{L}\p{N}_.\/-])((?:\.\.\/)*tools\/[^\s"'`;&|<>()]*?\.(?:ts|mts|cts|mjs|cjs|js))(?![\p{L}\p{N}_.\/-])/gu;
+
+export function toolPaths(text: string, base: string | undefined, known: Iterable<string> = []): string[] {
   const found = new Set<string>();
-  for (const match of text.matchAll(/(?<![\w./-])((?:\.\.\/)*tools\/[\w./-]*\.(?:ts|mts|cts|mjs|cjs|js))(?![\w.])/g)) {
+  const unescaped = text.replace(/\\(.)/gsu, '$1');
+  for (const path of known) if (path.startsWith('tools/') && (text.includes(path) || unescaped.includes(path))) found.add(path);
+  const names = [...[...text.matchAll(QUOTED_TOOL)].map(m => m[2]), ...[...text.matchAll(BARE_TOOL)].map(m => m[1])];
+  for (const name of names) {
     // base 是 undefined：執行的資料夾不固定但都在 repo 裡（check.yml 的 job 可以設 working-directory），開頭的 ../ 一律回到 repo 的根。
-    const path = base === undefined ? posix.normalize(match[1].replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, match[1]));
+    const path = base === undefined ? posix.normalize(name.replace(/^(\.\.\/)+/, '')) : posix.normalize(posix.join(base, name));
     if (path.startsWith('tools/') && !path.startsWith('tools/node_modules/')) found.add(path);
   }
   return [...found];
@@ -167,21 +189,24 @@ function toolPaths(text: string, base: string | undefined): string[] {
 
 /**
  * 檢查的入口（第 6 條，§A3）：.githooks/ 的 hook（從 repo 的根執行）、.github/workflows/check.yml（外掛 job 的資料夾在
- * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json 的 scripts（從外掛的資料夾執行）字面寫到的 tools/ 檔，
+ * repo 底下，寫成 ../../tools/… 也解得開）與 apps/*\/package.json、packages/*\/package.json 的 scripts（從外掛或套件的資料夾執行）字面寫到的 tools/ 檔，
  * 加上 CORE_ENTRIES，再加上這些檔 import 到的 tools/ 檔（一路往下）。只被 Pages 或共用檢查本身用到的工具不算入口。
+ * 只認字面寫出的路徑（`../../tools/x.ts`，加引號或跳脫都算）；指向同一個檔的其他拼法（`./`、`//`、大小寫不同、
+ * 先 cd 再叫、`npm --prefix`、shell 變數）認不到，記在 docs/backlog.md〈已知的限制〉，不再補拼法（L2 ai-client 第四輪 第 2 項）。
  */
-export function entryTools(root: string, compare: Dispatch['compare']): Set<string> {
+export function entryTools(root: string, compare: Dispatch['compare'], changed: readonly string[] = []): Set<string> {
   const isSource = (path: string) => /^tools\/[^]*\.(ts|mts|cts|mjs|cjs|js)$/.test(path) && !path.startsWith('tools/node_modules/');
   const texts = comparedTexts(root, compare, path =>
-    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^apps\/[^/]+\/package\.json$/.test(path) || isSource(path));
+    path.startsWith('.githooks/') || path === '.github/workflows/check.yml' || /^(?:apps|packages)\/[^/]+\/package\.json$/.test(path) || isSource(path));
   const entries = new Set<string>(CORE_ENTRIES);
+  const known = [...new Set([...texts.keys(), ...changed])].filter(isSource);
   for (const [path, text] of texts) {
-    if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.')) entries.add(tool);
-    else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined)) entries.add(tool);
+    if (path.startsWith('.githooks/')) for (const tool of toolPaths(text, '.', known)) entries.add(tool);
+    else if (path === '.github/workflows/check.yml') for (const tool of toolPaths(text, undefined, known)) entries.add(tool);
     else if (path.endsWith('package.json')) {
       let scripts: Record<string, unknown> = {};
       try { scripts = (JSON.parse(text) as { scripts?: Record<string, unknown> }).scripts ?? {}; } catch { /* 壞掉的 package.json 由外掛的檢查擋 */ }
-      for (const script of Object.values(scripts)) if (typeof script === 'string') for (const tool of toolPaths(script, posix.dirname(path))) entries.add(tool);
+      for (const script of Object.values(scripts)) if (typeof script === 'string') for (const tool of toolPaths(script, posix.dirname(path), known)) entries.add(tool);
     }
   }
   const queue = [...entries];
@@ -254,19 +279,19 @@ function list(paths: string[], max = 3): string {
 }
 
 export function dispatch(changes: Change[], { root, ci, compare }: { root: string; ci: boolean; compare: Dispatch['compare'] }): Dispatch {
-  const runs: Record<Target, Run> = { tools: 'skip', cards: 'skip', capture: 'skip', mindboard: 'skip' };
-  const touched: Record<Target, string[]> = { tools: [], cards: [], capture: [], mindboard: [] };
+  const runs = Object.fromEntries(TARGETS.map(target => [target, 'skip'])) as Record<Target, Run>;
+  const touched = Object.fromEntries(TARGETS.map(target => [target, []])) as unknown as Record<Target, string[]>;
   const related: Record<'cards' | 'tools', string[]> = { cards: [], tools: [] };
   const blocked: string[] = [];
   const paths: PathResult[] = [];
   let entries: Set<string> | undefined;
-  const ctx: Context = { entries: () => (entries ??= entryTools(root, compare)) };
+  const ctx: Context = { entries: () => (entries ??= entryTools(root, compare, changes.map(change => change.path))) };
   for (const change of changes) {
     const rule = RULES.find(r => r.matches(change.path, change, ctx))!;
     paths.push({ status: change.status, path: change.path, rule: rule.id, ruleName: rule.name });
     const effect = rule.effect(change.path);
     if (effect === 'blocked') { blocked.push(change.path); continue; }
-    const wanted: Partial<Record<Target, Run>> = effect === 'all' ? { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' } : effect;
+    const wanted: Partial<Record<Target, Run>> = effect === 'all' ? Object.fromEntries(TARGETS.map(target => [target, 'full'])) : effect;
     for (const target of TARGETS) {
       let run = wanted[target];
       if (!run) continue;

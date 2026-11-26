@@ -1,5 +1,5 @@
 // 軟體之間不 import（D-208 第 10 點，tasks/one-repo-step-1.md §6；D-218 起資料夾是 apps/<軟體>/）：各自安裝、各自可用（D-006），
-// 程式不跨出自己的資料夾。
+// 程式不跨出自己的資料夾。packages/<套件>/（tools/apps.ts 的 PACKAGES，docs/tasks/ai-client.md〈8〉）照同一套規則：不認識呼叫它的軟體。
 // 用法：node tools/check-app-imports.ts [--staged]
 //   預設：Git 追蹤的檔，內容讀工作樹（npm run check 與 CI 用）。--staged：清單與內容都讀暫存區（pre-commit 用）。
 // 擋：apps/<軟體>/ 的程式用相對路徑跑出自己的資料夾；根目錄 src/、tests/、tools/ 的程式用相對路徑進到 apps/；
@@ -17,15 +17,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
-import { APPS_ROOT, DOCS_ONLY, FOLDERS } from './apps.ts';
+import { APPS_ROOT, DOCS_ONLY, FOLDERS, PACKAGES, PACKAGES_ROOT } from './apps.ts';
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 interface Entry { path: string; mode: string; object: string }
 
 const SOURCE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
-/** 軟體的資料夾（第 1 組是整段，例如 apps/Cards）。 */
-const PLUGIN = /^(apps\/[^/]+)\//;
-const PACKAGE = /^(apps\/[^/]+)\/package\.json$/;
+/** 軟體或套件的資料夾（第 1 組是整段，例如 apps/Cards、packages/ai-client）。 */
+const PLUGIN = /^((?:apps|packages)\/[^/]+)\//;
+const PACKAGE = /^((?:apps|packages)\/[^/]+)\/package\.json$/;
 const ROOT_CODE = /^(?:src|tests|tools)\//;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
@@ -51,7 +51,7 @@ export function checkSource(path: string, text: string): Problem[] {
     if (!isRelative(fileName)) continue;
     const target = resolveFrom(path, fileName);
     if (plugin && !inside(target, plugin)) {
-      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `跑出 ${plugin}/：軟體不 import 其他軟體與最上層的程式（D-208 第 10 點）` });
+      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `跑出 ${plugin}/：軟體與套件不 import 其他軟體、套件與最上層的程式（D-208 第 10 點）` });
     } else if (rootCode && target.startsWith(APPS_ROOT)) {
       problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `根目錄的程式不 import ${APPS_ROOT} 裡的軟體（D-208 第 10 點）` });
     }
@@ -128,18 +128,31 @@ const NAMES = new Map<string, { name: string; docsOnly: boolean }>([
 const DOC_FILE = /\.(?:md|png|jpe?g|gif|svg|webp)$/i;
 const TWO_STEP = (from: string, to: string) => `Windows 上分兩步改：git mv ${from} ${to}.tmp，再 git mv ${to}.tmp ${to}；Linux 上正確的資料夾已經存在時，逐檔 git mv 到正確的路徑（目的資料夾不存在就先建）`;
 
+/** 表上每個套件的資料夾名（packages/ 後面那一段）。 */
+const PACKAGE_NAMES = new Map(Object.values(PACKAGES).map(dir => [dir.slice(PACKAGES_ROOT.length).toLowerCase(), dir.slice(PACKAGES_ROOT.length)] as const));
+
 /**
  * 追蹤的路徑（§3 第 1、2 點）：第一段不分大小寫是 plugins 或 apps、卻不是恰好 apps 的擋；apps/ 底下的資料夾要在表上、大小寫相同；
- * 表上只有文件的軟體只能有 Markdown 與圖檔。同一個資料夾的問題只報第一個檔。
+ * 表上只有文件的軟體只能有 Markdown 與圖檔。packages/ 一樣：第一段要恰好是 packages，底下的資料夾要在 PACKAGES 表上、大小寫相同。
+ * 同一個資料夾的問題只報第一個檔。
  */
 export function checkLayout(paths: Iterable<string>): Problem[] {
   const problems: Problem[] = [];
   const seen = new Set<string>();
   const once = (key: string, problem: Problem) => { if (!seen.has(key)) { seen.add(key); problems.push(problem); } };
   const root = APPS_ROOT.slice(0, -1);
+  const packages = PACKAGES_ROOT.slice(0, -1);
   for (const path of paths) {
     const [first, second, ...rest] = path.split('/');
     const lower = first.toLowerCase();
+    if (lower === packages) {
+      const dir = `${first}/${second}`;
+      const name = rest.length ? PACKAGE_NAMES.get(second.toLowerCase()) : undefined;
+      if (first !== packages) once(first, { file: path, line: 1, target: first + '/', reason: `資料夾要恰好是 ${PACKAGES_ROOT}；${TWO_STEP(first, packages)}` });
+      else if (!name) once(dir, { file: path, line: 1, target: rest.length ? dir + '/' : path, reason: `不在表上：${PACKAGES_ROOT} 底下的套件要先登記在 tools/apps.ts 的 PACKAGES` });
+      else if (name !== second) once(dir, { file: path, line: 1, target: dir + '/', reason: `大小寫和表上的 ${packages}/${name} 不同；${TWO_STEP(dir, `${packages}/${name}`)}` });
+      continue;
+    }
     if (lower === 'plugins') once(first, { file: path, line: 1, target: first + '/', reason: `改名後放 ${APPS_ROOT}<軟體>/（D-218）` });
     else if (lower === root && first !== root) once(first, { file: path, line: 1, target: first + '/', reason: `資料夾要恰好是 ${APPS_ROOT}（D-218 §3 第 2 點）；${TWO_STEP(first, root)}` });
     if (lower !== root || first !== root) continue;

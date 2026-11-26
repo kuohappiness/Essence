@@ -1,0 +1,8 @@
+{
+  // 套件本體不認得 Node 的型別：Buffer、process、node:* 模組在這裡都是型別錯誤，取別名（const g = globalThis; g.Buffer）也一樣（L2 第三輪 延續 R4）。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

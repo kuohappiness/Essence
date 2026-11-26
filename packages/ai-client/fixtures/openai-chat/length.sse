@@ -1,0 +1,6 @@
+data: {"id":"gen-len","object":"chat.completion.chunk","model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{"content":"寫到一半"},"finish_reason":null}]}
+
+data: {"id":"gen-len","object":"chat.completion.chunk","model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{},"finish_reason":"length"}]}
+
+data: [DONE]
+

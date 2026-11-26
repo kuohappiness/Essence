@@ -255,14 +255,13 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
 
 /**
  * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：只在英文的草稿。解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做：
- * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿、好幾個答案字數相同；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
+ * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿（好幾個答案字數不同也收，D-237）；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
  * 句子排序開頭那格大寫是提醒（§4-6：詞塊照句子中間的寫法，小寫；I、全大寫不算）。
  */
 function checkEnglish(deck: Deck, issue: Report): void {
   for (const p of deck.problems) {
     if (deck.targets.find(t => t.line === p.targetLine)?.kind?.id !== 'typing') continue;
     if (p.code === 'cloze-not-typed') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化要寫成問答題：句子挖一個 ＿＿ :: 答案');
-    else if (p.code === 'typed-answer-words') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化的好幾個答案字數要相同，題目的 ＿＿ 才對得上');
   }
   for (const t of deck.targets) {
     if (t.kind?.id === 'typing') {

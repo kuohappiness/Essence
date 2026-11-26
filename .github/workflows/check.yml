@@ -1,6 +1,6 @@
 name: Check
 on: [push, pull_request]
-# 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4；第二步 §A4 加共用工具）：plan 照分派表的 CI 跑法決定共用工具與哪幾個外掛要跑；共用檢查每次都跑；
+# 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4；第二步 §A4 加共用工具；docs/tasks/ai-client.md〈8〉加套件）：plan 照分派表的 CI 跑法決定共用工具、哪幾個外掛與套件要跑；共用檢查每次都跑；
 # gate 確認每個 job 都照 plan（要跑的成功、不跑的跳過），合併條件看 gate。
 jobs:
   plan:
@@ -10,6 +10,7 @@ jobs:
       cards: ${{ steps.plan.outputs.cards }}
       capture: ${{ steps.plan.outputs.capture }}
       mindboard: ${{ steps.plan.outputs.mindboard }}
+      ai-client: ${{ steps.plan.outputs.ai-client }}
       reasons: ${{ steps.plan.outputs.reasons }}
       compare: ${{ steps.plan.outputs.compare }}
     steps:
@@ -116,9 +117,27 @@ jobs:
       - run: npm ci
       - run: npm run check
 
+  # 套件（tools/apps.ts 的 PACKAGES，docs/tasks/ai-client.md〈8〉）：型別、lint、knip 與離線測試；執行期零相依，不跑 audit。
+  ai-client:
+    needs: plan
+    if: needs.plan.outputs.ai-client == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/ai-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: packages/ai-client/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
   # 要跑的 job 被跳過時，其他 job 都是綠的，只有這裡擋得到。main 之後要設必過檢查時只設這個 job（2026-11-17 查過，現在沒設）。
   gate:
-    needs: [plan, shared, tools, cards, capture, mindboard]
+    needs: [plan, shared, tools, cards, capture, mindboard, ai-client]
     if: always()
     runs-on: ubuntu-latest
     steps:

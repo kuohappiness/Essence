@@ -17,6 +17,7 @@
 | 外掛只改文件也跑完整檢查：Capture、Mindboard 在 `apps/Capture/`、`apps/Mindboard/` 底下改任何檔（只改文件也算），commit 與 CI 都跑那個外掛的完整 `npm run check`；現在它們的檢查只印一行，不花時間（Cards 的部分在第二步做完：[§A3](tasks/one-repo-step-2.md#a3-分派表toolsdispatchts) 定了相關測試，B 之後只改文件也只跑相關測試） | 某個外掛的 `npm run check` 在本機超過 1 分鐘 | 替那個外掛定「相關測試」的找法與登錄方式（測試讀到哪些檔要寫得出來），分派表（`tools/dispatch.ts`）加上那個外掛的相關測試跑法與案例 | [三個外掛併進同一個 repo 第一步 §10](tasks/one-repo-step-1.md#10-技術債) |
 | 補做：查詢工具的現行寫在只算有連結的引用：`node tools/decisions-index.ts D-xxx` 的「現行寫在」只比對字串 `D-xxx`，沒分辨是依據還是只是提到，可能多列和規則無關的出處；多列的人看了跳過，查無引用時照實印「沒有規範文件引用」 | 查詢時列出的出處有一半以上和規則無關 | 只算有連結的引用，或排除〈曾考慮的做法〉這類段落；測試加一份只提到、沒有連結的規範文件 | [工作流程上線〈技術債〉](tasks/workflow-impl.md#技術債) |
 | 〈已完成〉的核對只在本機的 hook：GitHub 上合併 PR、快轉、沒衝突的 cherry-pick、rebase 與 `git revert` 都不經過 pre-commit／pre-merge-commit；CI 的 `roadmap-sync --check` 是 HEAD 比自己，手寫或刪掉的〈已完成〉列可以進 `main`（狀態板和入口對不上，CI 照擋）。進去之後的後果：手寫的列在 `main` 刪不掉（是 HEAD 的舊列），比它早開的分支併 `main` 進來要刪、併回去又要加回來；繞過 hook 進了某個分支、格式對但日期不對的列，把那個分支用 `git merge` 併進來時留也擋、刪也擋 | 第一次在 GitHub 網頁上解〈已完成〉的衝突，或合併工作流程上線前開、帶手寫〈已完成〉列的分支 | CI 在分支 push 與 PR 時，拿和 `main` 的合併基點當比較對象跑完成列的核對（日期只查不晚於今天）；測試加一個分支手寫完成列、CI 擋下的案例 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N13；`git revert` 是[第三輪](tasks/workflow-impl-review.md#第三輪的回報)補的，進去之後的後果是[第五輪](tasks/workflow-impl-review.md#第五輪的回報) J2、J3 補的 |
+| 補測：雲端設定第 ① 件（PR #51 改的 `cloud-setup.mjs`，多裝 `packages/ai-client`）：新開的雲端 session 讀自己的開場訊息，hook 有沒有跑還沒看到；專案討論串開的 session 不載 repo 的 hook，驗不了。第 ② 件（乾淨 worktree 照雲端條件跑一次 hook）已過，所以 hook 本身會跑；沒驗的是雲端 session 開場時有沒有叫到它 | 下一次在 claude.ai/code 開 Essence 的雲端 session（不是專案討論串） | 那個 session 的開場訊息有「雲端環境設定：」那一段，`packages/ai-client` 一行是「npm ci 完成」或「鎖檔沒變，跳過」，`core.hooksPath` 是 `.githooks`，之後的指令用 Node 24；原文寫進[AI 連線模組〈結果〉](tasks/ai-client.md#結果) | [AI 連線模組〈結果〉](tasks/ai-client.md#結果)（使用者 2026-11-26 選合併後驗） |
 
 ### 已知的限制
 
@@ -26,8 +27,11 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 
 | 限制 | 發生條件 | 影響與避開 | 來源 |
 |---|---|---|---|
+| AI 連線套件的費用估計，寫進快取只照預設期限的價 | 呼叫端用 `extraBody` 開了更長的快取期限（OpenAI 的 12 小時、Anthropic 的 1 小時），服務回報的寫入 token 照目錄唯一的 `cacheWrite` 價算；Cards 現在不開 | 估計偏低（審查報告照 OpenAI 官方的倍率算，12 小時的例子少一半；倍率沒另外查）。費用本來就標「照牌價估計」。避開：要開長期限時，在目錄的價格加上那個期限的寫入價（之後再加欄位） | [AI 連線套件的 L2](<Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 第二輪 延續 R5 |
+| AI 連線套件（`packages/ai-client`）連不上時照樣重送，分不出請求送到了沒有 | 服務已經收到請求、開始做，回應標頭到之前連線斷掉；標準的 `fetch` 只丟 `TypeError`，分不出是沒連上還是送到才斷 | 同一個請求做兩次、可能付兩次錢。各家串流的回應收到請求就先回標頭，這一段通常不到一秒（推斷，第二步的冒煙測試記下標頭花的時間來驗）；回應標頭逾時已經不重送（L2 R7）。避開：沒有，要的話呼叫端把 `maxAttempts` 設成 1 | [AI 連線套件的 L2](<Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 第二輪 延續 R7 |
 | 金鑰掃描的預設模式（`npm run check`、CI）讀工作樹：Git 取出檔案時的轉換會改到掃的內容 | `.gitattributes` 對含金鑰的文字檔設了 `working-tree-encoding`（例如 UTF-16）或 `filter`，而且這個 commit 沒經過 pre-commit（在 GitHub 網頁上直接改、沒裝 hook 的 clone）；這個 repo 現在只有 hook 的換行規則 | CI 讀 checkout 出來的檔，轉成 UTF-16 或被 filter 改過的金鑰對不上規則，CI 不擋。經過 pre-commit 的 commit 照常擋（`--staged` 讀索引的 blob，L2 R7）。避開：不對可能含金鑰的文字檔設編碼或 filter | [三個外掛併進同一個 repo 第一步的 L2](<Claude Codex Discussion/2026-11-18-one-repo-step-1-review.md>) R7 的同一類、這次不改的（機制和 R7 相同，推斷，沒在 CI 實測） |
 | 分派表找入口相依時，區塊註解夾在 `require`／`import` 與括號或路徑之間，或區塊註解裡有不成對引號的 `from '…`，會少認那個相依 | 入口（hook、`check.yml`、外掛 scripts 叫的 `tools/` 檔）或 Cards 的測試檔這樣寫（`require /* … */ ('./x')`），之後只改它載入的下游工具或經 helper 讀的文件；現在的入口與測試都沒有這種寫法 | 該跑的外掛檢查被跳過（入口那一種 pre-commit 與 CI 都跳過；Cards 測試那一種 CI 照跑 Cards 的完整檢查）。入口那一種，`tools/tests/dispatch.test.ts` 的語法樹驗收在加入這種接線的 commit 會失敗。避開：註解不要夾在 `require(` 與路徑中間 | [三個外掛併進同一個 repo 第二步 A 的 L2](<Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R11（R9 修正引入；再補一條判斷就是同一類的第四代，照 D-200 不加） |
+| 分派表認外掛 scripts 呼叫的 `tools/` 檔，只認字面寫出的路徑（`../../tools/x.ts`，加引號或跳脫都算）；指向同一個檔的其他拼法認不到：`./`（`../../tools/./x.ts`）、`//`、大小寫不同、先 `cd ../../tools` 再叫、`npm --prefix ../../tools run x`、用 shell 變數組路徑（`T=../../tools; node $T/x.ts`） | 外掛或套件的 `package.json` 這樣寫，之後只改或刪那支工具；現在 apps/、packages/ 的 scripts 沒有任何一條含 `..`，入口只有 hook 與 `check.yml` 字面寫的 `tools/x.ts` | 那一次 commit 的 pre-commit 與 CI 都跳過那個外掛的檢查。機率低。避開：外掛 scripts 呼叫共用工具時寫正規的相對路徑。拼法數不完，不再補（再補一種就是第 4 代，D-200）；真的要防，改成檢查入口一律寫正規路徑 | [AI 連線套件的 L2](<Claude Codex Discussion/2026-11-25-ai-client-l2.md>) 第四輪 第 2 項（後三種寫法是 Fable 5.2 xhigh 驗的） |
 | 分派表把結尾有斜線的資料夾路徑（`require('./x/')`）旁邊同名的 `x.js` 也算成入口 | 入口這樣寫，同時有 `x/index.js` 與 `x.js`，只改 `x.js`；現在沒有這種接線 | 多跑三個外掛的檢查，不會少跑。不用避開 | [三個外掛併進同一個 repo 第二步 A 的 L2](<Claude Codex Discussion/2026-11-20-one-repo-step-2-review.md>) R12（R10 修正引入） |
 | 圍欄的判斷（`tools/fences.ts`，決策查詢與 `section.ts` 用）不追蹤清單與引用框，收尾的縮排拿開頭的縮排當基準：清單裡沒收尾的圍欄，清單結束後仍算到檔尾；頂層開頭縮排 1～3 格的圍欄，裡面縮排比開頭多不到 4 格的圍欄記號（CommonMark 只准 3 格以內）被當成收尾；引用框裡 `> ` 後面接 tab 的收尾，tab 寬度算錯 | 清單項目裡開了圍欄、沒寫收尾；頂層的圍欄開頭縮排、內容有縮排 4～6 格的三個反引號；引用框裡用 tab 縮排收尾 | 前兩種：後面的標題與 D-ID 當成程式碼（或反過來），`section.ts` 找不到那些標題、決策查詢少列或多列；第三種只影響到引用框結束。repo 現在 392 份 Markdown 和 markdown-it 一致。避開：圍欄都寫收尾、開頭頂格 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N10、[第三輪](tasks/workflow-impl-review.md#第三輪的回報) M4 |
 | 入口的狀態行搬進 roadmap 時（`moveText`），帶標題的連結 `[t](x.md "t")`、`/` 開頭的路徑、路徑裡有括號的連結不改基準；白板「最近定案」的 backlog 站，檔名有 `#` 時切錯 | 入口的狀態行這樣寫連結，或 backlog 的檔名有 `#`；現在都沒有 | roadmap 或白板的連結指錯，多半由文件檢查報成壞連結，不會默默寫壞。避開：狀態行的連結寫一般的相對路徑 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N11 |
@@ -42,6 +46,20 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 | 共用檢查的組字串那條只查程式與 workflow | 之後追蹤 `.sh`、`.ps1`、`.cmd`、`.py`，或在 `package.json` 的 scripts、`.claude/settings.json` 的 hook 指令裡組 `apps/` 路徑（`CODE_FILE` 是白名單：`ts`／`js` 各種、`yml`、`yaml`、`.githooks/`）；現在沒有 | 組出來的路徑不被擋（大小寫與 `plugins` 兩條仍查全部檔案）。避開：新增這類腳本時把副檔名加進 `CODE_FILE` | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第二輪 S6 |
 | 共用檢查的誤報 | 程式或 workflow 裡：路由與連結 `'/apps'`、介面文字 `'Apps'`、網址模板 `` `https://…/apps/${slug}` ``（組字串那條）；別的 repo 的網址、英文句子、`node_modules` 路徑碰到大小寫不符的 `apps/<軟體名>`（大小寫那條，查全部文字檔）；vault 路徑的正規式從 `configDir` 組（前面不是字面 `obsidian\/`）；任務標題寫了打錯的樣本，同步到 `docs/roadmap.md` 那一列 | 擋下引入那一行的 commit。避開：改寫法（路由字串拆開、vault 路徑從 `.obsidian\/plugins\/` 寫起或接 `essence-` ID），真的需要時加進例外表並寫明放行哪幾條；任務標題不寫打錯的樣本 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R4、第二輪 S1 |
 | 共用檢查的訊息在少數情況帶錯路 | `apps/` 正下方放檔（`apps/README.md`）；Portal 這類只有文件的軟體放 `.gitkeep`、PDF、CSV、txt；同一個資料夾有好幾個問題 | 前者報「不在表上」，看不出是「這一層不放檔」；後者算成程式被擋；同一個資料夾只報第一個，要一個一個修。等 Portal 的第一個任務碰到再調 | [D-218 合併前 L2](tasks/rename-plugins-to-apps-review.md) 第一輪 R9 |
+
+### AI 連線套件
+
+`packages/ai-client/`（[任務說明](tasks/ai-client.md)）第一步刻意不做的，各有觸發點（Claude 2026-11-25 規劃、Fable 審查時提的）：
+
+- 💡 **先上傳檔案再引用（各家的 Files API）**：教材重複送時省流量與時間。觸發點：同一份教材一學期送超過三次的情況變常見。
+- 💡 **可快取區塊的標記**：「到這個區塊為止可快取」，規則放 `instructions` 時連做幾課省錢；不做自動快取（PDF 在最後，等於每次多付寫入）。觸發點：Cards 的直接製作上線後，連做幾課的費用明顯偏高。
+- 💡 **送出前估費用**：回範圍與假設（頁數、預期輸出量由呼叫端給），畫面寫「照牌價估計，不含免費額度」。觸發點：Cards 要在送出前顯示預估。
+- 💡 **`gemini-interactions` 方言**：送 `store: false`。觸發點：Google 宣布 generateContent 要停，或 Interactions 轉成正式版。
+- 💡 **區網的本機模型**（`http://192.168.x.x` 的 Ollama）：要一個呼叫端明確打開的開關。觸發點：有人要用家裡另一台電腦跑的模型。
+- 💡 **`node:https` 傳輸層**：給不開 CORS 的端點，要放 Cards 的 `src/desktop/`（D-148）。觸發點：第三步的 CORS 實測有一家不通，或要接本機網路上的模型。
+- 💡 **錄下真的回應當範例**（冒煙測試加 `--record`，欄位走白名單，只存自編的內容）：觸發點：冒煙測試發現範例和真的回應對不上。
+- 💡 **多輪與工具呼叫**：助理訊息帶各方言的不透明區塊（thinking、thought signature、reasoning item）、錯誤帶已知用量。觸發點：要做「請 AI 修正」的多輪或工具呼叫。
+- 💡 **發布到 npm**：另外編譯成 `.js`（Node 不在 `node_modules` 裡執行 `.ts`）。觸發點：別的 repo 要用、又不方便複製資料夾。
 
 ### Essence Capture 與 Essence Mindboard
 

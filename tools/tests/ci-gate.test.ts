@@ -16,14 +16,17 @@ const ZEROS = '0'.repeat(40);
 
 type Needs = Record<string, { result?: string; outputs?: Record<string, string> }>;
 
-/** plan 說 Cards、Mindboard 要跑，共用工具、Capture 不跑；每個 job 都照 plan。 */
+/** plan 說 Cards、Mindboard 要跑，共用工具、Capture、AI 連線套件不跑；每個 job 都照 plan。 */
 function needs(change: (n: Needs) => void = () => {}): string {
   const n: Needs = {
     plan: {
       result: 'success',
       outputs: {
-        tools: 'false', cards: 'true', capture: 'false', mindboard: 'true',
-        reasons: JSON.stringify({ tools: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', mindboard: '完整檢查（改到 apps/Mindboard/a.ts）' }),
+        tools: 'false', cards: 'true', capture: 'false', mindboard: 'true', 'ai-client': 'false',
+        reasons: JSON.stringify({
+          tools: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（這次改的路徑都不是它的：src/a.ts）',
+          mindboard: '完整檢查（改到 apps/Mindboard/a.ts）', 'ai-client': '照分派表跳過（這次改的路徑都不是它的：src/a.ts）',
+        }),
         compare: 'aaa..bbb（PR：分岔點到 PR 的 head）',
       },
     },
@@ -32,6 +35,7 @@ function needs(change: (n: Needs) => void = () => {}): string {
     cards: { result: 'success' },
     capture: { result: 'skipped' },
     mindboard: { result: 'success' },
+    'ai-client': { result: 'skipped' },
   };
   change(n);
   return JSON.stringify(n);
@@ -45,7 +49,20 @@ void test('§4 gate：每個 job 都照 plan 才過；摘要有對象、跑不�
   assert.match(text, /\| Capture \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
   assert.match(text, /\| Mindboard \| 跑 \| 完整檢查（改到 apps\/Mindboard\/a\.ts） \| success \|/);
   assert.match(text, /\| 共用工具 \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
+  assert.match(text, /\| AI 連線套件 \| 不跑 \| 照分派表跳過（這次改的路徑都不是它的：src\/a\.ts） \| skipped \|/);
   assert.match(text, /比較：aaa\.\.bbb/);
+});
+
+void test('§4 gate：套件（docs/tasks/ai-client.md〈8〉）要跑卻跳過、不該跑卻跑了、沒有結果都不過', () => {
+  const skipped = gate(needs(n => { n.plan.outputs!['ai-client'] = 'true'; }));
+  assert.equal(skipped.ok, false);
+  assert.match(skipped.problems.join('\n'), /AI 連線套件：要跑卻跳過/);
+  const extra = gate(needs(n => { n['ai-client'].result = 'success'; }));
+  assert.equal(extra.ok, false);
+  assert.match(extra.problems.join('\n'), /AI 連線套件：不該跑卻跑了（success）/);
+  const missing = gate(needs(n => { delete n['ai-client']; }));
+  assert.equal(missing.ok, false);
+  assert.match(missing.problems.join('\n'), /AI 連線套件：job 沒有結果/);
 });
 
 void test('§4 gate：共用工具（第二步 §A4）要跑卻跳過、不該跑卻跑了、沒有結果都不過', () => {
@@ -129,7 +146,7 @@ void test('§4 gate：比較端點與理由缺、空或型別錯都不過（L2 R
   const loose = (n: Needs) => n as Record<string, Record<string, unknown>>;
   const outputs = (n: Needs) => n.plan.outputs as Record<string, unknown>;
   const reasons = (value: unknown) => (n: Needs) => { n.plan.outputs!.reasons = JSON.stringify(value); };
-  const full = { tools: '照分派表跳過（…）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（…）', mindboard: '完整檢查（改到 apps/Mindboard/a.ts）' };
+  const full = { tools: '照分派表跳過（…）', cards: '完整檢查（改到 src/a.ts）', capture: '照分派表跳過（…）', mindboard: '完整檢查（改到 apps/Mindboard/a.ts）', 'ai-client': '照分派表跳過（…）' };
   const cases: [string, (n: Needs) => void, RegExp][] = [
     ['沒有 compare', n => { delete n.plan.outputs!.compare; }, /plan 沒有比較的端點/],
     ['compare 是空字串', n => { n.plan.outputs!.compare = ''; }, /plan 沒有比較的端點/],
@@ -138,8 +155,9 @@ void test('§4 gate：比較端點與理由缺、空或型別錯都不過（L2 R
     ['沒有 reasons', n => { delete n.plan.outputs!.reasons; }, /Cards：plan 沒有寫理由[\s\S]*Capture：plan 沒有寫理由[\s\S]*Mindboard：plan 沒有寫理由/],
     ['reasons 是空字串', n => { n.plan.outputs!.reasons = ''; }, /Capture：plan 沒有寫理由/],
     ['reasons 是 {}', reasons({}), /Cards：plan 沒有寫理由[\s\S]*Capture：plan 沒有寫理由[\s\S]*Mindboard：plan 沒有寫理由/],
-    ['reasons 少一個外掛', reasons({ tools: full.tools, cards: full.cards, capture: full.capture }), /Mindboard：plan 沒有寫理由/],
-    ['reasons 是陣列', reasons([full.tools, full.cards, full.capture, full.mindboard]), /plan 的理由不是物件/],
+    ['reasons 少一個外掛', reasons({ tools: full.tools, cards: full.cards, capture: full.capture, 'ai-client': full['ai-client'] }), /Mindboard：plan 沒有寫理由/],
+    ['reasons 少套件', reasons({ tools: full.tools, cards: full.cards, capture: full.capture, mindboard: full.mindboard }), /AI 連線套件：plan 沒有寫理由/],
+    ['reasons 是陣列', reasons([full.tools, full.cards, full.capture, full.mindboard, full['ai-client']]), /plan 的理由不是物件/],
     ['reasons 是 null', reasons(null), /plan 的理由不是物件/],
     ['理由是空字串', reasons({ ...full, capture: '' }), /Capture：plan 沒有寫理由/],
     ['理由不是字串', reasons({ ...full, cards: 5 }), /Cards：plan 沒有寫理由/],
@@ -218,7 +236,7 @@ void test('§4 比較端點：PR 用分岔點到 head，不用 base 的最新；
   assert.match(p.compare, new RegExp(`^${h.start}\\.\\.${h.only}`));
   assert.match(p.reasons.cards, /照分派表跳過/);
   // 缺 SHA：跑全部。
-  assert.equal(runs(plan({ ...event, payload: {} }, gitIn(h.root), h.root)), 'tools,cards,capture,mindboard');
+  assert.equal(runs(plan({ ...event, payload: {} }, gitIn(h.root), h.root)), 'tools,cards,capture,mindboard,ai-client');
 });
 
 void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家前開的分支只改 tools/install.ts，合併後落在 apps/Cards/tools/ → Cards 也跑', async t => {
@@ -256,7 +274,7 @@ void test('§4 比較端點：PR 也看合併樹（第二步 L2 R1）：搬家�
   // 合併 commit 的第二個 parent 不是 PR 的 head、或不是合併 commit：對不上就跑全部。
   for (const sha of [moved, 'merge-sha']) {
     const all = plan({ ...event, sha }, gitIn(root), root);
-    assert.equal(runs(all), 'tools,cards,capture,mindboard', sha);
+    assert.equal(runs(all), 'tools,cards,capture,mindboard,ai-client', sha);
     assert.match(all.reasons.cards, /合併 commit/);
   }
 });
@@ -270,7 +288,7 @@ void test('§4 比較端點：push 到 main 有 before 就比 before..sha；全�
 
   for (const [before, why] of [[ZEROS, /沒有上一次的 SHA/], ['1234567890abcdef1234567890abcdef12345678', /clone 裡找不到/], [h.only, /不是這次的祖先/]] as const) {
     const all = plan(push(before, h.main1), gitIn(h.root), h.root);
-    assert.equal(runs(all), 'tools,cards,capture,mindboard', before);
+    assert.equal(runs(all), 'tools,cards,capture,mindboard,ai-client', before);
     assert.match(all.reasons.mindboard, why);
     assert.equal(all.compare, '全部');
   }
@@ -286,12 +304,12 @@ void test('§4 比較端點：push 到分支算整個分支（和 origin/main �
   assert.equal(runs(plan(branch('refs/heads/only', h.only), gitIn(h.root), h.root)), 'mindboard');
 
   const tag = plan(branch('refs/tags/v0.0.1', h.only), gitIn(h.root), h.root);
-  assert.equal(runs(tag), 'tools,cards,capture,mindboard');
+  assert.equal(runs(tag), 'tools,cards,capture,mindboard,ai-client');
   assert.match(tag.reasons.cards, /push tag/);
 
   h.git('update-ref', '-d', 'refs/remotes/origin/main');
   const lost = plan(branch('refs/heads/only', h.only), gitIn(h.root), h.root);
-  assert.equal(runs(lost), 'tools,cards,capture,mindboard');
+  assert.equal(runs(lost), 'tools,cards,capture,mindboard,ai-client');
   assert.match(lost.reasons.capture, /找不到和 origin\/main 的合併基點/);
 });
 
@@ -309,7 +327,7 @@ void test('§4 plan 的命令：寫 GITHUB_OUTPUT 的旗標、理由與比較的
     encoding: 'utf8',
   });
   const lines = (await readFile(output, 'utf8')).trim().split('\n');
-  assert.deepEqual(lines.slice(0, 4), ['tools=false', 'cards=false', 'capture=false', 'mindboard=true']);
+  assert.deepEqual(lines.slice(0, 5), ['tools=false', 'cards=false', 'capture=false', 'mindboard=true', 'ai-client=false']);
   const reasons = JSON.parse(lines.find(line => line.startsWith('reasons='))!.slice('reasons='.length)) as Record<string, string>;
   assert.match(reasons.mindboard, /完整檢查（改到 apps\/Mindboard\/b\.ts）/);
   assert.match(lines.find(line => line.startsWith('compare='))!, new RegExp(`${h.start}\\.\\.${h.only}`));

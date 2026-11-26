@@ -50,7 +50,7 @@ void test('文法：文法點是去掉最後一組括號（用法）的那段；
   assert.equal(old.kind === 'qa' ? old.typed : 'cloze', null);
 });
 
-void test('文法與變化的問答題打字：答案照中翻英拆 |，字數不同只是提示', () => {
+void test('文法與變化的問答題打字：答案照中翻英拆 |，字數不同也收、不提示（D-237）', () => {
   const parsed = one('現在完成式（從過去持續到現在） 文法', "I ＿＿ Tom since I was six. (know) :: have known | 've known");
   const prompt = parsed.targets[0].prompts[0];
   assert.equal(prompt.kind, 'qa');
@@ -58,7 +58,9 @@ void test('文法與變化的問答題打字：答案照中翻英拆 |，字數�
   assert.deepEqual(parsed.problems, []);
   assert.equal(parsed.targets[0].ok, true);
   const words = one('動名詞（當主詞） 文法', '＿＿ movies is fun. (watch) :: Watching | To watch');
-  assert.deepEqual(words.problems.map(p => [p.code, p.level]), [['typed-answer-words', 'hint']]);
+  assert.deepEqual(words.problems, []);
+  const both = words.targets[0].prompts[0];
+  assert.deepEqual(both.kind === 'qa' && both.typed, ['Watching', 'To watch']);
 });
 
 void test('英文卡組裡讀不成打字是錯誤（同中翻英）；填空題照翻面、只提示', () => {

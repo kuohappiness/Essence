@@ -246,23 +246,20 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 - 模型可以插拔，不指定供應商；AI 的建議與人的確認分開記錄（[D-007](../../../docs/decisions.md#d-007-ai-選用且可插拔)）。
 - AI 最有價值的位置在「來源 → 知識項目 → 學習目標 → 題目」這段；「複習 → 檢核 → 排程」這段不需要 AI。
 - AI 在程式裡就是一次呼叫：送出「教材 ＋ 學生年級 ＋ 製卡規則」，收回用出題語法寫成的學習目標與題目，存成草稿，由家長修改後啟用。AI 負責三件事：從教材製卡、分析錯題、產生英文記憶錨點。
-- **v1 接法採訂閱優先，尚未實作／驗證**（[D-126](../../../docs/decisions.md#d-126-訂閱優先的-ai-製卡與側欄修改)）：
-  - 用 ChatGPT 製作：Cards 透過 Sign in with ChatGPT 使用家長的方案額度；G1～G4 通過後推薦。
-  - 用 Claude 製作：背景啟動家長已登入的原版 Claude Code，不開工具，在 vault 外暫存目錄跑；由 Cards 收回、檢查並存草稿。產品整合條款與四項驗證通過後才上線。
-  - Codex CLI 背景接法：只在 SIWC 未過 G1～G4，或 Free／Go 帳號無法使用 SIWC 時才做。
+- **直接呼叫只走 API 金鑰，尚未實作**（[D-231](../../../docs/decisions.md#d-231-外掛直接呼叫-ai-只走-api-金鑰取消訂閱接法)）：家長在設定頁選服務、貼上自己的金鑰，Cards 送出、收回、檢查並存草稿；用訂閱登入、背景啟動 Claude Code 或 Codex CLI 的接法已取消（原本 [D-126](../../../docs/decisions.md#d-126-訂閱優先的-ai-製卡與側欄修改) 第 1 點）。
   - 交給其他 AI／匯入結果：保留複製貼上與手動匯入的共通備援；匯入共用檢查、ID、快照與草稿流程。
-  - API 直連：保留為選項，照 D-059、D-072、D-085；G1～G4 通過前，這三條與 D-039 的本文照舊。Capture、Mindboard 開工時再評估接法。
+  - API 直連照 D-059、D-072、D-085、[D-232](../../../docs/decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)：連線用最上層的共用套件 `packages/ai-client/`，Cards 經自己的轉接檔、用相對路徑 import 套件的入口檔；做法見 [AI 連線模組的任務說明](../../../docs/tasks/ai-client.md)。Capture、Mindboard 開工時再評估接法。
 - **固定生成與自由修改分開**：製作、加深、錯題分析由 Cards 按鈕送出一次請求；個別修改在 Obsidian 筆記，可用 Claudian 側欄。Cards 不另做聊天或修改畫面，也不寫 Claudian 專用接點；只提供從 syntax.md 產生的寫法 skill、結構檢查及既有卡組指令。偵測到 Claudian 時提供設定開關，是否讀取 skill 與差異接受流程仍待驗證。家長已核對該次差異並接受，不再重複審核；側欄權限由家長設定，背景生成的「不開工具」不套用到自由對話（D-126）。
 - **ID 與進度**：筆記變動時檢查有紀錄的 ID 消失、同篇 ID 重複；只檢查結構，不判斷能力是否改變。已複習目標拆分／合併後，舊紀錄保留，新目標配新 ID 並從頭開始，只提示不要求家長選承接關係（D-126，規劃中）。
-- ✅ API 金鑰與規劃中的登入憑證只存在電腦本機、vault／repo 以外：不經 iCloud 同步到手機或進 Git；不宣稱能與其他外掛隔離（[D-003](../../../docs/decisions.md#d-003-公開範圍)、D-126）。
+- ✅ API 金鑰只存在電腦本機、vault／repo 以外：不經 iCloud 同步到手機或進 Git；不宣稱能與其他外掛隔離（[D-003](../../../docs/decisions.md#d-003-公開範圍)、D-126、D-231）。
 - ✅ 模型的選擇原則（[D-055](../../../docs/decisions.md#d-055-ai-模型的選擇原則)）：免費或開源優先，其次是 CP 值高、成本低的模型；不限定任何一家；可以接受免費方案把資料拿去訓練。
-- API 直連的做法（[D-059](../../../docs/decisions.md#d-059-ai-的接法一種介面模型不包進外掛)）：
-  - ✅ **API 選項只做一種介面**：OpenAI 相容的 Chat Completions。家長從預設選單選一個、貼上金鑰，網址與模型由外掛填好，也可以自訂（[D-072](../../../docs/decisions.md#d-072-ai-服務的推薦與設定方式)）；API 推薦的服務與模型見 [AI 模型推薦](../../../docs/ai-models.md)。Gemini、OpenRouter（含免費的開源模型）、DeepSeek、Groq、Mistral，以及電腦本機跑的 Ollama、LM Studio 都支援這種介面。此 API 選項不為個別廠商寫轉接器；訂閱與 CLI 接法的條件另照 D-126。
+- API 直連的做法（[D-059](../../../docs/decisions.md#d-059-ai-的接法一種介面模型不包進外掛)、[D-232](../../../docs/decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)）：
+  - ✅ **API 選項經共用套件講四種方言**：OpenAI Responses、OpenAI 相容的 Chat Completions、Gemini、Anthropic；OpenRouter（含免費的開源模型）、DeepSeek、Groq、Mistral，以及電腦本機跑的 Ollama、LM Studio 都講 OpenAI 相容的那一種。家長從預設選單選一個、貼上金鑰，網址與模型由外掛填好，也可以自訂（[D-072](../../../docs/decisions.md#d-072-ai-服務的推薦與設定方式)）；API 推薦的服務與模型見 [AI 模型推薦](../../../docs/ai-models.md)。講這四種之一的廠商只加目錄資料，不改 Cards 的程式。
   - ✅ **教材怎麼送給 AI**（[D-076](../../../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）：PDF 與圖片由 Capture 轉成頁面圖片送去轉錄，圖表截成圖片放進轉錄稿；Cards 製卡時送出轉錄稿與裡面的圖片。所以兩個外掛都需要能看圖的模型。Obsidian 內建的 PDF 元件能不能讓外掛轉圖片，寫程式前確認。2026-11-16 起 Capture 移到第二階段，v1 的教材由家長在自己的 AI 對話附課本（[D-206](../../../docs/decisions.md#d-206-essence-capture-移到第二階段v1-的教材直接附給-ai)）；接上 API 時教材怎麼送，到那時候再定。
   - **用量估計**：一次製卡約 1.5～2 萬 token 輸入、3 千 token 輸出；一學期約 60 次，約 100 萬 token 輸入。便宜的模型一學期不到 1 美元，免費額度也夠用（OpenRouter 免費模型每天約 50 次）。價格與額度常變，寫程式前查官方頁面。
   - ✅ **真正的成本是審核時間**：模型差一點，家長要多刪改，學生要多複習不好的卡。預設模型依卡片品質挑，比較 2～3 個候選模型（由 API 規劃在 `experiments/` 實測；NotebookLM 對照實驗暫緩）。開源模型要特別檢查是否用台灣用語。
   - **複製貼上模式仍是最省錢的路**：各家網頁版的免費方案，常常比免費 API 用得到更強的模型。
-- ✅ 本機開源模型列為保留擴充，不在 v1（[D-055](../../../docs/decisions.md#d-055-ai-模型的選擇原則) 補充）：一般使用者沒有獨立顯卡。上面的 OpenAI 相容介面本來就能接 Ollama，之後要用不必另外寫程式。
+- ✅ 本機開源模型列為保留擴充，不在 v1（[D-055](../../../docs/decisions.md#d-055-ai-模型的選擇原則) 補充）：一般使用者沒有獨立顯卡。Ollama 講 OpenAI 相容的介面，共用套件本來就能接，之後要用不必另外寫程式。
 - ✅ 模型檔不包進外掛，也不放進 vault（[D-059](../../../docs/decisions.md#d-059-ai-的接法一種介面模型不包進外掛)）：
   - 外掛資料夾 `.obsidian/plugins/` 在 vault 裡，會經 iCloud 同步到每台裝置，包括 iPhone。語音模型約 90～330 MB，語言模型要數 GB。
   - Obsidian 每次啟動都要載入外掛，檔案太大會拖慢啟動（D-051 在意啟動時間）；iCloud 也可能把大檔案從 iPhone 移除，外掛就載入失敗。

@@ -14,7 +14,7 @@ import { access, appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, sy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FOLDERS } from '../apps.ts';
+import { FOLDERS, PACKAGES } from '../apps.ts';
 import { EXCEPTIONS, checkText } from '../check-app-imports.ts';
 import { CARDS } from '../dispatch.ts';
 
@@ -94,6 +94,11 @@ async function clone(t: test.TestContext) {
     await mkdir(join(repo, FOLDERS[plugin]), { recursive: true });
     await writeFile(join(repo, FOLDERS[plugin], 'package.json'), JSON.stringify({ name: `essence-${plugin}`, private: true, scripts: { check: `node ../../mark.mjs ${plugin}` } }, null, 2) + '\n');
   }
+  // 套件（docs/tasks/ai-client.md〈8〉）的 check 也換成記號；沒有相依，hook 不要求先 npm ci。
+  for (const [id, dir] of Object.entries(PACKAGES)) {
+    await mkdir(join(repo, dir), { recursive: true });
+    await writeFile(join(repo, dir, 'package.json'), JSON.stringify({ name: `essence-${id}`, private: true, scripts: { check: `node ../../mark.mjs ${id}` } }, null, 2) + '\n');
+  }
   // 共用工具的完整檢查（第二步 §A2）也換成記號。
   const toolsPkg = JSON.parse(await readFile(join(repo, 'tools/package.json'), 'utf8')) as { scripts: Record<string, string> };
   toolsPkg.scripts['self-check'] = 'node ../mark.mjs tools';
@@ -166,7 +171,7 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   let r = await commit(['-m', 'mindboard only']);
   assert.ok(r.ok, r.out);
   assert.deepEqual(r.marks, ['mindboard']);
-  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）通過$/);
+  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Cards：照分派表跳過（這次改的路徑都不是它的：apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）；Capture：照分派表跳過（.+）；Mindboard：完整檢查（改到 apps\/Mindboard\/src\/a\.ts、apps\/Mindboard\/src\/b\.ts）通過；AI 連線套件：照分派表跳過（.+）$/);
   await assert.rejects(access(join(repo, C, 'node_modules')), { code: 'ENOENT' });
 
   // 2. 只改 Cards：Cards 的資料夾沒有 node_modules 擋下，裝過（空的 node_modules）才跑。
@@ -213,13 +218,13 @@ void test('§3 乾淨 clone 的 hook：D-208 的五種情況照分派表跑，�
   assert.deepEqual(r.marks, ['tools']);
   assert.match(lastLine(r.out), /共用工具：完整檢查（改到 tools\/check-docs\.ts）通過；Cards：照分派表跳過/);
 
-  // 7. 改 .githooks/（第 6 條）：共用工具與三個外掛都跑完整檢查（第二步 §A3、驗收第 A6 項）。
+  // 7. 改 .githooks/（第 6 條）：共用工具、三個外掛與套件都跑完整檢查（第二步 §A3、驗收第 A6 項）。
   await appendFile(join(repo, '.githooks/commit-msg'), '# 探針\n');
   await git(repo, 'add', '--', '.githooks/commit-msg');
   r = await commit(['-m', 'githooks']);
   assert.ok(r.ok, r.out);
-  assert.deepEqual(r.marks, ['capture', 'cards', 'mindboard', 'tools']);
-  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：完整檢查（改到 \.githooks\/commit-msg）通過；Cards：完整檢查（改到 \.githooks\/commit-msg）通過；Capture：完整檢查（改到 \.githooks\/commit-msg）通過；Mindboard：完整檢查（改到 \.githooks\/commit-msg）通過$/);
+  assert.deepEqual(r.marks, ['ai-client', 'capture', 'cards', 'mindboard', 'tools']);
+  assert.match(lastLine(r.out), /^分派表：共用檢查通過；共用工具：完整檢查（改到 \.githooks\/commit-msg）通過；Cards：完整檢查（改到 \.githooks\/commit-msg）通過；Capture：完整檢查（改到 \.githooks\/commit-msg）通過；Mindboard：完整檢查（改到 \.githooks\/commit-msg）通過；AI 連線套件：完整檢查（改到 \.githooks\/commit-msg）通過$/);
 
   // 外掛的檢查失敗就擋下，commit 不會進去。
   const head = await git(repo, 'rev-parse', 'HEAD');

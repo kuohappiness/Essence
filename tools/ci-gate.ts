@@ -65,8 +65,8 @@ export function plan(event: Event, git: Git, root: string): Plan {
   const checkout = git(['rev-parse', 'HEAD']) ?? '（讀不到）';
   const ends = endpoints(event, git);
   const all = (why: string): Plan => ({
-    runs: { tools: true, cards: true, capture: true, mindboard: true },
-    reasons: { tools: why, cards: why, capture: why, mindboard: why },
+    runs: Object.fromEntries(TARGETS.map(target => [target, true])) as Record<Target, boolean>,
+    reasons: Object.fromEntries(TARGETS.map(target => [target, why])) as Record<Target, string>,
     compare: '全部', checkout, blocked: [],
   });
   if (ends.kind === 'all') return all(ends.why);
@@ -106,7 +106,7 @@ const filled = (value: unknown): string | undefined => (typeof value === 'string
 const describe = (value: unknown) => (value === undefined ? '沒有' : typeof value === 'string' ? value : JSON.stringify(value));
 
 /**
- * needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, tools: { result }, cards: { result }, … }。
+ * needs 是 toJSON(needs)：{ plan: { result, outputs }, shared: { result }, tools: { result }, cards: { result }, …, 'ai-client': { result } }。
  * 每個值都先查型別（L2 R4）：缺、空或型別錯的結果、旗標、比較端點與理由都列成問題，摘要不會因為型別錯拋錯。
  */
 export function gate(needsText: string | undefined): Gate {
