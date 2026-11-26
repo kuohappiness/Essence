@@ -1,3 +1,4 @@
+import { questionType } from '../core/study/index.ts';
 import type { Card, Rating } from '../core/study/index.ts';
 import type { Flow, ReviewLine } from './flow.ts';
 
@@ -65,8 +66,8 @@ const changeable = (allRight: boolean): readonly Rating[] => allRight ? ALL_RIGH
 export function createPick(card: Card, options: { now: () => number; revealed?: boolean }): Flow {
   const cells: Cell[] = card.blanks.map(blank => ({ lt: blank.lt, v: blank.prompt.fingerprint, answer: blank.answer ?? '', filled: null, skipped: false, first: null, status: 'open', held: null, ...(blank.cell === undefined ? {} : { cell: blank.cell }) }));
   const keys = card.group?.keys ?? [];
-  /** 全詩順序卡（D-187、D-204）：字鍵是句子，放過的會變淡，點了是交換。 */
-  const order = card.group?.order !== undefined;
+  /** 排序（全詩順序卡 D-187、D-204，句子排序）：放過的字鍵會變淡，點了是交換。 */
+  const order = questionType(card) === 'order';
   const shown = options.revealed === true;
   let stage: PickView['stage'] = shown ? 'result' : 'answer';
   let cursor: number | null = shown ? null : 0;

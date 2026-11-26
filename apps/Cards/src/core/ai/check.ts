@@ -166,13 +166,15 @@ type Report = (line: number, level: CheckLevel, code: string, msg: string) => vo
 const BOPOMOFO = /^˙?[\u3105-\u3129]{1,3}[ˊˇˋ]?$/u;
 const AMBIGUOUS = '同一句配了兩個讀音，孩子分不出該念哪一個；請換只有一種念法的句子';
 /** 照多音字讀的目標：讀成的，或讀音結尾、有括號卻讀不成的（名稱不用寫成「能……」、不算通用的三題上限）。 */
-const isChoice = (t: DeckTarget): boolean => t.choice !== undefined || choiceProblems(t).length > 0;
+const isChoice = (t: DeckTarget): boolean => t.kind?.id === 'polyphone' || choiceProblems(t).length > 0;
+/** 名稱不用寫成「能……」的目標（本文與候選兩處都用）：比較卡、結尾是相似字／相似詞／比較的、照多音字讀的。 */
+const isPickName = (t: DeckTarget): boolean => t.kind?.id === 'group' || PICK_ENDING.test(t.name) || isChoice(t);
 
 function checkChoice(deck: Deck, issue: Report, subject: string | undefined): void {
   for (const t of deck.targets) {
     const line = t.line + 1;
     for (const p of choiceProblems(t)) issue(p.line + 1, '錯誤', 'choice-invalid', p.message);
-    const choice = t.choice;
+    const choice = t.kind?.id === 'polyphone' ? t.kind.polyphone : undefined;
     if (!choice) continue;
     // 同一句配兩個讀音（或寫兩次）：解析時就不認，上面的 choice-invalid 會報（L2 第三輪 2、3）。
     if (subject === '國語') {
@@ -227,8 +229,8 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
     // 最上層的題目或名稱有 ==、＿：解析照原題型（隱式題、補 ID 留下來的），結尾又寫了相似字、相似詞、比較，八成是想做比較卡（§3 判斷順序第 1 點）。
     if (PICK_ENDING.test(t.name) && /==|＿/.test(lines[t.line].split('::')[0])) issue(line, '錯誤', 'pick-name-cloze', '比較卡的名稱不能有 == 或 ＿，這一行不會變成比較卡；名稱寫成「寨（寨、塞） 相似字」，句子放在底下');
     const spaced = spacedItem(t.name);
-    if ((t.group || unrecognized.has(t)) && spaced) issue(line, '提醒', 'pick-member-space', `括號裡的項目中間有空白，可能少打一個頓號：${spaced}`);
-    const group = t.group;
+    if ((t.kind?.id === 'group' || unrecognized.has(t)) && spaced) issue(line, '提醒', 'pick-member-space', `括號裡的項目中間有空白，可能少打一個頓號：${spaced}`);
+    const group = t.kind?.id === 'group' ? t.kind.group : undefined;
     if (!group) continue;
     groups.set(group.key, [...(groups.get(group.key) ?? []), t]);
     if (group.title !== '相似字' && group.title !== '相似詞' && group.title !== '比較') issue(line, '提醒', 'pick-title', `比較卡的結尾寫「相似字」「相似詞」或「比較」（現在是「${group.title}」），孩子才看得懂標題`);
@@ -244,36 +246,36 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
     if ([...why].length > 15) issue(line, '提醒', 'pick-anchor-long', `記憶錨點冒號前面 ${String([...why].length)} 字，約 15 字以內手機上才一行讀完`);
   }
   for (const members of groups.values()) {
-    const { group, line } = members[0];
-    const words = new Set(members.map(t => t.group?.wordKey));
+    const { kind, line } = members[0];
+    const group = kind?.id === 'group' ? kind.group : undefined;
+    const words = new Set(members.map(t => t.kind?.id === 'group' ? t.kind.group.wordKey : undefined));
     group?.members.forEach((member, i) => { if (!words.has(group.memberKeys[i])) issue(line + 1, '不符', 'pick-member-no-target', `組裡的「${member}」沒有自己的目標：字鍵還在，但不會出這個字的句子，對照也只有字`); });
   }
 }
 
 /**
  * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：只在英文的草稿。解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做：
- * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿、好幾個答案字數相同；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
+ * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿（好幾個答案字數不同也收，D-237）；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
  * 句子排序開頭那格大寫是提醒（§4-6：詞塊照句子中間的寫法，小寫；I、全大寫不算）。
  */
 function checkEnglish(deck: Deck, issue: Report): void {
   for (const p of deck.problems) {
-    const typing = deck.targets.find(t => t.line === p.targetLine)?.typing;
-    if (!typing) continue;
+    if (deck.targets.find(t => t.line === p.targetLine)?.kind?.id !== 'typing') continue;
     if (p.code === 'cloze-not-typed') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化要寫成問答題：句子挖一個 ＿＿ :: 答案');
-    else if (p.code === 'typed-answer-words') issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化的好幾個答案字數要相同，題目的 ＿＿ 才對得上');
   }
   for (const t of deck.targets) {
-    if (t.typing) {
+    if (t.kind?.id === 'typing') {
       for (const p of t.prompts) {
         if (p.kind === 'qa' && p.typed && blanksIn(p.question) !== 1) issue(p.line + 1, '錯誤', 'english-typed-invalid', '文法與變化的題目恰好挖一個 ＿＿，答案填進去要是完整的句子');
       }
     }
-    if (t.sentence) {
-      t.sentence.prompts.forEach((cells, i) => {
+    const sentence = t.kind?.id === 'order' && t.kind.order.style === 'sentence' ? t.kind.order : undefined;
+    if (sentence) {
+      sentence.prompts.forEach((cells, i) => {
         const word = cells.words[0];
         if (cells.starts[0] && /^\p{Lu}/u.test(word) && !/^I\b/.test(word) && word !== word.toUpperCase()) issue(t.prompts[i].line + 1, '提醒', 'english-order-capital', `句子開頭那格寫小寫（${word} → ${word[0].toLowerCase() + word.slice(1)}），複習時程式會換成大寫，大寫會洩漏誰在第一個`);
       });
-    } else if (!t.order && !t.group && /[\s）)]排序$/.test(t.name) && !/(^|\s)全詩\s*排序$/.test(t.name)) {
+    } else if (t.kind?.id !== 'order' && t.kind?.id !== 'group' && /[\s）)]排序$/.test(t.name) && !/(^|\s)全詩\s*排序$/.test(t.name)) {
       issue(t.line + 1, '錯誤', 'english-order-invalid', "英文的排序卡每一題都要是兩格以上的填空，例如 I don't know ==where== ==he== ==lives==.；== 不包句尾的標點，詞塊只寫純文字（不放連結、程式碼、底線）");
     }
   }
@@ -317,7 +319,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const targets: CheckedTarget[] = [], candidates: CheckedTarget[] = [], existing: CheckedTarget[] = [], notes: string[] = [], headings: string[] = [];
   const deck = parseDeck(text, { subject });
   // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這三個詞的、認不得的也一樣，它們另外有比較卡的診斷。
-  const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name) || isChoice(t)).map(t => t.line + 1));
+  const pickNames = new Set(deck.targets.filter(isPickName).map(t => t.line + 1));
   // 多音字不算通用的三題上限（tasks/polyphone-pick.md §5）：句數照讀音數。
   const choiceLines = new Set(deck.targets.filter(isChoice).map(t => t.line + 1));
 
@@ -511,7 +513,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         // 候選裡的比較卡、多音字也一樣：名稱不用寫成「能……」，多音字不算三題上限。
         for (const t of boxDeck.targets) {
           const no = inner[t.line].no;
-          if (t.group || PICK_ENDING.test(t.name) || isChoice(t)) pickNames.add(no);
+          if (isPickName(t)) pickNames.add(no);
           if (isChoice(t)) choiceLines.add(no);
         }
         // 英文的規則候選也一樣（L2 R2）：候選搬出去就會出題。

@@ -1,6 +1,6 @@
 # 題型模組：照形式分、每一科通用（給 Claude，L2 在本機）
 
-狀態：待審｜下一步：合併 PR #52 後開工 A1；使用者回 §6 第 1～3 題與第 4 題的兩件（不擋 A1）｜等誰：Claude、使用者
+狀態：實作中｜下一步：第 A 步已合併（PR #56，2026-11-26，`ff848530`）；先做[句子排序好幾種順序都算對](sentence-order-alternatives.md)（D-238，併進這一串），再照使用者同意的先後做[配對與單選](matching-single-choice.md) → 第 C 步 → 第 B 步；使用者回 §6 第 1～3 題與第 4 題的兩件｜等誰：使用者、Claude
 
 來自：使用者 2026-11-25：「我要做的不是每一科目不同的題型，是一個通用模組，例如每一科都有填空題，配對題，單選題等等」「現在做，進0.7.0」；[題型模組規劃稿](<../Claude Codex Discussion/2026-11-25-question-type-modules.md>)（第 2 版，Fable 5.2 xhigh 第一輪審過）的 §2、§5 第 1、2 段。
 
@@ -24,6 +24,7 @@
 | A1 | §1-1～§1-6：卡型欄位併成一欄、拆檔、每一層照卡型分；`QuestionType` 仍是三個；行為不變 | §1-7 | PR #53（多音字）與 PR #52（卡型分類表）都已合併，`main` 上 `npm run check` 全過、分類表已有多音字的列與範例。A1 照搬、不改卡組的寫法與解析結果，不用格式查核 |
 | A2 | §1-8：排序成為自己的題型（內部的 `QuestionType`） | §1-8 | A1；§6 第 3 題只影響文件與家長看得到的名稱，程式不等 |
 | — | 配對、單選（D-233）：另寫任務說明，接在 A2 的結構上 | 照那份 | A2；[配對與單選討論稿](<../Claude Codex Discussion/2026-11-25-matching-single-choice.md>)談定 |
+| — | 英文句子排序好幾種順序都算對（D-238，coordinator 2026-11-26 併進這一串）：另寫任務說明，排在配對前面 | 照那份 | A2 |
 | C | §3：去格式一處 | §3-5 | A2；自己一個 PR。解析結果除了 §3-3 列的句首例外都不變（第 1 條不變量保證），不用格式查核 |
 | B | §2：好幾題的排序各科都能點 | §2-4 | A2；使用者同意 §6 第 1 題；§2 先過格式查核（§2-5）；自己一個 PR |
 
@@ -34,6 +35,8 @@
 - **兩個正式 vault 的 `compare-versions`**：分三次，每次在那個 PR 合併前跑，預期寫在各步的驗收（§1-7、§2-3、§3-5）。在使用者的電腦用 Remote Control 跑，使用者只要按同意。
 - 分支：每一步從當時的 `main` 開新分支；一個 commit 只做一件事（code-quality〈測試〉）。
 - 同時在動 Cards 的串：考前抽測、手機啟用第二步、API 製卡、比較測試工具（也改 `tools/compare/adapter.ts`，§1-7 的快照欄位先和它對）、AI 提示詞架構。A1 開工前問各串預計合併的日子。
+
+→ [英文句子排序好幾種順序都算對](sentence-order-alternatives.md)（2026-11-26）
 
 ## §1 第 A 步：一種卡型在每一層一處（行為不變）
 
@@ -84,7 +87,7 @@ export type KindId = Kind['id'];
 | `kinds/order.ts` | `readOrder`、`readSentence`、`sentenceCells`、`plainBlock`、`visibleText` |
 | `kinds/typing.ts` | `readTyping`、`pairWordOf`、`mentions`、`splitMeaning`、`lastBracket`、`wordKey` |
 | `kinds/couplet.ts` | `readCouplet`、`coupletLines` |
-| `question-types.ts` | 認的先後（下面）、`KIND_NEEDS`（§1-5）；對外的匯出和現在一樣，`core/deck/index.ts` 照舊轉出 |
+| `question-types.ts` | 認的先後（下面）、`KIND_NEEDS`（§1-5）；`core/deck/index.ts` 轉出的照舊，只多 `needsOf` 與型別 `Kind`（L2 第二輪 F5 補）；從 `question-types.ts` 還 import 得到哪些照 §1-6 的表，表上寫「否」的改成直接 import 那個 `kinds/` 的檔（L2 第一輪 R5 改寫：原本寫「對外的匯出和現在一樣」，和 §1-6 矛盾） |
 
 `typedAnswer` 是打字題型的（中翻英也用），放 `src/core/deck/typed-answer.ts`，由 `question-types.ts` 轉出。
 
@@ -129,6 +132,41 @@ export type KindId = Kind['id'];
 
 A1 合併時在這一節附一張「舊寫法 → 新寫法」的表（`target.group` → `target.kind?.id === 'group' ? target.kind.group : undefined`、`typing.kind` → `typing.style`、`question-types.ts` 的函式搬到哪個檔），其他串照表改一次。
 
+**目標的卡型欄位**（`src/core/deck/types.ts`；`Order` 不匯出，要排序的內容時照 `style` 收窄）：
+
+| 舊寫法 | 新寫法 |
+|---|---|
+| `target.group` | `target.kind?.id === 'group' ? target.kind.group : undefined` |
+| `target.choice` | `target.kind?.id === 'polyphone' ? target.kind.polyphone : undefined` |
+| `target.order`（全詩） | `target.kind?.id === 'order' && target.kind.order.style === 'poem' ? target.kind.order : undefined`（多一個 `style: 'poem'`，其他五個欄位照舊） |
+| `target.sentence`（句子排序） | 同上，`style === 'sentence'`（多一個 `style: 'sentence'`） |
+| 「是排序卡」：`target.order \|\| target.sentence` | `target.kind?.id === 'order'` |
+| `target.typing` | `target.kind?.id === 'typing' ? target.kind.typing : undefined` |
+| `target.typing.kind`（`'grammar' \| 'inflection'`） | `target.kind.typing.style`（值不變） |
+| `target.couplet` | `target.kind?.id === 'couplet' ? target.kind.couplet : undefined` |
+| 「有卡型」：六個欄位有一個不是 `undefined` | `target.kind !== undefined` |
+| 好幾種卡型各做一件事的 `if` 串 | `switch (target.kind?.id)`，結尾 `default: { const never: never = target.kind; return never; }`（§1-4） |
+| 寫入：`target.group = group` | `target.kind = { id: 'group', group }`（其他卡型照 `{ id, <id 同名的欄位> }`；多音字是 `{ id: 'polyphone', polyphone }`） |
+| 需要版本：`deck.targets.some(t => t.group) \|\| problems 有 pick-answer-invalid ? PICK_NEEDS : null` | `needsOf(deck)`（`core/deck/index.ts` 匯出；回傳要的版本的清單，沒有是空的） |
+| 測試讀舊欄位 | `tests/helpers/kinds.ts` 的 `kindGroup`、`kindChoice`、`kindPoem`、`kindSentence`、`kindTyping`、`kindCouplet`（`kindPoem`、`kindSentence` 拿掉 `style`，回傳和舊欄位一樣的形狀） |
+
+**函式搬到哪個檔**（`src/core/deck/`；`question-types.ts` 照舊轉出的不用改 import）：
+
+| 函式 | 新的檔 | 從 `question-types.ts` 照舊 import 得到 |
+|---|---|---|
+| `typedAnswer` | `typed-answer.ts` | 是 |
+| `blanksIn`、`pickKey`、`unbold`（另有不匯出的 `foldWidth`、`withoutComments`、`countBlanks`、`splitName`、`membersOf`、`LIST_SHAPE`、`endingOf`） | `kinds/shared.ts` | 前三個是 |
+| `pickWord` | `kinds/group.ts` | 是 |
+| `readPick`、型別 `PickReading`（另有 `readGroup`） | `kinds/group.ts` | 否：直接 import `kinds/group.ts`；`parse.ts` 改呼叫 `readKind` |
+| `choiceStem`、`choiceProblems` | `kinds/polyphone.ts` | 是 |
+| `readChoice`、型別 `ChoiceReading` | `kinds/polyphone.ts` | 否 |
+| `readTyping`、`pairWordOf`、`mentions` | `kinds/typing.ts` | 是 |
+| `readOrder`、`readSentence` | `kinds/order.ts` | 否 |
+| `readCouplet` | `kinds/couplet.ts` | 否 |
+| 新：`readKind`（題目讀完後依序認比較卡 → 多音字 → 排序 → 接句，遇到第一個就停）、`needsOf` | `question-types.ts` | 是 |
+
+`kinds/` 底下的檔只 import `kinds/shared.ts`，多音字、變化、排序另外可以 import `kinds/group.ts`（`eslint.config.js` 擋）。
+
 ### 1-7 A1 的驗收
 
 - **行為測試**：`git diff <基準> -- apps/Cards/tests/` 只准有下面五類改動，全部通過。改到的測試檔與行寫進〈結果〉：先照 `tsc` 的錯誤清單，再跑一次全部測試找 `tsc` 看不到的（下面第 1 類的鍵名）：
@@ -145,8 +183,8 @@ A1 合併時在這一節附一張「舊寫法 → 新寫法」的表（`target.g
   - 差異要逐項說明，不能略過；腳本與結果寫進 L2 請求。
 - **畫面**：卡型範例每一種，在作答中與結果兩個階段，新舊的元素樹相同（用 `tests/helpers/review-ui.ts`）。比的是每個元素的標籤、class、文字與非函式的 props，函式不比；`review-ui.ts` 的 Markdown 是替身，渲染後的處理（`postProcess`）不在這個比對裡，由 Windows 看一次畫面補（Fable G14）。
 - **兩個正式 vault**：
-  - **轉接器先改，自己一個 commit**（在 A1 的第一個 commit，照小步的失敗 → 通過寫測試；這是工具的新行為，不是純重構，Fable G2 c）：`tools/compare/adapter.ts` 的目標快照多一欄「卡型摘要」（卡型、樣子（全詩或句子）、內容的摘要：組員、選項、格子的字、句首），舊版從六個欄位推、新版讀 `kind`，先對成同一個形狀再比；今天的份每張卡多記題型與格數。舊版沒有 `questionType` 與格數（`v0.2.0`、`v0.3.0` 的卡沒有 `blanks`）時這兩欄都輸出 `null`，兩邊有一邊是 `null` 就不比那一欄，報告列出「這一欄沒比」。`compare-versions.test.ts` 跟著改的：`TodaySnap` 的字面值（第 124-125 行、`fakeSnapshot`）、假版本 `fakeGood` 的卡、逐位置換錯值的表（`WRONG`、`CAN_BE_NULL`、`NULLABLE`）、第 293 行跨版本的比較。比較測試工具那一串也改這個檔，開工前先對（〈排程與分支〉）。
-  - **A 合併前跑一次**（Fable G4）：基準對 A1 的 commit 零差異；A1 對 A2 只有排序卡的題型不同（`pick` → `order`），其他零差異。在使用者的電腦用 Remote Control 跑。
+  - **轉接器先改，自己一個 commit**（在 A1 的第一個 commit，照小步的失敗 → 通過寫測試；這是工具的新行為，不是純重構，Fable G2 c）：`tools/compare/adapter.ts` 的目標快照多一欄「卡型摘要」（卡型、樣子（全詩或句子）、內容的摘要：組員、選項、格子的字、句首），舊版從六個欄位推、新版讀 `kind`，先對成同一個形狀再比；今天的份每張卡多記題型與格數（L2 第一輪 R1、第二輪 F1、F2 之後：今天的份同一篇的目標用 `{ deck }`、再複習一些整份的目標用 `{ more: true }` 一起交給 `nextCard` 出卡，每個目標記它還沒作答時出現的那張卡，另記那張卡的每一格對哪個目標、哪一題 `blanks`（照畫面的順序），比較卡併了同組的目標、多放的那一句換了才比得到）。舊版沒有 `questionType` 與格數（`v0.2.0`、`v0.3.0` 的卡沒有 `blanks`）時這三欄都輸出 `null`，`0.4.0` 以後沒有是接不上（第二輪 F3）。兩邊有一邊是 `null` 就不比那一欄；兩邊都有卡（`prompt` 不是 `null`）而一邊是 `null`，報告才列出「這一欄沒比」（第一輪 R2：今天已經答對、沒有卡的不算）。`compare-versions.test.ts` 跟著改的：`TodaySnap` 的字面值（第 124-125 行、`fakeSnapshot`）、假版本 `fakeGood` 的卡、逐位置換錯值的表（`WRONG`、`CAN_BE_NULL`、`NULLABLE`）、第 293 行跨版本的比較。比較測試工具那一串也改這個檔，開工前先對（〈排程與分支〉）。
+  - **A 合併前跑一次**（Fable G4）：基準對 A1 的 commit 零差異；A1 對 A2 只有排序卡的題型不同（`pick` → `order`），其他零差異。在使用者的電腦用 Remote Control 跑。順便記下兩邊的再複習一些（`more`）有幾筆、每一邊跑了幾秒，寫進〈結果〉（L2 第三輪 G3：再複習一些整份一起取卡之後，筆數多時比較變慢，合成的 12,000 個目標單邊 17.8 秒，上限是 5 分鐘；接近上限再處理）。
 - **型別與檢查**：`npm run check` 通過；六個舊欄位拿掉了，`tsc` 擋。
 - **漏接**：先列出預期會報錯的檔與處數（§1-4 表裡用 `switch` 或 `Record` 的每一處），再在暫存的工作樹加一個假的 `KindId`，`tsc` 報錯的地方和預期逐一相同（結果貼進〈結果〉，不 commit）。
 - **題型對得上**：加一個測試：卡型範例的每一張卡，`questionType` 和卡型對得上（`group`、`polyphone`、`order` → pick，其他照 `typed`）。
@@ -156,7 +194,7 @@ A1 合併時在這一節附一張「舊寫法 → 新寫法」的表（`target.g
 
 - `QuestionType` 加 `order`：`FLOWS.order = createPick`、`PREVIEWS.order` 同 `pick`；`SCREENS.order` 是排序的畫面：全詩與句子兩個 body 從 `PickCard.tsx` 搬到 `OrderCard.tsx`，class 不變所以 CSS 不動，照 `order.style` 選 body；`SCREENS.pick` 只剩比較卡與多音字。`questionType` 加一個分支：`card.group?.order ? 'order'`，仍只看卡片自己、不丟錯。`review/pick.ts` 的 `card.group.order !== undefined` 改成看 `questionType(card) === 'order'`。
 - 這是程式內部的名稱。題型專區的總表、家長看得到的名稱，以及「取消點選填空的勾選就不出排序」（D-187 第 8 點）都不改，等 §6 第 3 題。
-- **驗收**：只准改的測試斷言：`tests/english-order.test.ts:64`、`tests/poem-order-flow.test.ts:35`（`'pick'` → `'order'`）、`tests/question-types.test.ts` 的 `SAMPLES` 多一列、`tests/card-kinds.test.ts` 的排序那 5 格（A1 加了 `寨（寨、塞） 排序` 那一列，Fable G5）與兩個卡型範例的題型（`pick` → `order`）、A1 新增的「題型對得上」裡排序的那一項（改成卡型 `order` 對題型 `order`）。其他照 A1 的差分與元素樹比對，A1 對 A2 相同（`questionType` 的值除外）。
+- **驗收**：只准改的測試斷言：`tests/english-order.test.ts:64`、`tests/poem-order-flow.test.ts:35`（`'pick'` → `'order'`）、`tests/question-types.test.ts` 的 `SAMPLES` 多一列、`tests/card-kinds.test.ts` 的排序那 5 格（A1 加了 `寨（寨、塞） 排序` 那一列，Fable G5）與兩個卡型範例的題型（`pick` → `order`）、A1 新增的「題型對得上」裡排序的那一項（改成卡型 `order` 對題型 `order`）、`tests/compare-versions.test.ts` 卡型摘要那個測試裡排序的兩張卡（`poem00`、`order0`）的題型 `pick` → `order`（A1 才加的測試；L2 第一輪 R5 補列）。其他照 A1 的差分與元素樹比對，A1 對 A2 相同（`questionType` 的值除外）。
 
 ### 1-9 A 之後怎麼接配對、單選
 
@@ -722,6 +760,85 @@ Fable 5.2 xhigh，2026-11-25，只核對第 3 版（`fca61ca7`）有沒有把 G1
 
 ## 結果
 
-（實作後填：每一步的 commit、改到的測試檔與原因、差分的數字與每個分支走到幾筆、`compare-versions` 的結果、和現在不一樣的格、漏接檢查的結果、lookbehind 基準移動後 ESLint 的結果。）
+### A1（分支 `claude/project-thread-vpoerm`，基準 `e7304dff`）
 
-延後的測試：（實作後填；iPhone 併進 0.7.0 的那一次照 D-195 在技術債表寫「補測：」列）
+**commit**（每一個都過 hook 的完整檢查：型別、lint、knip、全部測試）：
+
+1. `4474ff75` 比較新舊版的工具先讀得懂新寫法（§1-7〈兩個正式 vault〉）：目標的快照多「卡型摘要」（卡型、樣子、內容的摘要），舊版從六個欄位推、新版讀 `kind`；今天的份每張卡多題型與格數，舊版沒有時是 `null`、不比，報告多一節「沒比的欄位」。測試先寫：卡型摘要兩個方向的差異、`null` 不比並列出、兩份卡型範例卡組（國語、英文）的摘要照筆記手寫的字面值、`v0.2.0` 的報告列出沒比的 2 張。
+2. `ec3db446` 拆檔（§1-3）：只搬不改。把 `question-types.ts` 原本的每一行和拆出來的七個檔逐行當成多重集合比，只多一行註解。`kinds/` 的 import 規則寫進 `eslint.config.js`（說明沒要求，多做的：拆開之後最容易壞的是卡型之間互相 import，機械擋比靠人記便宜）。
+3. `d4451c40` `Target.kind`（§1-2、§1-4、§1-5）：六個欄位拿掉，`tsc` 擋；`needsOf` 取代 `need.ts`、`move.ts`、`draft.ts` 三處只看比較卡的寫法。`draft.ts` 內部那一篇的欄位從 `pick`（有沒有比較卡）改成 `need`（`needsOf` 的最新版本），寫進屬性的 `需要版本` 不變（差分的 `inspectReply` 把舊的 `pick` 對成新的 `need` 比，零差異）。
+4. `74fb12f6` 新測試（§1-7 第 2、5 類）：`card-kinds.test.ts` 加 §1-3 的三列與「題型對得上」；`ai-cards.test.ts` 加 §1-5 的釘住：比較句的答案是組裡別的字時，草稿的檢查退件（第 11 行 `- 大＿＿車。 :: 塞`）、`planDraft` 不存。
+
+**改到的測試**（`git diff e7304dff -- apps/Cards/tests/`，18 個檔）：
+
+- 第 1 類（讀卡型欄位的換成存取式，斷言的值不改）：`ai-add-existing`、`ai-add-move`、`ai-materials`、`couplet-deck`、`couplet-queue`、`deck`、`english-order`、`english-typed-deck`、`pick-deck`、`pick-old-version`、`poem-order-deck`、`poem-order-queue`、`polyphone-pick`，共 13 個檔。和說明不一樣的兩點：
+  - 存取式不是每一處都寫成 `target.kind?.id === … ? … : undefined`，而是寫一次在新的 `tests/helpers/kinds.ts`（六個函式，各一行到四行），測試呼叫它。原因：13 個檔、幾十處都寫一長串很難讀；全詩與句子排序多了 `style`，每一處都要拿掉才能和舊的預期值比。斷言的值一個都沒改。
+  - `ai-add-move.test.ts:192` 的 `added.section` 改成 `added?.section`：原本靠 `added?.couplet?.title` 的斷言收窄型別，換成函式呼叫之後收窄不了，`tsc` 報錯。值不改。
+  - `english-typed-deck.test.ts` 的 12 個 `{ kind: … }` 鍵改成 `{ style: … }`（說明預告的唯一例外），另有 2 處 `?.kind` 改成 `?.style`。
+- 第 2 類：`card-kinds.test.ts` 的 `kindOf` 改讀 `target.kind`（`switch`，排序照 `style`）；多 §1-3 的三列；其他格不改。
+- 第 3 類：`boundaries.test.ts` 的匯出清單只多 `needsOf`（`KIND_NEEDS`、`Kind`、`KindId`、`Order` 沒有外部使用者，不匯出）；「deck、study 不 import catalog」改成遞迴掃。
+- 第 4 類：`compare-versions.test.ts`，在第 1 個 commit。
+- 第 5 類：第 4 個 commit 的兩個測試。
+
+**ESLint 的基準**（lookbehind 的那一條 suppression 跟著函式搬到 `kinds/order.ts`，總數仍是 13）：舊的那一條留在 `question-types.ts` 時 `eslint` 結束碼 2（`kinds/order.ts` 一個錯誤，加上「沒用到的 suppression」）；搬過去之後結束碼 0。
+
+**差分**（腳本不進 repo，§1-7〈差分〉；舊版從基準的 worktree 載入，新版從 `74fb12f6` 的 worktree 載入。舊版的六個欄位照上面〈1-6〉的表在原位置換成 `kind` 再比 JSON，鍵的順序也要相同）：
+
+- **錄下的輸入**：基準的測試加上記錄後跑一輪（3,004 個測試，3,000 個通過、4 個略過、0 個失敗），錄到 56,919 次呼叫（`parseDeck` 55,684、`check` 544、`inspectReply` 251、`planExisting` 192、`planDraft` 143、搬候選 105）；去掉重複後 `parseDeck` 12,149 份卡組（其中 1 份兩版都丟錯，錯誤相同）、`check` 211、`inspectReply` 108、`planDraft` 64（每一份都對到它的 `inspectReply`）、`planExisting` 108、搬候選 61。
+- **`parseDeck`**：錄下的 12,149 份，加上窮舉 2,751,840 份（名稱的字 15 × 括號 13 × 結尾 42 × 分隔 3 × 科目 4 × 題目組合 28），加上混合的四份（變化與英翻中、同一首的接句與全詩、同一組的比較卡、多音字和比較卡在同一份）× 三種科目選項：`targets`、`problems` 都相同。每個目標另比 `learnedWord`、`baseForm`、每一題的 `typedHint`，都相同。
+- **AI 與需要版本**：上面的每一份錄下的與混合的卡組，`markOf`、`withNeed` 各比 5 個版本（沒有、0.3.0、0.4.0、0.6.0、99.0.0），有年級學期與科目的另比 `learnedWords`；錄下的 `check`、搬候選三種、`planExisting`、`inspectReply`、`planDraft` 照錄下的輸入重跑：都相同。加題核對的七種加題，新舊都寫得進去、寫出來的字相同。
+- **`createSession`**：2,000 串，每串 60～100 步，共比 161,154 步；每一串的卡組從四份裡隨機挑，前幾天的紀錄隨機補（有到期的、答錯的、新的），每日上限 5、30 或 120 分鐘；782 串有考試範圍（單元與日期隨機，其中 650 串今天的份真的有考試範圍裡的科目）。取卡方式：各科、全部、一篇、再複習一些、今天的份裡的一些目標、單元的當日卡、全部卡的一輪（一篇、單元、目標從某天算）。動作：翻面、打字、確認、沒印象、點字鍵、點句子、對答案、跳過、自評、下一張、回看、往後、回到目前、切走與回來（10 秒、61 秒）、時間往後（0.4 秒、2 小時、一天、三天）、完成畫面的按鈕、重新開一次、別台裝置寫進一行紀錄、同一個 ID 在另一篇出現又消失（D-157）。每一步比 `view()`、這一次做過的卡、每個檔的全文（這一台寫了 21,931 行紀錄）、`pick()` 與動作的回傳值：都相同。卡型範例 10 種都出現在目前這張（中翻英要英翻中記得才出，2,000 串裡也有）。
+- **`createPreview`**：2,000 串，四份卡組、展開或不展開答案，每串 60～100 步，共比 161,476 步：`view()` 與回傳值都相同。
+- **故意弄錯，看差分抓不抓得到**（各跑一次就還原，不 commit）：多音字對成 `id: 'choice'` → `parseDeck` 報差異，複習流程的腳本一開始就停下；新版今天的份的多音字少看別台裝置的紀錄（`isNew` 少一個條件）→ 2,000 串裡 3 串報 `view()` 的差異；新版預覽的多音字照翻面出 → 300 串裡 81 串報差異；比較卡標題的 class 改一個字 → 元素樹報差異。
+
+**畫面**：上面的複習流程與預覽各 2,000 串，另外用 `tests/helpers/review-ui.ts` 畫兩邊的 Review，每一步比元素樹（標籤、class、文字與非函式的 props，props 裡的目標照表換）：複習流程 161,154 棵、預覽 161,476 棵，都相同。卡型範例 10 種都比到作答中與結果兩個階段（點選的三種另有再選，打字的三種有第 1、2、3 步，複習流程的每一種都有回看）；預覽的打字卡只到第 1 步、點選沒有再選，是預覽本來就這樣。Markdown 是替身，渲染後的處理不在這個比對裡，由合併前 Windows 看一次畫面補。
+
+**漏接**：預期在暫存的工作樹加一個假的卡型（`Kind` 多 `{ id: 'fake'; fake: true }`）時，`tsc` 報這 8 處：`core/deck/question-types.ts:43`（`KIND_NEEDS`）、`core/study/compose.ts:27`、`core/study/session.ts:135`、`core/study/practice.ts:230`、`review/preview.ts:40`、`core/ai/existing.ts:255`（各一個 `switch` 的 `never`）、`tests/card-kinds.test.ts:14`（`kindOf` 的 `switch` 沒有結尾的 `return`）、`tests/card-kinds.test.ts:167`（`PICKED`）。實際報的就是這 8 處，沒有別的。
+
+**兩個正式 vault 的 `compare-versions`**（2026-11-25，在使用者的電腦，L2 結案後的 `f76e7440`；兩個 vault 都是 `0.6.0+037b359`，只讀備份）：
+
+| vault | A1 前後（`e7304dff` → `74fb12f6`） | `main`（`a8973f9f`）→ 這個 PR（`f76e7440`） | 今天的份／再複習一些 | 轉接器單邊 |
+|---|---|---|---|---|
+| 甲 | 零差異 | 7 項，都是句子排序卡的 `type`：`"pick"` → `"order"`，格數不變；這個 vault 的排序卡正好 7 個，都在今天的份或再複習一些，沒有全詩 | 169／137 | 2.8～4.8 秒 |
+| 乙 | 零差異 | 零差異（沒有排序卡，今天的份都是翻面卡） | 120／19 | 2.9～4.3 秒 |
+
+四次都比得了，〈沒比的欄位〉沒有，〈讀取閘門〉兩邊都是沒有、否。每次整趟約 33 秒，三分之二是兩邊的 `npm ci`；再複習一些最多 137 筆，L2 第三輪 G3 說的變慢看不出來。報告與備份留在使用者的電腦。
+
+### A2（`cc872dc0`）
+
+- **程式**：`QuestionType` 多 `order`，`questionType` 多一個分支（組有 `order` 的卡）；`FLOWS.order`、`PREVIEWS.order` 照點選填空；`review/pick.ts` 改看 `questionType(card) === 'order'`；全詩與句子的題目區搬到新的 `ui/OrderCard.tsx`，照 `order.style` 選，class 不變，字鍵與底部那一排和點選填空共用（`orderScreen` 是 `{ ...pickScreen, Body: OrderBody }`）；`SCREENS.pick` 只剩比較卡與多音字。完整檢查通過。
+- **改到的測試斷言**：`english-order.test.ts:65`（說明寫 64：A1 在檔頭多 import 一行）、`poem-order-flow.test.ts:35`、`question-types.test.ts` 的 `SAMPLES` 多 `order` 一列、`card-kinds.test.ts` 的排序那 5 格與兩個卡型範例的題型、「題型對得上」（`PICKED` 改成 `TYPE_OF`：卡型對到哪一種題型）。說明沒列、多改的：`compare-versions.test.ts:392-393` 排序的兩張卡 `pick` → `order`，那個測試是 A1 才加的。
+- **差分**（A1 `74fb12f6` 對 A2，同一支腳本）：`createSession` 2,000 串共 161,154 步、`createPreview` 2,000 串共 161,476 步，`view()`、這一次做過的卡、每個檔、回傳值與元素樹都相同；目前這張的題型只有排序卡從 `pick` 變 `order`（51,631 步），其他都相同。`parseDeck`、AI 與需要版本的快速版（127,008 份窮舉加 2,000 行錄下的輸入）零差異（A2 沒改這幾處）。
+
+### L2 第一輪的修正
+
+第一輪沒有 P1；五項的判斷與修法在[報告的〈Claude 核對（第一輪）〉](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md#claude-核對第一輪>)。
+
+- **R1**（`e9f9937a`）：比較工具原本一次只給 `nextCard` 一個目標，比較卡併不到同組的目標，兩個 vault 的比較會漏掉併卡的差異。改成同一個佇列、同一篇的目標一起出卡，多記那張卡上的目標 `lts`。
+- **R2**（`4357e4d6`）：今天已經答對、這次沒有卡的目標，報告不再寫成「那一版沒有這一欄」。
+- **R3**（`7b88668f`）：差分腳本直接比兩邊的回傳值。重跑 A1、A2 兩組，數字和上面相同、零差異；故意把 `resume()` 的回傳值改壞，抓到 10 筆。
+- **R4**（`8fed3a3b`）：搬候選與加深寫的版號固定是 `PICK_NEEDS`。寫進筆記前 `withNeed` 會照 `needsOf` 補成對的版號（探針），記進技術債，等第二種要版號的卡型。
+- **R5**（`035979a6`）：§1-3、§1-7、§1-8 的文字。
+
+### L2 第二輪的修正
+
+第二輪沒有 P1；五項的判斷與修法在[報告的〈Claude 核對（第二輪）〉](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md#claude-核對第二輪>)。都只改比較工具與文字，產品程式沒改。
+
+- **F1**（`f77372b9`）：再複習一些照它自己的入口（`{ more: true }`）取卡，英文另一個方向今天答過的不出。
+- **F2**（`d852596b`）：`lts` 換成 `blanks`，記每一格對哪個目標、哪一題，比較卡多放的那一句換了也比得出來。
+- **F3**（`058b70a3`）：卡的主目標要在範圍裡、有自己的格；`0.4.0` 以後的版本卡上沒有 `blanks` 或沒有 `questionType` 是接不上。
+- **F4**（`643c359b`）：報告的「限制」寫明凍結取卡看不到的（答錯後重出時又併卡、接句隔開、全詩的等候）。
+- **F5**（`749eaca7`）：§1-3、§1-7 的文字。
+
+### L2 第三輪的修正
+
+第三輪只有三項 P3，都是報告的限制文字或合併前要多記的數字；修完不送第四輪（[〈Claude 核對（第三輪）〉](<../Claude Codex Discussion/2026-11-25-question-type-modules-l2.md#claude-核對第三輪>)）。
+
+- **G1**（`84cc86ca`）、**G2**（`d8bb8e52`）：報告的「限制」寫明今天的份的順序不是出卡順序、排序卡每一格同一個指紋，這兩種由有作答的流程驗。
+- **G3**（`c193f371`）：兩個正式 vault 比較時多記再複習一些的筆數與秒數（§1-7）。
+
+**Windows 畫面**（2026-11-25，使用者的電腦，Windows 版 Obsidian 1.15.1）：測試 vault 與正式 vault 都沒碰，用另開的 Obsidian 設定檔開兩個暫存 vault，各裝這個 PR（`7ca53f86`）與 `main`（`a8973f9f`）的開發版建置。開發命令 `md-cases` 兩邊都是 471 項全部 ok，量測值逐列相同。三張自編的卡（英文句子排序、國語全詩、相似字比較卡兩個目標併一張）從「今日複習」進去作答、對答案，正面、填好後、對答案後三個時間點的元素樹兩邊逐字相同（含 class、按鈕的停用狀態、字鍵的排法）；截圖除了開發版通知裡的裝置碼與時間都相同。另走了一次比較卡答錯、再選一次的流程，正常。用的是預設主題、DOM 事件點擊；使用者自己的主題與字型、真的滑鼠與輸入法、iPhone 沒看。
+
+**合併**：使用者 2026-11-26 同意，PR #56 合併進 `main`（`ff848530`）。
+
+延後的測試：iPhone 實機（觸控、字鍵大小）併進 0.7.0 那一次，記在[技術債表](../backlog.md#技術債)的「補測：題型模組第 A 步的 iPhone 畫面」。

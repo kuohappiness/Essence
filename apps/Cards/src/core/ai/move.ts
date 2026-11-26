@@ -1,4 +1,4 @@
-import { expandTabs, frontmatterLines, headingKey, linesOf, listTree, markNeed, nameIds, parseDeck } from '../deck/index.ts';
+import { expandTabs, frontmatterLines, headingKey, linesOf, listTree, markNeed, nameIds, needsOf, parseDeck } from '../deck/index.ts';
 import type { Deck, Line } from '../deck/index.ts';
 import { canRead, PICK_NEEDS } from '../version/index.ts';
 import { findItem, introBoxes } from './intro.ts';
@@ -75,7 +75,7 @@ function unboxed(item: BoxItem, rootIndent: number, tabs: boolean): { lines: str
 
 /** 比完整內容用：拿掉行號（搬動後會變的）。 */
 const content = (value: unknown, drop: readonly string[] = []): string => JSON.stringify(value, (key, each: unknown) => key === 'line' || key === 'targetLine' || drop.includes(key) ? undefined : each);
-const needsMark = (deck: Deck): boolean => deck.targets.some(t => t.group) || deck.problems.some(p => p.code === 'pick-answer-invalid');
+const needsMark = (deck: Deck): boolean => needsOf(deck).length > 0;
 
 /**
  * 候選卡片的加入（§2）：refs 照順序搬，接在一起，一次算好。每一項在最新的文字裡重新找（findItem）；搬之前核對 ID，搬完核對其他目標的
@@ -124,7 +124,7 @@ export function moveCandidates(text: string, refs: readonly ItemRef[], context: 
   };
   let next = attempt(plans);
   if (next === null && plans.length) {
-    const marks = (each: (typeof plans)[number]): boolean => parseDeck(each.lines.join('\n'), { subject: before.props.subject }).targets.some(t => t.group);
+    const marks = (each: (typeof plans)[number]): boolean => parseDeck(each.lines.join('\n'), { subject: before.props.subject }).targets.some(t => t.kind?.id === 'group');
     const withoutPick = plans.filter(each => !marks(each));
     const retry = withoutPick.length < plans.length ? attempt(withoutPick) : null;
     if (retry !== null) {

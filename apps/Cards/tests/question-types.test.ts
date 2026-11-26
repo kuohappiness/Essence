@@ -10,6 +10,7 @@ const SAMPLES: Record<QuestionType, string> = {
   flip: '- 能說明 A ^aaa111\n    - Q :: A\n',
   typed: '- borrow 中翻英 ^aaa111\n    - 借入 :: borrow\n',
   pick: '- 寨（寨、塞） 相似字 ^aaa111\n    - 山＿＿ :: 寨\n- 塞（寨、塞） 相似字 ^bbb222\n    - 大＿＿車 :: 塞\n',
+  order: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n',
 };
 
 for (const [type, text] of Object.entries(SAMPLES)) {

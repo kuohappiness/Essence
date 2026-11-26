@@ -9,7 +9,7 @@ import { SETTINGS_FILE } from '../src/core/settings/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import { cliPath } from './cli-path.ts';
 import type { AdapterInput } from './compare/adapter.ts';
-import { diffSnapshots, gateLines } from './compare/snapshot.ts';
+import { diffSnapshots, gateLines, uncomparedLines } from './compare/snapshot.ts';
 import { git, gitEnv, pluginRoot } from './git.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
@@ -18,7 +18,7 @@ const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 
-export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定照備份裡的設定檔與 data.json，各版本自己的讀法（有設定檔的版本當成沒確認過設定檔的一台：設定檔沒有就讀 data.json；0.4.0 只讀 data.json）；還沒有設定頁的舊版用預設（每日 30 分鐘、保持率 0.8），改過設定時，和新版的差異會包含設定本身。兩邊都沒有濾網。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
+export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定照備份裡的設定檔與 data.json，各版本自己的讀法（有設定檔的版本當成沒確認過設定檔的一台：設定檔沒有就讀 data.json；0.4.0 只讀 data.json）；還沒有設定頁的舊版用預設（每日 30 分鐘、保持率 0.8），改過設定時，和新版的差異會包含設定本身。兩邊都沒有濾網。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每個目標的「題目」、題型、格數與每一格，是它還沒作答時出現的那張卡：今天的份同一篇的、再複習一些整份的目標一起交給那一版出卡，出過的拿掉再出下一張，紀錄與時間不動（比較卡併同組的目標）。每一格比的是對哪個目標、哪一題的指紋；排序卡（全詩、句子）的每一格是同一題、同一個指紋，格裡的正解、字鍵與評分由有作答的差分驗。不模擬作答：〈今天的份的順序〉是排進今天的份的順序，不是出卡的順序，看不出差異出在第幾張；答錯的目標重出時又併進同組的卡、接句一聯兩張隔開、全詩等同一首的接句也看不到。和第一張、出卡先後或作答之後的狀態有關的判斷，用有作答的複習流程確認。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
 
 export interface CompareOptions {
   /** 凍結的輸入：1-1 的備份檔。 */
@@ -132,8 +132,13 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
   if (!comparable) {
     lines.push('## 無法比較', '');
     for (const [name, one] of sides) if (!one.result.ok) lines.push(`- ${name}：${one.result.reason}`);
-  } else if (differences.length === 0) lines.push('## 差異', '', '沒有差異。');
-  else lines.push(`## 差異（${differences.length} 項）`, '', '每一項都要對得到這一版的更新說明（tag 的說明）。', '', ...differences.map(line => '- ' + line));
+  } else if (old.result.ok && next.result.ok) {
+    // 一邊的版本沒有的欄位不比，照實寫出來，不算進差異。
+    const skipped = uncomparedLines(old.result.snapshot, next.result.snapshot);
+    if (skipped.length) lines.push('## 沒比的欄位', '', ...skipped.map(line => '- ' + line), '');
+    if (differences.length === 0) lines.push('## 差異', '', '沒有差異。');
+    else lines.push(`## 差異（${differences.length} 項）`, '', '每一項都要對得到這一版的更新說明（tag 的說明）。', '', ...differences.map(line => '- ' + line));
+  }
   const folder = options.out ?? dirname(options.backup);
   const report = join(folder, `發布前比較 ${stamp.slice(0, 10)} ${stamp.slice(11, 19).replaceAll(':', '')} ${old.build} 到 ${next.build}.md`);
   await writeFile(report, lines.join('\n') + '\n', { flag: 'wx' });

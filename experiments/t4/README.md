@@ -67,7 +67,7 @@ node arch.mjs blind --out <repo外結果資料夾> [--materials 2-1,2-2] [--run 
 
 ### 第二輪（已完成：2026-10-23～24 生成與盲評，結論 D-132）
 
-已照[第二輪任務說明](../../apps/Cards/docs/tasks/objective-architecture-r2-connection.md)分三段完成（接法凍結：方案額度、Sol high）。要重跑時用下面的指令；設定與提示讀 `arch/第二輪/設定.json`，不改第一輪輸出。Obsidian 內登入（G4）不在這次驗證範圍，仍未驗證，見 [backlog 的訂閱製卡接法驗證](../../apps/Cards/docs/backlog.md#訂閱製卡接法驗證d-126)。
+已照[第二輪任務說明](../../apps/Cards/docs/tasks/objective-architecture-r2-connection.md)分三段完成（接法凍結：方案額度、Sol high）。要重跑時用下面的指令；設定與提示讀 `arch/第二輪/設定.json`，不改第一輪輸出。Obsidian 內登入（G4）不在這次驗證範圍，仍未驗證，見 [backlog 的訂閱製卡接法驗證](../../apps/Cards/docs/backlog.md#claudian-與課外來源查證d-126)。
 
 ```powershell
 node arch.mjs run --round 2 --out <第二輪資料夾> --plan 接法驗證 --dry-run

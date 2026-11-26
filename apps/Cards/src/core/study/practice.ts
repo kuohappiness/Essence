@@ -24,7 +24,8 @@ type Partner<T extends Placed> = (item: Placed) => T | undefined;
 
 /** 接句卡配對用的位置：同一篇、同一個詩名小標題（照第幾個標題）、第幾句；沒有詩名或編號時 null。index 給了就換成那一句。 */
 export function coupletKey(item: Placed, index?: number): string | null {
-  const { couplet, sectionIndex } = item.target;
+  const { kind, sectionIndex } = item.target;
+  const couplet = kind?.id === 'couplet' ? kind.couplet : undefined;
   if (!couplet || couplet.title === null || couplet.index === null) return null;
   return JSON.stringify([item.path, sectionIndex, index ?? couplet.index]);
 }
@@ -47,7 +48,8 @@ export function partners<T extends Placed>(items: readonly T[], english: boolean
     if (!sides.has(key)) sides.set(key, item);
   }
   return item => {
-    const { direction, couplet } = item.target;
+    const { direction, kind } = item.target;
+    const couplet = kind?.id === 'couplet' ? kind.couplet : undefined;
     if (couplet) {
       const line = coupletKey(item);
       if (line === null || couplet.index === null || !lines.get(line)) return undefined;
@@ -63,8 +65,8 @@ export function partners<T extends Placed>(items: readonly T[], english: boolean
  */
 export function holdOrders<T extends Placed>(fresh: readonly T[], isNew: (item: T) => boolean): T[] {
   const poemOf = (item: T): string => JSON.stringify([item.path, item.target.sectionIndex]);
-  const learning = new Set(fresh.filter(item => item.target.couplet && item.target.sectionIndex !== undefined && isNew(item)).map(poemOf));
-  return fresh.filter(item => !(item.target.order && item.target.sectionIndex !== undefined && isNew(item) && learning.has(poemOf(item))));
+  const learning = new Set(fresh.filter(item => item.target.kind?.id === 'couplet' && item.target.sectionIndex !== undefined && isNew(item)).map(poemOf));
+  return fresh.filter(item => !(item.target.kind?.id === 'order' && item.target.kind.order.style === 'poem' && item.target.sectionIndex !== undefined && isNew(item) && learning.has(poemOf(item))));
 }
 
 /** 目標集合在卡組裡的樣子，照輸入的順序；不在卡組裡的（改掉了、刪掉了）不算。 */
@@ -204,23 +206,28 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(each => each.item), holdOrders(fresh, each => !memories.has(each.id)), apart) ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const priorOf = (id: string): ReviewEntry[] => before.filter(entry => entry.lt === id && entry.src !== 'mistake');
-  if (item.target.group) {
-    // 同一組的目標照今天的份的規則併（tasks/question-type-seam.md §5-1）；出題歷史是本輪以前加上這一輪。
-    const mateOf = (each: Item): PickMate => ({ lt: each.id, target: each.target, shown: shownWith(shownWith(new Map(), priorOf(each.id)), valid.get(each.id) ?? []) });
-    const dueBy = (each: Item): boolean => {
-      const memory = latest.get(each.id);
-      return !memory || dueAt(memory, retentionOf(input, each.entry, each.target)) <= input.now;
-    };
-    const early = !ready.length && !fresh.length;
-    const others = items.filter(other => other !== item && other.path === item.path && other.target.group?.key === item.target.group?.key
-      && joins(valid.get(other.id), early, () => dueBy(other)));
-    return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.whole ?? item.entry.deck.targets) };
-  }
   const prior = priorOf(item.id);
   const seen = shownWith(new Map(), prior);
-  // 多音字（tasks/polyphone-pick.md §3）：出題歷史是本輪以前加上這一輪，和今天的份同一種組法。
-  if (item.target.choice) {
-    return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early: !ready.length && !fresh.length }, shownWith(seen, valid.get(item.id) ?? [])) };
+  // 照卡型選組卡的方式（題型模組任務說明 §1-4）。
+  switch (item.target.kind?.id) {
+    case 'group': {
+      // 同一組的目標照今天的份的規則併（tasks/question-type-seam.md §5-1）；出題歷史是本輪以前加上這一輪。
+      const key = item.target.kind.group.key;
+      const mateOf = (each: Item): PickMate => ({ lt: each.id, target: each.target, shown: shownWith(shownWith(new Map(), priorOf(each.id)), valid.get(each.id) ?? []) });
+      const dueBy = (each: Item): boolean => {
+        const memory = latest.get(each.id);
+        return !memory || dueAt(memory, retentionOf(input, each.entry, each.target)) <= input.now;
+      };
+      const early = !ready.length && !fresh.length;
+      const others = items.filter(other => other !== item && other.path === item.path && (other.target.kind?.id === 'group' ? other.target.kind.group.key : undefined) === key
+        && joins(valid.get(other.id), early, () => dueBy(other)));
+      return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.whole ?? item.entry.deck.targets) };
+    }
+    // 多音字（tasks/polyphone-pick.md §3）：出題歷史是本輪以前加上這一輪，和今天的份同一種組法。
+    case 'polyphone':
+      return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early: !ready.length && !fresh.length }, shownWith(seen, valid.get(item.id) ?? [])) };
+    case 'order': case 'typing': case 'couplet': case undefined: break;
+    default: { const never: never = item.target.kind; return never; }
   }
   const slot: Slot = {
     target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention: retentionOf(input, item.entry, item.target), inExam: input.exam?.contains(item.entry, item.target) ?? false,

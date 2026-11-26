@@ -8,7 +8,7 @@
 
 - **一個帳號**：Essence Cards 和 Essence Capture 推薦同一家，家長申請一次，兩個外掛貼同一把金鑰；以後要付費，也只要買同一家。
 - 免費優先，其次是 CP 值高的（[D-055](decisions.md#d-055-ai-模型的選擇原則)）；同樣條件下，選家長和學生摩擦最小的。
-- 候選要先通過五條淘汰條件（[調查 §2](../apps/Cards/docs/research/api-providers.md#2-淘汰條件2026-10-11-使用者同意)），再用真實教材比品質。
+- 候選要先通過五條淘汰條件（[調查 §2](../apps/Cards/docs/research/api-providers.md#2-淘汰條件2026-10-11-使用者同意)），再用真實教材比品質。第 1 條「OpenAI 相容的介面」改成「講 AI 連線套件四種方言之一」（[D-232](decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 第 7 點）。
 
 ## 推薦總表
 

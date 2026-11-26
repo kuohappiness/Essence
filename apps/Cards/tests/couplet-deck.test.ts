@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { kindCouplet, kindPoem } from './helpers/kinds.ts';
 
 // 接句卡的認法（D-185 第 6、8 點、tasks/couplet-cards.md §1、§2）：名稱最後是「接句」、題目是一題剛好一格的填空。預期值照卡組的寫法手寫。
 
@@ -13,14 +14,14 @@ const POEM = `### 鳥鳴澗
         - 夜晚寂靜，春山顯得空曠。
         - 兩句都在寫靜。
 `;
-const coupletOf = (text: string) => parseDeck(text).targets[0]?.couplet;
+const coupletOf = (text: string) => kindCouplet(parseDeck(text).targets[0]);
 
 void test('接句卡：詩名是小標題、第幾句、照句尾標點分成兩句、記憶錨點一項一行', () => {
   assert.deepEqual(coupletOf(POEM), {
     title: '鳥鳴澗', index: 1, lines: ['==人閒桂花落==，', '夜靜春山空。'],
     notes: ['人心清閒，桂花悄悄飄落；', '夜晚寂靜，春山顯得空曠。', '兩句都在寫靜。'], promptNotes: [],
   });
-  assert.equal(parseDeck(POEM).targets[0].order, undefined, '不是全詩順序卡');
+  assert.equal(kindPoem(parseDeck(POEM).targets[0]), undefined, '不是全詩順序卡');
   assert.deepEqual(parseDeck(POEM).problems, []);
 });
 

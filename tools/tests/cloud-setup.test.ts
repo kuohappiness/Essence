@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FOLDERS } from '../apps.ts';
+import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -42,8 +42,8 @@ void test('§A5 cloud-setup 的資料夾清單和 check.yml 每個 job 安裝的
   assert.deepEqual([...dirs].sort(), [...(await ciInstallDirs())].sort());
 });
 
-void test('D-218 §3 第 1 點：cloud-setup 的清單是 tools 加上表上有程式的軟體（不含只有文件的）', async () => {
-  assert.deepEqual(await hookDirs(), ['tools', ...Object.values(FOLDERS)]);
+void test('D-218 §3 第 1 點：cloud-setup 的清單是 tools 加上表上有程式的軟體（不含只有文件的）與套件', async () => {
+  assert.deepEqual(await hookDirs(), ['tools', ...Object.values(FOLDERS), ...Object.values(PACKAGES)]);
 });
 
 void test('§A3 SessionStart 接到 cloud-setup.mjs：settings.json 的指令寫到的檔存在', async () => {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, nextCard, planToday } from '../src/core/study/index.ts';
 import type { DeckEntry, ExamScope, Pick, TodayInput } from '../src/core/study/index.ts';
+import { kindPoem } from './helpers/kinds.ts';
 
 // 接句卡在佇列裡（D-189 第 1 點、tasks/couplet-cards.md §4、§5）：純函式，預期值照 D-189 寫的「第 1、3、2、4 句」手寫。
 const P = 'Essence Cards/國語/古詩.md';
@@ -86,7 +87,7 @@ void test('沒有詩名或編號重複時不配對，照筆記順序出', () => 
 });
 
 void test('段考範圍只含排序卡時，排序卡照樣等同一首的新接句卡出完（backlog〈已知的限制〉）', () => {
-  const exam: ExamScope = { contains: (_entry, target) => target.order !== undefined, hasPeriod: false };
+  const exam: ExamScope = { contains: (_entry, target) => kindPoem(target) !== undefined, hasPeriod: false };
   const deck = entry(ONE);
   assert.equal(planToday(input(deck, [], START, exam)).share[0].lt, 'b3pma9', '排序卡在 exam-new，排在最前面');
   assert.deepEqual(run(ONE, () => ({ subject: '國語' }), undefined, exam), ['b3pma1', 'b3pma3', 'b3pma2', 'b3pma4', 'b3pma9']);

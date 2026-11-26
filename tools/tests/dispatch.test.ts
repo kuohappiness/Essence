@@ -10,8 +10,8 @@ import { createRequire } from 'node:module';
 import { dirname, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { CARDS, RULES, entryTools, relatedTests, relativeImports } from '../dispatch.ts';
-import { FOLDERS } from '../apps.ts';
+import { CARDS, RULES, dispatch, entryTools, readChanges, relatedTests, relativeImports, toolPaths } from '../dispatch.ts';
+import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
 const DISPATCH = fileURLToPath(new URL('../dispatch.ts', import.meta.url));
@@ -21,8 +21,8 @@ const C = CARDS === '.' ? '' : CARDS + '/';
 const moved = C !== '';
 
 type Run = 'full' | 'related';
-type Runs = { tools?: Run; cards?: Run; capture?: 'full'; mindboard?: 'full'; tests?: string[]; toolsTests?: string[] };
-interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard', { run: string; tests: string[] }> }
+type Runs = { tools?: Run; cards?: Run; capture?: 'full'; mindboard?: 'full'; 'ai-client'?: 'full'; tests?: string[]; toolsTests?: string[] };
+interface Result { blocked: string[]; targets: Record<'tools' | 'cards' | 'capture' | 'mindboard' | 'ai-client', { run: string; tests: string[] }> }
 
 // 本 repo 的文件路徑用拼接寫：這份測試不讀那些文件，字面寫出來會被分派表當成它們的「相關測試」，改文件時白跑這份。
 const SPEC = 'docs/' + 'transcript.md';
@@ -74,6 +74,7 @@ const BASE: Record<string, string> = {
   'apps/Mindboard/docs/backlog.md': '# B\n',
   'apps/Mindboard/a.ts': 'export {};\n', 'apps/Mindboard/b.ts': 'export {};\n', 'apps/Mindboard/Case.ts': 'export {};\n',
   'apps/Mindboard/src/old.ts': 'export {};\n',
+  'packages/ai-client/README.md': '# A\n',
   ...(moved ? { [`${C}README.md`]: '# R\n', [`${C}NOTES.MD`]: '# N\n', [`${C}docs/x.md`]: '# X\n', [`${C}docs/${'syntax.md'}`]: '# S\n' } : {}),
 };
 
@@ -104,13 +105,15 @@ async function setup(t: test.TestContext) {
 
 const expected = (runs: Runs) => ({
   tools: runs.tools ?? 'skip', cards: runs.cards ?? 'skip', capture: runs.capture ?? 'skip', mindboard: runs.mindboard ?? 'skip',
+  'ai-client': runs['ai-client'] ?? 'skip',
   tests: runs.tests ?? [], toolsTests: runs.toolsTests ?? [],
 });
 const actual = (result: Result) => ({
   tools: result.targets.tools.run, cards: result.targets.cards.run, capture: result.targets.capture.run, mindboard: result.targets.mindboard.run,
+  'ai-client': result.targets['ai-client'].run,
   tests: result.targets.cards.tests, toolsTests: result.targets.tools.tests,
 });
-const ALL: Runs = { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full' };
+const ALL: Runs = { tools: 'full', cards: 'full', capture: 'full', mindboard: 'full', 'ai-client': 'full' };
 
 type Env = Awaited<ReturnType<typeof setup>>;
 interface Case {
@@ -229,6 +232,33 @@ const CASES: Case[] = [
     change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
   },
   {
+    name: '套件的 scripts 直接跑 ../../tools/y.ts，這次只改 tools/y.ts',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node ../../tools/y.ts" } }\n'),
+    change: edit('tools/y.ts'), preCommit: ALL, ci: ALL,
+  },
+  // L2（ai-client 第一輪）R3：引號括住、有空白或中文的檔名也算入口。
+  {
+    name: '套件的 scripts 跑 node "../../tools/check package.ts"（雙引號、有空白），這次只改它',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node \\"../../tools/check package.ts\\"" } }\n'),
+    change: edit('tools/check package.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: "外掛的 scripts 跑 node '../../tools/單引號 x.mjs'（單引號），這次只改它",
+    prepare: wire('apps/Capture/package.json', '{ "scripts": { "check": "node \'../../tools/單引號 x.mjs\'" } }\n'),
+    change: edit('tools/單引號 x.mjs'), preCommit: ALL, ci: ALL,
+  },
+  // L2（ai-client 第二輪）延續 R3：雙引號裡的單引號是檔名的一部分。
+  {
+    name: '套件的 scripts 跑 node "../../tools/teacher\'s check.ts"（雙引號裡有單引號），這次只改它',
+    prepare: wire('packages/ai-client/package.json', '{ "scripts": { "check": "node \\"../../tools/teacher\'s check.ts\\"" } }\n'),
+    change: edit("tools/teacher's check.ts"), preCommit: ALL, ci: ALL,
+  },
+  {
+    name: 'hook 跑 node tools/檢查.ts（沒有引號的中文檔名），這次只改它',
+    prepare: wire('.githooks/pre-commit', 'exec node tools/hooks.ts pre-commit\nnode tools/檢查.ts && echo ok\n'),
+    change: edit('tools/檢查.ts'), preCommit: ALL, ci: ALL,
+  },
+  {
     name: `改 ${SPEC}（登錄表；經 helper 的測試也選）`, change: edit(SPEC),
     preCommit: { cards: 'related', capture: 'full', tests: ['tests/nested/syntax-b.test.ts', 'tests/syntax-a.test.ts', 'tests/via-helper.test.ts'] },
     ci: { cards: 'full', capture: 'full', tools: 'full' },
@@ -282,6 +312,15 @@ const CASES: Case[] = [
   { name: '新增 apps/Portal/docs/backlog.md', change: edit('apps/Portal/docs/backlog.md'), preCommit: {}, ci: {} },
   { name: '只改 apps/Capture/a.ts', change: edit('apps/Capture/a.ts'), preCommit: { capture: 'full' }, ci: { capture: 'full' } },
   { name: '新增 apps/a.ts', change: edit('apps/a.ts'), preCommit: ALL, ci: ALL },
+  // 套件（docs/tasks/ai-client.md〈8〉）：改到什麼都跑它自己的完整檢查；packages/ 底下不在表上的，全部跑。
+  { name: '新增 packages/ai-client/src/a.ts', change: edit('packages/ai-client/src/a.ts'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
+  { name: '改 packages/ai-client/docs/x.md', change: edit('packages/ai-client/docs/x.md'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
+  {
+    name: 'git mv apps/Mindboard/a.ts packages/ai-client/a.ts', change: async e => { await e.git('mv', 'apps/Mindboard/a.ts', 'packages/ai-client/a.ts'); },
+    preCommit: { mindboard: 'full', 'ai-client': 'full' }, ci: { mindboard: 'full', 'ai-client': 'full' },
+  },
+  { name: '新增 packages/other/a.ts', change: edit('packages/other/a.ts'), preCommit: ALL, ci: ALL },
+  { name: '新增 packages/a.md', change: edit('packages/a.md'), preCommit: ALL, ci: ALL },
   { name: '新增根目錄的 foo.config.js', change: edit('foo.config.js'), preCommit: ALL, ci: ALL },
   { name: '空 commit', change: async () => {}, preCommit: {}, ci: {} },
   { name: '檔名有中文與空白（core.quotepath=true）', change: edit('apps/Mindboard/docs/規畫 草稿.md'), preCommit: { mindboard: 'full' }, ci: { mindboard: 'full' } },
@@ -432,7 +471,7 @@ function astImports(text: string, fileName: string): string[] {
 }
 
 /**
- * 從 hook、check.yml、外掛 scripts 照字面取 tools/ 檔，相依用 TypeScript 的語法樹往下找（astImports，和 dispatch 的正規式分開算）；
+ * 從 hook、check.yml、外掛與套件的 scripts 照字面取 tools/ 檔，相依用 TypeScript 的語法樹往下找（astImports，和 dispatch 的正規式分開算）；
  * 找到的路徑交給 Node 的 require.resolve，以 Node 實際載入的檔為準（L2 第二輪：不寫副檔名的 require；第三輪：結尾有斜線的資料夾）。
  */
 async function independentEntries(): Promise<Set<string>> {
@@ -445,7 +484,7 @@ async function independentEntries(): Promise<Set<string>> {
   };
   for (const name of await readdir(join(ROOT, '.githooks'))) literal(await readFile(join(ROOT, '.githooks', name), 'utf8'), '.');
   literal(await readFile(join(ROOT, '.github/workflows/check.yml'), 'utf8'), undefined);
-  for (const folder of Object.values(FOLDERS)) {
+  for (const folder of [...Object.values(FOLDERS), ...Object.values(PACKAGES)]) {
     let pkg: { scripts?: Record<string, string> };
     try { pkg = JSON.parse(await readFile(join(ROOT, folder, 'package.json'), 'utf8')) as typeof pkg; } catch { continue; }
     for (const script of Object.values(pkg.scripts ?? {})) literal(script, folder);
@@ -513,5 +552,57 @@ void test('§A3 分派表：import 的正規式涵蓋語法樹找到的每個相
     const text = await readFile(file, 'utf8');
     const found = new Set(relativeImports(text));
     for (const name of astImports(text, file)) assert.ok(found.has(name), `${file}：${name}`);
+  }
+});
+
+void test('§A3 分派表：入口寫到的 tools/ 檔，檔名有任何 shell 的特殊字元、怎麼加引號或跳脫都算到（L2 ai-client 第二輪 延續 R3）', () => {
+  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a;b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a#b.ts', 'a\\b.ts', '檢查 工具.mjs', '😀.cjs', 'sub dir/x.mts', 'x.js'];
+  const shellEscape = (name: string) => name.replace(/[^\p{L}\p{N}_./-]/gu, ch => `\\${ch}`);
+  for (const name of names) {
+    const path = `tools/${name}`;
+    const forms = [
+      `node ../../${shellEscape(path)}`,
+      `node "../../${path.replace(/["\\$`]/g, ch => `\\${ch}`)}"`,
+      ...(name.includes("'") ? [] : [`node '../../${path}'`]),
+      ...(/[\s"'`;&|<>()$#\\]/u.test(name) ? [] : [`node ../../${path} && echo ok`]),
+    ];
+    for (const script of forms) {
+      assert.ok(toolPaths(script, 'packages/ai-client', [path, 'tools/other.ts']).includes(path), script);
+      assert.ok(!toolPaths(script, 'packages/ai-client', [path, 'tools/other.ts']).includes('tools/other.ts'), script);
+    }
+  }
+});
+
+void test('§A3 分派表：入口寫到的 tools/ 檔改了、刪了、改名了，暫存區與 range 都跑那個外掛（L2 ai-client 第三輪 延續 R3）', async t => {
+  // 只動索引（不寫工作樹）。Git for Windows 連索引都不收 <、>、:、"、|、?、*、\ 這些字（Invalid path，L2 第四輪 第 5 項），
+  // 所以 Windows 只跑它表示得了的檔名，其餘的在其他系統驗。
+  const names = ["teacher's check.ts", 'say "hi".ts', 'a (1).ts', 'a&b.ts', 'a|b.ts', 'a<b>.ts', 'a$b.ts', 'a`b.ts', 'a\\b.ts', '檢查 工具.mjs', 'x.js']
+    .filter(name => process.platform !== 'win32' || !/[<>:"|?*\\]/.test(name));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  for (const name of names) {
+    for (const kind of ['modify', 'delete', 'rename'] as const) {
+      const root = await mkdtemp(join(tmpdir(), 'essence-dispatch-entry-'));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=DispatchTest', '-c', 'user.email=test@example.invalid', ...args], { cwd: root, env, encoding: 'utf8' });
+      const blob = (text: string) => execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: root, env, input: text, encoding: 'utf8' }).trim();
+      const add = (path: string, text: string) => git('update-index', '--add', '--cacheinfo', `100644,${blob(text)},${path}`);
+      git('init', '-q', '-b', 'main');
+      const tool = `tools/${name}`;
+      const script = `node "../../${tool.replace(/["\\$`]/g, ch => `\\${ch}`)}"`;
+      add('packages/ai-client/package.json', JSON.stringify({ scripts: { check: script } }));
+      add(tool, 'export {};\n');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      if (kind === 'modify') add(tool, 'export const x = 1;\n');
+      else git('update-index', '--force-remove', '--', tool);
+      if (kind === 'rename') add('tools/renamed.ts', 'export {};\n');
+      const label = `${name}：${kind}（${script}）`;
+      const staged = { kind: 'staged' } as const;
+      assert.equal(dispatch(readChanges(root, staged), { root, ci: false, compare: staged }).targets['ai-client'].run, 'full', `暫存區 ${label}`);
+      git('commit', '-q', '-m', kind);
+      const range = { kind: 'range', base, head: git('rev-parse', 'HEAD').trim() } as const;
+      assert.equal(dispatch(readChanges(root, range), { root, ci: true, compare: range }).targets['ai-client'].run, 'full', `range ${label}`);
+    }
   }
 });

@@ -1,0 +1,7 @@
+{
+  // 入口是 package.json 的 exports（knip 自動讀）、測試與冒煙測試。
+  "entry": ["tests/**/*.test.ts", "tools/*.ts"],
+  "project": ["src/**/*.ts", "tests/**/*.ts", "tools/*.ts"],
+  // @emnapi/core、@emnapi/runtime 是 Linux 上 knip 的 wasm 解析器需要的 peer（同 tools/ 的 knip.jsonc）。
+  "ignoreDependencies": ["@emnapi/core", "@emnapi/runtime"]
+}
