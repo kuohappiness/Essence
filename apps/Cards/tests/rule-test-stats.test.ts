@@ -52,3 +52,8 @@ void test('份數多也很快：15 對 15 全贏是 1／155,117,520；30 對 30 
   assert.equal(permutationP(range(0), range(15)), 1 / 155_117_520);
   assert.equal(permutationP(Array.from({ length: 30 }, () => 2), Array.from({ length: 30 }, () => 2)), 1);
 });
+
+void test('不是有限的數就停下，不會卡住（L2 第 1 輪 F）', () => {
+  assert.throws(() => permutationP([Number.NaN, 1], [2, 3]), /不是有限的數/);
+  assert.throws(() => permutationP([1], [Infinity]), /不是有限的數/);
+});

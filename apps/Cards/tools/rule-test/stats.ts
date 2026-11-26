@@ -25,6 +25,7 @@ export const bestP = (m: number, n: number): number => 1 / choose(m + n, m);
  * 所以「場數不少於觀察值」就是「a 組的秩和不多於觀察值」；用動態規劃數每種份數、每種秩和各有幾種挑法。
  */
 export function permutationP(a: readonly number[], b: readonly number[]): number {
+  if (![...a, ...b].every(Number.isFinite)) throw Error(`兩兩比的值有不是有限的數：${JSON.stringify([a, b])}`);
   const pooled = [...a, ...b].sort((x, y) => x - y), m = a.length, total = pooled.length;
   // 秩乘 2，平手的平均秩也是整數。
   const doubled = new Map<number, number>();
