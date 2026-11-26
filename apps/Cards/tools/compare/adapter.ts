@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SETTINGS_FILE } from '../../src/core/settings/index.ts';
-import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
+import type { AdapterResult, DeckSnap, KindSnap, Snapshot, TodaySnap } from './snapshot.ts';
 
 /**
  * 發布前比較的轉接器（任務說明 1-3）：在一個版本的 worktree 裡，用那個版本自己的 `src/state` 讀凍結的備份，輸出 snapshot.ts 的比較資料。
@@ -106,7 +106,76 @@ const isLoadingLine = (line: string): boolean => {
 };
 
 interface TargetLike { id: string | null; name: string; line: number; ok: boolean; prompts: unknown;
-  fields: { importance: string; paused: boolean }; direction: string | null }
+  fields: { importance: string; paused: boolean }; direction: string | null; kind?: unknown }
+
+/** 題型模組之前的六個卡型欄位（題型模組任務說明 §1-2）：舊版的目標最多有其中一個。 */
+const LEGACY_KINDS = ['group', 'choice', 'order', 'sentence', 'typing', 'couplet'] as const;
+type Fields = Record<string, unknown>;
+function fields(value: unknown, name: string): Fields {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw wrongType(name);
+  return value as Fields;
+}
+const kindItems = {
+  group: (value: unknown, name: string): KindSnap => {
+    const group = fields(value, name);
+    return { id: 'group', style: null, items: [[text(group.word, name + '.word')], strings(group.members, name + '.members')], marks: [] };
+  },
+  polyphone: (value: unknown, name: string): KindSnap => {
+    const choice = fields(value, name);
+    return { id: 'polyphone', style: null, items: [[text(choice.word, name + '.word')], strings(choice.options, name + '.options')],
+      marks: [array<unknown>(choice.answers, name + '.answers').map(at => integer(at, name + '.answers'))] };
+  },
+  poem: (value: unknown, name: string): KindSnap => ({ id: 'order', style: 'poem', items: [strings(fields(value, name).lines, name + '.lines')], marks: [] }),
+  sentence: (value: unknown, name: string): KindSnap => {
+    const prompts = array<unknown>(fields(value, name).prompts, name + '.prompts').map(each => fields(each, name + '.prompts'));
+    return { id: 'order', style: 'sentence', items: prompts.map(each => strings(each.words, name + '.words')),
+      marks: prompts.map(each => array<unknown>(each.starts, name + '.starts').map(start => yesNo(start, name + '.starts'))) };
+  },
+  typing: (value: unknown, name: string, styleField: 'kind' | 'style'): KindSnap => {
+    const typing = fields(value, name);
+    // 提示（文法點或原形）與變化配對的英翻中：items 是 [提示, 配對的鍵]，沒有是空的；marks 是配對只配同一個意思。
+    const hint = textOrNull(typing.hint, name + '.hint');
+    const pair = typing.pair === null ? null : fields(typing.pair, name + '.pair');
+    return { id: 'typing', style: text(typing[styleField], name + '.' + styleField),
+      items: [hint === null ? [] : [hint], pair ? [text(pair.key, name + '.pair.key')] : []], marks: pair ? [[yesNo(pair.exact, name + '.pair.exact')]] : [] };
+  },
+  couplet: (value: unknown, name: string): KindSnap => ({ id: 'couplet', style: null, items: [strings(fields(value, name).lines, name + '.lines')], marks: [] }),
+};
+
+/**
+ * 卡型摘要（snapshot.ts 的 KindSnap）：新版讀 kind，舊版從六個欄位推；兩種同時有、舊版有兩個卡型欄位、認不得的卡型都當型別不同。
+ * 搬動前後同一個目標的摘要要一樣（Typing.kind 改名 style、多音字的 choice 叫 polyphone、句子排序是 order 的 sentence）。
+ */
+function kindSnap(target: TargetLike): KindSnap | null {
+  const own = target as unknown as Fields;
+  const legacy = LEGACY_KINDS.filter(field => own[field] !== undefined);
+  if (own.kind !== undefined) {
+    if (legacy.length) throw wrongType('target.kind');
+    const kind = fields(own.kind, 'target.kind');
+    switch (text(kind.id, 'target.kind.id')) {
+      case 'group': return kindItems.group(kind.group, 'target.kind.group');
+      case 'polyphone': return kindItems.polyphone(kind.polyphone, 'target.kind.polyphone');
+      case 'order': {
+        const style = text(fields(kind.order, 'target.kind.order').style, 'target.kind.order.style');
+        if (style !== 'poem' && style !== 'sentence') throw wrongType('target.kind.order.style');
+        return kindItems[style](kind.order, 'target.kind.order');
+      }
+      case 'typing': return kindItems.typing(kind.typing, 'target.kind.typing', 'style');
+      case 'couplet': return kindItems.couplet(kind.couplet, 'target.kind.couplet');
+      default: throw wrongType('target.kind.id');
+    }
+  }
+  if (legacy.length > 1) throw Error('這個版本的目標有兩個卡型：' + legacy.join('、'));
+  switch (legacy[0]) {
+    case undefined: return null;
+    case 'group': return kindItems.group(own.group, 'target.group');
+    case 'choice': return kindItems.polyphone(own.choice, 'target.choice');
+    case 'order': return kindItems.poem(own.order, 'target.order');
+    case 'sentence': return kindItems.sentence(own.sentence, 'target.sentence');
+    case 'typing': return kindItems.typing(own.typing, 'target.typing', 'kind');
+    case 'couplet': return kindItems.couplet(own.couplet, 'target.couplet');
+  }
+}
 interface DeckLike { props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: { code: string; name: string } | null; categories: string[] };
   targets: unknown; problems: unknown }
 interface ProblemLike { line: number; level: string; code: string }
@@ -130,8 +199,11 @@ interface StateLike {
 const STATE_METHODS = ['ready', 'close', 'unread', 'decks', 'history', 'blocked', 'canAnswer', 'input', 'today'];
 
 /** 讀完的 state 換成比較資料。到期照整份紀錄算（下次到期），但照那一版的 state 停掉的目標不算。 */
-function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
+function read(state: StateLike, study: unknown, input: AdapterInput, version: string): Snapshot {
   const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
+  // 題型（D-181）與卡上的 blanks 是 0.4.0 開始才有：更早的版本沒有就是 null，比較時不比；0.4.0 以後沒有是接不上（L2 第二輪 F3）。
+  const modern = !/^0\.[0-3]\./.test(version);
+  const questionType = modern || typeof (study as Fields).questionType === 'function' ? need(study, 'questionType') : null;
   const dayNumber = (at: number): number => integer(dayOf(at, input.offset), 'dayOf()');
   const blocked = state.blocked();
   const deckSnaps = unique<DeckSnap>(array<{ path: unknown; deck: DeckLike }>(state.decks(), 'decks()').map(({ path, deck: { props, targets, problems } }) => ({
@@ -145,7 +217,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
       return { key: id ?? `@${line}:${name}`, id, name, line, ok: yesNo(target.ok, 'target.ok'),
         fingerprints: array<{ fingerprint: unknown }>(target.prompts, 'target.prompts').map(prompt => text(prompt.fingerprint, 'prompt.fingerprint')),
         importance: text(target.fields.importance, 'target.fields.importance'), paused: yesNo(target.fields.paused, 'target.fields.paused'),
-        direction: textOrNull(target.direction, 'target.direction') };
+        direction: textOrNull(target.direction, 'target.direction'), kind: kindSnap(target) };
     }),
     problems: array<ProblemLike>(problems, 'problems').map(problem =>
       ({ line: integer(problem.line, 'problems 的 line'), level: text(problem.level, 'problems 的 level'), code: text(problem.code, 'problems 的 code') })),
@@ -175,19 +247,52 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
 
   const today = state.today();
   const slots = map<SlotLike>(today.slots, 'today().slots');
-  const items: TodaySnap[] = [];
-  for (const list of ['share', 'more'] as const) {
-    for (const item of array<ItemLike>(today[list], 'today().' + list)) {
-      const lt = text(item.lt, 'today() 的 lt'), deck = text(item.deck, 'today() 的 deck');
-      const slot = slots.get(lt);
-      if (!slot) throw wrongType('today().slots');
-      // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
-      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck }) as { kind: string; card?: { prompt: { fingerprint: unknown } } };
-      if (next.kind !== 'card' && next.kind !== 'done') throw wrongType('nextCard()');
-      items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
-        prompt: next.kind === 'card' ? text(next.card!.prompt.fingerprint, 'nextCard() 的 fingerprint') : null,
-        direction: textOrNull(slot.target.direction, 'today().slots 的 direction') });
+  const lists = (['share', 'more'] as const).map(list => ({ list, items: array<ItemLike>(today[list], 'today().' + list).map(item => {
+    const lt = text(item.lt, 'today() 的 lt'), slot = slots.get(lt);
+    if (!slot) throw wrongType('today().slots');
+    return { item, lt, deck: text(item.deck, 'today() 的 deck'), slot };
+  }) }));
+  // 每一張卡照那一版真的複習怎麼出（L2 第一輪 R1）：同一個佇列、同一篇的目標一起放進今天的份，nextCard 出一張，這張上的目標拿掉再出下一張。
+  // 比較卡併同組的目標看的是範圍，只放一個目標就併不到。不模擬作答：記的是每個目標還沒作答時出現在哪一張卡。今天已經答對的是 done；時間是固定的，不會是 stale。
+  // 再複習一些照它自己的入口（{ more: true }，跨篇一起出、跳過英文另一個方向今天已經一般作答的目標）；它跳過的目標沒有卡（L2 第二輪 F1）。
+  const shown = new Map<string, Pick<TodaySnap, 'prompt' | 'type' | 'cells' | 'blanks'>>();
+  const buckets = lists.flatMap(({ list, items }) => (list === 'more' ? [items] : [...new Set(items.map(each => each.deck))].map(deck => items.filter(each => each.deck === deck))).map(group => ({ list, items: group })));
+  for (const { list, items } of buckets) {
+    const deck = items[0]?.deck;
+    let left = items;
+    while (left.length) {
+      const next = (list === 'more'
+        ? nextCard({ ...today, more: left.map(each => each.item) }, todayInput, { more: true })
+        : nextCard({ ...today, share: left.map(each => each.item), more: [] }, todayInput, { deck })) as { kind: string; card?: unknown };
+      if (next.kind === 'done') break;
+      if (next.kind !== 'card') throw wrongType('nextCard()');
+      const card = fields(next.card, 'nextCard() 的 card');
+      const lead = text(card.lt, 'nextCard() 的 lt'), prompt = text(fields(card.prompt, 'nextCard() 的 prompt').fingerprint, 'nextCard() 的 fingerprint');
+      // 選中的目標一定在還沒出的範圍裡（L2 第二輪 F3）；範圍外的格可以照實記。
+      if (!left.some(each => each.lt === lead)) throw wrongType('nextCard() 的 lt');
+      if (modern && card.blanks === undefined) throw wrongType('nextCard() 的 blanks');
+      // 每一格只讀對哪個目標、哪一題；那一版的卡沒有 blanks（0.3.0 以前）只有選中的那個目標，題型、格數、每一格都是 null。
+      const blanks = card.blanks === undefined ? null : array<unknown>(card.blanks, 'nextCard() 的 blanks').map(each => {
+        const blank = fields(each, 'nextCard() 的 blanks');
+        return { lt: text(blank.lt, 'blanks 的 lt'), prompt: text(fields(blank.prompt, 'blanks 的 prompt').fingerprint, 'blanks 的 fingerprint') };
+      });
+      if (blanks !== null && !blanks.some(blank => blank.lt === lead)) throw wrongType('nextCard() 的 blanks');
+      const lts = blanks === null ? [lead] : [...new Set(blanks.map(blank => blank.lt))];
+      const type = questionType ? text(questionType(card), 'questionType()') : null;
+      const fresh = lts.filter(lt => left.some(each => each.lt === lt));
+      // 這張卡上沒有還沒出的目標：再叫一次也一樣，那一版的 nextCard 不對。
+      if (!fresh.length) throw wrongType('nextCard()');
+      for (const lt of fresh) {
+        shown.set(lt, { prompt: lt === lead ? prompt : blanks!.find(blank => blank.lt === lt)!.prompt, type, cells: blanks?.length ?? null, blanks: blanks?.map(blank => [blank.lt, blank.prompt]) ?? null });
+      }
+      left = left.filter(each => !fresh.includes(each.lt));
     }
+  }
+  const items: TodaySnap[] = [];
+  for (const { list, items: each } of lists) for (const { item, lt, deck, slot } of each) {
+    const card = shown.get(lt) ?? { prompt: null, type: null, cells: null, blanks: null };
+    items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
+      prompt: card.prompt, direction: textOrNull(slot.target.direction, 'today().slots 的 direction'), type: card.type, cells: card.cells, blanks: card.blanks });
   }
   return {
     gates: { decks: gated, held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
@@ -256,7 +361,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
     await state.ready();
     const unread = strings(state.unread(), 'unread()');
     if (unread.length) throw Error('讀不到：' + unread.join('、'));
-    result = read(state, study, input);
+    result = read(state, study, input, version);
   } finally {
     // 版本行被拒絕之後，close 重試時也會拒絕，拒絕的是同一個物件。
     await state.close().catch(failed);

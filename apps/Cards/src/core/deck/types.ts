@@ -47,26 +47,34 @@ export interface Target {
   ok: boolean;
   /** 只有 ambiguous-id 的目標才有：那一行出現的 ID 寫法，照出現的順序、不重複（W5 §8-3）。 */
   idCandidates?: string[];
-  /** 只有點選填空的目標才有（D-182、tasks/question-type-seam.md §3）。 */
-  group?: PickGroup;
-  /** 只有多音字的點選填空才有（D-230 第 4 點、tasks/polyphone-pick.md §1）：選項是這個目標自己的，寫在名稱最後一個括號。 */
-  choice?: Choice;
-  /** 只有全詩順序卡才有（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空。 */
-  order?: PoemOrder;
-  /** 只有英文的句子排序卡才有（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。 */
-  sentence?: SentenceOrder;
-  /** 只有名稱結尾是「文法」或變化種類的目標才有（D-193 第 5、6 點）：問答題打字。 */
-  typing?: Typing;
   /** 只有英翻中才有：pairKey 正規化後的寫法，變化目標找配對用（D-193 第 5 點）；base 是去掉最後一組括號的。 */
   pairWord?: { exact: string; base: string };
-  /** 只有接句卡才有（D-185 第 8 點）：名稱最後是「接句」、題目是一題剛好一格的填空。 */
-  couplet?: Couplet;
+  /** 卡型（題型模組任務說明 §1-2）：一個目標最多一種；一般問答、填空、英翻中、中翻英沒有。 */
+  kind?: Kind;
 }
+/**
+ * 卡型（題型模組任務說明 §1-1、§1-2）：孩子看到的那一種卡。認法在 kinds/，一種一個檔，先後在 question-types.ts。
+ * - group：點選填空的比較卡（D-182、tasks/question-type-seam.md §3）。
+ * - polyphone：多音字的點選填空（D-230 第 4 點、tasks/polyphone-pick.md §1）：選項是這個目標自己的，寫在名稱最後一個括號。
+ * - order：排序。poem 是全詩順序卡（D-187、D-204）：名稱最後是「排序」、題目是一題好幾格的填空；
+ *   sentence 是英文的句子排序卡（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。
+ * - typing：名稱結尾是「文法」或變化種類的目標（D-193 第 5、6 點）：問答題打字。
+ * - couplet：接句卡（D-185 第 8 點）：名稱最後是「接句」、題目是一題剛好一格的填空。
+ */
+export type Kind =
+  | { id: 'group'; group: PickGroup }
+  | { id: 'polyphone'; polyphone: Choice }
+  | { id: 'order'; order: Order }
+  | { id: 'typing'; typing: Typing }
+  | { id: 'couplet'; couplet: Couplet };
+export type KindId = Kind['id'];
+/** 排序的兩種樣子（§1-2）：只分畫面與組卡；欄位照 PoemOrder、SentenceOrder。 */
+type Order = ({ style: 'poem' } & PoemOrder) | ({ style: 'sentence' } & SentenceOrder);
 /**
  * 文法或變化目標（D-193、tasks/english-typed-order.md §1）：hint 是第 2 步的提示（文法點或原形），沒有是 null。
  * pair 只有變化才有：配對英翻中的鍵；exact 是名稱有括號，只配同一個意思。
  */
-export interface Typing { kind: 'grammar' | 'inflection'; hint: string | null; pair: { key: string; exact: boolean } | null }
+export interface Typing { style: 'grammar' | 'inflection'; hint: string | null; pair: { key: string; exact: boolean } | null }
 /**
  * 英文的句子排序卡（tasks/english-typed-order.md §4）：prompts 和目標的 prompts 一一對應。
  * 每一題：第一格前面的字、每一格的詞塊（拿掉結尾的標點、句首改小寫，比對與字鍵都用它）、每一格後面接的字（含拿掉的標點）、哪幾格在句首。

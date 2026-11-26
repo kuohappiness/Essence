@@ -26,12 +26,19 @@ function cardsOf(path: string, targets: readonly Target[]): Card[] {
   const ok = targets.filter(target => target.ok);
   const groups = new Set<string>();
   return ok.flatMap(target => {
-    const key = target.group?.key;
-    if (target.choice) return choicePreviewCards(path, target);
-    if (key === undefined) return target.prompts.map(prompt => cardOf({ lt: target.id ?? '', deck: path, target, prompt, isNew: false, early: false }));
-    if (groups.has(key)) return [];
-    groups.add(key);
-    return pickPreviewCards(path, ok.filter(each => each.group?.key === key), targets);
+    const plain = (): Card[] => target.prompts.map(prompt => cardOf({ lt: target.id ?? '', deck: path, target, prompt, isNew: false, early: false }));
+    // 照卡型分（題型模組任務說明 §1-4）。
+    switch (target.kind?.id) {
+      case 'group': {
+        const key = target.kind.group.key;
+        if (groups.has(key)) return [];
+        groups.add(key);
+        return pickPreviewCards(path, ok.filter(each => each.kind?.id === 'group' && each.kind.group.key === key), targets);
+      }
+      case 'polyphone': return choicePreviewCards(path, target);
+      case 'order': case 'typing': case 'couplet': case undefined: return plain();
+      default: { const never: never = target.kind; return never; }
+    }
   });
 }
 

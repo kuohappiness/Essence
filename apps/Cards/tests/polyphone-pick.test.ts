@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { ProblemCode } from '../src/core/deck/index.ts';
+import { kindChoice, kindGroup } from './helpers/kinds.ts';
 
 // 多音字的點選填空（tasks/polyphone-pick.md §1）：選項寫在名稱最後一個括號、結尾是讀音。預期值照任務說明的表。
 
@@ -19,9 +20,9 @@ const hints = (text: string): { code: ProblemCode; line: number }[] => parseDeck
 
 void test('多音字：正式的寫法', () => {
   const target = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^k3m9qa', SIX, '    - 記憶錨點：\n        - ㄓㄤˇ：長大、帶頭的人：成長、班長\n        - ㄔㄤˊ：距離或時間久：長短、很長\n'));
-  assert.deepEqual(target.choice, { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
+  assert.deepEqual(kindChoice(target), { word: '長', options: ['ㄓㄤˇ', 'ㄔㄤˊ'], optionKeys: ['ㄓㄤˇ', 'ㄔㄤˊ'], title: '讀音', answers: [0, 0, 0, 1, 1, 1], anchors: ['長大、帶頭的人：成長、班長', '距離或時間久：長短、很長'], rest: [] });
   assert.equal(target.id, 'k3m9qa');
-  assert.equal(target.group, undefined);
+  assert.equal(kindGroup(target), undefined);
   assert.equal(target.ok, true);
   assert.deepEqual(hints(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音')), []);
 });
@@ -36,7 +37,7 @@ void test('多音字：名稱的寫法容忍粗體、括號寬度、逗號與全
   for (const name of names) {
     const word = name.startsWith('行') ? '行' : '長';
     const prompts = word === '行' ? ['銀行（＿＿）在街角。 :: ㄏㄤˊ', '他行（＿＿）走得很快。 :: ㄒㄧㄥˊ'] : SIX;
-    const choice = first(deck(name, prompts)).choice;
+    const choice = kindChoice(first(deck(name, prompts)));
     assert.equal(choice?.word, word, name);
     assert.equal(choice?.options.length, 2, name);
     assert.deepEqual(hints(deck(name, prompts)), [], name);
@@ -45,21 +46,21 @@ void test('多音字：名稱的寫法容忍粗體、括號寬度、逗號與全
 
 void test('多音字：空格是緊接字後面的（＿…），括號全半形、底線長短都可以', () => {
   for (const question of ['他長(＿)得比哥哥高。', '他長（＿＿＿）得比哥哥高。', '他**長**（＿＿）得比哥哥高。', '他長(＿＿）得比哥哥高。']) {
-    assert.ok(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [question + ' :: ㄓㄤˇ', '這條路很長（＿＿）。 :: ㄔㄤˊ'])).choice, question);
+    assert.ok(kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [question + ' :: ㄓㄤˇ', '這條路很長（＿＿）。 :: ㄔㄤˊ']))), question);
   }
 });
 
 void test('多音字：名稱沒有括號照翻面，不提示（沒勾點選填空、現在的讀音卡）', () => {
   for (const prompts of [SIX, ['「他長得比哥哥高」的「長」怎麼念？ :: ㄓㄤˇ']]) {
     const text = deck('長 讀音', prompts);
-    assert.equal(first(text).choice, undefined);
+    assert.equal(kindChoice(first(text)), undefined);
     assert.deepEqual(hints(text), []);
   }
 });
 
 void test('多音字：比較卡認不成時，選項是最後一個括號；前面的括號留在名稱', () => {
-  assert.deepEqual(first(deck('長（長、常）（ㄓㄤˇ、ㄔㄤˊ） 讀音')).choice?.options, ['ㄓㄤˇ', 'ㄔㄤˊ']);
-  const choice = first(deck('長（大）（長大、很長）（ㄓㄤˇ、ㄔㄤˊ）讀音')).choice;
+  assert.deepEqual(kindChoice(first(deck('長（長、常）（ㄓㄤˇ、ㄔㄤˊ） 讀音')))?.options, ['ㄓㄤˇ', 'ㄔㄤˊ']);
+  const choice = kindChoice(first(deck('長（大）（長大、很長）（ㄓㄤˇ、ㄔㄤˊ）讀音')));
   assert.equal(choice?.word, '長');
   assert.deepEqual(choice?.options, ['ㄓㄤˇ', 'ㄔㄤˊ']);
 });
@@ -67,7 +68,7 @@ void test('多音字：比較卡認不成時，選項是最後一個括號；前
 void test('多音字：選項讀不出、括號之後不只讀音：照翻面，提示 pick-not-recognized', () => {
   for (const name of ['長（ㄓㄤˇ） 讀音', '長（ㄓㄤˇㄔㄤˊ） 讀音', '長（**　**、ㄓㄤˇ） 讀音', '長（ㄓㄤˇ、ㄔㄤˊ）（大） 讀音', '長（ㄓㄤˇ、ㄔㄤˊ） 字義 讀音', '長（ㄓㄤˇ、`ㄔㄤˊ`） 讀音']) {
     const text = deck(name);
-    assert.equal(first(text).choice, undefined, name);
+    assert.equal(kindChoice(first(text)), undefined, name);
     assert.deepEqual(hints(text), [{ code: 'pick-not-recognized', line: 0 }], name);
     assert.equal(first(text).ok, true, name);
   }
@@ -77,17 +78,17 @@ void test('多音字：一題都不是多音字句：照翻面，提示 pick-not
   const bad = ['他長__得比哥哥高。', '他長　＿＿得比哥哥高。', '他長（**＿＿**）得比哥哥高。', '他長（＿　＿）得比哥哥高。', '他長（＿）又長（＿）高。', '他＿＿長得比哥哥高。', '他長（&#65343;）得比哥哥高。', '他長（`＿＿`）得比哥哥高。'];
   for (const question of bad) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [question + ' :: ㄓㄤˇ']);
-    assert.equal(first(text).choice, undefined, question);
+    assert.equal(kindChoice(first(text)), undefined, question);
     assert.deepEqual(hints(text).map(h => h.code), ['pick-not-recognized'], question);
   }
   const cloze = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', ['他==長==得比哥哥高。']);
-  assert.equal(first(cloze).choice, undefined);
+  assert.equal(kindChoice(first(cloze)), undefined);
   assert.deepEqual(hints(cloze).map(h => h.code), ['pick-not-recognized']);
 });
 
 void test('多音字：有的題是、有的不是：照翻面，pick-mixed 標不是的題', () => {
   const tone = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭長（＿＿）髮。 :: ㄔㄤ´']);
-  assert.equal(first(tone).choice, undefined);
+  assert.equal(kindChoice(first(tone)), undefined);
   assert.deepEqual(hints(tone), [{ code: 'pick-mixed', line: 6 }]);
   const missing = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭長（＿＿）髮。 :: ㄔㄤ']);
   assert.deepEqual(hints(missing), [{ code: 'pick-mixed', line: 6 }]);
@@ -97,22 +98,22 @@ void test('多音字：有的題是、有的不是：照翻面，pick-mixed 標�
 
 void test('多音字（L2 R4）：括號裡有讀音沒有句子：照翻面，提示 pick-not-recognized（不然一直點同一個鍵就全對）', () => {
   const one = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX.slice(0, 3));
-  assert.equal(first(one).choice, undefined);
+  assert.equal(kindChoice(first(one)), undefined);
   assert.deepEqual(hints(one), [{ code: 'pick-not-recognized', line: 0 }]);
   assert.match(parseDeck(one).problems[0].message, /「ㄔㄤˊ」沒有句子/);
   // 每個讀音都有一句就認。
-  assert.ok(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [SIX[0], SIX[3]])).choice);
+  assert.ok(kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [SIX[0], SIX[3]]))));
 });
 
 void test('多音字（L2 R3）：看不見的文字裡的「長（＿＿）」不算；空格要是畫面上那一個', () => {
   const hidden = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭＿髮。%% 長（＿＿） %% :: ㄔㄤˊ']);
-  assert.equal(first(hidden).choice, undefined);
+  assert.equal(kindChoice(first(hidden)), undefined);
   assert.deepEqual(hints(hidden), [{ code: 'pick-mixed', line: 6 }]);
   const html = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭＿髮。<span title="長（＿＿）"></span> :: ㄔㄤˊ']);
   assert.deepEqual(hints(html), [{ code: 'pick-mixed', line: 6 }]);
   // 註解在別的地方：照樣是多音字句。
   const note = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), '妹妹留著一頭長（＿＿）髮。%% 註 %% :: ㄔㄤˊ']);
-  assert.ok(first(note).choice);
+  assert.ok(kindChoice(first(note)));
   assert.deepEqual(hints(note), []);
 });
 
@@ -131,17 +132,17 @@ void test('多音字（L2 第三輪 1、4）：句子只收純文字，有別的
   ];
   for (const question of formatted) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
-    assert.equal(first(text).choice, undefined, question);
+    assert.equal(kindChoice(first(text)), undefined, question);
     assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 6 }], question);
   }
   // 題目分成兩行（第二行可能是清單）也不認。
   const lines = parseDeck(`- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音\n${SIX.slice(0, 5).map(line => `    - ${line}\n`).join('')}    - 妹妹留著一頭長（＿＿）\n      髮。 :: ㄔㄤˊ\n`);
-  assert.equal(lines.targets[0].choice, undefined);
+  assert.equal(kindChoice(lines.targets[0]), undefined);
   assert.deepEqual(lines.problems.map(p => [p.code, p.line]), [['pick-mixed', 6]]);
   // 粗體、螢光筆（成對）與 `%%` 註解照樣認；全形的符號是一般的字。
   for (const question of ['妹妹留著一頭**長**（＿＿）髮。', '妹妹留著一頭==長==（＿＿）髮。', '**妹妹**留著一頭長（＿＿）髮。', '妹妹留著一頭長（＿＿）髮。%% 註 %%', '妹妹留著一頭長（＿＿）髮＊。']) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX.slice(0, 5), `${question} :: ㄔㄤˊ`]);
-    assert.ok(first(text).choice, question);
+    assert.ok(kindChoice(first(text)), question);
     assert.deepEqual(hints(text), [], question);
   }
 });
@@ -154,7 +155,7 @@ void test('多音字（L2 第三輪 2、3）：畫面上同一句寫了兩次，
   ];
   for (const copy of copies) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, copy]);
-    assert.equal(first(text).choice, undefined, copy);
+    assert.equal(kindChoice(first(text)), undefined, copy);
     assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 1 }, { code: 'pick-mixed', line: 7 }], copy);
     assert.match(parseDeck(text).problems[0].message, /同一句/, copy);
   }
@@ -165,14 +166,14 @@ void test('多音字（L2 第三輪 2、3）：畫面上同一句寫了兩次，
   ];
   for (const [one, two] of pairs) {
     const text = deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, one, two]);
-    assert.equal(first(text).choice, undefined, two);
+    assert.equal(kindChoice(first(text)), undefined, two);
     assert.deepEqual(hints(text), [{ code: 'pick-mixed', line: 7 }, { code: 'pick-mixed', line: 8 }], two);
   }
   // 只有這一句有 ㄏㄤˊ（第三輪 2）：照原題型出，不會少考一個讀音。
   const lone = deck('行（ㄒㄧㄥˊ、ㄏㄤˊ、ㄏㄥˋ） 讀音', ['他行（＿＿）走得很快。 :: ㄒㄧㄥˊ', '他行（＿）走得很快。 :: ㄏㄤˊ', '他的道行（＿＿）很深。 :: ㄏㄥˋ']);
-  assert.equal(first(lone).choice, undefined);
+  assert.equal(kindChoice(first(lone)), undefined);
   // 不同的句子照樣認。
-  assert.ok(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, '他長（＿＿）得比姊姊高。 :: ㄓㄤˇ'])).choice);
+  assert.ok(kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', [...SIX, '他長（＿＿）得比姊姊高。 :: ㄓㄤˇ']))));
 });
 
 void test('多音字：原本就停出的照舊', () => {
@@ -182,31 +183,31 @@ void test('多音字：原本就停出的照舊', () => {
   const group = parseDeck(deck('長（長、常） 讀音', ['他＿＿得比哥哥高。 :: 長', '時＿＿來看我。 :: 常']));
   assert.equal(group.targets[0].ok, false);
   assert.deepEqual(group.problems.map(p => p.code), ['pick-answer-invalid']);
-  assert.equal(group.targets[0].choice, undefined);
-  assert.ok(first(deck('長（長、常） 讀音', ['他＿＿得比哥哥高。 :: 長'])).group);
+  assert.equal(kindChoice(group.targets[0]), undefined);
+  assert.ok(kindGroup(first(deck('長（長、常） 讀音', ['他＿＿得比哥哥高。 :: 長']))));
 });
 
 void test('多音字：結尾不是單獨的讀音就不看', () => {
   for (const name of ['長（ㄓㄤˇ、ㄔㄤˊ）讀音（進階）', '長（ㄓㄤˇ、ㄔㄤˊ） 字義', '長（ㄓㄤˇ、ㄔㄤˊ）', '長（ㄓㄤˇ、ㄔㄤˊ） 讀聲']) {
     const text = deck(name);
-    assert.equal(first(text).choice, undefined, name);
+    assert.equal(kindChoice(first(text)), undefined, name);
     assert.deepEqual(hints(text), [], name);
   }
 });
 
 void test('多音字：程式不分科，手寫的英文也認', () => {
-  const choice = first(deck('read（/riːd/、/rɛd/） 讀音', ['I have read（＿＿） it. :: /rɛd/', 'I read（＿＿） every day. :: /riːd/'])).choice;
+  const choice = kindChoice(first(deck('read（/riːd/、/rɛd/） 讀音', ['I have read（＿＿） it. :: /rɛd/', 'I read（＿＿） every day. :: /riːd/'])));
   assert.deepEqual(choice?.options, ['/riːd/', '/rɛd/']);
 });
 
 void test('多音字：記憶錨點照第一個全形冒號對到讀音；同一行的、同一讀音的第二行、未知讀音、半形冒號照原序留在 rest', () => {
   const tail = '    - 記憶錨點：先想是不是變大\n        - ㄓㄤˇ：長大：成長\n        - ㄓㄤˇ：第二行\n        - ㄔㄤ˙：未知的讀音\n        - ㄔㄤˊ:半形冒號\n';
-  const choice = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, tail)).choice;
+  const choice = kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, tail)));
   assert.deepEqual(choice?.anchors, ['長大：成長', null]);
   assert.deepEqual(choice?.rest, ['先想是不是變大', 'ㄓㄤˇ：第二行', 'ㄔㄤ˙：未知的讀音', 'ㄔㄤˊ:半形冒號']);
   // 讀音寫粗體也對得到；冒號後面是空的當成沒有說明。
-  const bold = first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, '    - 記憶錨點：\n        - **ㄓㄤˇ**：長大：成長\n        - ㄔㄤˊ：\n')).choice;
+  const bold = kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音', SIX, '    - 記憶錨點：\n        - **ㄓㄤˇ**：長大：成長\n        - ㄔㄤˊ：\n')));
   assert.deepEqual([bold?.anchors, bold?.rest], [['長大：成長', null], []]);
   // 沒有記憶錨點：每個讀音都沒有說明。
-  assert.deepEqual(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音')).choice?.anchors, [null, null]);
+  assert.deepEqual(kindChoice(first(deck('長（ㄓㄤˇ、ㄔㄤˊ） 讀音')))?.anchors, [null, null]);
 });

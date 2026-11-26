@@ -9,12 +9,12 @@
       "count": 1
     }
   },
-  "src/core/deck/markdown.ts": {
+  "src/core/deck/kinds/order.ts": {
     "obsidianmd/regex-lookbehind": {
       "count": 1
     }
   },
-  "src/core/deck/question-types.ts": {
+  "src/core/deck/markdown.ts": {
     "obsidianmd/regex-lookbehind": {
       "count": 1
     }

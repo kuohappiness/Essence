@@ -15,9 +15,9 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
 | 家長的手機也能製卡與啟用 | 實作中 | 第一步（手機製卡、存成草稿）L2 四輪審完（[報告](<Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者同意第四輪的 P1 記成限制並合併；開關文字使用者 2026-11-25 同意（「在這台裝置製卡」）；iPhone 實機測試在提早試用之後；第二步（手機啟用）另開；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
-| 製卡規則重整的比較測試 | 實作中 | 快照、現行組提示、評分表都已凍結，在使用者電腦上生成；ChatGPT 的 4 份等使用者貼，精簡組等使用者確認三條教學選擇 | Claude、使用者 | [任務說明](tasks/rule-restructure-test.md) |
+| 製卡規則重整的比較測試 | 實作中 | 使用者決定國小社會換不換（〈結果〉門檻 3）；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一版照 §9 與[三層架構檢討](<Claude Codex Discussion/2026-11-25-three-layer-review.md>)測試 1 改，用[比較測試工具](tasks/rule-test-tool.md)跑 | 使用者 | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
-| 題型模組（每個學習目標掛上一種題型） | 討論中 | Fable 5.2 xhigh 審[任務說明](tasks/question-type-modules.md)；配對、單選（D-233）的寫法照七項一題一題談 | Claude | [討論稿](<Claude Codex Discussion/2026-11-25-question-type-modules.md>) |
+| 題型模組（每個學習目標掛上一種題型） | 實作中 | 第 A 步已合併（PR #56，2026-11-26，`ff848530`）；照使用者同意的先後做[配對與單選](tasks/matching-single-choice.md) → 第 C 步 → 第 B 步；使用者回 §6 第 1～3 題與第 4 題的兩件 | 使用者、Claude | [任務說明](tasks/question-type-modules.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
 

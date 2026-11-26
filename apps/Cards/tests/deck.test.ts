@@ -8,6 +8,7 @@ import { inspectReply, planDraft, RULE_SUBJECTS } from '../src/core/ai/index.ts'
 import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
 import { EDIT_CASES } from './helpers/source-edit-cases.ts';
 import { addTexts } from './helpers/add-cases.ts';
+import { kindGroup } from './helpers/kinds.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -309,7 +310,7 @@ void test('syntax §2-3 的比較卡範例：三個字都是比較卡，沒有�
   const deck = parseDeck(text);
   assert.deepEqual(deck.problems, []);
   const members = ['寨', '塞', '寒'];
-  assert.deepEqual(deck.targets.map(t => [t.group?.word, t.group?.members, t.group?.title, t.prompts.length, t.ok]), [
+  assert.deepEqual(deck.targets.map(t => [kindGroup(t)?.word, kindGroup(t)?.members, kindGroup(t)?.title, t.prompts.length, t.ok]), [
     ['寨', members, '相似字', 2, true],
     ['塞', members, '相似字', 2, true],
     ['寒', members, '相似字', 2, true],

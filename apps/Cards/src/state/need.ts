@@ -1,4 +1,4 @@
-import { hasOutside, markNeed, parseDeck } from '../core/deck/index.ts';
+import { hasOutside, markNeed, needsOf, parseDeck } from '../core/deck/index.ts';
 import { canRead, laterRelease, OUTSIDE_NEEDS, PICK_NEEDS } from '../core/version/index.ts';
 import type { Prepared } from './ids.ts';
 
@@ -14,7 +14,8 @@ function marked(text: string, version: string | null): { text: string; need: str
   if (!pickOn && !outsideOn) return { text, need: null };
   const deck = parseDeck(text);
   const wants: string[] = [];
-  if (pickOn && (deck.targets.some(target => target.group) || deck.problems.some(problem => problem.code === 'pick-answer-invalid'))) wants.push(PICK_NEEDS);
+  // 卡型要的版本（題型模組任務說明 §1-5）：只算這台讀得懂的。
+  wants.push(...needsOf(deck).filter(need => canRead(need, version)));
   if (outsideOn && deck.targets.some(target => hasOutside(target.fields.sources, deck.props))) wants.push(OUTSIDE_NEEDS);
   if (!wants.length) return { text, need: null };
   const need = wants.reduce(laterRelease);

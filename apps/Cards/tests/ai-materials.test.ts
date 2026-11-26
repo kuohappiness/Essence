@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { learnedWord, parseDeck } from '../src/core/deck/index.ts';
 import { buildPrompt, learnedWords, readJobs, RULE_SUBJECTS, sha256Hex, taskSection } from '../src/core/ai/index.ts';
 import type { CardForm, RuleSubject } from '../src/core/ai/index.ts';
+import { kindGroup } from './helpers/kinds.ts';
 
 // AI 製卡第 3 批（tasks/ai-cards-materials.md §1、D-210 第 4 點）：英文已學過的單字。
 
@@ -88,7 +89,7 @@ void test('L2 第一輪 R1、R2：沒勾時的名稱例子讀得進來、不被�
   assert.ok(off.includes('排序的題型（例如英文的排序、國語的全詩順序卡）不做'));
   const chinese = (name: string): ReturnType<typeof parseDeck> => parseDeck(`---\n科目: 國語\n年級學期: 四上\n單元: L3\n狀態: 啟用\n---\n- ${name}\n    - 盜匪躲在山＿＿裡。（寨、塞、寒、賽） :: 寨\n`);
   assert.deepEqual(chinese('寨 辨字').problems, []);
-  assert.ok(!chinese('寨 辨字').targets[0].group);
+  assert.ok(!kindGroup(chinese('寨 辨字').targets[0]));
   // 對照：舊的寫法 `寨 相似字` 會有 pick-not-recognized（貼回時擋下），所以提示不能這樣寫。
   assert.ok(chinese('寨 相似字').problems.some(problem => problem.code === 'pick-not-recognized'));
 });

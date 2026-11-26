@@ -4,18 +4,19 @@ import { parseDeck } from '../src/core/deck/index.ts';
 import { questionType } from '../src/core/study/index.ts';
 import { RATE_DELAY } from '../src/review/index.ts';
 import { check, pick, setup, stage, tap, texts, view } from './helpers/pick-session.ts';
+import { kindPoem, kindSentence } from './helpers/kinds.ts';
 
 // 英文的句子排序卡（D-193 第 8 點、tasks/english-typed-order.md §4）。預期值照任務說明的邊界例子手寫。
 
 const english = (body: string) => parseDeck(`---\n科目: 英文\n---\n${body}`);
 const sentenceOf = (body: string, name = '間接問句 排序') => english(`- ${name}\n${body}`).targets[0];
-const cellsOf = (question: string) => sentenceOf(`    - ${question}\n`).sentence?.prompts[0];
+const cellsOf = (question: string) => kindSentence(sentenceOf(`    - ${question}\n`))?.prompts[0];
 
 void test('句子排序：每一題各自的詞塊；句末的標點從最後一格拿掉、接在後面', () => {
   const target = sentenceOf('    - 你知道公車站在哪裡嗎？Do you know ==where== ==the bus stop== ==is==?\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives.==\n');
-  assert.equal(target.order, undefined, '不是全詩');
-  assert.equal(target.sentence?.title, '間接問句');
-  assert.deepEqual(target.sentence?.prompts, [
+  assert.equal(kindPoem(target), undefined, '不是全詩');
+  assert.equal(kindSentence(target)?.title, '間接問句');
+  assert.deepEqual(kindSentence(target)?.prompts, [
     { head: '你知道公車站在哪裡嗎？Do you know ', words: ['where', 'the bus stop', 'is'], tails: [' ', ' ', '?'], starts: [false, false, false] },
     { head: '我不知道他住在哪裡。I don\'t know ', words: ['where', 'he', 'lives'], tails: [' ', ' ', '.'], starts: [false, false, false] },
   ]);
@@ -38,15 +39,15 @@ void test('句首那格：照原樣當鍵、不改小寫；只有第一格、前
 });
 
 void test('不是句子排序：只有一格、問答題、拿掉標點後是空的、別科、沒寫科目、全詩', () => {
-  assert.equal(sentenceOf('    - I know ==where== he lives.\n').sentence, undefined);
-  assert.equal(sentenceOf('    - 請問他住哪裡？ :: Where does he live?\n').sentence, undefined);
-  assert.equal(sentenceOf('    - I know ==where== ==?==\n').sentence, undefined);
-  assert.equal(parseDeck('- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0].sentence, undefined);
-  assert.equal(parseDeck('---\n科目: 國文\n---\n- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0].order?.title, '間接問句', '別科照全詩順序卡，和以前一樣');
+  assert.equal(kindSentence(sentenceOf('    - I know ==where== he lives.\n')), undefined);
+  assert.equal(kindSentence(sentenceOf('    - 請問他住哪裡？ :: Where does he live?\n')), undefined);
+  assert.equal(kindSentence(sentenceOf('    - I know ==where== ==?==\n')), undefined);
+  assert.equal(kindSentence(parseDeck('- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0]), undefined);
+  assert.equal(kindPoem(parseDeck('---\n科目: 國文\n---\n- 間接問句 排序\n    - I know ==where== ==he== ==lives==.\n').targets[0])?.title, '間接問句', '別科照全詩順序卡，和以前一樣');
   const poem = sentenceOf('    - ==Twinkle, twinkle==, ==little star==.\n', 'Twinkle 全詩 排序');
-  assert.deepEqual([poem.sentence, poem.order?.title], [undefined, 'Twinkle'], '英文卡組裡寫了全詩是全詩順序卡');
+  assert.deepEqual([kindSentence(poem), kindPoem(poem)?.title], [undefined, 'Twinkle'], '英文卡組裡寫了全詩是全詩順序卡');
   const chinese = sentenceOf('    - ==人閒桂花落==，==夜靜春山空==。\n', '鳥鳴澗 排序');
-  assert.deepEqual([chinese.sentence?.title, chinese.order], ['鳥鳴澗', undefined], '英文卡組裡沒寫全詩的就是句子排序，空格是中文也一樣');
+  assert.deepEqual([kindSentence(chinese)?.title, kindPoem(chinese)], ['鳥鳴澗', undefined], '英文卡組裡沒寫全詩的就是句子排序，空格是中文也一樣');
 });
 
 const P = 'Essence Cards/英文/L3 文法.md';
@@ -61,7 +62,7 @@ void test('句子排序是點選填空：一個目標，這一題的每一格是
   const h = await setup(t, { [P]: DECK });
   const s = await h.open({ subject: '英文' });
   const { card } = view(s);
-  assert.equal(questionType(card), 'pick');
+  assert.equal(questionType(card), 'order');
   assert.deepEqual(card.blanks.map(blank => [blank.lt, blank.answer, blank.cell]), [['order1', 'the', 0], ['order1', 'man', 1], ['order1', 'the', 2], ['order1', 'dog', 3]]);
   assert.deepEqual([...(card.group?.keys ?? [])].sort(), ['dog', 'man', 'the', 'the']);
   assert.notDeepEqual(card.group?.keys, ['the', 'man', 'the', 'dog'], '字鍵不照句子的順序');

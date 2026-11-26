@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { cardOf, encodeEntry, mergeHistory, nextCard, planToday } from '../src/core/study/index.ts';
 import type { Card, DeckEntry, Pick, TodayInput } from '../src/core/study/index.ts';
+import { kindPoem } from './helpers/kinds.ts';
 
 // 全詩順序卡在佇列裡（D-189 第 1 點、D-204）：純函式，預期值手寫。
 const P = 'Essence Cards/國語/古詩.md';
@@ -61,7 +62,7 @@ void test('字鍵的順序每次出不同，同一次重來不變', () => {
 
 // 字鍵的順序和上一次不同（L2 R4）：直接用 cardOf 算出第 0～200 次。
 const keysAt = (text: string, times: number): readonly string[] => {
-  const target = parseDeck(text).targets.find(each => each.order);
+  const target = parseDeck(text).targets.find(each => kindPoem(each));
   if (!target) throw Error('沒有全詩順序卡');
   return cardOf({ lt: target.id ?? '', deck: P, target, prompt: target.prompts[0], isNew: false, early: false }, times).group?.keys ?? [];
 };

@@ -10,6 +10,7 @@ import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry } from '../src/core/study/index.ts';
 import { PICK_NEEDS } from '../src/core/version/index.ts';
 import { createState } from '../src/state/index.ts';
+import { kindGroup } from './helpers/kinds.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { tempFolder } from './helpers/vault.ts';
 
@@ -92,7 +93,7 @@ void test('v0.3.0 的 parseDeck 讀比較卡組當問答卡：每一題的指紋
   const script = "import { parseDeck } from './src/core/deck/index.ts'; console.log(JSON.stringify(parseDeck(JSON.parse(process.argv[1])).targets.map(target => [target.id, target.prompts.map(prompt => [prompt.kind, prompt.kind === 'qa' ? prompt.typed : null, prompt.fingerprint])])));";
   const old = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script, JSON.stringify(text)], { cwd: dir, env, encoding: 'utf8' })) as unknown;
   const now = parseDeck(text).targets;
-  assert.ok(now.every(target => target.group), '這個版本讀到的是比較卡');
+  assert.ok(now.every(target => kindGroup(target)), '這個版本讀到的是比較卡');
   const expected = now.map(target => [target.id, target.prompts.map(prompt => ['qa', null, prompt.fingerprint])]);
   assert.deepEqual(old, expected);
   assert.equal(now.flatMap(target => target.prompts).length, 4);
