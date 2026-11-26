@@ -60,11 +60,11 @@ export function fillBlank(question: string, answer: string): string | null {
 /** 題目的文字。 */
 export const questionOf = (prompt: Prompt): string => prompt.kind === 'qa' ? prompt.question : prompt.text;
 /** 英文的打字卡：中翻英、文法、變化（tasks/english-typed-order.md §6-3）：答案出現時念、之後才有喇叭。 */
-const typedEnglish = (card: Card): boolean => card.target.direction === 'zh-en' || card.target.typing !== undefined;
+const typedEnglish = (card: Card): boolean => card.target.direction === 'zh-en' || card.target.kind?.id === 'typing';
 /** 有喇叭的英文卡：英翻中與英文的打字卡。 */
-export const speaksEnglish = (card: Card): boolean => card.target.direction !== null || card.target.typing !== undefined;
+export const speaksEnglish = (card: Card): boolean => card.target.direction !== null || card.target.kind?.id === 'typing';
 /** 英文的卡（冠詞連著換行、中文句子後面英文換行）：會念的，再加上英文的句子排序。 */
-export const isEnglish = (card: Card): boolean => speaksEnglish(card) || card.target.sentence !== undefined;
+export const isEnglish = (card: Card): boolean => speaksEnglish(card) || card.target.kind?.id === 'order' && card.target.kind.order.style === 'sentence';
 /** 題目一出現就念的：英翻中的題目念英文（D-116）；其他不念。 */
 export function openingSpeech(card: Card): readonly string[] | null {
   const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
@@ -83,7 +83,7 @@ const dropUnlessBlank = (match: string, inner: string): string => BLANK.test(inn
  */
 export function typedSentence(card: Card, answer: string): string | null {
   const question = questionOf(card.prompt);
-  if (!card.target.typing) return fillBlank(question, answer);
+  if (card.target.kind?.id !== 'typing') return fillBlank(question, answer);
   const bare = question.replace(/\*\*|==/g, '').replace(LABEL, dropUnlessBlank).replace(HINT, dropUnlessBlank);
   return fillBlank(bare, answer);
 }

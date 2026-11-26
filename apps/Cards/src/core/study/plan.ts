@@ -180,7 +180,7 @@ export function planToday(input: TodayInput): Today {
       return heldOnly.has(target) ? [{ c: null, word: target.pairWord }] : [];
     });
     for (const target of entry.deck.targets) {
-      const pair = target.typing?.pair;
+      const pair = target.kind?.id === 'typing' ? target.kind.typing.pair : undefined;
       const c = pair && target.id !== null ? candidates.get(target.id) : undefined;
       if (!pair || !c || c.target !== target || c.memory) continue;
       const mates = words.filter(({ word }) => (pair.exact ? word.exact : word.base) === pair.key);
@@ -218,7 +218,7 @@ export function planToday(input: TodayInput): Today {
 }
 
 /** 比較卡的組的身分（§3）：同一篇、key 相同。 */
-const groupKey = (c: Candidate): string | null => c.target.group ? c.entry.path + '\0' + c.target.group.key : null;
+const groupKey = (c: Candidate): string | null => c.target.kind?.id === 'group' ? c.entry.path + '\0' + c.target.kind.group.key : null;
 
 /** 排好順序後，新的目標碰到同組的第一個時，同組其他新的目標緊接在它後面（§5-4）。 */
 function newGroupsTogether(sorted: readonly Candidate[]): Candidate[] {

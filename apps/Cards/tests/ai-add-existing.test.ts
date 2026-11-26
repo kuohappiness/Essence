@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EXISTING_WHY, planExisting } from '../src/core/ai/index.ts';
 import type { ExistingInput } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
+import { kindChoice } from './helpers/kinds.ts';
 
 // tasks/ai-cards-add.md §3-2：加進已有的學習目標，只加缺的（一對一配對）、窄版防呆、留項條件、寫前寫後核對。只用自編的內容。
 
@@ -148,7 +149,7 @@ void test('多音字（tasks/polyphone-pick.md §5）：加合規的句子照常
   const more = '    - 小樹苗慢慢長（＿＿）大了。 :: ㄓㄤˇ';
   const out = planned(choiceItem(more), choice());
   assert.equal(out, choice(more));
-  assert.ok(parseDeck(out).targets[0].choice);
+  assert.ok(kindChoice(parseDeck(out).targets[0]));
   already(choiceItem(more), out);
   for (const bad of ['    - 他長（＿＿）得很快。 :: ㄓㄤ', '    - 他長__得很快。 :: ㄓㄤˇ', '    - 「長」有幾種念法？ :: 兩種']) assert.equal(left(choiceItem(bad), choice()), EXISTING_WHY.choiceLost, bad);
   // 已有的翻面讀音卡（名稱沒有括號）：照原池的問句加題，還是翻面。
@@ -171,6 +172,6 @@ void test('多音字（PR #53 的 Codex 審查、L2 第三輪）：加過去之�
   assert.equal(planned(choiceItem(fine), choice()), choice(fine));
   // 原本就照翻面出的（家長手改出同一句兩個讀音）：照一般的核對加，還是翻面；點選填空才照答案評分，不會把答對記成差一點。
   const conflicted = '    - 他長（＿＿＿）得比哥哥高。 :: ㄔㄤˊ';
-  assert.equal(parseDeck(choice(conflicted)).targets[0].choice, undefined);
+  assert.equal(kindChoice(parseDeck(choice(conflicted)).targets[0]), undefined);
   assert.equal(planned(choiceItem(fine), choice(conflicted)), choice(conflicted, fine));
 });

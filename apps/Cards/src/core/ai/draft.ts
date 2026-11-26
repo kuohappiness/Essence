@@ -1,6 +1,6 @@
 import { stringify } from 'yaml';
-import { parseDeck, splitUnit, TRAILING_ID } from '../deck/index.ts';
-import { PICK_NEEDS } from '../version/index.ts';
+import { needsOf, parseDeck, splitUnit, TRAILING_ID } from '../deck/index.ts';
+import { laterRelease } from '../version/index.ts';
 import { sha256Hex, titlePrefix } from './prompt.ts';
 import type { CardForm, ExistingTarget } from './prompt.ts';
 import { checkPiece, nameLineIds, normalizeReply, pieceText, quoteLine, safeFileName, segmentReply, splitReply } from './reply.ts';
@@ -21,8 +21,8 @@ interface InspectedPiece extends Piece {
   adds: { line: number; id: string }[];
   /** 新目標與候選的名稱行（整理後的行號）：存草稿時在行尾配 ID。 */
   names: number[];
-  /** 有比較卡：卡組要寫 `需要版本`（D-191）。 */
-  pick: boolean;
+  /** 卡組要寫的 `需要版本`（D-191，題型模組任務說明 §1-5 的 needsOf）：有比較卡是 PICK_NEEDS；不用寫是 null。 */
+  need: string | null;
   /** 候選的理由行（整理後的行號）：存草稿時只在這幾行核對疑似重複的 ID（L2 R7）。 */
   reasons: number[];
 }
@@ -101,7 +101,7 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
         const problem = id === undefined ? null : addProblem(id, sent, now);
         if (problem) hints.push({ line: rawLine(i), message: `${problem}：理由裡的 ID 照原文留著，不轉成連結` });
       }
-      pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), reasons: reasons.map(i => piece.lines[i]), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
+      pieces.push({ ...piece, names, adds, need: needsOf(deck).reduce<string | null>((a, b) => a === null ? b : laterRelease(a, b), null), reasons: reasons.map(i => piece.lines[i]), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
     }
   }
   // 寫出最後一行（真人測試 2026-11-08：還沒寫完就按了複製，家長看不出少了 <<<完>>>，就勾了確定）。
@@ -163,10 +163,10 @@ export interface PlannedDraft {
 }
 
 /** 屬性用 YAML 序列化寫（§5）：`L3 Sports: Week 1` 這種值才會加引號。 */
-function properties(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, pick: boolean): string {
+function properties(form: CardForm, subject: Pick<RuleSubject, 'subject' | 'r3'>, need: string | null): string {
   const unit = form.unit.trim().replace(/[ \t　]+/g, ' ');
   const props: Record<string, string> = subject.subject === null ? { 狀態: '草稿' } : { 年級學期: form.term.trim(), 科目: subject.subject, 單元: unit, 狀態: '草稿' };
-  if (pick) props['需要版本'] = PICK_NEEDS;
+  if (need !== null) props['需要版本'] = need;
   return '---\n' + stringify(props, { lineWidth: 0 }) + '---\n';
 }
 
@@ -222,7 +222,7 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
     });
     while (body.length && body[0].trim() === '') body.shift();
     while (body.length && body[body.length - 1].trim() === '') body.pop();
-    const text = properties(form, subject, piece.pick) + '\n' + body.join('\n') + '\n';
+    const text = properties(form, subject, piece.need) + '\n' + body.join('\n') + '\n';
     const deck = parseDeck(text);
     const unit = splitUnit(form.unit);
     const props = deck.props;
@@ -231,7 +231,7 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
       ? props.term === null && props.subject === null
       : props.term === form.term.trim() && props.subject === subject.subject && props.unit?.code === unit.code && props.unit.name === unit.name.replace(/[ \t　]+/g, ' '));
     const trailing = new Set(text.split('\n').map(line => TRAILING_ID.exec(line)?.[1]).filter((id): id is string => !!id));
-    if (!same || (piece.pick && props.need !== PICK_NEEDS) || !ids.every(id => trailing.has(id))) throw Error(`做出來的卡組讀回來和要寫的不同：${piece.name}`);
+    if (!same || (piece.need !== null && props.need !== piece.need) || !ids.every(id => trailing.has(id))) throw Error(`做出來的卡組讀回來和要寫的不同：${piece.name}`);
     const base = withCode(piece.name, code);
     decks.push({ path: `${folder}/${freeName(base, taken)}.md`, base, text, sha256: sha256Hex(text), ids });
   }
