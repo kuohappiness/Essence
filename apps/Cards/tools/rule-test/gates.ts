@@ -12,8 +12,8 @@ type WorseState = 'within' | 'more' | 'worse' | 'skip' | 'unknown';
 type Verdict = '過' | '沒過' | '未定' | '打平' | '打平，候選較省';
 export interface GateResult {
   lesson: string; generator: string; candidate: string; baseline: string;
-  /** 進門檻的份數；unpaired 是候選裡區組沒有基準、不進門檻的份數。 */
-  counts: { candidate: number; baseline: number; unpaired: number };
+  /** 進門檻的份數；unpaired 是候選裡區組沒有基準、alone 是基準裡區組沒有候選的份數，都不進門檻（§7-1 第 1 點）。 */
+  counts: { candidate: number; baseline: number; unpaired: number; alone: number };
   major: Check; rows: Check; total: Check; extra: Check; harm: Check;
   /** 時間預算（檢查表課 3）：設定只報告時，標出來也是過。 */
   budget: Check;
@@ -28,6 +28,8 @@ export interface GateResult {
 }
 
 const FIXED: readonly SecondaryMetric[] = ['規則字數', '整份提示字數'];
+/** 基準有區組沒有候選：算門檻的組份數一樣（F11），所以是候選的有效原稿補不滿（§7-1 第 1 點：進門檻的份數少於設定的份數是未定）。 */
+const lonelyBaseline = (alone: number): string => `基準有 ${String(alone)} 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠`;
 const EPSILON = 1e-9;
 /** 少於幾份時不判明顯（rule-test-d236.md §7-2 第 4 道：份數不夠）。 */
 const ENOUGH = 3;
@@ -107,7 +109,7 @@ function ends(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[
 }
 
 /** 一個候選組對基準的門檻。candidate、baseline 是同一課、同一個生成器、已經配好對的份。 */
-export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], unpaired = 0): Omit<GateResult, 'lesson' | 'generator' | 'candidate' | 'baseline'> {
+export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], unpaired = 0, alone = 0): Omit<GateResult, 'lesson' | 'generator' | 'candidate' | 'baseline'> {
   const n = candidate.length, m = baseline.length;
   // 份數夠不夠、贏的比例，照每個指標拿掉不算的份之後實際留下的份算（不讓存不了、不能加深的份湊數）。
   const few = (s: { c: readonly number[]; b: readonly number[] }): boolean => s.c.length < ENOUGH || s.b.length < ENOUGH;
@@ -224,8 +226,9 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
   const hard = [major, rows, total, extra, harm, budget];
   let verdict: Verdict, basis: string;
   if (hard.some(each => each.pass === false) || noWorse.some(each => each.state === 'worse')) { verdict = '沒過'; basis = '有一道沒過'; }
-  else if (harm.pass === null || [...benefits, ...noWorse].some(each => each.state === 'unknown') || unpaired > 0) {
-    verdict = '未定'; basis = unpaired > 0 ? `候選有 ${String(unpaired)} 份的區組沒有基準，配對的份數不夠` : harm.pass === null ? '傷到學習未定' : '有指標缺資料或歧見會左右結果';
+  else if (harm.pass === null || [...benefits, ...noWorse].some(each => each.state === 'unknown') || unpaired > 0 || alone > 0) {
+    verdict = '未定';
+    basis = unpaired > 0 ? `候選有 ${String(unpaired)} 份的區組沒有基準，配對的份數不夠` : alone > 0 ? lonelyBaseline(alone) : harm.pass === null ? '傷到學習未定' : '有指標缺資料或歧見會左右結果';
   } else if (benefits.some(each => each.state === 'clear')) { verdict = '過'; basis = '學習面有一項明顯比較好'; }
   else if (benefits.some(each => each.state === 'few')) { verdict = '未定'; basis = '收益平均達到，但份數不夠'; }
   else if (n >= gates.tieMinCopies && m >= gates.tieMinCopies && harm.pass === true && noWorse.every(each => each.state === 'within' || each.state === 'skip')) {
@@ -234,7 +237,7 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
     else if (gates.tieCheaper === 'pass') { verdict = '過'; basis = '學習面打平、候選較省（設定：打平較省算過）'; }
     else { verdict = '打平，候選較省'; basis = '學習面打平、候選較省'; }
   } else { verdict = '未定'; basis = '學習面沒有明顯的差，但有指標多過容許量或份數不到打平的要求'; }
-  return { counts: { candidate: n, baseline: m, unpaired }, major, rows, total, extra, harm, budget, benefits, noWorse, secondary, verdict, basis, chance };
+  return { counts: { candidate: n, baseline: m, unpaired, alone }, major, rows, total, extra, harm, budget, benefits, noWorse, secondary, verdict, basis, chance };
 }
 
 /**
@@ -257,14 +260,15 @@ export function allGates(gates: Gates, decks: readonly DeckMetrics[]): GateResul
   for (const lesson of [...new Set(decks.map(deck => deck.lesson))]) {
     for (const generator of gates.generators) {
       for (const name of gates.candidates) {
-        const pair = pairUp(decks, lesson, generator, name, gates.baseline);
-        if (!pair.a.length && !pair.unpaired) continue;
+        const pair = pairUp(decks, lesson, generator, name, gates.baseline), alone = pairUp(decks, lesson, generator, gates.baseline, name).unpaired;
+        if (!pair.a.length && !pair.unpaired && !alone) continue;
         if (!pair.a.length) {
           const empty: Check = { pass: null, text: '沒有和基準同一個區組的份' };
-          out.push({ lesson, generator, candidate: name, baseline: gates.baseline, counts: { candidate: 0, baseline: 0, unpaired: pair.unpaired }, major: empty, rows: empty, total: empty, extra: empty, harm: empty, budget: empty, benefits: [], noWorse: [], secondary: [], verdict: '未定', basis: `候選 ${String(pair.unpaired)} 份的區組都沒有基準`, chance: {} });
+          const basis = pair.unpaired ? `候選 ${String(pair.unpaired)} 份的區組都沒有基準` : lonelyBaseline(alone);
+          out.push({ lesson, generator, candidate: name, baseline: gates.baseline, counts: { candidate: 0, baseline: 0, unpaired: pair.unpaired, alone }, major: empty, rows: empty, total: empty, extra: empty, harm: empty, budget: empty, benefits: [], noWorse: [], secondary: [], verdict: '未定', basis, chance: {} });
           continue;
         }
-        out.push({ lesson, generator, candidate: name, baseline: gates.baseline, ...judgeGates(gates, pair.a, pair.b, pair.unpaired) });
+        out.push({ lesson, generator, candidate: name, baseline: gates.baseline, ...judgeGates(gates, pair.a, pair.b, pair.unpaired, alone) });
       }
     }
   }

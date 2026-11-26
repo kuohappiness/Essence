@@ -169,8 +169,16 @@ void test('配對：只收和基準同一個區組的候選份，混在一起比
   ];
   const results = allGates(GATES, decks);
   assert.deepEqual(results.map(each => [each.lesson, each.generator, each.candidate, each.counts, each.verdict, each.basis]), [
-    ['L3', 'claude', '候選', { candidate: 1, baseline: 1, unpaired: 1 }, '未定', '候選有 1 份的區組沒有基準，配對的份數不夠'],
+    ['L3', 'claude', '候選', { candidate: 1, baseline: 1, unpaired: 1, alone: 0 }, '未定', '候選有 1 份的區組沒有基準，配對的份數不夠'],
   ]);
+});
+
+void test('進門檻的份數少於設定的（§7-1 第 1 點）：候選的有效原稿補不滿、有區組只有基準，總結果未定，不是過；候選一份都沒有也列出來', () => {
+  const blocks = (group: string, n: number, more: Partial<DeckMetrics>): DeckMetrics[] => Array.from({ length: n }, (_, i) => deck(group, { code: `${group}${String(i)}`, block: `L3-B0${String(i + 1)}`, copy: i + 1, ...more }));
+  const [short] = allGates(GATES, [...blocks('候選', 4, {}), ...blocks('現行', 5, wrong(1))]);
+  assert.deepEqual([short.counts, short.verdict, short.basis], [{ candidate: 4, baseline: 4, unpaired: 0, alone: 1 }, '未定', '基準有 1 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
+  const [none] = allGates(GATES, blocks('現行', 3, {}));
+  assert.deepEqual([none.counts, none.verdict, none.basis], [{ candidate: 0, baseline: 0, unpaired: 0, alone: 3 }, '未定', '基準有 3 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
 });
 
 void test('時間預算（檢查表課 3，rule-test-d236.md §16）：目標多超過 15% 而確定考到的必備沒多，標出來；設定算門檻時沒過，只報告時照樣過', () => {
