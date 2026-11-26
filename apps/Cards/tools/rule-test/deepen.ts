@@ -16,7 +16,7 @@ import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './ad
 import { deepenGroups } from './config.ts';
 import { blindedJobs, materialOf, openFolder, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { confirmSpec, deepenSources, deepenSourcesHash, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, SPEC, verifyLock } from './freeze.ts';
-import { acquireLock, CODEX_MATERIAL, detach, rawName } from './generate.ts';
+import { acquireLock, CODEX_MATERIAL, detach, rawName, startable } from './generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
 import { subjectOf } from './prompts.ts';
 
@@ -361,7 +361,8 @@ export async function deepen(): Promise<void> {
   const events = readEvents(folder, LOG), retry = flags.includes('--retry');
   const all = todos(folder, plans);
   const failed = all.filter(each => jobState(events, each.piece.key).status === 'failed');
-  const todo = all.filter(each => ['pending', 'retry'].includes(jobState(events, each.piece.key).status) || (retry && failed.includes(each)));
+  const can = startable(folder);
+  const todo = all.filter(each => can(jobState(events, each.piece.key).status) || (retry && failed.includes(each)));
   if (failed.length && !retry) console.log(`放棄的 ${String(failed.length)} 篇沒算進去（決定再試就加 --retry）：${failed.map(each => each.piece.key).join('、')}\n`);
   if (!flags.includes('--confirmed')) {
     for (const generator of folder.config.generators) {

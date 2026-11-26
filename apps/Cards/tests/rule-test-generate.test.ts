@@ -11,7 +11,7 @@ import { blindFolder } from '../tools/rule-test/blind.ts';
 import { cutDeck, validity } from '../tools/rule-test/deck-cut.ts';
 import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
-import { acquireLock, runQueue, savePasted, writeManual } from '../tools/rule-test/generate.ts';
+import { acquireLock, runQueue, savePasted, startable, writeManual } from '../tools/rule-test/generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { RUBRIC } from './helpers/rule-test.ts';
 
@@ -244,6 +244,13 @@ void test('行程鎖：另一個還在跑就停下；上一次的行程已經不
   const state = jobState(readEvents(folder), '甲-L3-claude-1');
   assert.equal(state.status, 'retry');
   assert.equal(state.last?.type, 'interrupted');
+});
+
+void test('停在跑中（上一次的行程被砍掉）：沒有行程拿著鎖時，CLI 把它算進要跑的；有行程在跑、或手貼的，不算（L2 第 1 輪 E）', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  assert.deepEqual([startable(folder)('running'), startable(folder)('running', true), startable(folder)('pending'), startable(folder)('done')], [true, false, true, false]);
+  const release = acquireLock(folder, 'generate');
+  try { assert.equal(startable(folder)('running'), false); } finally { release(); }
 });
 
 void test('手貼：說明寫清楚服務、模型、PDF 與順序；貼回一步一步存，後一步的提示等前一步貼回才產生', async () => {

@@ -9,7 +9,7 @@ import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
 import { confirmSpec, readFrozenSteps, SPEC, verifyLock, type FrozenStep } from './freeze.ts';
-import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent } from './jobs.ts';
+import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent, type JobState } from './jobs.ts';
 import { fillReplies } from './prompts.ts';
 
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
@@ -42,6 +42,16 @@ function finalize(folder: Folder, job: Job, attempt: number): void {
 
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+}
+
+/**
+ * CLI 算要跑的工作（generate、deepen 共用）：待跑與待重試；停在「跑中」的，沒有活著的行程拿著鎖時也算（上一次的行程被砍掉，
+ * 開跑時 acquireLock 會改記中斷再跑，L2 第 1 輪 E）。手貼的「跑中」是在等使用者貼下一步，不算。
+ */
+export function startable(folder: Folder): (status: JobState['status'], manual?: boolean) => boolean {
+  const file = lockFile(folder);
+  const held = existsSync(file) && alive((JSON.parse(readFileSync(file, 'utf8')) as { pid: number }).pid);
+  return (status, manual = false) => status === 'pending' || status === 'retry' || (status === 'running' && !held && !manual);
 }
 
 /**
@@ -206,7 +216,8 @@ export async function generate(): Promise<void> {
   const steps = readFrozenSteps(folder), events = readEvents(folder), retry = flags.includes('--retry');
   const jobs = planJobs(folder, steps, events);
   const failed = jobs.filter(job => jobState(events, job.key).status === 'failed');
-  const todo = jobs.filter(job => ['pending', 'retry'].includes(jobState(events, job.key).status) || (retry && failed.includes(job)));
+  const can = startable(folder);
+  const todo = jobs.filter(job => can(jobState(events, job.key).status, job.kind === 'manual') || (retry && failed.includes(job)));
   const auto = todo.filter(job => job.kind !== 'manual'), manual = todo.filter(job => job.kind === 'manual');
   if (failed.length && !retry) console.log(`放棄的 ${String(failed.length)} 份沒算進去（原因用 status 看；決定再試就加 --retry）：${failed.map(job => job.key).join('、')}\n`);
   if (!flags.includes('--confirmed')) {
