@@ -80,8 +80,13 @@ export function validateDeepen(value: unknown, context: DeepenContext): string[]
   result.issues.forEach((issue, i) => {
     const at = `問題第 ${String(i + 1)} 筆（${issue.deck} ${issue.kind}）`;
     if (!issue.lines.length) problems.push(`${at}：要寫行號`);
-    const bad = issue.lines.filter(line => !Number.isInteger(line) || line < 1 || !(context.sheets.get(issue.deck)?.[line - 1] ?? '').trim());
+    const sheet = context.sheets.get(issue.deck) ?? [];
+    const bad = issue.lines.filter(line => !Number.isInteger(line) || line < 1 || !(sheet[line - 1] ?? '').trim());
     if (bad.length) problems.push(`${at}：行號 ${bad.join('、')} 不是這一份有字的行`);
+    // 草稿在第一個「# 第 N 篇的加深」之前（deepen.ts 的 deepenSheet）。
+    const replies = sheet.findIndex(line => /^# 第 \d+ 篇的加深$/.test(line));
+    const draft = issue.lines.filter(line => !bad.includes(line) && (replies < 0 || line - 1 < replies));
+    if (draft.length) problems.push(`${at}：行號 ${draft.join('、')} 在草稿，草稿不評（只記加深回覆裡的問題）`);
     if (issue.item && !known(issue.deck, issue.item)) problems.push(`${at}：${issue.item} 不是這一份的項`);
   });
   return problems;

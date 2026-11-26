@@ -277,6 +277,8 @@ void test('驗加深評分（§6-3）：每列每份一格、每項一筆；判�
     '問題第 1 筆（S1 判錯）：行號 2 不是這一份有字的行', '問題第 1 筆（S1 判錯）：3-1 不是這一份的項',
   ]);
   assert.deepEqual(validateDeepen(answer({ rows: [] }), context), ['少了這幾列：D1']);
+  // 草稿不評（加深評分說明）：行號指到草稿段的問題擋下（L2 第 1 輪 D）。
+  assert.deepEqual(validateDeepen(answer({ issues: [{ deck: 'S1', kind: '洩漏', item: '', lines: [3], note: '' }] }), context), ['問題第 1 筆（S1 洩漏）：行號 3 在草稿，草稿不評（只記加深回覆裡的問題）']);
 });
 
 void test('合併加深（§6-3）：項兩位都對是對、都錯是錯、不同是歧見；加深機會照卡組的表；同一項同一種問題算一筆', () => {
