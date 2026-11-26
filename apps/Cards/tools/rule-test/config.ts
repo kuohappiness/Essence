@@ -129,7 +129,8 @@ function yesNo(value: unknown, yes: string, no: string, where: string, errors: E
   return false;
 }
 function percent(value: unknown, where: string, errors: Errors): number {
-  const match = typeof value === 'number' ? [String(value), String(value)] : typeof value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*%?\s*$/.exec(value) : null;
+  // 數字也要有限、不小於 0（YAML 的 -1、.nan、.inf 是數字，字串的那一支本來就只收不帶負號的數）。
+  const match = typeof value === 'number' ? Number.isFinite(value) && value >= 0 ? [String(value), String(value)] : null : typeof value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*%?\s*$/.exec(value) : null;
   if (!match) { errors.add(where, '要寫百分比，例如 20%'); return 0; }
   return Number(match[1]) / 100;
 }
@@ -379,7 +380,7 @@ export function readConfig(source: string): Config {
       const item = isRaw(raw) ? raw : {};
       const where = `門檻 次要 第 ${String(i + 1)} 項`;
       knownKeys(item, ['指標', '至少', '容許'], where, errors);
-      return { metric: secondary(item['指標'], where, errors), atLeast: percent(item['至少'], `${where} 至少`, errors), tolerance: percent(item['容許'] ?? 0, `${where} 容許`, errors) };
+      return { metric: secondary(item['指標'], where, errors), atLeast: percent(item['至少'], `${where} 至少`, errors), tolerance: item['容許'] === undefined ? 0 : percent(item['容許'], `${where} 容許`, errors) };
     }),
     tieMinCopies: count(rawGates['打平最少份數'], 3, '門檻 打平最少份數', errors),
     tieCheaper: tieText === '過' ? 'pass' : tieText === '只報告' ? 'report' : (errors.add('門檻 打平較省', '要寫「過」或「只報告」'), 'pass'),
