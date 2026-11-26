@@ -99,6 +99,9 @@ void test('對照只收同一個區組的份：缺乙的區組列出來；份數
   assert.deepEqual(five.results[0].counts, { a: 1, b: 1 });
   assert.equal(five.results[0].metrics.find(each => each.metric === '判錯')!.text, '判錯：甲 0.0、乙 1.0，差 -1.0（甲少）；甲贏 1／1 場；份數不夠，不判明顯');
   assert.deepEqual(five.missing, ['批 1 L3｜claude：甲有 1 份的區組沒有乙（L3-B02）', '批 1 L3｜codex：甲（現行＋五步）沒有份']);
+  // 組多於 4 拆區組時，同一份現行（B1）在 B01、B02 各評一次：B02 沒有甲那一次不算缺（§5-6）。
+  const split = allContrasts(config(), [deck('現行＋五步', { code: 'A1' }), deck('現行', { code: 'B1' }), deck('現行', { code: 'B1', block: 'L3-B02' }), deck('候選', { code: 'C1', block: 'L3-B02' })])[0];
+  assert.deepEqual(split.missing, []);
 });
 
 /** 一個有現行英文規則、候選規則與一份五步檔的 git repo（不碰真的 repo）。 */

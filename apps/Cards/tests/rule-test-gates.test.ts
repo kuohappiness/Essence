@@ -203,6 +203,21 @@ void test('進門檻的份數少於設定的（§7-1 第 1 點）：候選的有
   assert.deepEqual([none.counts, none.verdict, none.basis], [{ candidate: 0, baseline: 0, unpaired: 0, alone: 3 }, '未定', '基準有 3 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
 });
 
+void test('五組以上拆區組（§5-6）：同一份基準在每個拆開的區組各評一次，沒有候選的那一次不算缺；真的少了才算', () => {
+  // 每一輪拆成兩個區組：B 單數是現行、候選、甲、乙，B 雙數是同一份現行和丙。
+  const split = (n: number, m: number): DeckMetrics[] => Array.from({ length: m }, (_, i) => [
+    deck('現行', { code: `現行${String(i)}`, block: `L3-B${String(2 * i + 1).padStart(2, '0')}`, copy: i + 1, ...wrong(2) }),
+    deck('現行', { code: `現行${String(i)}`, block: `L3-B${String(2 * i + 2).padStart(2, '0')}`, copy: i + 1, ...wrong(2) }),
+    ...i < n ? [deck('候選', { code: `候選${String(i)}`, block: `L3-B${String(2 * i + 1).padStart(2, '0')}`, copy: i + 1 })] : [],
+    deck('丙', { code: `丙${String(i)}`, block: `L3-B${String(2 * i + 2).padStart(2, '0')}`, copy: i + 1 }),
+  ]).flat();
+  // 5 對 5 全贏：1/C(10,5)＝1/252。
+  const [full] = allGates(GATES, split(5, 5));
+  assert.deepEqual([full.counts, full.verdict, full.basis], [{ candidate: 5, baseline: 5, unpaired: 0, alone: 0 }, '過', '學習面有一項明顯比較好']);
+  const [short] = allGates(GATES, split(4, 5));
+  assert.deepEqual([short.counts, short.verdict, short.basis], [{ candidate: 4, baseline: 4, unpaired: 0, alone: 1 }, '未定', '基準有 1 份的區組沒有候選（候選的有效份數比設定的少），配對的份數不夠']);
+});
+
 void test('時間預算（檢查表課 3，rule-test-d236.md §16）：目標多超過 15% 而確定考到的必備沒多，標出來；設定算門檻時沒過，只報告時照樣過', () => {
   const candidate = many('候選', [0, 0, 0], () => ({ targets: 12, sureRequired: 3 })), baseline = many('現行', [0, 0, 0], () => ({ targets: 10, sureRequired: 3 }));
   const report = judgeGates(GATES, candidate, baseline);

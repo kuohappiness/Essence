@@ -245,16 +245,19 @@ export function judgeGates(gates: Gates, candidate: readonly DeckMetrics[], base
 
 /**
  * 配對（§7-1 第 1 點）：只收同一個區組裡有 b 組的 a 組份，和那幾份 b 組；收進來以後兩組混在一起比。
- * 沒有 b 組的區組，那幾份 a 組不收，回傳在 unpaired。對照（§8）用同一個函式。
+ * 沒有 b 組的區組，那幾份 a 組不收：unpaired 數的是一次都沒和 b 組同區組的 a 組份，lonely 是它們的區組。
+ * 組多於 4 時同一份基準在拆開的每個區組各評一次（§5-6），所以照份（批／代號）數，不照出現的次數。對照（§8）用同一個函式。
  */
-export function pairUp(decks: readonly DeckMetrics[], lesson: string, generator: string, a: string, b: string): { a: DeckMetrics[]; b: DeckMetrics[]; unpaired: number } {
+export function pairUp(decks: readonly DeckMetrics[], lesson: string, generator: string, a: string, b: string): { a: DeckMetrics[]; b: DeckMetrics[]; unpaired: number; lonely: string[] } {
   const here = decks.filter(deck => deck.lesson === lesson && deck.generator === generator);
   const key = (deck: DeckMetrics): string => `${String(deck.batch)}/${deck.block}`;
+  const copy = (deck: DeckMetrics): string => `${String(deck.batch)}/${deck.code}`;
   const withB = new Set(here.filter(deck => deck.group === b).map(key));
   const all = here.filter(deck => deck.group === a);
   const paired = all.filter(deck => withB.has(key(deck)));
-  const blocks = new Set(paired.map(key));
-  return { a: paired, b: here.filter(deck => deck.group === b && blocks.has(key(deck))), unpaired: all.length - paired.length };
+  const blocks = new Set(paired.map(key)), done = new Set(paired.map(copy));
+  const alone = all.filter(deck => !done.has(copy(deck)));
+  return { a: paired, b: here.filter(deck => deck.group === b && blocks.has(key(deck))), unpaired: new Set(alone.map(copy)).size, lonely: [...new Set(alone.map(deck => deck.block))] };
 }
 
 /** 照設定逐課、逐算門檻的生成器、逐候選組判。 */

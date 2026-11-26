@@ -58,9 +58,8 @@ export function allContrasts(config: Pick<Config, 'contrasts' | 'groups' | 'less
           if (!hasA && !hasB) continue;
           if (!hasA || !hasB) { out.missing.push(`${at}：${hasA ? `乙（${b}）` : `甲（${a}）`}沒有份`); continue; }
           const pair = pairUp(here, lesson, generator, a, b), reverse = pairUp(here, lesson, generator, b, a);
-          const lonely = (side: string, other: string): string => [...new Set(mine.filter(deck => deck.group === side && !mine.some(each => each.group === other && each.block === deck.block)).map(deck => deck.block))].join('、');
-          if (pair.unpaired) out.missing.push(`${at}：甲有 ${String(pair.unpaired)} 份的區組沒有乙（${lonely(a, b)}）`);
-          if (reverse.unpaired) out.missing.push(`${at}：乙有 ${String(reverse.unpaired)} 份的區組沒有甲（${lonely(b, a)}）`);
+          if (pair.unpaired) out.missing.push(`${at}：甲有 ${String(pair.unpaired)} 份的區組沒有乙（${pair.lonely.join('、')}）`);
+          if (reverse.unpaired) out.missing.push(`${at}：乙有 ${String(reverse.unpaired)} 份的區組沒有甲（${reverse.lonely.join('、')}）`);
           if (!pair.a.length) continue;
           out.results.push({
             lesson, generator, batch, counts: { a: pair.a.length, b: pair.b.length },
