@@ -3,11 +3,11 @@
 // （只有數字與結論，可以貼進 repo）；每一課的 使用紀錄.md 加一行（之後用這一課時，凍結會警告只能當回歸，F15）。
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { batchDir, batchNumbers, openBatch, type Batch } from './blind.ts';
+import { batchDir, openBatch, type Batch } from './blind.ts';
 import { cliPath } from '../cli-path.ts';
 import { collectDisputes, deepenAt, mergeBatch } from './disputes.ts';
 import { levelOf, QUALITY_KINDS, type Level, type QualityKind } from './levels.ts';
-import { lessonDir, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
+import { batchNumbers, lessonDir, openFolder, rubricOf, sha256File, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSteps, verifyLock } from './freeze.ts';
 import { readFormat } from './check.ts';
 import { jobState, planJobs, readEvents } from './jobs.ts';

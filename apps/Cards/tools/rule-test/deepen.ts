@@ -14,7 +14,7 @@ import type { Mastery } from '../../src/core/study/index.ts';
 import { cliPath } from '../cli-path.ts';
 import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './adapters.ts';
 import { deepenGroups } from './config.ts';
-import { materialOf, openFolder, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
+import { blindedJobs, materialOf, openFolder, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { confirmSpec, DEEPEN_PROMPT, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, SPEC, verifyLock } from './freeze.ts';
 import { acquireLock, CODEX_MATERIAL, detach, rawName } from './generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
@@ -189,9 +189,11 @@ export function deepenStatus(folder: Folder, jobs: readonly Job[]): string[] {
 
 interface Todo { job: Job; plan: DeepenPlan; piece: DeepenPiece }
 
+/** 要加深的篇：已經匿名的份不算（§6-2：匿名之後那一份的加深固定），放棄的篇重開了也不跑。CLI 與背景行程都從這裡取。 */
 function todos(folder: Folder, plans: readonly DeepenPlan[]): Todo[] {
   const jobs = new Map(planJobs(folder, readFrozenSteps(folder), readEvents(folder)).map(job => [job.key, job]));
-  return plans.flatMap(plan => plan.pieces.map(piece => ({ job: jobs.get(plan.job)!, plan, piece })));
+  const blinded = blindedJobs(folder);
+  return plans.filter(plan => !blinded.has(plan.job)).flatMap(plan => plan.pieces.map(piece => ({ job: jobs.get(plan.job)!, plan, piece })));
 }
 
 /** 外掛的 inspectDeepen（§6-1 第 7 點）：這一篇模擬加入的卡組、這一組交不交三段。 */
@@ -354,6 +356,8 @@ export async function deepen(): Promise<void> {
   const plans = planFolder(folder);
   const unsavable = plans.filter(plan => !plan.savable);
   if (unsavable.length) console.log(`卡組存不了、不能加深（記最差值）：${unsavable.map(plan => plan.job).join('、')}\n`);
+  const fixed = blindedJobs(folder), blinded = plans.filter(plan => fixed.has(plan.job));
+  if (blinded.length) console.log(`已經匿名、加深固定了，不再跑：${blinded.map(plan => plan.job).join('、')}\n`);
   const events = readEvents(folder, LOG), retry = flags.includes('--retry');
   const all = todos(folder, plans);
   const failed = all.filter(each => jobState(events, each.piece.key).status === 'failed');

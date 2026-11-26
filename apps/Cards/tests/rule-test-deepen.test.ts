@@ -21,7 +21,7 @@ import { unblindFolder } from '../tools/rule-test/unblind.ts';
 import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
 import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
-import { jobState, planJobs, readEvents } from '../tools/rule-test/jobs.ts';
+import { jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { deepenSectionText } from '../tools/rule-test/prompts.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
@@ -196,6 +196,21 @@ void test('deepen：一篇一個新對話、附教材、模型推理同生成；
   assert.deepEqual([...block.deepens].sort(), [entry.code, other.code].sort());
   assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '加深', `${entry.code}.md`)));
   assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '地圖', `${other.code}.md`)));
+});
+
+void test('匿名之後不再加深（§6-2）：放棄的篇重開了，deepen 也不跑；那一份的加深固定在匿名時', async () => {
+  const folder = await generated();
+  const fake = fakeDeepener();
+  // 乙那一篇一直失敗，試滿 3 次放棄；甲做完。
+  const flaky = (request: StepRequest): ReturnType<typeof fake.adapter> | Promise<{ kind: 'fail'; message: string }> => request.text.includes('照規則交全貌') ? Promise.resolve({ kind: 'fail', message: '假的失敗' }) : fake.adapter(request);
+  await runDeepen(folder, { adapters: { claude: flaky }, log: () => {} });
+  const LOG = join('加深', '事件.jsonl'), key = '乙-L3-claude-1~加深~1';
+  assert.equal(jobState(readEvents(folder, LOG), key).status, 'failed');
+  blindFolder(folder, { log: () => {} });
+  reopenFailed(folder, [key], LOG);
+  const after = fakeDeepener();
+  await runDeepen(folder, { adapters: { claude: after.adapter }, log: () => {} });
+  assert.equal(after.requests.length, 0);
 });
 
 void test('§13-7 加深的提示和外掛一字不差：假 vault 放凍結的卡組與模擬加入的那一篇、孩子都記穩了、這個單元有小考，外掛走一次 copy()', async t => {

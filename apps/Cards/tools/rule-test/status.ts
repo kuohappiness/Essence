@@ -2,10 +2,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
-import { batchDir, batchNumbers, readBlocks } from './blind.ts';
+import { batchDir, readBlocks } from './blind.ts';
 import { readFormat } from './check.ts';
 import { deepenStatus } from './deepen.ts';
-import { openFolder, type Folder } from './folder.ts';
+import { batchNumbers, openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
 import { resultFile, stagesOf } from './judge.ts';
 import { readReports } from './unblind.ts';

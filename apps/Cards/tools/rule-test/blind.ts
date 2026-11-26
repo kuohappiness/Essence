@@ -1,12 +1,12 @@
 // 比較測試工具：blind（任務說明 tasks/rule-test-tool.md §5-6）。切出卡組段、掃洩漏字樣、每課各自打亂代號、分區組，
 // 建給評審的資料夾；對照表寫進 封存/，那一批鎖定前不讀。一批一次：已經在前一批的工作不再放進來。
 import { randomInt } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
 import { cutDeck } from './deck-cut.ts';
 import { anonymousMap, cutMap, handsInMap, joinMaps, type MapCut } from './map.ts';
-import { materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
+import { batchFile, batchNumbers, blindedJobs, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSnapshot, readFrozenSteps, verifyLock } from './freeze.ts';
 import { rawName } from './generate.ts';
 import { deepenOf, deepenUnfinished, type DeepenSheet } from './deepen.ts';
@@ -31,11 +31,6 @@ export interface Batch { batch: number; commit: string; time: string; entries: B
 const BLOCK_SIZE = 4;
 const MODEL_WORDS = ['claude', 'opus', 'sonnet', 'haiku', 'fable', 'chatgpt', 'gpt', 'codex', 'gemini'];
 
-const batchFile = (folder: Folder, n: number): string => join(folder.root, '封存', `對照表-批${String(n)}.json`);
-export function batchNumbers(folder: Folder): number[] {
-  const dir = join(folder.root, '封存');
-  return existsSync(dir) ? readdirSync(dir).flatMap(name => /^對照表-批(\d+)\.json$/.exec(name)?.[1] ?? []).map(Number).sort((a, b) => a - b) : [];
-}
 /** 對照表只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。 */
 const readBatch = (folder: Folder, n: number): Batch => JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as Batch;
 export const batchDir = (folder: Folder, n: number): string => join(folder.root, '評分', `批${String(n)}`);
@@ -159,7 +154,7 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
   const unfinished = jobs.filter(job => !['done', 'invalid'].includes(jobState(events, job.key).status));
   if (unfinished.length) throw Error(`還有 ${String(unfinished.length)} 份沒生成完（一批一次，等都完成再匿名）：${unfinished.map(job => `${job.key}（${jobState(events, job.key).status}）`).join('、')}`);
   const previous = batchNumbers(folder).map(n => readBatch(folder, n));
-  const seen = new Set(previous.flatMap(batch => batch.entries.map(entry => entry.job)));
+  const seen = blindedJobs(folder);
   const fresh = jobs.filter(job => jobState(events, job.key).status === 'done' && !seen.has(job.key));
   if (!fresh.length) throw Error('沒有新的有效原稿可以匿名');
   // 這一批每一份的加深都完成或放棄才匿名（rule-test-d236.md §6-2）：匿名之後那一份的卡組、地圖、加深都固定。
