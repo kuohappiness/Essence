@@ -195,6 +195,35 @@ void test('readConfig：門檻寫錯不會默默變成別的值（L2 第 1 輪 I
   });
 });
 
+void test('readConfig：門檻底下每一層寫錯都擋下（L2 第 2 輪）：每個物件多一個不認得的鍵、每個單值寫成空白／是非／清單、次要與不能變差重複', () => {
+  const errorsOf = (yaml: string): string[] => {
+    try { readConfig(yaml); } catch (error) { return (error as Error).message.split('\n').slice(1); }
+    return [];
+  };
+  const objects: [string, string, string][] = [
+    ['傷到學習容許: { 百分比: 10%, 下限: 0.5 }', '傷到學習容許: { 百分比: 10%, 下線: 0.5 }', '門檻 傷到學習容許'],
+    ['不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]', '不能變差: [{ 指標: 每個必備平均幾題, 容忍: "15", 下限: 0.3 }]', '門檻 不能變差 第 1 項'],
+    ['{ 指標: 每個必備平均幾題, 至少: 10% }', '{ 指標: 每個必備平均幾題, 至少: 10%, 多的: 1 }', '門檻 收益 第 2 項'],
+    ['次要: [{ 指標: token, 至少: 10%, 容許: 10% }]', '次要: [{ 指標: token, 至少: 10%, 容忍: 10% }]', '門檻 次要 第 1 項'],
+  ];
+  for (const [from, to, where] of objects) {
+    assert.ok(EXAMPLE.includes(from), from);
+    assert.ok(errorsOf(EXAMPLE.replace(from, to)).some(line => line.includes(where) && line.includes('不認得')), to);
+  }
+  const gate = (key: string, value: string): string => {
+    const line = new RegExp(`^  ${key}: .*$`, 'm');
+    return line.test(EXAMPLE) ? EXAMPLE.replace(line, `  ${key}: ${value}`) : EXAMPLE.replace('  時間預算: 算門檻\n', `  時間預算: 算門檻\n  ${key}: ${value}\n`);
+  };
+  for (const key of ['重大錯誤', '收益校正', '多餘的題多出', '多漏差距', '多漏列數', '打平最少份數', '打平較省', '時間預算']) {
+    for (const value of ['', 'true', 'false', '[1]']) assert.ok(errorsOf(gate(key, value)).some(line => line.includes(`門檻 ${key}`)), `${key}: ${value}`);
+  }
+  for (const [from, to, where] of [
+    ['次要: [{ 指標: token, 至少: 10%, 容許: 10% }]', '次要: [{ 指標: token, 至少: 10%, 容許: 10% }, { 指標: token, 至少: 5% }]', '門檻 次要'],
+    ['不能變差: [{ 指標: 每個必備平均幾題, 容許: "15", 下限: 0.3 }]', '不能變差: [{ 指標: 每個必備平均幾題, 容許: "15" }, { 指標: 每個必備平均幾題, 下限: 0.3 }]', '門檻 不能變差'],
+  ]) assert.ok(errorsOf(EXAMPLE.replace(from, to)).some(line => line.includes(where) && line.includes('重複')), to);
+  assert.deepEqual(errorsOf(EXAMPLE), []);
+});
+
 void test('readConfig：加深、加深規則與對照（rule-test-d236.md §2、§6-1、§8）', () => {
   const withDeepen = EXAMPLE
     .replace('      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }', '      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }\n    加深規則: { commit: 288ba1ef, 檔案: [apps/Cards/docs/card-rules/next/core.md] }')

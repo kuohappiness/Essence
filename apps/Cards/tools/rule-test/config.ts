@@ -115,6 +115,8 @@ function knownKeys(raw: Raw, known: readonly string[], where: string, errors: Er
 const TOP_KEYS = ['名稱', '課庫', '系統提示', '逾時分鐘', '同時', '課', '組', '生成', '評審', '評審重評', '裁定', '評分表', '門檻', '錯誤分級', '加深', '對照'];
 const GATE_KEYS = ['基準', '候選', '生成器', '重大錯誤', '收益', '收益校正', '傷到學習容許', '不能變差', '多餘的題多出', '近義重複多出', '多漏差距', '多漏列數', '次要', '打平最少份數', '打平較省', '時間預算'];
 const text = (value: unknown): string | null => typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : null;
+/** 只能寫幾個字之一的設定：沒寫用預設；寫了但不是字（空白、是非、清單）回空字串，讓呼叫的地方報錯。 */
+const word = (value: unknown, fallback: string): string => value === undefined ? fallback : text(value) ?? '';
 function need(raw: Raw, key: string, where: string, errors: Errors): string {
   const value = text(raw[key]);
   if (!value) errors.add(where, `少了「${key}」`);
@@ -206,7 +208,8 @@ function secondary(value: unknown, where: string, errors: Errors): SecondaryMetr
 }
 function count(value: unknown, fallback: number, where: string, errors: Errors): number {
   if (value === undefined) return fallback;
-  const number = Number(value);
+  // 空白、是非、清單不當成數（Number(null) 是 0、Number([1]) 是 1）。
+  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
   if (!Number.isFinite(number) || number < 0) errors.add(where, '要是 0 以上的數');
   return number;
 }
@@ -332,25 +335,29 @@ export function readConfig(source: string): Config {
   if (!gateGenerators.length) errors.add('門檻', '少了「生成器」（哪幾個生成器算門檻，第一輪沒寫這一項）');
   for (const name of [baseline, ...candidates]) if (name && !names.includes(name)) errors.add('門檻', `沒有叫「${name}」的組`);
   for (const name of gateGenerators) if (!generatorNames.includes(name)) errors.add('門檻', `沒有叫「${name}」的生成器`);
-  const majorText = text(rawGates['重大錯誤']) ?? '不比基準多';
+  const majorText = word(rawGates['重大錯誤'], '不比基準多');
   const tolerance = (raw: unknown, where: string, fallback: Tolerance): Tolerance => {
     if (raw === undefined) return { ...fallback };
     if (!isRaw(raw)) { errors.add(where, '要寫成 { 百分比, 下限 }，例如 { 百分比: 10%, 下限: 0.5 }'); return { ...fallback }; }
     const item = raw;
+    knownKeys(item, ['百分比', '下限'], where, errors);
     return { percent: item['百分比'] === undefined ? fallback.percent : percent(item['百分比'], `${where} 百分比`, errors), floor: count(item['下限'], fallback.floor, `${where} 下限`, errors) };
   };
   const noWorse = { ...NO_WORSE_DEFAULTS };
-  list(rawGates['不能變差'], '門檻 不能變差', errors).forEach((raw, i) => {
+  const rawNoWorse = list(rawGates['不能變差'], '門檻 不能變差', errors);
+  rawNoWorse.forEach((raw, i) => {
     const where = `門檻 不能變差 第 ${String(i + 1)} 項`;
     const item = isRaw(raw) ? raw : {};
+    knownKeys(item, ['指標', '容許', '下限'], where, errors);
     const name = learning(item['指標'], where, errors);
+    if (rawNoWorse.slice(0, i).some(each => isRaw(each) && text(each['指標']) === name)) errors.add('門檻 不能變差', `「${name}」重複`);
     if (name === '傷到學習') { errors.add(where, '傷到學習是第 3 道，容許量寫在「傷到學習容許」'); return; }
     if (!(name in noWorse)) return;
     const key = name;
     noWorse[key] = { percent: item['容許'] === undefined ? noWorse[key].percent : percent(item['容許'], `${where} 容許`, errors), floor: count(item['下限'], noWorse[key].floor, `${where} 下限`, errors) };
   });
-  const tieText = text(rawGates['打平較省']) ?? '過';
-  const budgetText = text(rawGates['時間預算']) ?? '只報告';
+  const tieText = word(rawGates['打平較省'], '過');
+  const budgetText = word(rawGates['時間預算'], '只報告');
   const gates: Gates = {
     baseline, candidates, generators: gateGenerators,
     majorErrors: majorText === '零' ? 'zero' : majorText === '不比基準多' ? 'notMore' : (errors.add('門檻 重大錯誤', '要寫「零」或「不比基準多」'), 'zero'),
@@ -360,16 +367,18 @@ export function readConfig(source: string): Config {
     harm: tolerance(rawGates['傷到學習容許'], '門檻 傷到學習容許', { percent: 0, floor: 0 }),
     benefits: list(rawGates['收益'], '門檻 收益', errors).map((raw, i) => {
       const item = isRaw(raw) ? raw : {};
+      knownKeys(item, ['指標', '至少'], `門檻 收益 第 ${String(i + 1)} 項`, errors);
       return { metric: learning(item['指標'], `門檻 收益 第 ${String(i + 1)} 項`, errors), atLeast: percent(item['至少'], `門檻 收益 第 ${String(i + 1)} 項 至少`, errors) };
     }),
     correction: (() => {
-      const value = text(rawGates['收益校正']) ?? '要';
+      const value = word(rawGates['收益校正'], '要');
       return value === '要' ? true : value === '不要' ? false : (errors.add('門檻 收益校正', '要寫「要」或「不要」'), true);
     })(),
     noWorse,
     secondary: list(rawGates['次要'], '門檻 次要', errors).map((raw, i) => {
       const item = isRaw(raw) ? raw : {};
       const where = `門檻 次要 第 ${String(i + 1)} 項`;
+      knownKeys(item, ['指標', '至少', '容許'], where, errors);
       return { metric: secondary(item['指標'], where, errors), atLeast: percent(item['至少'], `${where} 至少`, errors), tolerance: percent(item['容許'] ?? 0, `${where} 容許`, errors) };
     }),
     tieMinCopies: count(rawGates['打平最少份數'], 3, '門檻 打平最少份數', errors),
@@ -380,6 +389,7 @@ export function readConfig(source: string): Config {
   if (!gates.benefits.length) errors.add('門檻', '少了「收益」');
   // 同一個指標列兩次會讓校正的 k 變大，門檻變嚴。
   gates.benefits.forEach(({ metric }, i) => { if (gates.benefits.findIndex(each => each.metric === metric) !== i) errors.add('門檻 收益', `「${metric}」重複`); });
+  gates.secondary.forEach(({ metric }, i) => { if (gates.secondary.findIndex(each => each.metric === metric) !== i) errors.add('門檻 次要', `「${metric}」重複`); });
   if (!Number.isInteger(gates.tieMinCopies)) errors.add('門檻 打平最少份數', '要是整數');
   knownKeys(rawGates, GATE_KEYS, '門檻', errors);
 
