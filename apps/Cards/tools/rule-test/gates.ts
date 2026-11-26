@@ -76,13 +76,13 @@ const DEEPEN: readonly LearningMetric[] = ['加深機會漏掉', '確定接錯']
  * 剩下的份數不到、或兩組放棄的篇差 2 篇以上，是未定（逾時不一定是平台的錯）。
  */
 export function series(candidate: readonly DeckMetrics[], baseline: readonly DeckMetrics[], pick: (deck: DeckMetrics) => Value, metric: string): SeriesOr {
-  let c = candidate, b = baseline;
+  const c = candidate, b = baseline;
   if ((DEEPEN as readonly string[]).includes(metric) || metric === '傷到學習') {
     const gone = (decks: readonly DeckMetrics[]): number => decks.reduce((total, deck) => total + (deck.deepen?.abandoned ?? 0), 0);
     if (Math.abs(gone(c) - gone(b)) >= 2) return { unknown: `加深放棄的篇：候選 ${String(gone(c))}、基準 ${String(gone(b))}，差 2 篇以上` };
-    const kept = (decks: readonly DeckMetrics[]): DeckMetrics[] => decks.filter(deck => !deck.deepen || deck.deepen.pieces > 0 || deck.deepen.abandoned === 0);
-    if (kept(c).length < c.length || kept(b).length < b.length) return { unknown: '有份的加深整份都放棄了' };
-    c = kept(c); b = kept(b);
+    // 整份都放棄（有篇、但一篇都沒留下）的份不能拿掉了事：那一份的加深指標沒有資料，整項未定。
+    const allGone = (deck: DeckMetrics): boolean => !!deck.deepen && deck.deepen.pieces === 0 && deck.deepen.abandoned > 0;
+    if (c.some(allGone) || b.some(allGone)) return { unknown: '有份的加深整份都放棄了' };
   }
   const values = (decks: readonly DeckMetrics[]): Value[] => decks.map(pick).filter(value => value !== 'drop');
   const vc = values(c), vb = values(b);
