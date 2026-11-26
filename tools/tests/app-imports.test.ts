@@ -7,8 +7,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EXCEPTIONS, checkLayout, checkPackage, checkPaths, checkSource, checkText } from '../check-app-imports.ts';
-import { FOLDERS } from '../apps.ts';
+import { EXCEPTIONS, checkLayout, checkLink, checkPackage, checkPaths, checkSource, checkText } from '../check-app-imports.ts';
+import { FOLDERS, PACKAGES } from '../apps.ts';
 
 const run = promisify(execFile);
 const CHECK = fileURLToPath(new URL('../check-app-imports.ts', import.meta.url));
@@ -104,6 +104,39 @@ void test('§6 外掛 package.json 的本機相依只接受外掛裡的相對路
   ]) assert.deepEqual(check(spec), [], spec);
 });
 
+void test('套件（docs/tasks/ai-client.md〈8〉）：程式、symlink、本機相依跑出自己的資料夾就擋，套件裡互相引用放行', () => {
+  const from = 'packages/ai-client/src/a.ts';
+  for (const code of [
+    "import '../../../apps/Cards/src/a.ts';",
+    "import { x } from '../../other/src/x.ts';",
+    "import { checkDocs } from '../../../tools/check-docs.ts';",
+    "void import('../../../src/' + name);",
+  ]) blocked(from, code);
+  allowed(from, "import { b } from './b.ts';\nimport { d } from './dialects/index.ts';\nimport { readFile } from 'node:fs/promises';");
+  allowed('packages/ai-client/tools/smoke.ts', "import { createAiClient } from '../src/index.ts';");
+  allowed('packages/ai-client/tests/a.test.ts', "import { mockFetch } from '../src/testing.ts';");
+  assert.match(checkSource(from, "import '../../other/a.ts';")[0].reason, /跑出 packages\/ai-client\//);
+  assert.equal(checkLink('packages/ai-client/out', '../../apps/Cards').length, 1);
+  assert.deepEqual(checkLink('packages/ai-client/in', 'src/index.ts'), []);
+  const pkg = (spec: string) => checkPackage('packages/ai-client/package.json', JSON.stringify({ name: 'essence-ai-client', devDependencies: { x: spec } }, null, 2));
+  assert.equal(pkg('file:../other').length, 1);
+  assert.equal(pkg('file:../../apps/Cards').length, 1);
+  assert.deepEqual(pkg('^5.9.3'), []);
+});
+
+void test('套件的資料夾：表外的、packages/ 底下直接放檔、Packages/、大小寫不符都擋；表上的放行', () => {
+  const one = (path: string, pattern: RegExp) => {
+    const found = checkLayout([path]).map(p => p.reason);
+    assert.equal(found.length, 1, `${path}: ${found.join(' / ')}`);
+    assert.match(found[0], pattern, path);
+  };
+  one('packages/other/a.ts', /不在表上：packages\/ 底下的套件要先登記在 tools\/apps\.ts 的 PACKAGES/);
+  one('packages/a.md', /不在表上/);
+  one('Packages/ai-client/a.ts', /資料夾要恰好是 packages\/.*git mv Packages packages\.tmp，再 git mv packages\.tmp packages/);
+  one('packages/AI-Client/src/a.ts', /大小寫和表上的 packages\/ai-client 不同/);
+  assert.deepEqual(checkLayout(['packages/ai-client/src/a.ts', 'packages/ai-client/README.md', 'packages/ai-client/fixtures/x/case.json']), []);
+});
+
 void test('§6 --staged 讀暫存區：工作樹修好了、暫存區還壞著照樣擋；預設讀工作樹', async t => {
   const r = await repo(t, { 'apps/Capture/src/a.ts': "import '../../mindboard/a.ts';\n" });
   await writeFile(join(r.root, 'apps/Capture/src/a.ts'), "import './b.ts';\n");
@@ -141,7 +174,7 @@ void test('D-218 §3 第 1、2 點：表外的資料夾、plugins/、Apps/、大
 void test('D-218 §3 第 1 點：本 repo 追蹤的資料夾都在表上、大小寫和 git ls-files 相同；有程式的每一列都有追蹤的檔', () => {
   const tracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: REPO, encoding: 'utf8', maxBuffer: 1 << 28 }).split('\0').filter(Boolean);
   assert.deepEqual(checkLayout(tracked), []);
-  for (const dir of Object.values(FOLDERS)) assert.ok(tracked.some(path => path.startsWith(dir + '/')), dir);
+  for (const dir of [...Object.values(FOLDERS), ...Object.values(PACKAGES)]) assert.ok(tracked.some(path => path.startsWith(dir + '/')), dir);
 });
 
 void test('D-218 §3 第 3 點：寫死的路徑大小寫不符、Markdown 以外的 plugins/<軟體>、組字串都擋；正規化後跳脫與反斜線也找得到', () => {

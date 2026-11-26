@@ -1,0 +1,14 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-abc123","object":"chat.completion.chunk","created":1764000000,"model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"gen-abc123","object":"chat.completion.chunk","created":1764000000,"model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{"content":"光合作用把"},"finish_reason":null}]}
+
+data: {"id":"gen-abc123","object":"chat.completion.chunk","created":1764000000,"model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{"content":"光能轉成化學能。"},"finish_reason":null}]}
+
+data: {"id":"gen-abc123","object":"chat.completion.chunk","created":1764000000,"model":"openai/gpt-5.6-terra","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"gen-abc123","object":"chat.completion.chunk","created":1764000000,"model":"openai/gpt-5.6-terra","choices":[],"usage":{"prompt_tokens":1200,"completion_tokens":350,"total_tokens":1550,"cost":0.0066,"prompt_tokens_details":{"cached_tokens":1000},"completion_tokens_details":{"reasoning_tokens":300}}}
+
+data: [DONE]
+

@@ -1,0 +1,2 @@
+# 範例回應是服務送來的原文，換行不能被 checkout 改掉（Windows 的 core.autocrlf=true 會改成 CRLF，L2 R15）。
+fixtures/** -text

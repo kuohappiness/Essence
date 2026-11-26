@@ -1,0 +1,268 @@
+{
+  "dialect": "gemini-generate-content",
+  "source": "官方文件",
+  "docs": [
+    "https://ai.google.dev/gemini-api/docs/generate-content/thinking.md.txt",
+    "https://ai.google.dev/gemini-api/docs/generate-content/file-input-methods",
+    "https://ai.google.dev/gemini-api/docs/troubleshooting"
+  ],
+  "checkedOn": "2026-11-25",
+  "endpoint": {
+    "provider": "google"
+  },
+  "model": "gemini-3.8-flash",
+  "request": {
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse",
+    "authHeader": "x-goog-api-key",
+    "authValue": "{key}",
+    "textBody": {
+      "systemInstruction": {
+        "parts": [
+          {
+            "text": "只用繁體中文。"
+          }
+        ]
+      },
+      "contents": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": "你好"
+            }
+          ]
+        }
+      ]
+    },
+    "imagePart": {
+      "inlineData": {
+        "mimeType": "image/png",
+        "data": "AAEC"
+      }
+    },
+    "pdfPart": {
+      "inlineData": {
+        "mimeType": "application/pdf",
+        "data": "JVBERi0xLjQ="
+      }
+    },
+    "maxOutputTokens": {
+      "generationConfig": {
+        "maxOutputTokens": 1000
+      }
+    },
+    "reasoningHigh": {
+      "generationConfig": {
+        "thinkingConfig": {
+          "thinkingLevel": "high"
+        }
+      }
+    },
+    "headers": {}
+  },
+  "stream": {
+    "file": "stream.sse",
+    "headers": {},
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end",
+    "rawStopReason": "STOP",
+    "usage": {
+      "inputTokens": 1200,
+      "cachedInputTokens": 1000,
+      "cacheWriteInputTokens": null,
+      "outputTokens": 350,
+      "reasoningTokens": 300
+    },
+    "resolvedModel": "gemini-3.8-flash",
+    "requestId": null,
+    "responseId": "gem-abc123"
+  },
+  "json": {
+    "body": {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "想一想",
+                "thought": true
+              },
+              {
+                "text": "光合作用把光能轉成化學能。"
+              }
+            ],
+            "role": "model"
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 1200,
+        "candidatesTokenCount": 50,
+        "thoughtsTokenCount": 300,
+        "totalTokenCount": 1550
+      },
+      "modelVersion": "gemini-3.8-flash",
+      "responseId": "gem-abc123"
+    },
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end"
+  },
+  "length": {
+    "file": "length.sse",
+    "text": "寫到一半",
+    "stopReason": "length",
+    "rawStopReason": "MAX_TOKENS"
+  },
+  "filter": {
+    "file": "filter.sse",
+    "stopReason": "content_filter"
+  },
+  "streamError": {
+    "file": "stream-error.sse",
+    "kind": "overloaded",
+    "providerCode": "UNAVAILABLE"
+  },
+  "errors": [
+    {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": 400,
+          "message": "API key not valid. Please pass a valid API key.",
+          "status": "INVALID_ARGUMENT",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              "reason": "API_KEY_INVALID",
+              "domain": "googleapis.com"
+            }
+          ]
+        }
+      },
+      "kind": "auth"
+    },
+    {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": 400,
+          "message": "User location is not supported for the API use.",
+          "status": "FAILED_PRECONDITION"
+        }
+      },
+      "kind": "permission"
+    },
+    {
+      "status": 429,
+      "body": {
+        "error": {
+          "code": 429,
+          "message": "You exceeded your current quota, please check your plan and billing details.",
+          "status": "RESOURCE_EXHAUSTED",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+              "violations": [
+                {
+                  "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                  "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "kind": "quota"
+    },
+    {
+      "status": 429,
+      "body": {
+        "error": {
+          "code": 429,
+          "message": "Resource has been exhausted (e.g. check quota).",
+          "status": "RESOURCE_EXHAUSTED",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+              "violations": [
+                {
+                  "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+                }
+              ]
+            },
+            {
+              "@type": "type.googleapis.com/google.rpc.RetryInfo",
+              "retryDelay": "3s"
+            }
+          ]
+        }
+      },
+      "kind": "rate_limit",
+      "retryAfterMs": 3000
+    },
+    {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": 400,
+          "message": "The input token count (1200000) exceeds the maximum number of tokens allowed (1048576).",
+          "status": "INVALID_ARGUMENT"
+        }
+      },
+      "kind": "input_too_large"
+    },
+    {
+      "status": 404,
+      "body": {
+        "error": {
+          "code": 404,
+          "message": "models/gemini-9 is not found for API version v1beta, or is not supported for generateContent.",
+          "status": "NOT_FOUND"
+        }
+      },
+      "kind": "model_not_found"
+    },
+    {
+      "status": 500,
+      "body": {
+        "error": {
+          "code": 500,
+          "message": "An internal error has occurred.",
+          "status": "INTERNAL"
+        }
+      },
+      "kind": "server"
+    },
+    {
+      "status": 503,
+      "body": {
+        "error": {
+          "code": 503,
+          "message": "The model is overloaded. Please try again later.",
+          "status": "UNAVAILABLE"
+        }
+      },
+      "kind": "overloaded"
+    }
+  ],
+  "check": {
+    "status": 200,
+    "body": {
+      "models": [
+        {
+          "name": "models/gemini-3.8-flash",
+          "displayName": "Gemini 3.8 Flash",
+          "supportedGenerationMethods": [
+            "generateContent",
+            "countTokens"
+          ]
+        }
+      ]
+    },
+    "models": [
+      "gemini-3.8-flash"
+    ]
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-25",
+  "providers": [
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "dialect": "openai-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "auth": { "header": "Authorization", "scheme": "Bearer" },
+      "docsUrl": "https://developers.openai.com/api/docs",
+      "limits": { "maxFileBytes": 52428800 },
+      "defaults": {
+        "reasoning": { "path": "reasoning.effort", "values": { "off": "none", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } }
+      },
+      "models": [
+        {
+          "id": "gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "maxOutputTokens": 128000,
+          "contextTokens": 1050000,
+          "reasoning": { "path": "reasoning.effort", "values": { "off": "none", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } },
+          "prices": [
+            { "input": 2, "cachedInput": 0.2, "cacheWrite": 2.5, "output": 12, "longContext": { "aboveInputTokens": 272000, "input": 4, "output": 18 } }
+          ],
+          "pricesAsOf": "2026-11-25",
+          "source": "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+        }
+      ]
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic Claude",
+      "dialect": "anthropic-messages",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "auth": { "header": "x-api-key" },
+      "docsUrl": "https://platform.claude.com/docs",
+      "limits": { "maxRequestBytes": 134217728, "maxPdfPages": 600 },
+      "defaults": {
+        "inputs": ["text", "image", "pdf"],
+        "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } }
+      },
+      "models": [
+        {
+          "id": "claude-opus-5-5",
+          "label": "Claude Opus 5.5",
+          "inputs": ["text", "image", "pdf"],
+          "maxOutputTokens": 128000,
+          "contextTokens": 1000000,
+          "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } },
+          "prices": [{ "input": 4, "cachedInput": 0.2, "cacheWrite": 5, "output": 20 }],
+          "pricesAsOf": "2026-11-03",
+          "source": "https://platform.claude.com/docs/en/about-claude/pricing"
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "label": "Claude Sonnet 5.5",
+          "inputs": ["text", "image", "pdf"],
+          "maxOutputTokens": 128000,
+          "contextTokens": 1000000,
+          "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } },
+          "prices": [{ "input": 2, "cachedInput": 0.1, "cacheWrite": 2.5, "output": 10 }],
+          "pricesAsOf": "2026-11-03",
+          "source": "https://platform.claude.com/docs/en/about-claude/pricing"
+        },
+        {
+          "id": "claude-haiku-5-5",
+          "label": "Claude Haiku 5.5",
+          "inputs": ["text", "image", "pdf"],
+          "maxOutputTokens": 128000,
+          "contextTokens": 1000000,
+          "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } },
+          "prices": [{ "input": 0.1, "cacheWrite": 0.125, "output": 0.5, "longContext": { "aboveInputTokens": 100000, "input": 0.5, "output": 2.5 } }],
+          "pricesAsOf": "2026-11-03",
+          "source": "https://platform.claude.com/docs/en/about-claude/pricing"
+        },
+        {
+          "id": "claude-fable-5-2",
+          "label": "Claude Fable 5.2",
+          "inputs": ["text", "image", "pdf"],
+          "maxOutputTokens": 128000,
+          "contextTokens": 1000000,
+          "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } },
+          "prices": [{ "input": 8, "cachedInput": 0.2, "cacheWrite": 10, "output": 40 }],
+          "pricesAsOf": "2026-11-03",
+          "source": "https://platform.claude.com/docs/en/about-claude/pricing"
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "label": "Google AI Studio（Gemini）",
+      "dialect": "gemini-generate-content",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "auth": { "header": "x-goog-api-key" },
+      "docsUrl": "https://ai.google.dev/gemini-api/docs",
+      "defaults": { "inputs": ["text", "image", "pdf"] },
+      "models": [
+        {
+          "id": "gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash",
+          "inputs": ["text", "image", "pdf"],
+          "reasoning": { "path": "generationConfig.thinkingConfig.thinkingLevel", "values": { "low": "low", "medium": "medium", "high": "high" } },
+          "prices": [
+            { "input": 0.75, "cachedInput": 0.075, "output": 3.75 },
+            { "effectiveFrom": "2027-01-01", "input": 1.5, "cachedInput": 0.15, "output": 7.5 }
+          ],
+          "pricesAsOf": "2026-11-25",
+          "source": "https://ai.google.dev/gemini-api/docs/pricing"
+        },
+        {
+          "id": "gemini-3.5-flash-lite",
+          "label": "Gemini 3.5 Flash-Lite",
+          "inputs": ["text", "image", "pdf"],
+          "reasoning": { "path": "generationConfig.thinkingConfig.thinkingLevel", "values": { "off": "minimal", "low": "low", "medium": "medium", "high": "high" } },
+          "prices": [{ "input": 0.3, "cachedInput": 0.03, "output": 2.5 }],
+          "pricesAsOf": "2026-11-25",
+          "source": "https://ai.google.dev/gemini-api/docs/pricing"
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "dialect": "openai-chat",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "auth": { "header": "Authorization", "scheme": "Bearer" },
+      "docsUrl": "https://openrouter.ai/docs",
+      "options": { "checkPath": "key" },
+      "defaults": {
+        "reasoning": { "path": "reasoning.effort", "values": { "low": "low", "medium": "medium", "high": "high" } }
+      },
+      "models": []
+    }
+  ]
+}

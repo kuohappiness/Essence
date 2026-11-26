@@ -1,0 +1,236 @@
+{
+  "dialect": "openai-responses",
+  "source": "官方文件",
+  "docs": [
+    "https://developers.openai.com/api/docs/guides/streaming-responses",
+    "https://developers.openai.com/api/docs/guides/pdf-files",
+    "https://developers.openai.com/api/docs/guides/error-codes"
+  ],
+  "checkedOn": "2026-11-25",
+  "endpoint": {
+    "provider": "openai"
+  },
+  "model": "gpt-5.6-terra",
+  "request": {
+    "url": "https://api.openai.com/v1/responses",
+    "authHeader": "authorization",
+    "authValue": "Bearer {key}",
+    "textBody": {
+      "model": "gpt-5.6-terra",
+      "instructions": "只用繁體中文。",
+      "store": false,
+      "input": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "你好"
+            }
+          ]
+        }
+      ],
+      "stream": true
+    },
+    "imagePart": {
+      "type": "input_image",
+      "image_url": "data:image/png;base64,AAEC"
+    },
+    "pdfPart": {
+      "type": "input_file",
+      "filename": "U5.pdf",
+      "file_data": "data:application/pdf;base64,JVBERi0xLjQ="
+    },
+    "maxOutputTokens": {
+      "max_output_tokens": 1000
+    },
+    "reasoningHigh": {
+      "reasoning": {
+        "effort": "high"
+      }
+    },
+    "headers": {}
+  },
+  "stream": {
+    "file": "stream.sse",
+    "headers": {
+      "x-request-id": "req_123"
+    },
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end",
+    "rawStopReason": "completed",
+    "usage": {
+      "inputTokens": 1200,
+      "cachedInputTokens": 1000,
+      "cacheWriteInputTokens": null,
+      "outputTokens": 350,
+      "reasoningTokens": 300
+    },
+    "resolvedModel": "gpt-5.6-terra-2026-07-09",
+    "requestId": "req_123",
+    "responseId": "resp_abc123"
+  },
+  "json": {
+    "body": {
+      "id": "resp_abc123",
+      "object": "response",
+      "status": "completed",
+      "model": "gpt-5.6-terra-2026-07-09",
+      "output": [
+        {
+          "id": "rs_1",
+          "type": "reasoning",
+          "summary": []
+        },
+        {
+          "id": "msg_1",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "光合作用把光能轉成化學能。",
+              "annotations": []
+            }
+          ]
+        }
+      ],
+      "usage": {
+        "input_tokens": 1200,
+        "input_tokens_details": {
+          "cached_tokens": 1000
+        },
+        "output_tokens": 350,
+        "output_tokens_details": {
+          "reasoning_tokens": 300
+        },
+        "total_tokens": 1550
+      }
+    },
+    "text": "光合作用把光能轉成化學能。",
+    "stopReason": "end"
+  },
+  "length": {
+    "file": "length.sse",
+    "text": "寫到一半",
+    "stopReason": "length",
+    "rawStopReason": "max_output_tokens"
+  },
+  "filter": {
+    "file": "filter.sse",
+    "stopReason": "content_filter"
+  },
+  "streamError": {
+    "file": "stream-error.sse",
+    "kind": "server",
+    "providerCode": "server_error"
+  },
+  "errors": [
+    {
+      "status": 401,
+      "body": {
+        "error": {
+          "message": "Incorrect API key provided: sk-proj-****abcd. You can find your API key at https://platform.openai.com/account/api-keys.",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "invalid_api_key"
+        }
+      },
+      "kind": "auth"
+    },
+    {
+      "status": 429,
+      "body": {
+        "error": {
+          "message": "You exceeded your current quota, please check your plan and billing details.",
+          "type": "insufficient_quota",
+          "param": null,
+          "code": "insufficient_quota"
+        }
+      },
+      "kind": "quota"
+    },
+    {
+      "status": 429,
+      "headers": {
+        "retry-after-ms": "1500"
+      },
+      "body": {
+        "error": {
+          "message": "Rate limit reached for gpt-5.6-terra on tokens per min (TPM).",
+          "type": "tokens",
+          "param": null,
+          "code": "rate_limit_exceeded"
+        }
+      },
+      "kind": "rate_limit",
+      "retryAfterMs": 1500
+    },
+    {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Your input exceeds the context window of this model.",
+          "type": "invalid_request_error",
+          "param": "input",
+          "code": "context_length_exceeded"
+        }
+      },
+      "kind": "input_too_large"
+    },
+    {
+      "status": 404,
+      "body": {
+        "error": {
+          "message": "The model `gpt-9` does not exist or you do not have access to it.",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "model_not_found"
+        }
+      },
+      "kind": "model_not_found"
+    },
+    {
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "The server had an error while processing your request. Sorry about that!",
+          "type": "server_error",
+          "param": null,
+          "code": null
+        }
+      },
+      "kind": "server"
+    },
+    {
+      "status": 503,
+      "body": {
+        "error": {
+          "message": "The engine is currently overloaded, please try again later.",
+          "type": "server_error",
+          "param": null,
+          "code": null
+        }
+      },
+      "kind": "overloaded"
+    }
+  ],
+  "check": {
+    "status": 200,
+    "body": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-5.6-terra",
+          "object": "model",
+          "created": 1783555200,
+          "owned_by": "system"
+        }
+      ]
+    },
+    "models": [
+      "gpt-5.6-terra"
+    ]
+  }
+}

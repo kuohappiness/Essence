@@ -26,7 +26,7 @@
 - 雲端做到一半發現要本機：推分支，在任務說明寫下進度與下一步，提醒使用者回本機接手。
 - 雲端 session 照它自己的規則只推自己的 `claude/` 分支，不直接推 `main`（只改文件也一樣）；做完開 PR 合併。
 - 只改 Markdown 文件的 PR：開 PR 後訂閱 PR 動態，CI 綠燈就 squash 合併、回報，不再先問；有程式、設定、hook、workflow、skill、`AGENTS.md`，或 `apps/Cards/docs/syntax.md`、`docs/transcript.md` 的實質修改，照舊先問使用者（[D-239](../decisions.md#d-239-只改文件的-prci-綠燈就合併)）。
-- 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備：設 `core.hooksPath`、淺層 clone 沒有的 git tag 補抓（跨版本測試要用）、PATH 上的 Node 低於 24 時改用映像裡 `/opt/node24`、在 CI 用到的資料夾（`tools`、`apps/Cards`、`apps/Capture`、`apps/Mindboard`）`npm ci`（沒有相依的跳過），每個資料夾印一行結果。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
+- 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備：設 `core.hooksPath`、淺層 clone 沒有的 git tag 補抓（跨版本測試要用）、PATH 上的 Node 低於 24 時改用映像裡 `/opt/node24`、在 CI 用到的資料夾（`tools`、`apps/Cards`、`apps/Capture`、`apps/Mindboard`、`packages/ai-client`）`npm ci`（沒有相依的跳過），每個資料夾印一行結果。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
 - 改 `.claude/hooks/cloud-setup.mjs` 或 `.claude/settings.json` 的 `SessionStart` 的任務，合併前在那個分支開一個雲端 session，由那個 session 的 Claude 做兩件事，兩段原文附在回覆裡、寫進任務的〈結果〉：① 讀自己的開場訊息，確認 hook 有跑、之後的指令用 Node 24、`core.hooksPath` 是 `.githooks`；② 新的 session 可能從前一個 session 的快照開機、`node_modules` 已在（只會印「鎖檔沒變，跳過」，2026-11-22 [D-218 改名](../tasks/rename-plugins-to-apps.md#結果)驗收第 10 項遇到），所以另開一個沒有 `node_modules` 的 worktree，PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑一次 hook，確認有相依的 `tools`、`apps/Cards` 是「`npm ci` 完成」、沒有相依的外掛是「沒有相依，跳過」。分派表只跑得到它們的測試，這幾件只在雲端看得到（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第二步 §A3）。
 - 雲端 session 不會回報給本機，本機 session 的工具也讀不到它的對話：要本機接著做時，請使用者給它的 `claude.ai/code/…` 網址，用內建瀏覽器讀（窗格要登入 claude.ai）。
 

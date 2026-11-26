@@ -1,0 +1,197 @@
+// 中立的錯誤：每種錯誤有固定的種類、能不能重試、給使用者看的預設說明（docs/tasks/ai-client.md〈7〉第 7 點）。
+// 金鑰不進錯誤：訊息與細節在建立時就遮掉（〈3〉第 4 點）。
+import { redactText as redact, usable } from './redact.ts';
+
+export type AiErrorKind =
+  | 'auth'
+  | 'permission'
+  | 'quota'
+  | 'rate_limit'
+  | 'overloaded'
+  | 'server'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'invalid_request'
+  | 'input_too_large'
+  | 'unsupported_input'
+  | 'model_not_found'
+  | 'content_blocked'
+  | 'unknown';
+
+/** 可以重試的種類。client 只在還沒拿到成功的回應時自動重送（見 afterResponse）；408 歸 server（服務說請求沒收完，還沒開始做）。 */
+const RETRYABLE: ReadonlySet<AiErrorKind> = new Set(['rate_limit', 'overloaded', 'server', 'network']);
+const isRetryableKind = (kind: AiErrorKind): boolean => RETRYABLE.has(kind);
+
+export interface AiErrorInit {
+  kind: AiErrorKind;
+  message: string;
+  status?: number | null;
+  providerCode?: string | null;
+  requestId?: string | null;
+  retryAfterMs?: number | null;
+  partialText?: string | null;
+  provider?: string | null;
+  afterResponse?: boolean;
+  /** 遮蔽用：出現在訊息裡的這些字串換成 ***。 */
+  secrets?: readonly string[];
+  cause?: unknown;
+}
+
+export class AiError extends Error {
+  readonly kind: AiErrorKind;
+  /** 自動重送是安全的：種類可以重試，而且還沒拿到成功的回應。 */
+  readonly retryable: boolean;
+  readonly status: number | null;
+  /** 服務自己的錯誤代碼，例如 insufficient_quota、overloaded_error、RESOURCE_EXHAUSTED。 */
+  readonly providerCode: string | null;
+  readonly requestId: string | null;
+  readonly retryAfterMs: number | null;
+  /** 串流中途失敗時已經收到的文字，由呼叫端決定要不要用。 */
+  readonly partialText: string | null;
+  readonly provider: string | null;
+  /**
+   * true：服務已經回了成功的狀態碼才出錯（串流中途斷線、串流裡的錯誤、內容被擋）。推理可能已經計費，套件不自動重送，
+   * retryable 也是 false（〈7〉第 7 點的表）；要不要再試一次由呼叫端問使用者。
+   */
+  readonly afterResponse: boolean;
+  /** 送了幾次（client 填）。 */
+  attempts = 1;
+
+  constructor(init: AiErrorInit) {
+    const secrets = init.secrets ?? [];
+    const cause = sanitizeCause(init.cause, secrets);
+    super(redact(init.message, secrets), cause === undefined ? undefined : { cause });
+    this.name = 'AiError';
+    this.kind = init.kind;
+    this.retryable = isRetryableKind(init.kind) && !(init.afterResponse ?? false);
+    this.status = init.status ?? null;
+    this.providerCode = init.providerCode ? redact(init.providerCode, secrets) : null;
+    this.requestId = init.requestId ? redact(init.requestId, secrets) : null;
+    this.retryAfterMs = init.retryAfterMs ?? null;
+    this.partialText = init.partialText ? redact(init.partialText, secrets) : null;
+    this.provider = init.provider ?? null;
+    this.afterResponse = init.afterResponse ?? false;
+  }
+
+  /** JSON.stringify 用：不含 cause（cause 可能是傳輸層的物件）。 */
+  toJSON(): Record<string, unknown> {
+    return {
+      name: this.name, kind: this.kind, message: this.message, retryable: this.retryable, status: this.status,
+      providerCode: this.providerCode, requestId: this.requestId, retryAfterMs: this.retryAfterMs,
+      partialText: this.partialText, provider: this.provider, afterResponse: this.afterResponse, attempts: this.attempts,
+    };
+  }
+}
+
+export const isAiError = (value: unknown): value is AiError => attempt(() => value instanceof AiError, false);
+
+/**
+ * 傳輸層的例外可能帶著請求的細節：有金鑰要遮時，換成只留遮過的名稱與訊息的 Error（L2 R1）；
+ * 裡面再包的 cause 不留。沒有要遮的就原樣保留，方便除錯。
+ */
+function sanitizeCause(cause: unknown, secrets: readonly string[]): unknown {
+  if (cause === undefined || usable(secrets).length === 0) return cause;
+  const copy = new Error(redact(describeThrown(cause), secrets));
+  const name = attempt(() => (cause instanceof Error ? String(cause.name) : null), null);
+  if (name) copy.name = redact(name, secrets);
+  return copy;
+}
+
+/**
+ * 碰丟出來的值的每一個動作（instanceof、讀屬性、轉字串）都可能再丟：getter、Proxy 的 trap、撤銷的 Proxy（L2 第三輪 R1 修正引入）。
+ * 都經過這裡，丟了就用 fallback。
+ */
+function attempt<T>(read: () => T, fallback: T): T {
+  try {
+    return read();
+  } catch {
+    return fallback;
+  }
+}
+
+/** 任何丟出來的值變成可以 reject 的 Error：本身是 Error 就原樣（instanceof 也可能丟）。 */
+export const asError = (value: unknown): Error => attempt(() => (value instanceof Error ? value : new Error(describeThrown(value))), new Error('[unprintable]'));
+
+/**
+ * 任何丟出來的值都轉得成字串、不會再丟例外：循環物件、BigInt、沒有原型的物件、getter 會丟的都算（L2 第二輪 R1 修正引入）。
+ */
+export function describeThrown(value: unknown): string {
+  try {
+    if (value instanceof Error) return String(value.message);
+    if (typeof value === 'string') return value;
+    try {
+      const json = JSON.stringify(value);
+      if (json !== undefined) return json;
+    } catch { /* 循環或 BigInt：改用 String */ }
+    return String(value);
+  } catch {
+    return '[unprintable]';
+  }
+}
+
+/**
+ * 交給呼叫端之前再遮一次：傳輸層自己丟的 AiError 建立時沒有金鑰可遮，訊息、編號、partialText、cause 都可能帶著（L2 第二輪 延續 R1）。
+ * generate 與 check 的每個錯誤出口都經過這裡。
+ */
+export function withSecrets(error: AiError, secrets: readonly string[]): AiError {
+  if (usable(secrets).length === 0) return error;
+  const copy = new AiError({
+    kind: error.kind, message: error.message, status: error.status, providerCode: error.providerCode, requestId: error.requestId,
+    retryAfterMs: error.retryAfterMs, partialText: error.partialText, provider: error.provider, afterResponse: error.afterResponse,
+    secrets, cause: error.cause,
+  });
+  copy.attempts = error.attempts;
+  return copy;
+}
+
+type Locale = 'zh-TW' | 'en';
+
+const MESSAGES: Record<Locale, Record<AiErrorKind, string>> = {
+  'zh-TW': {
+    auth: '金鑰不對或已失效，請到設定頁重新貼上。',
+    permission: '這把金鑰不能用這個模型或功能。',
+    quota: '額度用完了，等額度恢復或到服務的網站加值。',
+    rate_limit: '送得太快，稍等一下再試。',
+    overloaded: '服務忙線中，稍後再試。',
+    server: '服務暫時出錯，稍後再試。',
+    network: '網路連不上。',
+    timeout: '等太久了，已停止。',
+    cancelled: '已取消。',
+    invalid_request: '請求格式不對。',
+    input_too_large: '教材或內容太大，超過服務的上限。',
+    unsupported_input: '這個模型不能讀這種檔案。',
+    model_not_found: '找不到這個模型，可能名稱打錯或已下架。',
+    content_blocked: '內容被服務擋下。',
+    unknown: '未知的錯誤。',
+  },
+  en: {
+    auth: 'The API key is wrong or expired.',
+    permission: 'This key cannot use this model or feature.',
+    quota: 'The quota or credit is used up.',
+    rate_limit: 'Too many requests; wait a moment and retry.',
+    overloaded: 'The service is overloaded; retry later.',
+    server: 'The service had an error; retry later.',
+    network: 'Network error.',
+    timeout: 'Timed out.',
+    cancelled: 'Cancelled.',
+    invalid_request: 'The request was invalid.',
+    input_too_large: 'The input is larger than the service allows.',
+    unsupported_input: 'This model cannot read this kind of file.',
+    model_not_found: 'Model not found.',
+    content_blocked: 'The content was blocked by the service.',
+    unknown: 'Unknown error.',
+  },
+};
+
+const RATE_LIMIT_HINT: Record<Locale, string> = {
+  'zh-TW': '如果一直這樣，可能是額度用完了。',
+  en: 'If this keeps happening, the quota may be used up.',
+};
+
+/** 給使用者看的一句話。呼叫端可以用自己的文字取代。 */
+export function describeAiError(error: AiError, locale: Locale = 'zh-TW'): string {
+  const base = MESSAGES[locale][error.kind];
+  if (error.kind === 'rate_limit' && error.attempts > 1) return `${base}${locale === 'en' ? ' ' : ''}${RATE_LIMIT_HINT[locale]}`;
+  return base;
+}

@@ -1,0 +1,6 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_err","object":"response","status":"in_progress","model":"gpt-5.6-terra-2026-07-09","output":[]}}
+
+event: response.failed
+data: {"type":"response.failed","sequence_number":1,"response":{"id":"resp_err","object":"response","status":"failed","error":{"code":"server_error","message":"The server had an error while processing your request."},"model":"gpt-5.6-terra-2026-07-09","output":[]}}
+
