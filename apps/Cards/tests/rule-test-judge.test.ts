@@ -94,6 +94,23 @@ void test('驗評審的結果：列號一列一筆、每份一格、判有要有
   assert.deepEqual(validateResult('不是 JSON', context), ['不是照 schema 的 JSON（要有 pages、rows、issues、unsure）']);
 });
 
+void test('驗評審的結果：沒講為什麼一題一筆（rule-test-d236.md §17），行號要落在同一題；有好幾題的目標不寫名稱行，只有一題的可以', () => {
+  // S3 第 1 行是有兩題的目標名稱，第 2、3 行是兩題，第 4 行是第 3 行那一題的詳解。
+  const decks = new Map([...DECKS, ['S3', ['- borrow 的用法', '    - borrow 英翻中 :: 借入', '    - 「借入」的英文 :: borrow', '        - 詳解', '']]]);
+  const context = { rows: parseRubric(RUBRIC), codes: ['S1', 'S2', 'S3'], decks, pages: 1 };
+  const why = (deck: string, lines: number[]): JudgeResult => {
+    const result = good();
+    result.rows = result.rows.map(row => ({ ...row, decks: [...row.decks, { deck: 'S3', evidence: '', lines: [], verdict: '沒有' as const }] }));
+    result.issues = [{ deck, kind: '沒講為什麼', lines, rubric: '', note: '' }];
+    return result;
+  };
+  const wrong = '問題第 1 筆（S3 沒講為什麼）：沒講為什麼一題一筆，行號要落在同一題（題目行或它底下的行；有好幾題的目標不寫名稱行）';
+  assert.deepEqual(validateResult(why('S3', [3, 4]), context), []);
+  assert.deepEqual(validateResult(why('S1', [1]), context), []);
+  assert.deepEqual(validateResult(why('S3', [1]), context), [wrong]);
+  assert.deepEqual(validateResult(why('S3', [2, 3]), context), [wrong]);
+});
+
 void test('judge：每個區組、每位評審一個新對話（只開 Read、照 schema 交、資料夾是複本）；兩位都交了就鎖定', async () => {
   const folder = await blinded();
   const claude = fakeJudge(), codex = fakeJudge();

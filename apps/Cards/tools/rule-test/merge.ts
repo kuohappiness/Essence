@@ -54,6 +54,12 @@ export function twoPrompts(deck: string, lines: readonly number[]): boolean {
   return a.target !== null && b.target !== null && a.prompt !== null && b.prompt !== null && !(a.target === b.target && a.prompt === b.prompt);
 }
 
+/** 沒講為什麼的一筆只指一題（rule-test-d236.md §17）：每一行都歸得到題（同上），而且是同一題，合併時才不會看評審的順序。 */
+export function onePrompt(deck: string, lines: readonly number[]): boolean {
+  const units = lines.map(unitsOf(deck));
+  return units.length > 0 && units.every(unit => unit.target !== null && unit.prompt !== null && unit.target === units[0].target && unit.prompt === units[0].prompt);
+}
+
 /**
  * 近義重複併成組（§4）：共用一題的對併在一起；多餘的題＝每組（題數 − 1）加總。pairs 是每一對的兩個位置名稱（合併後的 at）。
  */

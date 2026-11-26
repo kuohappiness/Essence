@@ -140,9 +140,9 @@ void test('沒講為什麼（rule-test-d236.md §17）：兩位在同一題記�
   const folder = await blinded({ 乙: SECOND });
   const decks = join(folder.root, '評分', '批1', '卡組', 'L3');
   const second = readdirSync(decks).map(name => name.replace('.md', '')).find(code => readFileSync(join(decks, `${code}.md`), 'utf8').includes('「借入」的英文'))!;
-  // 乙的第 2 行是有兩題的目標（第 3、4 行是題），第 5 行是只有一題的目標（第 6 行是題）。
+  // 乙的第 2 行是有兩題的目標（第 3、4 行是題），第 5 行是只有一題的目標（第 6 行是題）。Fable 寫第 5 行、Codex 寫第 6 行，是同一題。
   const codex = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '沒講為什麼', lines: [3], rubric: '', note: '沒說 borrow 是「借入」的理由' }, { deck: second, kind: '沒講為什麼', lines: [6], rubric: '', note: '' }); } });
-  const fable = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '沒講為什麼', lines: [2], rubric: '', note: '' }); } });
+  const fable = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '沒講為什麼', lines: [5], rubric: '', note: '' }); } });
   await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
   await runDisputes(folder, { adapters: { claude: () => Promise.reject(Error('沒有要裁定的')) }, log: () => {} });
   checkFolder(folder, () => {});

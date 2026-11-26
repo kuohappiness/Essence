@@ -16,7 +16,7 @@ import { appendEvent, jobState, readEvents, reopenFailed } from './jobs.ts';
 import { countPdfPages } from './probe.ts';
 import { ISSUE_KINDS, type IssueKind } from './levels.ts';
 import { mapSchema, validateMap } from './map.ts';
-import { twoPrompts } from './merge.ts';
+import { onePrompt, twoPrompts } from './merge.ts';
 import { deepenChances, judgedRows, parseRubric, type RubricRow } from './rubric.ts';
 import { deepenSchema, validateDeepen } from './deepen-judge.ts';
 
@@ -77,6 +77,7 @@ export function validateResult(value: unknown, context: JudgeContext): string[] 
     const bad = badLines(issue.deck, issue.lines);
     if (bad.length) problems.push(`${at}：行號 ${bad.join('、')} 不是卡組裡有字的行`);
     if (issue.kind === '近義重複' && !twoPrompts(context.decks.get(issue.deck)?.join('\n') ?? '', issue.lines)) problems.push(`${at}：近義重複要剛好寫兩道不同的題的行號（不是目標名稱行、不是同一題）`);
+    if (issue.kind === '沒講為什麼' && issue.lines.length && !onePrompt(context.decks.get(issue.deck)?.join('\n') ?? '', issue.lines)) problems.push(`${at}：沒講為什麼一題一筆，行號要落在同一題（題目行或它底下的行；有好幾題的目標不寫名稱行）`);
     if ((issue.kind === '跨單元去向') && !rubricIds.has(issue.rubric)) problems.push(`${at}：rubric 要寫評分表的列號`);
     if (issue.kind === '重大錯誤' && issue.rubric && !context.rows.some(row => row.id === issue.rubric && row.kind === '重大錯誤')) problems.push(`${at}：rubric「${issue.rubric}」不是評分表的重大錯誤列`);
   });
