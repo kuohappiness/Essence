@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import type { DeepenJob } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { createDeepen } from '../src/obsidian/deepen.ts';
@@ -19,7 +19,7 @@ import { checkFolder } from '../tools/rule-test/check.ts';
 import { runDisputes } from '../tools/rule-test/disputes.ts';
 import { unblindFolder } from '../tools/rule-test/unblind.ts';
 import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
-import { DEEPEN_PROMPT, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
+import { deepenSources, deepenSourcesHash, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { deepenSectionText } from '../tools/rule-test/prompts.ts';
@@ -100,10 +100,14 @@ function fakeDeepener(): { requests: StepRequest[]; adapter: (request: StepReque
   } };
 }
 
-void test('凍結加深：每組送的規則全文、外掛加深任務段的雜湊、英文這一科的卡組全文', async () => {
+void test('凍結加深：每組送的規則全文、外掛加深用到的原始碼的雜湊、英文這一科的卡組全文', async () => {
   const folder = await generated();
   const frozen = readDeepenFrozen(folder);
-  assert.equal(frozen.prompt, sha256File(DEEPEN_PROMPT));
+  assert.equal(frozen.plugin, deepenSourcesHash());
+  // 模擬加深用到的外掛函式（§6-1）所在的檔都在裡面，不只 deepen-prompt.ts（L2 第 1 輪 O）。
+  const sources = deepenSources().map(path => relative(join(import.meta.dirname, '..'), path).split(sep).join('/'));
+  for (const file of ['src/core/ai/deepen-prompt.ts', 'src/core/ai/draft.ts', 'src/core/ai/prompt.ts', 'src/core/ai/deepen-write.ts', 'src/core/catalog/index.ts', 'src/core/deck/index.ts']) assert.ok(sources.includes(file), file);
+  assert.ok(sources.every(file => file.startsWith('src/')));
   assert.deepEqual(Object.keys(frozen.groups), ['甲', '乙']);
   assert.equal(frozen.groups.甲[0].text, '## 英文規則\n- 二\n\n- 加深的規則');
   assert.equal(frozen.groups.甲[0].name, 'english.md');
@@ -366,14 +370,14 @@ void test('status 顯示加深做到哪裡：還沒算計畫的份、篇數與�
   assert.ok(statusLines(folder).includes('加深：2 份、1 篇｜完成 1、跑中 0、待跑 0、放棄 0；卡組存不了、不能加深 1 份'));
 });
 
-void test('外掛的加深任務段（deepen-prompt.ts）在凍結之後改過：deepen 停下，說用凍結時的 commit 跑', async () => {
+void test('外掛加深用到的原始碼在凍結之後改過：deepen 停下，說用凍結時的 commit 跑', async () => {
   const folder = await generated();
   // 模擬原始碼改過：把凍結記的雜湊換掉，並讓鎖跟著（只測這一道核對，不改真的原始碼）。
   const rules = join(folder.root, '凍結', '加深', '規則.json');
-  writeFileSync(rules, readFileSync(rules, 'utf8').replace(/"prompt": "[0-9a-f]{64}"/, `"prompt": "${'0'.repeat(64)}"`));
+  writeFileSync(rules, readFileSync(rules, 'utf8').replace(/"plugin": "[0-9a-f]{64}"/, `"plugin": "${'0'.repeat(64)}"`));
   const lockFile = join(folder.root, '凍結', '鎖.json');
   const lock = JSON.parse(readFileSync(lockFile, 'utf8')) as { files: Record<string, string> };
   lock.files['凍結/加深/規則.json'] = sha256File(rules);
   writeFileSync(lockFile, JSON.stringify(lock, null, 2) + '\n');
-  await assert.rejects(runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} }), /deepen-prompt\.ts）在凍結之後改過：用凍結時的 commit 跑/);
+  await assert.rejects(runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} }), /外掛加深用到的原始碼（src 底下 \d+ 個檔，含 deepen-prompt\.ts）在凍結之後改過：用凍結時的 commit 跑/);
 });

@@ -2,7 +2,7 @@
 // 鎖.json 記設定、提示、快照、教材與評分表的雜湊和當時的 commit；之後每一步開頭只核對這些雜湊（verifyLock），不要求 repo 停在同一個 commit。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { RULE_SUBJECTS, unitCode, type EmbeddedRule } from '../../src/core/ai/index.ts';
 import { cliPath } from '../cli-path.ts';
 import { deepenGroups, type RuleSource } from './config.ts';
@@ -82,12 +82,28 @@ export function confirmSpec(folder: Folder, log?: string): void {
 }
 
 /** 外掛的加深任務段（§6-1 第 5 點）：凍結時記雜湊，模擬時核對。 */
-export const DEEPEN_PROMPT = join(APP_ROOT, 'src', 'core', 'ai', 'deepen-prompt.ts');
+/**
+ * 模擬加深用到的外掛原始碼（D-236 §11；L2 第 1 輪 O：不只 deepen-prompt.ts，planDraft、unitSiblings、learnedWords、inspectDeepen 也會改變送出的提示）：
+ * 從 deepen.ts 起順著相對 import 找（工具的檔也跟著找），收 src 底下的檔。
+ */
+export function deepenSources(): string[] {
+  const src = join(APP_ROOT, 'src') + sep, seen = new Set<string>(), out: string[] = [];
+  const visit = (file: string): void => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    if (file.startsWith(src)) out.push(file);
+    for (const match of readFileSync(file, 'utf8').matchAll(/(?:^|\n)\s*(?:import|export)\b[^'";]*?(?:from\s*)?'(\.{1,2}\/[^']+\.ts)'/g)) visit(resolve(dirname(file), match[1]));
+  };
+  visit(join(import.meta.dirname, 'deepen.ts'));
+  return out.sort();
+}
+/** 這些檔合成一個雜湊（相對路徑＋各自的雜湊），凍結時記、模擬時核對。 */
+export const deepenSourcesHash = (): string => sha256Text(deepenSources().map(file => `${relative(APP_ROOT, file).split(sep).join('/')} ${sha256File(file)}`).join('\n'));
 const DEEPEN_RULES = join('凍結', '加深', '規則.json');
 /** 〈評估規格〉的位置（§11）。 */
 export const SPEC = join('凍結', '評估規格.md');
 /** 凍結的加深規則：每一組送的規則全文（已經組好、算好雜湊），與 deepen-prompt.ts 的雜湊。 */
-export interface DeepenFrozen { prompt: string; groups: Record<string, EmbeddedRule[]> }
+export interface DeepenFrozen { plugin: string; groups: Record<string, EmbeddedRule[]> }
 export const readDeepenFrozen = (folder: Folder): DeepenFrozen => JSON.parse(readFileSync(join(folder.root, DEEPEN_RULES), 'utf8')) as DeepenFrozen;
 export function readWordDecks(folder: Folder, lesson: string): WordDecks | null {
   const path = join(folder.root, '凍結', '加深', '單字卡組', `${lesson}.json`);
@@ -198,7 +214,7 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   }
   if (config.deepen) {
     const rules: DeepenFrozen = {
-      prompt: sha256File(DEEPEN_PROMPT),
+      plugin: deepenSourcesHash(),
       groups: Object.fromEntries(deepenGroups(config).map(name => [name, deepenRulesFor(config.groups.find(group => group.name === name)!, root)])),
     };
     writes.push([join(folder.root, DEEPEN_RULES), JSON.stringify(rules, null, 2) + '\n']);

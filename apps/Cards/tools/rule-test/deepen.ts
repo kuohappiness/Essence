@@ -14,8 +14,8 @@ import type { Mastery } from '../../src/core/study/index.ts';
 import { cliPath } from '../cli-path.ts';
 import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './adapters.ts';
 import { deepenGroups } from './config.ts';
-import { blindedJobs, materialOf, openFolder, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
-import { confirmSpec, DEEPEN_PROMPT, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, SPEC, verifyLock } from './freeze.ts';
+import { blindedJobs, materialOf, openFolder, sha256Text, writeOnce, type Folder } from './folder.ts';
+import { confirmSpec, deepenSources, deepenSourcesHash, readDeepenFrozen, readFrozenSnapshot, readFrozenSteps, readWordDecks, SPEC, verifyLock } from './freeze.ts';
 import { acquireLock, CODEX_MATERIAL, detach, rawName } from './generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job } from './jobs.ts';
 import { subjectOf } from './prompts.ts';
@@ -157,7 +157,7 @@ function planFolder(folder: Folder): DeepenPlan[] {
 /** 凍結之後外掛的加深任務段改過就停下（§6-1 第 5 點）。 */
 function verifyDeepenPrompt(folder: Folder): void {
   if (!folder.config.deepen) throw Error('測試.yaml 沒有設定「加深」');
-  if (sha256File(DEEPEN_PROMPT) !== readDeepenFrozen(folder).prompt) throw Error('外掛的加深任務段（src/core/ai/deepen-prompt.ts）在凍結之後改過：用凍結時的 commit 跑');
+  if (deepenSourcesHash() !== readDeepenFrozen(folder).plugin) throw Error(`外掛加深用到的原始碼（src 底下 ${String(deepenSources().length)} 個檔，含 deepen-prompt.ts）在凍結之後改過：用凍結時的 commit 跑`);
 }
 
 /** 這幾份原稿的加深還沒完成、也還沒放棄的篇；沒有計畫的寫「還沒跑 deepen」（blind 用，§6-2）。 */
