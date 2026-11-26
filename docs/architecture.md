@@ -110,7 +110,7 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
 
 Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件出現才建，結構照 Cards。
 
-`packages/<套件>/` 放軟體共用的套件（[任務說明〈8〉](tasks/ai-client.md#8-repo-要改的地方)）：登記在 `tools/apps.ts` 的 `PACKAGES` 表；程式不跨出自己的資料夾、不 import 任何軟體；有自己的完整檢查與 CI job，改到它就跑它。軟體怎麼用套件，等第一個軟體接上時寫成決定。
+`packages/<套件>/` 放軟體共用的套件（[任務說明〈8〉](tasks/ai-client.md#8-repo-要改的地方)）：登記在 `tools/apps.ts` 的 `PACKAGES` 表；程式不跨出自己的資料夾、不 import 任何軟體；有自己的完整檢查與 CI job，改到它就跑它。軟體放一個自己的轉接檔，用相對路徑 import 表上套件的入口檔，其他檔只 import 轉接檔；不用 npm 的 `file:`、git 相依或發布版（[D-232](decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 第 5 點）。這條放行等第一個軟體接上時才加進檢查，在那之前軟體不能 import 套件。
 
 ### 每一類放哪裡
 

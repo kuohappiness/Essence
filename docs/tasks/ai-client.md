@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：待審｜下一步：L2 收尾了（[第四輪修正表](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)，雲端與 Windows 都過）；合併只差使用者同意〈13〉D-232，另在這個分支開新雲端 session 驗雲端設定第 ① 件｜等誰：使用者
+狀態：待審｜下一步：L2 收尾了（[第四輪修正表](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)，雲端與 Windows 都過），[D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 也寫好了；合併前只差在這個分支開新雲端 session 驗雲端設定第 ① 件，再請使用者同意合併｜等誰：使用者
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -150,12 +150,13 @@ packages/ai-client/
 - **分派表與 CI**：`tools/dispatch.ts` 多一個對象 `ai-client`（第 4 條：改到套件的任何檔，跑它自己的完整檢查；第 5 條：`packages/` 底下不認得的路徑全部跑）；套件 `package.json` 的 scripts 寫到的 `tools/` 檔也算檢查的入口。`tools/ci-gate.ts`、`.github/workflows/check.yml`（新的 job 與 gate）、`tools/hooks.ts`（照表，不用改）、`.claude/hooks/cloud-setup.mjs`（多裝一個資料夾）跟著改；`tools/tests/` 的分派、gate、hook、雲端設定與邊界測試都補上套件。
 - **審查**：共用檢查與 CI 屬高風險，合併前 L2。雲端叫不到 Codex：推分支回本機請 Codex 審，或由 Claude 開沒參與實作的子代理審（L3），選哪一種先問使用者。改 `cloud-setup.mjs` 照 [quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端) 另開雲端 session 驗兩件事。
 
-**第三步（Cards 接上）要做的**（寫進 D-232，修改 [D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 10 點）：
+**第三步（Cards 接上）要做的**（[D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 第 5 點，修改 [D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 10 點）：
 
 - Cards 不用 npm 的 `file:` 相依：npm 會在 `node_modules` 建連結，pre-commit 的暫存副本借工作樹的 `node_modules`，檢查會讀到工作樹的套件、不是要 commit 的內容（Fable 第 1 點，已重現）；套件被複製進 `node_modules` 時 Node 也不執行 `.ts`。改成 Cards 放一個轉接檔，用相對路徑 import 套件的入口檔，其他檔只 import 轉接檔。
 - `check-app-imports.ts` 加一條放行：軟體的程式只准指到表上套件的入口檔；Cards 的 ESLint 邊界、knip 與 `tools/build.mjs` 跟著放行。
 - 分派表加一張明列的表（像 `SHARED_SPECS`）：改到套件時哪些軟體也要跑完整檢查，另加一條檢查確認表和實際的 import 一致。
 - `tools/tests/hooks.test.ts` 加一條驗收：暫存一個會讓 Cards 測試失敗的套件修改、工作樹是好的，pre-commit 要失敗。
+- `apps/Cards/AGENTS.md`〈程式〉的「不 import 其他軟體與最上層的程式」補上轉接檔的例外（D-232 第 5 點），和放行規則同一個 commit。
 
 ## 9. 拿到別的 repo
 
@@ -192,7 +193,9 @@ packages/ai-client/
 ## 13. 要寫的決定
 
 - **只接 API、取消訂閱接法**：已寫成 [D-231](../decisions.md#d-231-外掛直接呼叫-ai-只走-api-金鑰取消訂閱接法)（原本寫成 D-230，和 PR #50 撞號後改號）。
-- **D-232 AI 連線做成共用套件**（等使用者看過才寫；合併 PR #51 前要寫好，不然 D-059 與 D-208 第 10 點和這個分支的程式矛盾，L2 R19）：這份的〈3〉〈5〉〈8〉〈9〉；修改 [D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛)（一種介面 → 四種方言的共用套件）與 D-208 第 10 點（新類別 `packages/`；軟體經自己的轉接檔、用相對路徑 import 表上套件的入口檔，不用 npm 相依；套件不 import 軟體、別的套件與最上層的程式）。
+- **AI 連線做成共用套件**：已寫成 [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)（使用者 2026-11-26 在決定卡同意）：這份的〈3〉〈5〉〈8〉〈9〉；修改 [D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛)（一種介面 → 四種方言的共用套件）、[D-072](../decisions.md#d-072-ai-服務的推薦與設定方式) 第 3、4 點（淘汰條件改成講四種方言之一）與 D-208 第 10 點（新類別 `packages/`；軟體經自己的轉接檔、用相對路徑 import 表上套件的入口檔，不用 npm 相依；套件不 import 軟體、別的套件與最上層的程式）。
+
+→ [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)（2026-11-26）
 
 ## 結果
 
@@ -205,6 +208,9 @@ packages/ai-client/
 - 改 `cloud-setup.mjs` 的第 ② 件（2026-11-25，這個雲端 session）：另開沒有 `node_modules` 的 worktree（`1c993b62`），PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑 hook，原文：「雲端環境設定：PATH 上的 Node 是 22.23.5；/opt/node24/bin 有 v24.22.3，但沒有 CLAUDE_ENV_FILE，之後的指令仍是舊版，跑指令前先 export PATH="/opt/node24/bin:$PATH"；core.hooksPath 已設為 .githooks；tools：npm ci 完成；apps/Cards：npm ci 完成；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：npm ci 完成」。
 - L2 第一輪（本機 Codex，使用者 2026-11-25 選的，請求 [ai-client-l2.md](ai-client-l2.md)）：19 項發現，都修了，一項一個 commit、先寫會失敗的測試（R17、R19 是規格對齊）；每一項的修法與 commit 在[審查報告〈Claude 核對（第一輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第一輪>)。
 - L2 第二輪（只審修正）：14 項，11 項修了（第 2 代，回歸測試是整類的性質測試），連不上時照樣重送、長期限的快取估價記進[已知的限制](../backlog.md#已知的限制)，D-232 等使用者；每一項在[審查報告〈Claude 核對（第二輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第二輪>)。
-- 還沒做：L2 第三輪（只審第二輪的修正）；D-232（使用者同意後寫，合併前要寫好）；第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
+- L2 第三輪（只審第二輪的修正）：13 項，12 項修了，延續 R8 的期限寫成前提，延續 R5、R7 照舊是已知的限制；每一項在[審查報告〈Claude 核對（第三輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-核對第三輪>)。
+- L2 第四輪（最後一輪）：12 項，使用者 2026-11-25 說「用 fable 5.2 xhigh 看一次，如果他也同意就不再送審」；Fable 有條件同意，照條件修了 10 項、第 2 項記進已知的限制，不再送 Codex（[審查報告〈Claude 修正（第四輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)）。最後版本 `480470ec` 在雲端與使用者的 Windows 電腦上，套件 220 個測試、共用檢查都過。
+- D-232：使用者 2026-11-26 同意，已寫成 [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)。
+- 還沒做：第 ① 件（在這個分支新開雲端 session，讀它的開場訊息）；冒煙測試（第二步）。
 
 延後的測試：沒有。
