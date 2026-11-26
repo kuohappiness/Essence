@@ -6,10 +6,10 @@ import { check } from '../src/core/ai/index.ts';
 const issuesOf = (text: string, subject = '英文') => check(text, { subject }).issues.filter(each => each.code.startsWith('english-') || each.code.startsWith('typed-'));
 const codes = (text: string, subject = '英文'): string[] => issuesOf(text, subject).filter(each => each.level === '錯誤').map(each => each.code);
 
-void test('文法與變化：讀不成打字、填空題、字數不同、不是恰好一個 ＿＿ 都是錯誤；讀得成的不報', () => {
+void test('文法與變化：讀不成打字、填空題、不是恰好一個 ＿＿ 都是錯誤；讀得成的（含字數不同的好幾個答案，D-237）不報', () => {
   assert.deepEqual(codes('- go 過去式\n    - Yesterday I ＿＿ to school.（去） :: 去了\n'), ['typed-answer-invalid']);
   assert.deepEqual(codes('- 被動語態 文法\n    - The window ==was broken== yesterday.\n'), ['english-typed-invalid']);
-  assert.deepEqual(codes('- 動名詞（當主詞） 文法\n    - ＿＿ movies is fun. (watch) :: Watching | To watch\n'), ['english-typed-invalid']);
+  assert.deepEqual(codes('- 動名詞（當主詞） 文法\n    - ＿＿ movies is fun. (watch) :: Watching | To watch\n'), []);
   assert.deepEqual(codes('- go 過去式\n    - Yesterday I went to school. :: went\n'), ['english-typed-invalid']);
   assert.deepEqual(codes('- go 過去式\n    - Yesterday I ＿＿ to school.（去） :: went\n'), []);
 });

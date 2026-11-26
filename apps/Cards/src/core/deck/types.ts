@@ -153,8 +153,6 @@ export interface FieldColon { field: FieldName; name: Span; colon: Span }
 export interface TargetLayout { fields: SourceFieldLayout[]; entries: (Span | null)[]; parts: SourcePart[]; fieldColons: FieldColon[]; end: number }
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'
-  // typed-answer-words：hint，好幾個答案的字數不一樣，畫線照第一個（D-122）。
-  | 'typed-answer-words'
   | 'duplicate-field' | 'unknown-field-value' | 'unknown-field'
   | 'unknown-property-value' | 'duplicate-id' | 'cloze-not-typed'
   // misplaced-id：hint，目標的 ID 不在行尾，照樣認得、存檔時移回行尾；ambiguous-id：error，目標那一行有兩個以上的 ID（D-134）。

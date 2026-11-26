@@ -322,20 +322,16 @@ for (const [name, answer, typed, fingerprint, problems] of [
   ['粗體跨過分隔', '**a | b**', ['a', 'b'], 'b284db9b', []],
   ['螢光筆跨過分隔', '==a | b==', ['a', 'b'], 'b38b856f', []],
   ['兩段各自的裝飾', '**a** | ==b==', ['a', 'b'], 'f6fd120c', []],
-  ['兩個答案字數不同只是 hint', 'a | two words', ['a', 'two words'], '03324c7c', ['typed-answer-words']],
+  ['兩個答案字數不同也收、不提示（D-237）', 'a | two words', ['a', 'two words'], '03324c7c', []],
   ['只有一個答案', 'borrow', ['borrow'], 'cffabbc2', []],
   ['每一段各自拿掉粗體', '**made** up his mind | made his mind up', ['made up his mind', 'made his mind up'], '01829f8b', []],
-  ['字數不一樣：提示、照樣出題', 'made up his mind | decided', ['made up his mind', 'decided'], 'cb4b5fb9', ['typed-answer-words']],
+  ['字數不一樣：不提示、照樣出題（D-237）', 'made up his mind | decided', ['made up his mind', 'decided'], 'cb4b5fb9', []],
 ] as const) void test('R1 ' + name, () => {
   const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
   const prompt = qa(parsed.targets[0].prompts[0]);
   assert.deepEqual([prompt.answer, prompt.typed, prompt.fingerprint], [answer, typed, fingerprint]);
   assert.deepEqual(parsed.problems.map(p => p.code), problems);
   assert.equal(parsed.targets[0].ok, true);
-});
-void test('R1 typed-answer-words 是 hint，訊息說畫線照第一個', () => {
-  const parsed = parseDeck('- x 中翻英\n  - Q :: made up his mind | decided');
-  assert.deepEqual(parsed.problems.map(p => [p.level, p.message, p.targetLine]), [['hint', '好幾個答案的字數不一樣，畫線照第一個', 0]]);
 });
 // Codex 格式查核的固定回歸基準：同一個答案格，W5（還沒拆 |）算出的指紋和 W6 相同，typed 照 | 拆開。
 for (const [answer, fingerprint, typed] of [
@@ -397,7 +393,7 @@ void test('R1 S1 只看 :: 右邊的答案格：資料欄位、題幹、背面�
     [true, ['https://a.test'], '因果', [['c', ['c']]]],
   ]);
 });
-// 中文且字數不同（'a | 借 入'）也只報 invalid，不另給字數的 hint（Codex 格式查核 F2）。
+// 中文且字數不同（'a | 借 入'）只報 invalid（Codex 格式查核 F2；D-237 起字數不同本來就不提示）。
 for (const answer of ['a | ', '| a', 'a | | b', 'a || b', 'a | 借', 'a | 借 入', 'a | ** **']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
   const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
   assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
