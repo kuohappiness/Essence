@@ -72,11 +72,13 @@ export interface Flow {
 /** 預覽（D-161）什麼都不寫，自評也不等 0.3 秒，所以沒有這兩項。 */
 export type PreviewFlow = Omit<Flow, 'revealedAt' | 'settle'>;
 
-const FLOWS: Record<QuestionType, (card: Card, options: { now: () => number }) => Flow> = { flip: createFlip, typed: createTyped, pick: createPick };
+// 排序照點選填空作答（題型模組任務說明 §1-8）：字鍵放過會變淡、點了是交換，由 createPick 照題型分。
+const FLOWS: Record<QuestionType, (card: Card, options: { now: () => number }) => Flow> = { flip: createFlip, typed: createTyped, pick: createPick, order: createPick };
 const PREVIEWS: Record<QuestionType, (card: Card, reveal: boolean) => PreviewFlow> = {
   flip: (card, reveal) => createFlip(card, { now: Date.now, revealed: reveal }),
   typed: createPreviewTyped,
   pick: (card, reveal) => createPick(card, { now: Date.now, revealed: reveal }),
+  order: (card, reveal) => createPick(card, { now: Date.now, revealed: reveal }),
 };
 
 export function createFlow(card: Card, options: { now: () => number }): Flow {

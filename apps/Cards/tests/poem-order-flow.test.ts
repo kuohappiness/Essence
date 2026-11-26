@@ -32,7 +32,7 @@ const used = (s: Session): string[] => (view(s).card.group?.keys ?? []).filter((
 void test('全詩順序卡是點選填空：一個目標四格，每格是一句，字鍵是打亂的四句，詩名是標題', async t => {
   const { s } = await open(t);
   const { card } = view(s);
-  assert.equal(questionType(card), 'pick');
+  assert.equal(questionType(card), 'order');
   assert.deepEqual(card.blanks.map(blank => [blank.lt, blank.answer, blank.cell]), [['b3pmae', LINES[0], 0], ['b3pmae', LINES[1], 1], ['b3pmae', LINES[2], 2], ['b3pmae', LINES[3], 3]]);
   const group = card.group;
   assert.ok(group);

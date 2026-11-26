@@ -521,6 +521,16 @@ void test('§5 疑似重複的理由：存草稿時 ID 照加題的同一套核�
   assert.ok(kept.decks[0].text.includes('\n>     - 理由：可能重複 q8z3ka｜第一題要看圖\n'));
 });
 
+// 題型模組 A1（任務說明 §1-5）：草稿寫的需要版本改用 needsOf，比原本多算答案是組裡別的字（pick-answer-invalid）的目標。
+// 那是錯誤：草稿的檢查退件（check.ts 的 pick-answer-invalid → reply.ts 的錯誤 → planDraft 丟錯），存不進去，所以存得進去的草稿寫的需要版本不變。
+void test('§5 比較句的答案是組裡別的字：草稿的檢查退件、planDraft 不存', () => {
+  const pick = '<<<全貌>>>\n無\n<<<架構>>>\n無\n<<<卡組>>>\n## 相似字\n\n- 寨（寨、塞） 相似字\n    - 出處：p.1\n    - 山＿＿。 :: 寨\n    - 大＿＿車。 :: 塞\n<<<完>>>';
+  const chineseForm = form({ subject: 'chinese', term: '小五上', unit: 'L7 詩兩首' });
+  const inspected = inspectReply(pick, chineseForm, subject('chinese'), [], nobody);
+  assert.deepEqual(inspected.errors.map(each => [each.line, each.quote]), [[11, '- 大＿＿車。 :: 塞']]);
+  assert.throws(() => planDraft(inspected, chineseForm, subject('chinese'), [], nobody, counter(), new Set(), '2026-11-07'), /還有擋住的錯誤/);
+});
+
 void test('§5 有比較卡的篇寫需要版本；一般知識只寫狀態；檔名撞名往後加（同資料夾、別的資料夾、大小寫不同、 2 已經有人用）', () => {
   const pick = '<<<全貌>>>\n無\n<<<架構>>>\n無\n<<<卡組>>>\n## 相似字\n\n- 寨（寨、塞） 相似字\n    - 出處：p.1\n    - 山＿＿。 :: 寨\n    - 木＿＿。 :: 寨\n    - 記憶錨點：下面是**木**\n- 塞（寨、塞） 相似字\n    - 出處：p.1\n    - ＿＿車。 :: 塞\n    - ＿＿住。 :: 塞\n    - 記憶錨點：下面是**土**\n<<<完>>>';
   const chineseForm = form({ subject: 'chinese', term: '小五上', unit: 'L7 詩兩首' });

@@ -34,7 +34,7 @@ void test('state 對外只透過 index 匯出 createState 與裝置碼', async (
 });
 void test('deck 對外只透過指定 index 匯出', async () => {
   const module = await import('../src/core/deck/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['NEEDS_NEWER', 'TRAILING_ID', 'assignIds', 'baseForm', 'blanksIn', 'blockIds', 'canEditSource', 'chapterAlias', 'choiceProblems', 'choiceStem', 'codeKey', 'editSource', 'expandTabs', 'fieldFixes', 'fieldStart', 'fixField', 'fixQuestion', 'folderIssues', 'folderLabel', 'frontmatterLines', 'guardedMoves', 'hasOutside', 'headingKey', 'isDeckPath', 'isOutside', 'learnedWord', 'linesOf', 'listDeckPaths', 'listTree', 'markNeed', 'misplacedFolders', 'nameIds', 'newId', 'outsideSource', 'parseDeck', 'pickKey', 'pickWord', 'presentFolders', 'readDecks', 'readProperties', 'readSourceParts', 'readTerm', 'setDeckStatus', 'setTargetId', 'sourceLabel', 'sourceLinks', 'splitSource', 'splitSourceItems', 'splitUnit', 'termKey', 'termRank', 'tidy', 'typedHint', 'verifySourceEdit']);
+  assert.deepEqual(Object.keys(module).sort(), ['NEEDS_NEWER', 'TRAILING_ID', 'assignIds', 'baseForm', 'blanksIn', 'blockIds', 'canEditSource', 'chapterAlias', 'choiceProblems', 'choiceStem', 'codeKey', 'editSource', 'expandTabs', 'fieldFixes', 'fieldStart', 'fixField', 'fixQuestion', 'folderIssues', 'folderLabel', 'frontmatterLines', 'guardedMoves', 'hasOutside', 'headingKey', 'isDeckPath', 'isOutside', 'learnedWord', 'linesOf', 'listDeckPaths', 'listTree', 'markNeed', 'misplacedFolders', 'nameIds', 'needsOf', 'newId', 'outsideSource', 'parseDeck', 'pickKey', 'pickWord', 'presentFolders', 'readDecks', 'readProperties', 'readSourceParts', 'readTerm', 'setDeckStatus', 'setTargetId', 'sourceLabel', 'sourceLinks', 'splitSource', 'splitSourceItems', 'splitUnit', 'termKey', 'termRank', 'tidy', 'typedHint', 'verifySourceEdit']);
 });
 
 void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 require ts-fsrs', async () => {
@@ -68,7 +68,8 @@ void test('deck、study 不 import catalog；catalog 從 study 只 import 型別
   const root = new URL('../src/core/', import.meta.url);
   const specifiers = async (folder: string): Promise<{ path: string; name: string; typeOnly: boolean }[]> => {
     const found: { path: string; name: string; typeOnly: boolean }[] = [];
-    for (const path of (await readdir(new URL(folder + '/', root))).filter(each => each.endsWith('.ts'))) {
+    // 遞迴掃：deck 的認法在 kinds/ 底下（題型模組任務說明 §1-3）。
+    for (const path of (await readdir(new URL(folder + '/', root), { recursive: true })).map(each => each.replaceAll('\\', '/')).filter(each => each.endsWith('.ts'))) {
       const source = ts.createSourceFile(path, await readFile(new URL(folder + '/' + path, root), 'utf8'), ts.ScriptTarget.Latest, true);
       source.forEachChild(node => {
         if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {

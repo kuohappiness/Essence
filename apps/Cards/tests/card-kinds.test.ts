@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { Target } from '../src/core/deck/index.ts';
 import { cardOf, questionType } from '../src/core/study/index.ts';
+import type { QuestionType } from '../src/core/study/index.ts';
 import { setup, view } from './helpers/pick-session.ts';
 
 // 卡型分類表（題型模組討論稿 §5 第 0 段，apps/Cards/docs/Claude Codex Discussion/2026-11-25-question-type-modules.md）：
@@ -10,16 +11,17 @@ import { setup, view } from './helpers/pick-session.ts';
 // 預期值逐格對過 syntax.md §2-3（中翻英、文法與變化、比較卡、全詩順序、句子排序）與接句的任務說明，不是用同樣的算法再算一次。
 // 加一種卡型（例如多音字）時：會變的格改掉，再加它自己的列；其他格變了就是互搶。之後把 Target 的卡型欄位併成一欄時，只改 kindOf。
 
-/** 現在的卡型：Target 上哪一個卡型欄位有值（Fable 審查 F4 的五個欄位、多音字，加上方向）。 */
+/** 現在的卡型：Target 的 kind（題型模組 A1 把六個卡型欄位併成一欄），排序照樣子分、文法與變化照種類分；沒有卡型時看方向。 */
 function kindOf(target: Target): string {
-  if (target.group) return 'group';
-  if (target.choice) return 'choice';
-  if (target.order) return 'poem-order';
-  if (target.sentence) return 'sentence-order';
-  if (target.couplet) return 'couplet';
-  if (target.typing) return 'typing-' + target.typing.kind;
-  if (target.direction) return target.direction;
-  return 'flip';
+  const kind = target.kind;
+  if (!kind) return target.direction ?? 'flip';
+  switch (kind.id) {
+    case 'group': return 'group';
+    case 'polyphone': return 'choice';
+    case 'order': return kind.order.style + '-order';
+    case 'couplet': return 'couplet';
+    case 'typing': return 'typing-' + kind.typing.style;
+  }
 }
 
 /** 一個目標底下一題，四種題目形狀；w 是這個名稱該填的字（比較句的答案、填空挖的字）。 */
@@ -37,7 +39,7 @@ function cell(subject: string, name: string, w: string, shape: Shape): string {
   const deck = parseDeck(`---\n科目: ${subject}\n---\n- ${name}\n    - ${SHAPES[shape](w)}\n`);
   assert.equal(deck.targets.length, 1, `${subject}｜${name}｜${shape}`);
   const target = deck.targets[0];
-  const types = target.prompts.map(prompt => target.group || target.choice ? 'pick' : questionType(cardOf({ lt: 'aaa111', deck: 'd', target, prompt, isNew: false, early: false })));
+  const types = target.prompts.map(prompt => target.kind?.id === 'group' || target.kind?.id === 'polyphone' ? 'pick' : questionType(cardOf({ lt: 'aaa111', deck: 'd', target, prompt, isNew: false, early: false })));
   return [kindOf(target), ...types, ...deck.problems.map(problem => problem.code)].join(' ');
 }
 
@@ -83,12 +85,23 @@ const ROWS: readonly [string, string, readonly string[], readonly string[]][] = 
     ['flip flip', 'group pick', 'flip flip', 'flip flip']],
   // 排序：非英文是全詩順序（不用寫全詩）；英文沒寫全詩是句子排序（§2-3〈全詩順序卡〉〈英文的句子排序〉）。
   ['鳥鳴澗 全詩 排序', '人閒桂花落',
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick'],
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick']],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order'],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order']],
   ['間接問句 排序', 'where',
-    ['flip flip', 'flip flip', 'flip flip', 'poem-order pick'],
-    ['flip flip', 'flip flip', 'flip flip', 'sentence-order pick']],
+    ['flip flip', 'flip flip', 'flip flip', 'poem-order order'],
+    ['flip flip', 'flip flip', 'flip flip', 'sentence-order order']],
   ['鳥鳴澗 第 1 句 接句', '夜靜春山空',
+    ['flip flip', 'flip flip', 'couplet flip', 'flip flip'],
+    ['flip flip', 'flip flip', 'couplet flip', 'flip flip']],
+  // 讀得出組又寫了排序、接句（題型模組任務說明 §1-3 第 3 點，Fable 第一輪的窮舉）：比較句照比較卡（比較卡先認）；兩格填空在國語是全詩順序，
+  // 英文沒寫全詩、句子排序又排除讀得出組的名稱，照翻面；一格填空是接句。多音字的括號讀不出組，只有一格填空的是接句。
+  ['寨（寨、塞） 排序', '寨',
+    ['flip flip', 'group pick', 'flip flip', 'poem-order order'],
+    ['flip flip', 'group pick', 'flip flip', 'flip flip']],
+  ['寨（寨、塞） 接句', '寨',
+    ['flip flip', 'group pick', 'couplet flip', 'flip flip'],
+    ['flip flip', 'group pick', 'couplet flip', 'flip flip']],
+  ['長（ㄓㄤˇ、ㄔㄤˊ） 接句', 'ㄓㄤˇ',
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip'],
     ['flip flip', 'flip flip', 'couplet flip', 'flip flip']],
   // 多音字（D-230 第 4 點）：題目裡沒有「長（＿＿）」這種句子時讀不成，照翻面並提示；讀得成的在下面自己的測試。
@@ -136,8 +149,8 @@ const KIND_SAMPLES: readonly { kind: string; type: string; subject: string; text
   { kind: 'typing-inflection', type: 'typed', subject: '英文', text: '- go 過去式 ^aaa111\n    - Yesterday I ＿＿ to school.（去） :: went\n' },
   { kind: 'group', type: 'pick', subject: '國語', text: '- 寨（寨、塞） 相似字 ^aaa111\n    - 山＿＿ :: 寨\n- 塞（寨、塞） 相似字 ^bbb222\n    - 大＿＿車 :: 塞\n' },
   { kind: 'choice', type: 'pick', subject: '國語', text: '- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^aaa111\n    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ\n    - 這條路很長（＿＿）。 :: ㄔㄤˊ\n' },
-  { kind: 'poem-order', type: 'pick', subject: '國語', text: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n' },
-  { kind: 'sentence-order', type: 'pick', subject: '英文', text: '- 間接問句 排序 ^aaa111\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives==.\n' },
+  { kind: 'poem-order', type: 'order', subject: '國語', text: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n' },
+  { kind: 'sentence-order', type: 'order', subject: '英文', text: '- 間接問句 排序 ^aaa111\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives==.\n' },
 ];
 
 for (const { kind, type, subject, text } of KIND_SAMPLES) {
@@ -149,3 +162,15 @@ for (const { kind, type, subject, text } of KIND_SAMPLES) {
     assert.equal(questionType(card), type);
   });
 }
+
+// 題型對得上（題型模組任務說明 §1-7，Fable G2 b）：卡型決定題型，questionType 只看卡片自己（compose.ts），兩邊在這裡對齊。
+// 比較卡、多音字是點選，排序是排序（A2，§1-8）；其他卡型和沒有卡型的照這張卡打不打字（null）。多一種卡型時這張表編譯不過，要寫它是哪一種題型。
+const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null };
+void test('題型對得上：卡型範例的每一張卡，questionType 和卡型一致', async t => {
+  for (const { kind, subject, text } of KIND_SAMPLES) {
+    const h = await setup(t, { [`Essence Cards/${subject}/範例.md`]: `---\n科目: ${subject}\n---\n${text}` });
+    const card = view(await h.open({ subject })).card;
+    const own = card.target.kind;
+    assert.equal(questionType(card), (own && TYPE_OF[own.id]) ?? (card.typed ? 'typed' : 'flip'), kind);
+  }
+});
