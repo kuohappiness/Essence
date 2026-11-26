@@ -108,6 +108,12 @@ class Errors {
   add(where: string, message: string): void { this.list.push(`${where}：${message}`); }
 }
 
+/** 鍵拼錯不會默默用預設值（L2 第 1 輪 I）：頂層與門檻只收認得的鍵。 */
+function knownKeys(raw: Raw, known: readonly string[], where: string, errors: Errors): void {
+  for (const key of Object.keys(raw)) if (!known.includes(key)) errors.add(where, `不認得「${key}」（認得的是 ${known.join('、')}）`);
+}
+const TOP_KEYS = ['名稱', '課庫', '系統提示', '逾時分鐘', '同時', '課', '組', '生成', '評審', '評審重評', '裁定', '評分表', '門檻', '錯誤分級', '加深', '對照'];
+const GATE_KEYS = ['基準', '候選', '生成器', '重大錯誤', '收益', '收益校正', '傷到學習容許', '不能變差', '多餘的題多出', '近義重複多出', '多漏差距', '多漏列數', '次要', '打平最少份數', '打平較省', '時間預算'];
 const text = (value: unknown): string | null => typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : null;
 function need(raw: Raw, key: string, where: string, errors: Errors): string {
   const value = text(raw[key]);
@@ -231,6 +237,7 @@ export function readConfig(source: string): Config {
   let doc: unknown;
   try { doc = parse(source); } catch (error) { throw Error(`測試.yaml 讀不懂：${error instanceof Error ? error.message : String(error)}`); }
   if (!isRaw(doc)) throw Error('測試.yaml 要是一個物件');
+  knownKeys(doc, TOP_KEYS, '設定', errors);
 
   const lessons = list(doc['課'], '課', errors).map((raw, i): LessonConfig => {
     const where = `課 第 ${String(i + 1)} 項`;
@@ -328,7 +335,8 @@ export function readConfig(source: string): Config {
   const majorText = text(rawGates['重大錯誤']) ?? '不比基準多';
   const tolerance = (raw: unknown, where: string, fallback: Tolerance): Tolerance => {
     if (raw === undefined) return { ...fallback };
-    const item = isRaw(raw) ? raw : {};
+    if (!isRaw(raw)) { errors.add(where, '要寫成 { 百分比, 下限 }，例如 { 百分比: 10%, 下限: 0.5 }'); return { ...fallback }; }
+    const item = raw;
     return { percent: item['百分比'] === undefined ? fallback.percent : percent(item['百分比'], `${where} 百分比`, errors), floor: count(item['下限'], fallback.floor, `${where} 下限`, errors) };
   };
   const noWorse = { ...NO_WORSE_DEFAULTS };
@@ -346,8 +354,8 @@ export function readConfig(source: string): Config {
   const gates: Gates = {
     baseline, candidates, generators: gateGenerators,
     majorErrors: majorText === '零' ? 'zero' : majorText === '不比基準多' ? 'notMore' : (errors.add('門檻 重大錯誤', '要寫「零」或「不比基準多」'), 'zero'),
-    rowMissGap: Number(rawGates['多漏差距'] ?? 0.5),
-    missedRows: Number(rawGates['多漏列數'] ?? 1),
+    rowMissGap: count(rawGates['多漏差距'], 0.5, '門檻 多漏差距', errors),
+    missedRows: count(rawGates['多漏列數'], 1, '門檻 多漏列數', errors),
     extraPrompts: count(rawGates['多餘的題多出'], 0, '門檻 多餘的題多出', errors),
     harm: tolerance(rawGates['傷到學習容許'], '門檻 傷到學習容許', { percent: 0, floor: 0 }),
     benefits: list(rawGates['收益'], '門檻 收益', errors).map((raw, i) => {
@@ -370,6 +378,10 @@ export function readConfig(source: string): Config {
   };
   if (rawGates['近義重複多出'] !== undefined) errors.add('門檻 近義重複多出', '改成「多餘的題多出」（每組題數減一加總，rule-test-d236.md §4）');
   if (!gates.benefits.length) errors.add('門檻', '少了「收益」');
+  // 同一個指標列兩次會讓校正的 k 變大，門檻變嚴。
+  gates.benefits.forEach(({ metric }, i) => { if (gates.benefits.findIndex(each => each.metric === metric) !== i) errors.add('門檻 收益', `「${metric}」重複`); });
+  if (!Number.isInteger(gates.tieMinCopies)) errors.add('門檻 打平最少份數', '要是整數');
+  knownKeys(rawGates, GATE_KEYS, '門檻', errors);
 
   // 加深與對照（rule-test-d236.md §2、§6-1、§8）。
   let deepen: Config['deepen'] = null;

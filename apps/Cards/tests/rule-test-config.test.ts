@@ -177,6 +177,24 @@ void test('readConfig：收益與不能變差只收學習面的指標（D-236 �
   });
 });
 
+void test('readConfig：門檻寫錯不會默默變成別的值（L2 第 1 輪 I）：容許量要寫成物件、不認得的鍵、收益重複、份數要整數、差距要是數', () => {
+  const config = EXAMPLE
+    .replace('傷到學習容許: { 百分比: 10%, 下限: 0.5 }', '傷到學習容許: 0.5\n  傷到學習容許量: 1\n  打平最少份數: 2.5\n  多漏差距: abc')
+    .replace('收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 每個必備平均幾題, 至少: 10% }]', '收益: [{ 指標: 傷到學習, 至少: 20% }, { 指標: 傷到學習, 至少: 10% }]')
+    + '逾時: 30\n';
+  assert.throws(() => readConfig(config), (error: Error) => {
+    const lines = error.message.split('\n').slice(1);
+    const at = (where: string): string => lines.find(line => line.includes(where)) ?? '';
+    assert.match(at('門檻 傷到學習容許：'), /要寫成 \{ 百分比, 下限 \}/);
+    assert.match(at('不認得「傷到學習容許量」'), /門檻/);
+    assert.match(at('不認得「逾時」'), /逾時分鐘/);
+    assert.match(at('門檻 收益'), /傷到學習.*重複/);
+    assert.match(at('門檻 打平最少份數'), /整數/);
+    assert.match(at('門檻 多漏差距'), /0 以上的數/);
+    return true;
+  });
+});
+
 void test('readConfig：加深、加深規則與對照（rule-test-d236.md §2、§6-1、§8）', () => {
   const withDeepen = EXAMPLE
     .replace('      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }', '      任務段: { 點選填空說明: 不送, 已有目標說明: 一行, 三段: 要, 已有目標清單: 精簡 }\n    加深規則: { commit: 288ba1ef, 檔案: [apps/Cards/docs/card-rules/next/core.md] }')
