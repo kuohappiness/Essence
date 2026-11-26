@@ -100,8 +100,8 @@ export interface MergedDeepen {
   issues: MergedDeepenIssue[];
 }
 
-/** 問題算同一筆：同一種、同一項；不在項裡的，同一種、行號有重疊。 */
-const sameIssue = (a: { kind: string; item: string; lines: readonly number[] }, b: { kind: string; item: string; lines: readonly number[] }): boolean =>
+/** 問題算同一筆：同一種、同一項；不在項裡的，同一種、行號有重疊。合併兩位評審與裁定改記（unblind）共用。 */
+export const sameIssue = (a: { kind: string; item: string; lines: readonly number[] }, b: { kind: string; item: string; lines: readonly number[] }): boolean =>
   a.kind === b.kind && (a.item || b.item ? a.item === b.item : a.lines.some(line => b.lines.includes(line)));
 
 /** 合併一份加深的兩位評審（§6-3）。 */

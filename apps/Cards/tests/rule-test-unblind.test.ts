@@ -105,6 +105,28 @@ void test('指標：照合併表與裁定另算；問題兩位聯集去重；教
   assert.deepEqual(report.rows.L3.map(each => [each.id, each.effect]), [['R1', null], ['R2', '改必備'], ['M1', null]]);
 });
 
+void test('裁定改記的去重（§3）：只有 Codex 記重大（有兩題的目標的名稱行）、Fable 在那個目標的第 1 題記判錯；改記判錯時和合併同一條規則，只算一筆', async () => {
+  const folder = await blinded({ 乙: SECOND });
+  const decks = join(folder.root, '評分', '批1', '卡組', 'L3');
+  const second = readdirSync(decks).map(name => name.replace('.md', '')).find(code => readFileSync(join(decks, `${code}.md`), 'utf8').includes('「借入」的英文'))!;
+  const codex = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '重大錯誤', lines: [2], rubric: 'M1', note: 'borrow 的字義' }); } });
+  const fable = fakeJudge({ shape: result => { result.issues.push({ deck: second, kind: '判錯', lines: [3], rubric: '', note: '' }); } });
+  await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
+  await runDisputes(folder, {
+    adapters: {
+      claude: request => {
+        request.record('{}', '');
+        const value = { verdict: '不成立', quality: '判錯', reason: '字義沒錯，但答案只收一種說法' };
+        return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 's', warnings: [], ms: 1, models: [], structured: value });
+      },
+    },
+    log: () => {},
+  });
+  checkFolder(folder, () => {});
+  const deck = unblindFolder(folder, { log: () => {} }).decks.find(each => each.code === second)!;
+  assert.deepEqual([deck.quality.判錯, deck.harm.判錯, deck.major], [1, 1, 0]);
+});
+
 void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀錄加一行；再跑不重算、不重記', async () => {
   const { folder } = await judged();
   await ruling(folder);

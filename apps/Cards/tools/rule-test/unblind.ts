@@ -11,7 +11,8 @@ import { batchNumbers, lessonDir, openFolder, rubricOf, sha256File, writeOnce, t
 import { git, readFrozenSteps, verifyLock } from './freeze.ts';
 import { readFormat } from './check.ts';
 import { jobState, planJobs, readEvents } from './jobs.ts';
-import { duplicateGroups, leakCandidates, type MergedIssue, type Verdict } from './merge.ts';
+import { duplicateGroups, leakCandidates, sameSpot, type MergedIssue, type Verdict } from './merge.ts';
+import { sameIssue } from './deepen-judge.ts';
 import { deepenChances, parseRubric, type RubricRow } from './rubric.ts';
 import type { JudgeResult } from './judge.ts';
 import { allContrasts } from './contrast.ts';
@@ -170,11 +171,6 @@ function effectiveRows(rows: readonly RubricRow[], effects: readonly Effect[]): 
   });
 }
 
-/** 裁定不成立、改記成另一種時，同一處已經有評審記了那一種就不再記（§3 去重：同一份、同一處、同一種算一筆）。卡組與加深共用。 */
-function already<T extends { kind: string }>(issues: readonly T[], kind: string, place: (issue: T) => string, at: string): boolean {
-  return issues.some(each => each.kind === kind && place(each) === at);
-}
-
 export function unblindFolder(folder: Folder, options: { batch?: number; log?: (line: string) => void } = {}): BatchReport {
   const { log = console.log } = options;
   verifyLock(folder);
@@ -228,7 +224,8 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
       const dispute = disputes.majors.find(each => each.block === block.name && each.code === code && each.at === issue.at.join('＋'))!;
       const ruling = rulings.majors.get(dispute.id)!;
       if (ruling.verdict === '成立') { majorRuled++; issues.push({ ...issue, notes: [...issue.notes, `裁定 ${dispute.id} 成立`] }); continue; }
-      if (ruling.quality && !already(merged.issues, ruling.quality, each => each.at.join('＋'), issue.at.join('＋'))) issues.push({ ...issue, kind: ruling.quality, notes: [...issue.notes, `裁定 ${dispute.id} 不成立，改記${ruling.quality}`] });
+      // 裁定不成立、改記成另一種時，同一題已經有評審記了那一種就不再記（§3 去重，和合併同一條規則）。
+      if (ruling.quality && !merged.issues.some(each => each.kind === ruling.quality && sameSpot(deck, each.lines, issue.lines))) issues.push({ ...issue, kind: ruling.quality, notes: [...issue.notes, `裁定 ${dispute.id} 不成立，改記${ruling.quality}`] });
     }
     const quality = Object.fromEntries(QUALITY_KINDS.map(kind => [kind, issues.filter(issue => issue.kind === kind).length])) as Record<QualityKind, number>;
     const qualityIssues = issues.filter(issue => (QUALITY_KINDS as readonly string[]).includes(issue.kind));
@@ -271,7 +268,7 @@ export function unblindFolder(folder: Folder, options: { batch?: number; log?: (
         const dispute = disputes.majors.find(each => each.stage === '加深' && each.block === block.name && each.code === code && each.at === deepenAt(issue))!;
         const ruling = rulings.majors.get(dispute.id)!;
         if (ruling.verdict === '成立') deepenMajor++;
-        else if (ruling.quality && !already(deepen?.issues ?? [], ruling.quality, deepenAt, deepenAt(issue))) kinds.push(ruling.quality);
+        else if (ruling.quality && !(deepen?.issues ?? []).some(each => sameIssue({ ...issue, kind: ruling.quality }, each))) kinds.push(ruling.quality);
       }
       const verdicts = Object.values(deepen?.items ?? {});
       deepenMetrics = {

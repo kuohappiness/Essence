@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { JudgeResult } from '../tools/rule-test/judge.ts';
-import { duplicateGroups, mergeDeck, mergeVerdict, twoPrompts, type Verdict } from '../tools/rule-test/merge.ts';
+import { duplicateGroups, mergeDeck, mergeVerdict, sameSpot, twoPrompts, type Verdict } from '../tools/rule-test/merge.ts';
 import { wins } from '../tools/rule-test/stats.ts';
 
 void test('合併表 §6-2 的九格：兩位都有是有、都沒有是沒有（漏），其他都是部分', () => {
@@ -57,6 +57,21 @@ void test('有兩題的目標：名稱行和其中一題算同一筆；同一位
   const fable = result(['有'], [issue('一題多事', [6])]);
   const merged = mergeDeck('S1', DECK, new Map([['codex', codex], ['fable', fable]]));
   assert.deepEqual(merged.issues.map(each => [each.kind, each.at.join('＋'), each.judges.join('、'), each.lines.join(',')]), [['一題多事', '目標 2', 'codex、fable', '5,6']]);
+});
+
+void test('裁定改記時「同一題」（§3 去重）：和合併兩位評審同一條規則；名稱行和題目行兩個方向都算，同一個目標的兩題不算', () => {
+  // DECK：第 1 行標題（目標外），第 2 行只有一題的目標（第 3 行是題、第 4 行是它的詳解），第 5 行有兩題的目標（第 6、7 行）。
+  const cases: [number[], number[], boolean][] = [
+    [[5], [6], true], [[6], [5], true], [[6], [7], false], [[2], [3], true], [[3], [4], true],
+    [[6, 7], [6], true], [[1], [1], true], [[1], [2], false], [[3], [6], false], [[], [6], false],
+  ];
+  for (const [a, b, expected] of cases) assert.equal(sameSpot(DECK, a, b), expected, `${a.join('、')} 對 ${b.join('、')}`);
+  // 整類：任兩組行號，合併成一筆若且唯若 sameSpot 說是同一題。
+  const sets = [[1], [2], [3], [4], [5], [6], [7], [2, 3], [5, 6], [6, 7], [3, 6]];
+  for (const a of sets) for (const b of sets) {
+    const merged = mergeDeck('S1', DECK, new Map([['codex', result([], [issue('判錯', a)])], ['claude', result([], [issue('判錯', b)])]]));
+    assert.equal(merged.issues.length === 1, sameSpot(DECK, a, b), `${a.join('、')} 對 ${b.join('、')}`);
+  }
 });
 
 void test('引言框（候選卡片、加進已有的學習目標）裡的題分開算；目標範圍外的行（框的標題、備註）不歸給前一題（PR #54 Codex P2）', () => {

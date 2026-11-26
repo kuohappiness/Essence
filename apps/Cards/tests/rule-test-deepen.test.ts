@@ -13,7 +13,7 @@ import { encodeEntry } from '../src/core/study/index.ts';
 import type { StepRequest } from '../tools/rule-test/adapters.ts';
 import { blindFolder } from '../tools/rule-test/blind.ts';
 import { planCopy, readPlan, runDeepen } from '../tools/rule-test/deepen.ts';
-import { mergeDeepen, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
+import { mergeDeepen, sameIssue, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
 import { resultFile, runJudges } from '../tools/rule-test/judge.ts';
 import { checkFolder } from '../tools/rule-test/check.ts';
 import { runDisputes } from '../tools/rule-test/disputes.ts';
@@ -311,6 +311,14 @@ void test('合併加深（§6-3）：項兩位都對是對、都錯是錯、不�
   assert.deepEqual(merged.disagreements, ['D1']);
   assert.deepEqual(merged.items, { '1-1': '歧見', '1-2': '對' });
   assert.deepEqual(merged.issues.map(issue => [issue.kind, issue.item, issue.lines, issue.judges]), [['判錯', '1-2', [8, 7], ['甲', '乙']], ['小問題', '', [5], ['乙']]]);
+  // 同一筆的規則（裁定改記時 unblind 也用它）：有項的比項；沒寫項的比行號有沒有重疊；種類要一樣。
+  const at = (kind: string, item: string, lines: number[]): { kind: string; item: string; lines: number[] } => ({ kind, item, lines });
+  const cases: [ReturnType<typeof at>, ReturnType<typeof at>, boolean][] = [
+    [at('判錯', '1-2', [8]), at('判錯', '1-2', [7]), true], [at('判錯', '1-1', [8]), at('判錯', '1-2', [8]), false],
+    [at('判錯', '', [15]), at('判錯', '', [15, 16]), true], [at('判錯', '', [15]), at('判錯', '', [16]), false],
+    [at('判錯', '1-2', [8]), at('判錯', '', [8]), false], [at('判錯', '', [5]), at('小問題', '', [5]), false],
+  ];
+  for (const [x, y, expected] of cases) assert.equal(sameIssue(x, y), expected, JSON.stringify([x, y]));
 });
 
 void test('加深評分：每個有加深的區組、每位評審另開一個對話；提示列加深機會與每一份的項；結果檔 -加深、鎖定表列進去', async () => {
