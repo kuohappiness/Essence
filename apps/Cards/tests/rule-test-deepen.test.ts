@@ -20,6 +20,7 @@ import { runDisputes } from '../tools/rule-test/disputes.ts';
 import { unblindFolder } from '../tools/rule-test/unblind.ts';
 import { openFolder, sha256File, type Folder } from '../tools/rule-test/folder.ts';
 import { deepenSources, deepenSourcesHash, freezeFolder, readDeepenFrozen, readFrozenSteps } from '../tools/rule-test/freeze.ts';
+import { extendFolder } from '../tools/rule-test/extend.ts';
 import { runQueue } from '../tools/rule-test/generate.ts';
 import { jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { deepenSectionText } from '../tools/rule-test/prompts.ts';
@@ -200,6 +201,19 @@ void test('deepen：一篇一個新對話、附教材、模型推理同生成；
   assert.deepEqual([...block.deepens].sort(), [entry.code, other.code].sort());
   assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '加深', `${entry.code}.md`)));
   assert.ok(existsSync(join(folder.root, '評分', '批1', '加深區組', block.name, '地圖', `${other.code}.md`)));
+});
+
+void test('extend 只跑新的份的加深（§13 第 8 條）：第一批做完、匿名後補一份，deepen 只送新的兩篇', async () => {
+  const folder = await generated();
+  await runDeepen(folder, { adapters: { claude: fakeDeepener().adapter }, log: () => {} });
+  blindFolder(folder, { log: () => {} });
+  extendFolder(folder, { lesson: 'L3', generator: 'claude', count: 1, reason: '補一份' });
+  await runQueue(folder, { adapters: { claude: request => Promise.resolve({ kind: 'ok', reply: request.text.startsWith('組乙') ? THREE : DECK, session: null, warnings: [], ms: 1200, models: [] }) }, log: () => {} });
+  const fake = fakeDeepener();
+  await runDeepen(folder, { adapters: { claude: fake.adapter }, log: () => {} });
+  assert.equal(fake.requests.length, 2);
+  const events = readEvents(folder, join('加深', '事件.jsonl'));
+  assert.deepEqual(['甲', '乙'].map(group => jobState(events, `${group}-L3-claude-2~加深~1`).status), ['done', 'done']);
 });
 
 void test('匿名之後不再加深（§6-2）：放棄的篇重開了，deepen 也不跑；那一份的加深固定在匿名時', async () => {
