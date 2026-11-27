@@ -14,7 +14,7 @@ export { blanksIn, pickKey, unbold } from './kinds/shared.ts';
 export { pickWord } from './kinds/group.ts';
 export { choiceProblems, choiceStem } from './kinds/polyphone.ts';
 export { mentions, pairWordOf, readTyping } from './kinds/typing.ts';
-export { ALT_LIKE, movingTails, otherSentences, shownTails } from './kinds/order.ts';
+export { ALT_LIKE, altMentions, movingTails, otherSentences, shownTails } from './kinds/order.ts';
 
 /** 題目階段讀出的卡型與提示（比較卡、多音字的診斷；一個目標只有一種）。 */
 interface KindReading { kind: Kind | null; problems: PickReading['problems'] }
