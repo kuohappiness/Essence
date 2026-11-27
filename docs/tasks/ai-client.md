@@ -80,7 +80,7 @@ packages/ai-client/
 
 用法寫在套件的 [README](../../packages/ai-client/README.md)，型別以 `src/types.ts` 為準。這裡只記會影響之後的決定：
 
-- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
+- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`（送出前估費用）在 Cards 要顯示預估時加了（[Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) §3，2026-11-27，用法見套件的 README）；`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄與證據照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。標頭組好之後整份驗一次：名稱要是合法的 token、值不能有換行或 NUL、每個字都在 0～255（標準的 `Headers` 只收這些），認證標頭不能用套件固定的 `content-type`、`accept`；目錄、自訂服務、`extraHeaders`、認證的前綴與金鑰哪一個壞了，都回 `invalid_request`、不送出，訊息只寫標頭名稱（L2 第四輪 第 9 項）。
