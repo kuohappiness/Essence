@@ -183,8 +183,8 @@ const decoded = (text: string): string => text.replace(/&(?:#[xX]([0-9a-fA-F]+)|
 /**
  * 題目第一格前面的字結尾是開頭的引號或括號嗎（§1 第 5 點最後一項）：引號跟著第一格，換一種排法就跟錯詞塊。看解開字元參照後看得到的字（L2 第二輪 F1、F3）：
  * - 開頭的括號、引號（`(`、`“`、`「`…）是；
- * - 直引號（半形、全形當同一種）照成對數：到這裡是單數個，最後一個就是開頭的（`—"`、`:"` 是，`"I'm tired," ` 不是）；
- * - 單引號一樣照成對數，前一個字是字母或數字的是所有格（`boys' `），不是；夾在兩個字母中間的（`I'm`）不算進成對數；
+ * - 雙直引號（半形、全形當同一種）照成對數：到這裡是單數個，最後一個就是開頭的（`—"`、`:"` 是，`"I'm tired," ` 不是）；
+ * - 單直引號不數（L2 第三輪 F6）：前一個字是字母或數字的是所有格或結束的引號（`boys' `），不是；其他的看不出來，當成是；
  * - 最後是認不得的字元參照：看不出是不是引號，當成是（這一題只照題目那一行判）。
  */
 function opensFirstBlock(head: string): boolean {
@@ -195,10 +195,8 @@ function opensFirstBlock(head: string): boolean {
   if (/[\p{Ps}\p{Pi}]/u.test(last)) return true;
   const word = (char: string | undefined): boolean => char !== undefined && /[\p{L}\p{N}]/u.test(char);
   if (last === '"' || last === '＂') return chars.filter(char => char === '"' || char === '＂').length % 2 === 1;
-  if (last === "'" || last === '＇') {
-    if (word(chars.at(-2))) return false;
-    return chars.filter((char, at) => (char === "'" || char === '＇') && !(word(chars[at - 1]) && word(chars[at + 1]))).length % 2 === 1;
-  }
+  // 單引號也當撇號用（所有格 boys'、年代 '90s），數不準（L2 第三輪 F6）：前一個字是字母或數字的是所有格或結束的引號，其他的看不出來，算開頭。
+  if (last === "'" || last === '＇') return !word(chars.at(-2));
   return false;
 }
 

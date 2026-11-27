@@ -83,6 +83,10 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   invalid('她說她累了：&nbsp;"==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
   invalid('她說她累了：&OpenCurlyDoubleQuote;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
   invalid('他說 \'==I\'m tired==,\' ==she== ==said==.', ['另一種排法：==she== ==said==, \'==I\'m tired==.\''], /引號/);
+  // L2 第三輪 F6：單引號也當撇號用（所有格、年代），數不準；結尾的單引號前一個字不是字母或數字時看不出是開頭還是結束，都不認。
+  invalid('The boys\' teacher said: \'==we== ==learn== ==today==.\'', ['另一種排法：==today==, \'==we== ==learn==.\''], /引號/);
+  invalid('A phrase from the \'90s: \'==we== ==learn== ==today==.\'', ['另一種排法：==today==, \'==we== ==learn==.\''], /引號/);
+  invalid('\'The boys\' coats are blue,\' ==she== ==said== ==quietly==.', ['另一種排法：==she== ==quietly== ==said==.'], /引號/);
 
   const twice = one(BECAUSE, [ALT, ALT]);
   assert.deepEqual(codes(twice), [[4, 'order-alt-invalid']], '第二行和前面一行相同');
@@ -121,7 +125,7 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   assert.equal(othersOf(spaced)?.length, 1);
 });
 
-void test('結束的引號（L2 第一輪 R1、第二輪 F3）：直引號照成對數，第一格前面的引號都成對時是結束的引號，照樣認；所有格的 \' 不算', () => {
+void test('結束的引號（L2 第一輪 R1、第二輪 F3、第三輪 F6）：雙引號照成對數，第一格前面的都成對時是結束的引號，照樣認；單引號只認前一個字是字母或數字的（所有格）', () => {
   const accepted = (question: string, alt: string, words: readonly string[]): void => {
     const deck = one(question, [`另一種排法：${alt}`], '說話的人 排序');
     assert.deepEqual(codes(deck), [], question);
