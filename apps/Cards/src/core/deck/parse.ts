@@ -313,6 +313,11 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
      * 欄位照樣屬於整個目標。
      */
     const extraOf = (child: Item): string => markdown(child, child.indent, false, ALT_LIKE.test(child.text));
+    /** 寫在題目的下一層、當成那一題補充的另一種排法：句子排序在 readKind 讀，其他卡型下面提示；其他位置的由 misplaced 提示。 */
+    const placed = new Set<Item>();
+    const placeAlternatives = (children: readonly Item[]): void => {
+      for (const child of children) if (ALT_LIKE.test(child.text)) placed.add(child);
+    };
     function prompt(node: Item): Prompt {
       const body = stripId(node.text).text;
       const { colon, blanks } = questionSyntax(body);
@@ -323,6 +328,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
         const multiline = !answer;
         if (multiline) answer = children.map(child => markdown(child)).filter(Boolean).join('\n');
         const extras = multiline ? [] : children.map(child => markdown(child));
+        if (!multiline) placeAlternatives(children);
         if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
         let typed: readonly string[] | null = null;
@@ -337,6 +343,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
       else if (typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字；要打字改成問答題');
       const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(extraOf), fingerprint: fingerprint(body, '') };
+      placeAlternatives(children);
       const own = anchorNotes(children);
       if (own) promptNotes.set(cloze, own);
       return cloze;
@@ -352,12 +359,9 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     };
     const promptNotes = new Map<Prompt, string[]>();
     let notes: string[] | null = null;
-    /** 寫在目標底下、少縮一層的另一種排法（tasks/sentence-order-alternatives.md §1 第 6 點）：照現在的讀法當題目或共用補充，只提示。 */
-    const shallow: Item[] = [];
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
       if (fieldStart.test(child.text)) continue;
-      if (ALT_LIKE.test(child.text)) shallow.push(child);
       const syntax = questionSyntax(stripId(child.text).text);
       if (syntax.colon >= 0 || syntax.blanks.length) target.prompts.push(prompt(child));
       else target.shared.push(markdown(child));
@@ -382,7 +386,16 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     for (const each of target.prompts) {
       if (!sentence && each.extras.some(extra => ALT_LIKE.test(extra))) problems.push({ line: each.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法只有英文句子排序的題目底下認得，這裡照背面補充顯示' });
     }
-    for (const node of shallow) addProblem(node, 'order-alt-invalid', '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充');
+    // 寫在題目的下一層以外的地方（§1 第 6 點、L2 第一輪 R3）：照現在的讀法（另一題、共用補充、補充或答案的一部分），只提示。
+    const misplaced = (node: Item, depth: number): void => {
+      if (ALT_LIKE.test(node.text) && !placed.has(node)) {
+        addProblem(node, 'order-alt-invalid', depth === 0 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在最上層會被當成另一個學習目標'
+          : depth === 1 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充'
+          : '另一種排法要直接寫在那一題的下一層；寫在補充、答案或別的子項目底下，照原本的讀法顯示，不算對的順序');
+      }
+      for (const child of node.children) misplaced(child, depth + 1);
+    };
+    misplaced(root, 0);
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
       seenIds.add(target.id);

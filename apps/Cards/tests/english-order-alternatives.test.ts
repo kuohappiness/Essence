@@ -161,6 +161,26 @@ void test('少縮一層、寫在目標底下（§1 第 6 點）：認法照現�
   assert.deepEqual(codes(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n    - 另一種排法:because I was tired.\n`)), [[5, 'order-alt-invalid']], '半形冒號也提示');
 });
 
+void test('寫得更深或寫在最上層（L2 第一輪 R3）：補充、多行答案、別的子項目底下，最上層；照現在的讀法，提示指到那一行', () => {
+  const deeper = (deck: Deck, line: number, needle: RegExp): void => {
+    assert.deepEqual(codes(deck), [[line, 'order-alt-invalid']]);
+    assert.match(deck.problems[0].message, needle);
+  };
+  const explained = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - 詳解：連接詞放前面時中間加逗號\n            - ${ALT}\n`);
+  deeper(explained, 6, /下一層/);
+  assert.equal(othersOf(explained), undefined);
+  assert.deepEqual(explained.targets[0].prompts[0].extras, [`詳解：連接詞放前面時中間加逗號\n    - ${ALT}`], '照補充留著');
+  const answer = english('- 頻率的問法\n    - How often? ::\n        - 另一種排法：==today==, ==we== ==learn==.\n');
+  deeper(answer, 5, /下一層/);
+  const prompt = answer.targets[0].prompts[0];
+  assert.equal(prompt.kind === 'qa' ? prompt.answer : null, '另一種排法：==today==, ==we== ==learn==.', '照多行答案讀');
+  deeper(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n    - 記憶錨點：because 放前面要加逗號\n        - ${ALT}\n`), 6, /下一層/);
+  const top = english('- 另一種排法：==today==, ==we== ==learn==.\n');
+  deeper(top, 3, /縮到那一題底下.*最上層/s);
+  assert.equal(top.targets[0].implicit, true, '照現在的讀法是最上層的一題');
+  assert.deepEqual(codes(english('- 另一種排法：because I was tired, I went to bed early.\n')), [], '最上層沒有填空的是一般筆記，不提示');
+});
+
 // 字鍵（§3）：直接用 cardOf 算出第 0～20 次。甲＝I went to bed early、乙＝because、丙＝I was tired。
 const keysAt = (deck: Deck, times: number): readonly string[] => {
   const target = deck.targets[0];

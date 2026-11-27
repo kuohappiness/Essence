@@ -50,6 +50,10 @@ void test('另一種排法：認得的不報；不認、少縮一層、排錯的
   assert.deepEqual(altErrors(sentence().join('\n') + '\n    - 另一種排法：==because== ==I was tired==, ==I went to bed early==.\n'), [[3, 'order-alt-invalid']]);
   assert.deepEqual(altErrors('- 時間的位置 排序\n    - 我們明天中午見。See you ==tomorrow== ==at noon==.\n        - 另一種排法：See you ==at noon== ==tomorrow==.\n'), [[2, 'order-alt-all-right']]);
   assert.deepEqual(altErrors('- 鳥鳴澗 排序\n    - ==人閒桂花落==，==夜靜春山空==。\n        - 另一種排法：==夜靜春山空==，==人閒桂花落==。\n', '國文'), [[2, 'order-alt-invalid']]);
+  // L2 第一輪 R2、R3：底下有資料欄位、寫在詳解底下也是錯誤。
+  const alt = '另一種排法：==because== ==I was tired==, ==I went to bed early==.';
+  assert.deepEqual(altErrors([...sentence(alt), '            - 狀態：暫停'].join('\n') + '\n'), [[2, 'order-alt-invalid']]);
+  assert.deepEqual(altErrors([...sentence('詳解：連接詞放前面時中間加逗號'), '            - ' + alt].join('\n') + '\n'), [[4, 'order-alt-invalid']]);
 });
 
 void test('另一種排法：候選框與已有框也擋，行號是原文的行；已有框也跑英文的排序檢查', () => {
