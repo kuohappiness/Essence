@@ -2,15 +2,18 @@
 // 鎖.json 記設定、提示、快照、教材與評分表的雜湊和當時的 commit；之後每一步開頭只核對這些雜湊（verifyLock），不要求 repo 停在同一個 commit。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
-import { RULE_SUBJECTS } from '../../src/core/ai/index.ts';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { RULE_SUBJECTS, unitCode, type EmbeddedRule } from '../../src/core/ai/index.ts';
 import { cliPath } from '../cli-path.ts';
-import type { RuleSource } from './config.ts';
+import { deepenGroups, type RuleSource } from './config.ts';
 import { lessonDir, libraryOf, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { checkInherited, templateHashes } from './init.ts';
-import { APP_ROOT, buildFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
+import { EVALUATION } from './levels.ts';
+import { APP_ROOT, buildFor, deepenRulesFor, REPO_ROOT, subjectOf, type PromptPart } from './prompts.ts';
 import { checkRubricFile } from './rubric.ts';
-import { parseSnapshotFile, readSnapshot, type Snapshot } from './snapshot.ts';
+import { evaluationSpec, unreachable } from './spec.ts';
+import { appendEvent } from './jobs.ts';
+import { parseSnapshotFile, readVault, snapshotOf, unitDecks, wordDecksOf, type Snapshot, type WordDecks } from './snapshot.ts';
 
 export interface FrozenStep {
   group: string;
@@ -38,6 +41,8 @@ export interface Lock {
   /** 凍結時 repo 有沒 commit 的修改（只記錄；外掛來源用到的檔有修改時不會走到這裡）。 */
   dirty: boolean;
   version: string;
+  /** 評估版本（rule-test-d236.md §2）：之後每一步都核對，和工具的不同就停下。 */
+  evaluation: string;
   /** 檔案 → SHA-256。測試資料夾裡的寫相對路徑；課庫的檔寫 `<課庫>/<課>/<檔>`。 */
   files: Record<string, string>;
 }
@@ -62,12 +67,47 @@ export function readLock(folder: Folder): Lock | null {
 export function verifyLock(folder: Folder): Lock {
   const lock = readLock(folder);
   if (!lock) throw Error('還沒凍結（先跑 freeze）');
+  if (lock.evaluation !== EVALUATION) throw Error(`這個資料夾是用舊的評估版本（${lock.evaluation ?? 'D-236 以前'}）凍結的，現在的工具是 ${EVALUATION}：用凍結時的 commit（${lock.commit.slice(0, 8)}）跑`);
   const changed = Object.entries(lock.files).filter(([key, hash]) => {
     const path = located(folder, key);
     return !existsSync(path) || sha256File(path) !== hash;
   }).map(([key]) => key);
   if (changed.length) throw Error(`凍結之後改過或不見了：${changed.join('、')}（要改就開新的測試資料夾，或照 §5-2 存成新版評分表）`);
   return lock;
+}
+
+/** 使用者同意用量（--confirmed）：在事件裡記下〈評估規格〉的雜湊，代表使用者看過的就是這一份（rule-test-d236.md §11）。 */
+export function confirmSpec(folder: Folder, log?: string): void {
+  appendEvent(folder, { type: 'confirmed', detail: { spec: sha256File(join(folder.root, SPEC)) } }, log);
+}
+
+/** 外掛的加深任務段（§6-1 第 5 點）：凍結時記雜湊，模擬時核對。 */
+/**
+ * 模擬加深用到的外掛原始碼（D-236 §11；L2 第 1 輪 O：不只 deepen-prompt.ts，planDraft、unitSiblings、learnedWords、inspectDeepen 也會改變送出的提示）：
+ * 從 deepen.ts 起順著相對 import 找（工具的檔也跟著找），收 src 底下的檔。
+ */
+export function deepenSources(): string[] {
+  const src = join(APP_ROOT, 'src') + sep, seen = new Set<string>(), out: string[] = [];
+  const visit = (file: string): void => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    if (file.startsWith(src)) out.push(file);
+    for (const match of readFileSync(file, 'utf8').matchAll(/(?:^|\n)\s*(?:import|export)\b[^'";]*?(?:from\s*)?'(\.{1,2}\/[^']+\.ts)'/g)) visit(resolve(dirname(file), match[1]));
+  };
+  visit(join(import.meta.dirname, 'deepen.ts'));
+  return out.sort();
+}
+/** 這些檔合成一個雜湊（相對路徑＋各自的雜湊），凍結時記、模擬時核對。 */
+export const deepenSourcesHash = (): string => sha256Text(deepenSources().map(file => `${relative(APP_ROOT, file).split(sep).join('/')} ${sha256File(file)}`).join('\n'));
+const DEEPEN_RULES = join('凍結', '加深', '規則.json');
+/** 〈評估規格〉的位置（§11）。 */
+export const SPEC = join('凍結', '評估規格.md');
+/** 凍結的加深規則：每一組送的規則全文（已經組好、算好雜湊），與 deepen-prompt.ts 的雜湊。 */
+export interface DeepenFrozen { plugin: string; groups: Record<string, EmbeddedRule[]> }
+export const readDeepenFrozen = (folder: Folder): DeepenFrozen => JSON.parse(readFileSync(join(folder.root, DEEPEN_RULES), 'utf8')) as DeepenFrozen;
+export function readWordDecks(folder: Folder, lesson: string): WordDecks | null {
+  const path = join(folder.root, '凍結', '加深', '單字卡組', `${lesson}.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as WordDecks : null;
 }
 
 export function readFrozenSteps(folder: Folder): FrozenStep[] {
@@ -140,10 +180,18 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
   for (const lesson of config.lessons) {
     const subject = subjectOf(lesson.subjectKey);
     let snapshot: Snapshot | null = null;
-    if (lesson.existing && 'vault' in lesson.existing) snapshot = await readSnapshot(cliPath(lesson.existing.vault, 'rule-test'), subject.subject, lesson.form.term, version);
-    else if (lesson.existing) snapshot = parseSnapshotFile(readFileSync(cliPath(lesson.existing.snapshot, 'rule-test', {}, folder.root), 'utf8'), version);
+    const vault = lesson.existing && 'vault' in lesson.existing ? await readVault(cliPath(lesson.existing.vault, 'rule-test')) : null;
+    if (vault) snapshot = snapshotOf(vault, subject.subject, lesson.form.term, version);
+    else if (lesson.existing && 'snapshot' in lesson.existing) snapshot = parseSnapshotFile(readFileSync(cliPath(lesson.existing.snapshot, 'rule-test', {}, folder.root), 'utf8'), version);
     if (snapshot) {
       writes.push([join(folder.root, '凍結', '已有目標', `${lesson.code}.json`), JSON.stringify(snapshot, null, 2) + '\n']);
+    }
+    if (config.deepen) {
+      // 加深模擬的是新課（rule-test-d236.md §6-1 第 4 點）：快照檔查不了單元有沒有卡組、也沒有英文單字的排序，要從 vault 讀。
+      if (lesson.existing && !vault) throw Error(`課「${lesson.code}」跑加深，已有目標要從 vault 讀（快照檔查不了這個單元有沒有卡組，英文也排不了單字）`);
+      const taken = vault && subject.subject !== null ? unitDecks(vault, subject.subject, lesson.form.term, unitCode(lesson.form.unit)) : [];
+      if (taken.length) throw Error(`課「${lesson.code}」跑加深，但 vault 裡這個單元已經有卡組（含草稿）：${taken.join('、')}；加深模擬的是沒做過卡的新課`);
+      if (subject.subject === '英文') writes.push([join(folder.root, '凍結', '加深', '單字卡組', `${lesson.code}.json`), JSON.stringify(wordDecksOf(vault ?? [], subject.subject, version), null, 2) + '\n']);
     }
     for (const group of config.groups) {
       group.steps.forEach((step, i) => {
@@ -164,19 +212,28 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
       files[`${LIBRARY}/${lesson.code}/評分表.md`] = sha256File(rubricOf(folder, lesson));
     }
   }
-  // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明，凍結一份，評分與裁定照這一份。
+  if (config.deepen) {
+    const rules: DeepenFrozen = {
+      plugin: deepenSourcesHash(),
+      groups: Object.fromEntries(deepenGroups(config).map(name => [name, deepenRulesFor(config.groups.find(group => group.name === name)!, root)])),
+    };
+    writes.push([join(folder.root, DEEPEN_RULES), JSON.stringify(rules, null, 2) + '\n']);
+  }
+  // 評審與裁定的範本（§5-7、§5-8）：評分說明、用到的科目口徑、裁定與拿不準的說明、評分表的寫法與核對（D-236 §11），凍結一份，之後照這一份。
   const templates = join(import.meta.dirname, 'templates');
-  const names = ['評分說明.md', '裁定說明.md', '拿不準說明.md', ...[...new Set(config.lessons.map(lesson => lesson.subjectKey))].map(key => `口徑/${key}.md`).filter(name => existsSync(join(templates, name)))];
+  const names = ['評分說明.md', '地圖評分說明.md', '加深評分說明.md', '裁定說明.md', '拿不準說明.md', '評分表寫法.md', '評分表核對.md', ...[...new Set(config.lessons.map(lesson => lesson.subjectKey))].map(key => `口徑/${key}.md`).filter(name => existsSync(join(templates, name)))];
   checkInherited(folder, steps, templateHashes(names, templates));
   for (const name of names) writes.push([join(folder.root, '凍結', '範本', name), readFileSync(join(templates, name))]);
   writes.push([join(folder.root, '凍結', '提示.json'), JSON.stringify(steps, null, 2) + '\n']);
+  // 〈評估規格〉（rule-test-d236.md §11）：照設定與工具的常數產生，鎖住；給使用者看用量時一起給。
+  writes.push([join(folder.root, SPEC), evaluationSpec(config, steps)]);
   for (const [path, content] of writes) {
     writeOnce(path, content);
     record(path);
   }
   record(join(folder.root, '測試.yaml'));
 
-  const lock: Lock = { time: new Date().toISOString(), commit: git(['rev-parse', 'HEAD'], root), dirty: git(['status', '--porcelain'], root) !== '', version, files };
+  const lock: Lock = { time: new Date().toISOString(), commit: git(['rev-parse', 'HEAD'], root), dirty: git(['status', '--porcelain'], root) !== '', version, evaluation: EVALUATION, files };
   writeOnce(join(folder.root, '凍結', '鎖.json'), JSON.stringify(lock, null, 2) + '\n');
 
   for (const lesson of config.lessons) {
@@ -185,7 +242,8 @@ export async function freezeFolder(folder: Folder, options: FreezeOptions = {}):
       log(`  ${step.group}${step.steps > 1 ? ` 第 ${String(step.step)} 步` : ''}：規則 ${step.rulesChars.toLocaleString('en-US')} 字、整份 ${step.chars.toLocaleString('en-US')} 字${step.pending.length ? `（生成時代入 ${step.pending.join('、')}）` : ''}`);
     }
   }
-  for (const warning of usedWarnings(folder, root)) log(`警告：${warning}`);
+  for (const warning of [...usedWarnings(folder, root), ...unreachable(config)]) log(`警告：${warning}`);
+  log(`評估規格：${join(folder.root, SPEC)}（給使用者看用量時一起給）`);
   log(`\n凍結完成：commit ${lock.commit.slice(0, 8)}${lock.dirty ? '（工作樹有別的修改）' : ''}。`);
   return lock;
 }

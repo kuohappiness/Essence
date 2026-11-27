@@ -16,13 +16,13 @@ import { RUBRIC } from './helpers/rule-test.ts';
 const GOOD = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 const BROKEN = '- borrow 英翻中\n    - borrow ::\n<<<完>>>';
 
-async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }', rubric?: string): Promise<Folder> {
+async function folderWith(groups: string[], count: number, gates = '{ 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }', rubric?: string, prompts: Record<string, string> = {}): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-blind-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
   if (rubric !== undefined) writeFileSync(join(root, '課', 'L3', '評分表.md'), rubric);
   mkdirSync(join(root, '提示'));
-  for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
+  for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), prompts[name] ?? `組${name}\n\n{{任務段}}`);
   writeFileSync(join(root, '測試.yaml'), `
 名稱: 匿名測試
 課庫: 課
@@ -44,13 +44,22 @@ void test('check：照外掛的 inspectReply 記錯誤、提示與每篇的目�
   await runQueue(folder, { adapters: { claude: reply(prompt => prompt.startsWith('組乙') ? BROKEN : GOOD) }, log: () => {} });
   const records = checkFolder(folder, () => {});
   assert.deepEqual(records.map(record => [record.job, record.errors.length, record.pieces]), [
-    ['甲-L3-claude-1', 0, [{ name: '國二上英文 L3 單字', targets: 2, prompts: 2, candidates: 0, adds: 0 }]],
-    ['乙-L3-claude-1', 1, [{ name: '國二上英文 L3（卡片）', targets: 1, prompts: 1, candidates: 0, adds: 0 }]],
+    ['甲-L3-claude-1', 0, [{ name: '國二上英文 L3 單字', targets: 2, prompts: 2, candidates: 0, adds: 0, addPrompts: 0 }]],
+    ['乙-L3-claude-1', 1, [{ name: '國二上英文 L3（卡片）', targets: 1, prompts: 1, candidates: 0, adds: 0, addPrompts: 0 }]],
   ]);
   assert.match(records[1].errors[0], /底下沒有答案/);
   const lines: string[] = [];
   checkFolder(folder, line => lines.push(line));
   assert.deepEqual(lines, []);
+});
+
+void test('check：加題一項底下三題，孩子要複習的題算 3（rule-test-d236.md §4）', async () => {
+  const added = ['````markdown', '國二上英文 L3 單字', '- borrow 英翻中', '    - borrow :: v. 借入', '',
+    '> [!note]- 加進已有的學習目標', '> - abc234 lend 英翻中', '>     - lend :: v. 借出', '>     - 「借出」的英文 :: lend', '>     - lend 的過去式 :: lent', '<<<完>>>', '````'].join('\n');
+  const folder = await folderWith(['甲', '乙'], 1);
+  await runQueue(folder, { adapters: { claude: reply(() => added) }, log: () => {} });
+  const records = checkFolder(folder, () => {});
+  assert.deepEqual(records.map(record => record.pieces.map(piece => [piece.prompts, piece.adds, piece.addPrompts])), [[[1, 1, 3]], [[1, 1, 3]]]);
 });
 
 void test('blind：卡組段原字照留、每課打亂代號、每組各取一份成區組；評審資料夾有評分表、教材、題池與加行號的卡組；對照表另外封存', async () => {
@@ -103,11 +112,33 @@ void test('blind：掃到洩漏字樣或切不出卡組段就停下給人看；�
   assert.equal(blindFolder(folder, { acceptLeaks: true, log: () => {} }).entries.length, 2);
 });
 
+void test('blind 的地圖（rule-test-d236.md §5-1、§5-2）：交三段的組切出地圖、標記換成標題另放一個資料夾；應交沒交記原因；不交的組沒有地圖', async () => {
+  const map = (frame: string): string => ['````markdown', '<<<全貌>>>', '- 這一課學借與還', '<<<架構>>>', frame, '<<<卡組>>>', '國二上英文 L3 單字', '- borrow 英翻中', '    - borrow :: v. 借入', '<<<完>>>', '````'].join('\n');
+  const folder = await folderWith(['甲', '乙'], 2, undefined, RUBRIC, { 乙: '組乙：照三段交\n\n<<<卡組>>>\n\n{{任務段}}' });
+  let n = 0;
+  await runQueue(folder, { adapters: { claude: reply(prompt => prompt.startsWith('組乙') ? map(n++ === 0 ? '- 能分辨 borrow 與 lend' : '') : GOOD) }, log: () => {} });
+  const batch = blindFolder(folder, { random: max => max - 1, log: () => {} });
+  const byJob = Object.fromEntries(batch.entries.map(entry => [entry.job, entry]));
+  assert.deepEqual(byJob['甲-L3-claude-1'].map, { kind: 'none' });
+  assert.equal(byJob['乙-L3-claude-1'].map.kind, 'ok');
+  assert.deepEqual(byJob['乙-L3-claude-2'].map, { kind: 'missing', why: '架構是空的' });
+  const withMap = byJob['乙-L3-claude-1'];
+  const block = batch.blocks.find(each => each.codes.includes(withMap.code))!;
+  assert.deepEqual(block.maps, [withMap.code]);
+  assert.deepEqual(batch.blocks.find(each => each !== block)!.maps, []);
+  const dir = join(folder.root, '評分', '批1');
+  assert.equal(readFileSync(join(dir, '地圖', 'L3', `${withMap.code}.md`), 'utf8'), '## 全貌\n- 這一課學借與還\n## 架構\n- 能分辨 borrow 與 lend\n');
+  assert.deepEqual(readdirSync(join(dir, '地圖區組', block.name)).sort(), ['地圖', '已有目標.json', '教材.pdf', '評分表.md']);
+  assert.equal(readFileSync(join(dir, '地圖區組', block.name, '地圖', `${withMap.code}.md`), 'utf8'), '1\t## 全貌\n2\t- 這一課學借與還\n3\t## 架構\n4\t- 能分辨 borrow 與 lend\n');
+  assert.ok(!existsSync(join(dir, '區組', block.name, '地圖')));
+  assert.ok(!existsSync(join(dir, '地圖區組', batch.blocks.find(each => each !== block)!.name)));
+});
+
 void test('區組：組多於 4 時拆開，每個區組都有基準組的同一份；候選一定和基準同一區組', () => {
   const folder = { config: { gates: { baseline: '甲', candidates: ['乙'] }, groups: ['甲', '乙', '丙', '丁', '戊', '己'].map(name => ({ name })) } } as unknown as Folder;
-  const entries: BlindEntry[] = ['甲', '乙', '丙', '丁', '戊', '己'].map((group, i) => ({ lesson: 'L3', code: `S${String(i + 1)}`, job: `${group}-1`, group, generator: 'claude', copy: 1, replacement: false, raws: [], rawSha256: [], deckSha256: '', chars: 0, blocks: [] }));
+  const entries: BlindEntry[] = ['甲', '乙', '丙', '丁', '戊', '己'].map((group, i) => ({ lesson: 'L3', code: `S${String(i + 1)}`, job: `${group}-1`, group, generator: 'claude', copy: 1, replacement: false, raws: [], rawSha256: [], deckSha256: '', chars: 0, blocks: [], map: i === 2 ? { kind: 'ok' as const, sha256: '' } : { kind: 'none' as const }, deepen: { kind: 'none' as const } }));
   const blocks = makeBlocks(folder, entries, () => 1);
-  assert.deepEqual(blocks.map(block => [block.name, block.codes]), [['L3-B01', ['S1', 'S2', 'S3', 'S4']], ['L3-B02', ['S1', 'S5', 'S6']]]);
+  assert.deepEqual(blocks.map(block => [block.name, block.codes, block.maps]), [['L3-B01', ['S1', 'S2', 'S3', 'S4'], ['S3']], ['L3-B02', ['S1', 'S5', 'S6'], []]]);
   assert.deepEqual(entries[0].blocks, ['L3-B01', 'L3-B02']);
 });
 
@@ -142,7 +173,7 @@ void test('凍結與匿名：評分表格式不合就停下、不鎖（2026-11-2
 });
 
 void test('blind：組名叫「候選」時，外掛規定的「候選卡片」框標題不算洩漏，其他地方的組名照樣停下（2026-11-25 使用者電腦）', async () => {
-  const gates = '{ 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }';
+  const gates = '{ 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }';
   const boxed = GOOD.replace('<<<完>>>', '> [!note]- 候選卡片\n> - give 英翻中\n>     - 理由：課本 p.4 有\n>     - give :: v. 給\n<<<完>>>');
   const folder = await folderWith(['現行', '候選'], 1, gates, RUBRIC);
   await runQueue(folder, { adapters: { claude: reply(() => boxed) }, log: () => {} });

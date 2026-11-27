@@ -2,11 +2,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
-import { batchDir, batchNumbers, readBlocks } from './blind.ts';
+import { batchDir, readBlocks } from './blind.ts';
 import { readFormat } from './check.ts';
-import { openFolder, type Folder } from './folder.ts';
+import { deepenStatus } from './deepen.ts';
+import { batchNumbers, openFolder, type Folder } from './folder.ts';
 import { readFrozenSteps, readLock } from './freeze.ts';
-import { resultFile } from './judge.ts';
+import { resultFile, stagesOf } from './judge.ts';
 import { readReports } from './unblind.ts';
 import { jobState, planJobs, readEvents, readExtensions, type JobState } from './jobs.ts';
 
@@ -46,6 +47,7 @@ export function statusLines(folder: Folder): string[] {
   const finished = jobs.filter(job => ['done', 'invalid'].includes(states.get(job.key)!.status));
   const unchecked = finished.filter(job => readFormat(folder, job) === null);
   lines.push(`格式：${String(finished.length - unchecked.length)}／${String(finished.length)} 份檢查過${unchecked.length ? '（下一步：check）' : ''}`);
+  lines.push(...deepenStatus(folder, jobs));
 
   const batches = batchNumbers(folder);
   if (!batches.length) lines.push('匿名：還沒（生成都完成後：blind）');
@@ -54,11 +56,12 @@ export function statusLines(folder: Folder): string[] {
     const blocks = readBlocks(folder, n);
     const decks = new Set(blocks.flatMap(block => block.codes.map(code => `${block.lesson}/${code}`))).size;
     const dir = batchDir(folder, n);
-    const judged = blocks.flatMap(block => folder.config.judges.filter(judge => existsSync(resultFile(folder, n, judge.name, block.name)))).length;
+    const wanted = blocks.flatMap(block => stagesOf(block).flatMap(stage => folder.config.judges.map(judge => resultFile(folder, n, judge.name, block.name, stage))));
+    const judged = wanted.filter(path => existsSync(path)).length;
     const state = unblinded.has(n) ? '已解開（結果/）'
       : existsSync(join(dir, '裁定.md')) ? '已裁定（教學選擇填好後：unblind）'
         : existsSync(join(dir, '鎖定.md')) ? '已鎖定（下一步：disputes）'
-          : `評分 ${String(judged)}／${String(blocks.length * folder.config.judges.length)}（下一步：judge）`;
+          : `評分 ${String(judged)}／${String(wanted.length)}（下一步：judge）`;
     lines.push(`批 ${String(n)}：${String(decks)} 份、${String(blocks.length)} 個區組｜${state}`);
     const judging = readEvents(folder, join('評分', `批${String(n)}`, '事件.jsonl'));
     for (const key of new Set(judging.flatMap(event => event.job ?? []))) {

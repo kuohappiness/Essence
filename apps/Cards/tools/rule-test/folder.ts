@@ -32,6 +32,17 @@ export const materialOf = (folder: Folder, lesson: LessonConfig): string => join
 export const rubricOf = (folder: Folder, lesson: LessonConfig): string => join(lessonDir(folder, lesson), '評分表.md');
 
 export const sha256File = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
+
+/** 一批的對照表（§5-6）：代號和組別的對應只在 blind、unblind 讀；這裡只放路徑與批號。 */
+export const batchFile = (folder: Folder, n: number): string => join(folder.root, '封存', `對照表-批${String(n)}.json`);
+export function batchNumbers(folder: Folder): number[] {
+  const dir = join(folder.root, '封存');
+  return existsSync(dir) ? readdirSync(dir).flatMap(name => /^對照表-批(\d+)\.json$/.exec(name)?.[1] ?? []).map(Number).sort((a, b) => a - b) : [];
+}
+/** 已經匿名的生成工作：只取工作名稱，不讀代號和組別的對應。匿名之後那一份的卡組、地圖、加深都固定（rule-test-d236.md §6-2）。 */
+export function blindedJobs(folder: Folder): Set<string> {
+  return new Set(batchNumbers(folder).flatMap(n => (JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as { entries: { job: string }[] }).entries.map(entry => entry.job)));
+}
 export const sha256Text = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /**

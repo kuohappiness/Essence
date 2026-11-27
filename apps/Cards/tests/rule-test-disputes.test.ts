@@ -33,7 +33,7 @@ function fakeAdjudicator(): { adapter: Adapter; requests: { request: StepRequest
     adapter: request => {
       requests.push({ request, files: readdirSync(request.cwd, { recursive: true }).map(each => String(each).replaceAll('\\', '/')).sort() });
       request.record('{}', '');
-      const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '多解', reason: 'p.3 寫的是借出' }
+      const value = request.text.startsWith('# 裁定說明') ? { verdict: '不成立', quality: '判錯', reason: 'p.3 寫的是借出' }
         : request.resume === null ? { items: [] } : { items: [{ notes: ['U1'], kind: '教學選擇', question: 'R1 要不要算必備？', answer: '' }] };
       return Promise.resolve({ kind: 'ok', reply: JSON.stringify(value), session: 'ruling-1', warnings: [], ms: 1, models: [], structured: value });
     },
@@ -53,7 +53,7 @@ void test('合併：那一批鎖定前停下；鎖定後結果檔改過也停下
 void test('要裁定的：只有一位記的重大錯誤（兩位都記的不用），與評審寫了的拿不準', async () => {
   const { folder, codes } = await judged();
   const { majors, unsure } = collectDisputes(mergeBatch(folder, 1));
-  assert.deepEqual(majors, [{ id: 'M1', lesson: 'L3', block: 'L3-B01', code: codes[1], at: '目標 2 第 1 題', lines: [5], rubric: 'M1', judge: 'codex', note: 'lend 教成借入' }]);
+  assert.deepEqual(majors, [{ id: 'M1', stage: '卡組', lesson: 'L3', block: 'L3-B01', code: codes[1], at: '目標 2 第 1 題', lines: [5], rubric: 'M1', judge: 'codex', note: 'lend 教成借入' }]);
   assert.deepEqual(unsure, [{ id: 'U1', lesson: 'L3', block: 'L3-B01', judge: 'codex', text: '列 R1 只考英翻中算不算有' }]);
 });
 
@@ -74,7 +74,7 @@ void test('disputes：重大錯誤一筆一個隔離對話（只有那一份卡�
   assert.equal(fix.request.resume, 'ruling-1');
   assert.match(fix.request.text, /這幾筆沒有放進任何一項：U1/);
   const rulings = readFileSync(join(folder.root, '評分', '批1', '裁定.md'), 'utf8');
-  assert.ok(rulings.includes(`| M1 | L3 | L3-B01 | ${codes[1]} | 目標 2 第 1 題 | 5 | M1 | codex | lend 教成借入 | 不成立 | 多解 | p.3 寫的是借出 |`));
+  assert.ok(rulings.includes(`| M1 | L3 | L3-B01 | ${codes[1]} | 目標 2 第 1 題 | 5 | M1 | codex | lend 教成借入 | 不成立 | 判錯 | p.3 寫的是借出 |`));
   assert.ok(rulings.includes('| U1 | L3 | L3-B01 | codex | 列 R1 只考英翻中算不算有 |'));
   assert.ok(rulings.includes('| C1 | U1 | 教學選擇 | R1 要不要算必備？ |  |  |'));
   // 操作的 Claude 照使用者的話填了之後，重跑不開對話、不蓋掉。
