@@ -135,6 +135,12 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
     ['src/state/index.ts', "import { EditorView } from '@codemirror/view';", true],
     ['src/dev/compare.ts', "require('@codemirror/state');", true],
     ['src/obsidian/lock.ts', "import { EditorState } from '@codemirror/state';", false],
+    // AI 連線套件（docs/tasks/ai-client.md〈8〉第三步）：只有轉接檔能 import 套件的入口；別的核心檔、套件的其他檔都擋。
+    ['src/core/connect/client.ts', "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", false],
+    ['src/core/connect/client.ts', "import '../../../../../packages/ai-client/src/client.ts';", true],
+    ['src/core/connect/index.ts', "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", true],
+    ['src/core/ai/prompt.ts', "import { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", true],
+    ['src/core/deck/index.ts', "import '../../../../../packages/ai-client/src/index.ts';", true],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
     assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);

@@ -59,9 +59,13 @@ const coreModule = /\/src\/core\/([^/]+)\//;
 // 題型模組（tasks/question-type-modules.md §1-3）：deck/kinds/ 的檔之間只 import shared.ts；polyphone、typing、order 另外可以 import group.ts。
 const kindFile = /\/src\/core\/deck\/kinds\/([^/]+)\.ts$/;
 const kindsOnGroup = ['polyphone', 'typing', 'order'];
+// AI 連線套件的轉接檔（docs/tasks/ai-client.md〈8〉第三步，D-232 第 5 點）：只有它能 import 套件的入口；
+// 表在 tools/dispatch.ts 的 PACKAGE_USERS（Cards 不 import 最上層的程式，這裡照抄；tools/check-app-imports.ts 也照表查）。
+const packageAdapter = { from: '/src/core/connect/client.ts', to: '/packages/ai-client/src/index.ts' };
 function crossModule(path, name, typeOnly) {
   if (!name.startsWith('.')) return undefined;
   const target = posix.normalize(posix.join(posix.dirname(path), name));
+  if (path.endsWith(packageAdapter.from) && target.endsWith(packageAdapter.to)) return undefined;
   if (!target.includes('/src/core/')) return '核心不能 import src 裡核心以外的檔案。';
   const fromKind = kindFile.exec(path)?.[1], toKind = kindFile.exec(target)?.[1];
   if (fromKind && toKind && toKind !== 'shared' && !(toKind === 'group' && kindsOnGroup.includes(fromKind))) {

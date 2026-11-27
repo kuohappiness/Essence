@@ -71,7 +71,8 @@ P1 有一家不通時，那一家改用 `requestUrl` 包成的傳輸層（不串
 
 照 AI 連線任務說明〈8〉第三步，這裡不重抄，只列驗收：
 
-- Cards 只有一個轉接檔（`src/core/ai/connect.ts`）用相對路徑 import 套件的入口檔；測試另准 import `testing` 入口。其他檔只 import 轉接檔。
+- Cards 只有一個轉接檔（`src/core/connect/client.ts`，模組的入口是同資料夾的 `index.ts`）用相對路徑 import 套件的入口檔；測試另准 import `testing` 入口。其他檔只 import 轉接檔。
+  - 原本寫 `src/core/ai/connect.ts`，施工時改成自己一個核心模組：放在 `core/ai` 就要從 `core/ai/index.ts` 轉出，`state` 用到 `core/ai`，發布前比較的轉接器載入 `state` 時會跟著載入套件，暫存的版本複本裡沒有 `packages/` 就壞。要連 AI 的地方（設定頁、直接製作）由 `main.ts` 與 `src/obsidian/` 拿這個模組，再把動作交給畫面。
 - `tools/check-app-imports.ts` 放行「軟體的程式指到表上套件的入口檔」，其他跨出資料夾的照舊擋；Cards 的 ESLint 邊界、knip、`tools/build.mjs` 跟著放行。
 - 分派表加一張明列的表：改到 `packages/ai-client/` 時 Cards 也跑完整檢查；另加一條檢查確認表和實際的 import 一致。
 - `tools/tests/hooks.test.ts`：暫存一個會讓 Cards 測試失敗的套件修改、工作樹是好的，pre-commit 要失敗。
