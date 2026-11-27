@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 3 批的 L2（審查紀錄）
 
-狀態：待實機｜下一步：第二輪再審通過，改過的畫面在 Windows 實機複查，再問使用者合併｜等誰：Claude
+狀態：已結案 → [任務說明](../tasks/ai-direct.md)｜完成：兩輪審完，第二輪再審通過、不再送審（〈Claude 回應（第二輪）〉）；改過的畫面實機複查通過，合併前的使用者同意照任務說明｜等誰：—
 
 審查請求：[ai-direct-batch3-l2.md](../tasks/ai-direct-batch3-l2.md)；任務說明：[ai-direct.md](../tasks/ai-direct.md) §9。
 
