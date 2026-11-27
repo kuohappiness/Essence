@@ -210,6 +210,8 @@ export interface ObsidianStub {
   statusBar: { textContent: string; style: { display: string }; clicks: (() => void)[] }[];
   /** 這個 vault 的 localStorage 現在的值（app.loadLocalStorage）。 */
   storage: (key: string) => unknown;
+  /** localStorage 現在有的每一個 key：掃「某個值有沒有寫進任何一筆」用（ai-direct.md §2 驗收，L2 第一輪 R11 第 1 項）。 */
+  storedKeys: () => string[];
   /** Markdown 分頁。 */
   leaves: Leaf[];
   leaf: (path: string | null) => Leaf;
@@ -450,7 +452,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   };
   return {
     obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,
-    timers: () => ({ ...timers }), required, settingTabs, statusBar, storage: key => storage.get(key) ?? null,
+    timers: () => ({ ...timers }), required, settingTabs, statusBar, storage: key => storage.get(key) ?? null, storedKeys: () => [...storage.keys()],
     text: path => texts.get(path),
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout.splice(0)) callback(); },

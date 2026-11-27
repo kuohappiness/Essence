@@ -425,7 +425,10 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   assert.deepEqual(lines(row(TEST).descEl), ['這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。']);
   assert.equal(sent.length, 2);
 
-  const written = JSON.stringify([...['essence-cards-ai-connection'].map(storage), h.data.content, h.notices, said, [...h.texts.entries()]]);
+  // localStorage 的每一筆都掃（§2 驗收「saveLocalStorage 的任何一筆」，L2 第一輪 R11 第 1 項），不只 AI 連線那一筆。
+  const stored = h.storedKeys().map(key => [key, storage(key)]);
+  assert.ok(stored.some(([key]) => key === AI_PREFS));
+  const written = JSON.stringify([stored, h.data.content, h.notices, said, [...h.texts.entries()]]);
   assert.ok(!written.includes(AI_KEY), '金鑰的值出現在寫入或 console 裡');
 });
 
