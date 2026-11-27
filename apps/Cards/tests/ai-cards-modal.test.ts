@@ -280,3 +280,25 @@ void test('L2 R9 重開過 Obsidian 再重送：同一個畫面先重選教材�
   assert.equal(made.fetch.requests.length, 1);
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
 });
+
+void test('L2 R5 畫過好幾次教材欄（重送的畫面、回上一步、做新的一課）之後拖進一個檔：只加一次', async t => {
+  const first = await load(t, [unauthorized]);
+  assert.equal((await first.cards.direct(form, [lesson])).kind, 'failed');
+  const { openModal } = await open(t, [], { box: first.box, memory: first.memory });
+  const modal = openModal();
+  button(modal.contentEl, '重送')?.click();
+  await sleep(10);
+  button(modal.contentEl, '回上一步')?.click();
+  await sleep(10);
+  button(modal.contentEl, '做新的一課')?.click();
+  await sleep(10);
+  const unit = all(modal.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
+  assert.ok(unit);
+  unit.value = form.unit;
+  unit.fire('input');
+  modal.contentEl.fire('drop', { preventDefault() {}, dataTransfer: { files: [pdf()] } });
+  await sleep(30);
+  const line = texts(modal.contentEl).find(each => each.startsWith('會送出：'));
+  assert.ok(line, texts(modal.contentEl).join('|'));
+  assert.equal(line.split('英文 L3.pdf').length - 1, 1, line);
+});
