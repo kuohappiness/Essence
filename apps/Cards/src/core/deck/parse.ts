@@ -388,6 +388,10 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     }
     // 寫在題目的下一層以外的地方（§1 第 6 點、L2 第一輪 R3）：照現在的讀法（另一題、共用補充、補充或答案的一部分），只提示。
     const misplaced = (node: Item, depth: number): void => {
+      // 寫成接續行（前面沒有清單符號，L2 第二輪）：照現在是這一項的文字。
+      node.text.split('\n').forEach((text, at) => {
+        if (at > 0 && ALT_LIKE.test(text.trimStart())) problems.push({ line: node.starts[at]?.line ?? node.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法要另起一行、前面加「- 」，當那一題的子項目；沒有清單符號時會接在上一項後面，當成同一項的文字' });
+      });
       if (ALT_LIKE.test(node.text) && !placed.has(node)) {
         addProblem(node, 'order-alt-invalid', depth === 0 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在最上層會被當成另一個學習目標'
           : depth === 1 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充'

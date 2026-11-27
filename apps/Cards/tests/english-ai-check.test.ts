@@ -54,6 +54,8 @@ void test('另一種排法：認得的不報；不認、少縮一層、排錯的
   const alt = '另一種排法：==because== ==I was tired==, ==I went to bed early==.';
   assert.deepEqual(altErrors([...sentence(alt), '            - 狀態：暫停'].join('\n') + '\n'), [[2, 'order-alt-invalid']]);
   assert.deepEqual(altErrors([...sentence('詳解：連接詞放前面時中間加逗號'), '            - ' + alt].join('\n') + '\n'), [[4, 'order-alt-invalid']]);
+  // L2 第二輪（中途）：寫成問答的接續行也是錯誤。
+  assert.deepEqual(altErrors(['- 頻率的問法 ^a1b2c4', '    - How often? ::', '      ' + alt].join('\n') + '\n'), [[3, 'order-alt-invalid']]);
 });
 
 void test('另一種排法：候選框與已有框也擋，行號是原文的行；已有框也跑英文的排序檢查', () => {

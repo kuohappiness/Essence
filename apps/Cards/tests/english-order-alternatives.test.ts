@@ -182,6 +182,10 @@ void test('寫得更深或寫在最上層（L2 第一輪 R3）：補充、多行
   deeper(top, 3, /縮到那一題底下.*最上層/s);
   assert.equal(top.targets[0].implicit, true, '照現在的讀法是最上層的一題');
   assert.deepEqual(codes(english('- 另一種排法：because I was tired, I went to bed early.\n')), [], '最上層沒有填空的是一般筆記，不提示');
+  // L2 第二輪（中途）：寫成上一項的接續行（沒有清單符號），照現在是同一項的文字，提示指到那一行。
+  deeper(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n      ${ALT}\n`), 5, /另起一行/);
+  deeper(english(`- 頻率的問法\n    - How often? ::\n      ${ALT}\n`), 5, /另起一行/);
+  deeper(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - 詳解：連接詞放前面時中間加逗號\n          ${ALT}\n`), 6, /另起一行/);
 });
 
 // 字鍵（§3）：直接用 cardOf 算出第 0～20 次。甲＝I went to bed early、乙＝because、丙＝I was tired。
