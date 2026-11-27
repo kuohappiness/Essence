@@ -44,12 +44,25 @@ export type DirectOutcome =
   | { kind: 'blocked'; message: string }
   | { kind: 'received'; job: CardJob; reply: string; evidence: DirectEvidence }
   | { kind: 'failed'; job: CardJob; failure: DirectFailure; partial: string | null };
+/** 直接製作要的連線（製卡與加深共用，tasks/ai-direct.md §4、§9）。 */
+export type DirectDeps = NonNullable<AiCardsDeps['direct']>;
+
 /** 沒有可用的金鑰時「直接製作」不能按（§2，tasks/ai-direct.md）：照 keyOf 的原因說。 */
-const NO_KEY: Record<Exclude<KeyLookup, { ok: true }>['why'], string> = {
+export const NO_KEY: Record<Exclude<KeyLookup, { ok: true }>['why'], string> = {
   unset: '先到設定頁的「AI 連線」選好這個服務的金鑰，才能直接製作。',
   empty: '設定頁「AI 連線」選的金鑰是空的或找不到；重新貼上之後才能直接製作。',
   malformed: '設定頁「AI 連線」選的金鑰看起來不完整；重新貼上之後才能直接製作。',
 };
+
+/** 設定頁選的服務與模型（§2）；選的服務不在目錄、沒有模型（OpenRouter 沒填）時是原因。製卡與加深共用。 */
+export function endpoint(direct: DirectDeps): { connection: Connection; provider: ProviderSpec; model: string } | { error: string } {
+  const connection = direct.connection();
+  const provider = direct.client.providers().find(each => each.id === connection.provider);
+  if (!provider) return { error: '設定頁「AI 連線」還沒選服務。' };
+  const model = modelOf(connection, provider);
+  if (!model) return { error: '設定頁「AI 連線」還沒填模型。' };
+  return { connection, provider, model };
+}
 
 /** 存草稿或繼續之後：done 是快照寫成（製卡成功）；stop 寫原因，deck 是要家長選的那一篇。 */
 export type Outcome =
@@ -206,15 +219,6 @@ export function createAiCards(deps: AiCardsDeps) {
   }
   /** 正在送出的那一個的中止開關（一次只送一個）。 */
   let sending: AbortController | null = null;
-  /** 設定頁選的服務與模型（§2）；選的服務不在目錄、沒有模型（OpenRouter 沒填）時是原因。 */
-  function endpoint(direct: NonNullable<AiCardsDeps['direct']>): { connection: Connection; provider: ProviderSpec; model: string } | { error: string } {
-    const connection = direct.connection();
-    const provider = direct.client.providers().find(each => each.id === connection.provider);
-    if (!provider) return { error: '設定頁「AI 連線」還沒選服務。' };
-    const model = modelOf(connection, provider);
-    if (!model) return { error: '設定頁「AI 連線」還沒填模型。' };
-    return { connection, provider, model };
-  }
   /**
    * 直接製作的狀態存進這一份工作（§7 `api`）：送出前、收到、失敗各存一次。存不進去交給錯誤紀錄、照樣往下（送出前的那一次除外，由呼叫端擋），
    * 交回存好（或存不進去時在手上）的那一份。
