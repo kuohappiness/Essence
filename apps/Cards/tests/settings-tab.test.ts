@@ -385,7 +385,7 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
     return Promise.resolve(status === 200 ? json({ data: [{ id: 'gpt-5.6-terra' }] })
       : new Response(JSON.stringify({ error: { message: `Incorrect API key provided: ${AI_KEY}` } }), { status, headers: { 'content-type': 'application/json' } }));
   };
-  const h = await open(t, { desktop: true, secrets: { 'family-openai': AI_KEY, cleared: '' }, fetch });
+  const h = await open(t, { desktop: true, secrets: { 'family-openai': AI_KEY, cleared: '', 'pasted-wrong': 'sk-…2222' }, fetch });
   const { row, storage } = h;
   // open() 先把 console.error 換成不印；這裡再換成記下來，之後印的都看得到。
   const said: string[] = [];
@@ -414,11 +414,15 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   await settle();
   assert.deepEqual(lines(row(TEST).descEl), ['金鑰不對或已失效，請到設定頁重新貼上。']);
 
-  // 家長清掉金鑰（存空字串）：當成沒有金鑰，不送出。
+  // 家長清掉金鑰（存空字串）：說這把是空的，不送出（L2 第一輪 R11 第 4 項）；樣子不像金鑰的也不送出、請家長重貼（R4）。
   row(KEY).secret?.choose('cleared');
   row(TEST).buttons[0].click();
   await settle();
-  assert.deepEqual(lines(row(TEST).descEl), ['先在上面選一把這個服務的金鑰，或建立一把新的。']);
+  assert.deepEqual(lines(row(TEST).descEl), ['這把金鑰是空的或找不到，請重新貼上，或選另一把。']);
+  row(KEY).secret?.choose('pasted-wrong');
+  row(TEST).buttons[0].click();
+  await settle();
+  assert.deepEqual(lines(row(TEST).descEl), ['這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。']);
   assert.equal(sent.length, 2);
 
   const written = JSON.stringify([...['essence-cards-ai-connection'].map(storage), h.data.content, h.notices, said, [...h.texts.entries()]]);

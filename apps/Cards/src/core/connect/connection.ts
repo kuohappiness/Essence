@@ -87,12 +87,24 @@ export function withSecret(connection: Connection, provider: string, id: string 
   return { ...connection, secrets };
 }
 
-/** 這一家的金鑰：沒選名稱、SecretStorage 裡沒有，或存的是空字串（家長清掉金鑰時只能存空字串，探針 P3）都當成沒有。 */
-export function keyOf(connection: Connection, getSecret: (id: string) => string | null): string | null {
+/**
+ * 金鑰的樣子（L2 第一輪 R4）：各家的金鑰都是幾十個看得見的半形字（英數與 - _ 這類符號）。短於 8 個字的套件不送到遠端，
+ * 中間有空白、換行或全形字的放不進標頭，送出前就分出來，請家長重新貼，不讓他們看到「請求格式不對、請回報給開發者」。
+ */
+const KEY_SHAPE = /^[!-~]{8,}$/;
+
+/** 這一家的金鑰：拿到了，或為什麼沒有。 */
+export type KeyLookup = { ok: true; key: string } | { ok: false; why: KeyProblem };
+/** unset：沒選名稱；empty：選了，但 SecretStorage 裡沒有，或存的是空字串（家長清掉金鑰時只能存空字串，探針 P3）；malformed：樣子不像金鑰。 */
+type KeyProblem = 'unset' | 'empty' | 'malformed';
+
+/** 這一家的金鑰：前後的空白拿掉；沒選、是空的、樣子不對都不交出值（測試連線與直接製作都用這個判斷）。 */
+export function keyOf(connection: Connection, getSecret: (id: string) => string | null): KeyLookup {
   const id = connection.secrets[connection.provider];
-  if (!id) return null;
+  if (!id) return { ok: false, why: 'unset' };
   const value = getSecret(id)?.trim();
-  return value ? value : null;
+  if (!value) return { ok: false, why: 'empty' };
+  return KEY_SHAPE.test(value) ? { ok: true, key: value } : { ok: false, why: 'malformed' };
 }
 
 /**
@@ -114,7 +126,12 @@ const NEXT: Partial<Record<AiErrorKind, string>> = {
   invalid_request: '再試一次；一直這樣，請回報給開發者。',
   unknown: '再試一次；一直這樣，請回報給開發者。',
 };
-const NO_KEY = '先在上面選一把這個服務的金鑰，或建立一把新的。';
+/** 沒有可用的金鑰時，不送出、直接寫的一句（L2 第一輪 R4、R11 第 4 項）。 */
+const KEY_PROBLEM: Record<KeyProblem, { kind: 'no_key' | 'empty_key' | 'bad_key'; text: string }> = {
+  unset: { kind: 'no_key', text: '先在上面選一把這個服務的金鑰，或建立一把新的。' },
+  empty: { kind: 'empty_key', text: '這把金鑰是空的或找不到，請重新貼上，或選另一把。' },
+  malformed: { kind: 'bad_key', text: '這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。' },
+};
 const CONNECTED = '連得上。';
 
 /** 錯誤的一句話：套件的中文說明，加上下一步。 */
@@ -124,14 +141,14 @@ function connectionError(kind: AiErrorKind, text: string): string {
 }
 
 /**
- * 測試連線（§2）：讀模型清單確認金鑰，不產生內容、不花錢。沒有金鑰時不送出。結果是一句話，金鑰不會在裡面（套件把錯誤裡的金鑰換掉）。
+ * 測試連線（§2）：讀模型清單確認金鑰，不產生內容、不花錢。沒有可用的金鑰時不送出。結果是一句話，金鑰不會在裡面（套件把錯誤裡的金鑰換掉）。
  * signal 中止時（關掉設定頁、停用外掛）回 cancelled，呼叫端不用畫。
  */
-export async function testConnection(client: AiClient, request: { provider: string; key: string | null; signal?: AbortSignal }): Promise<{ ok: true; text: string } | { ok: false; kind: AiErrorKind | 'no_key'; text: string }> {
-  if (!request.key) return { ok: false, kind: 'no_key', text: NO_KEY };
+export async function testConnection(client: AiClient, request: { provider: string; key: KeyLookup; signal?: AbortSignal }): Promise<{ ok: true; text: string } | { ok: false; kind: AiErrorKind | 'no_key' | 'empty_key' | 'bad_key'; text: string }> {
+  if (!request.key.ok) return { ok: false, ...KEY_PROBLEM[request.key.why] };
   let error: unknown;
   try {
-    const result = await client.check({ endpoint: { provider: request.provider }, apiKey: request.key, ...request.signal ? { signal: request.signal } : {} });
+    const result = await client.check({ endpoint: { provider: request.provider }, apiKey: request.key.key, ...request.signal ? { signal: request.signal } : {} });
     if (result.ok) return { ok: true, text: CONNECTED };
     error = result.error;
   } catch (thrown) {

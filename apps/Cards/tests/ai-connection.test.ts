@@ -39,16 +39,23 @@ void test('這台電腦存的設定：讀不懂的欄位用預設，金鑰的名
   assert.equal(modelOf({ ...saved, models: { google: 'gemini-1-gone' } }, provider('google')), 'gemini-3.8-flash');
 });
 
-void test('金鑰：只記名稱，值向 SecretStorage 拿；沒選、找不到、存的是空字串或空白都當成沒有', () => {
-  const stored = new Map([['my-openai-key', ` ${FAKE_KEY}\n`], ['cleared', ''], ['blank', '   ']]);
+void test('金鑰：只記名稱，值向 SecretStorage 拿；沒選、找不到或是空的、樣子不像金鑰，各自分開，都不交出值', () => {
+  // 樣子不像金鑰（L2 第一輪 R4）：短於 8 個字、中間有空白或換行、全形字、網站遮罩的省略號。
+  const malformed = { short: 'sk-1234', spaced: 'sk-abcd efgh-1234', newline: 'sk-abcd\nefgh1234', fullwidth: 'sk-ａｂｃｄ12345678', masked: 'sk-…abcd1234' };
+  const stored = new Map([['my-openai-key', ` ${FAKE_KEY}\n`], ['cleared', ''], ['blank', '   '], ...Object.entries(malformed)]);
   const get = (id: string) => stored.get(id) ?? null;
   let connection = readConnection({ provider: 'openai' }, providers);
-  assert.equal(keyOf(connection, get), null);
+  assert.deepEqual(keyOf(connection, get), { ok: false, why: 'unset' });
   connection = withSecret(connection, 'openai', 'my-openai-key');
   assert.deepEqual(connection.secrets, { openai: 'my-openai-key' });
   assert.ok(!JSON.stringify(connection).includes(FAKE_KEY));
-  assert.equal(keyOf(connection, get), FAKE_KEY);
-  for (const id of ['cleared', 'blank', 'missing']) assert.equal(keyOf(withSecret(connection, 'openai', id), get), null, id);
+  assert.deepEqual(keyOf(connection, get), { ok: true, key: FAKE_KEY });
+  for (const id of ['cleared', 'blank', 'missing']) assert.deepEqual(keyOf(withSecret(connection, 'openai', id), get), { ok: false, why: 'empty' }, id);
+  for (const id of Object.keys(malformed)) assert.deepEqual(keyOf(withSecret(connection, 'openai', id), get), { ok: false, why: 'malformed' }, id);
+  // 各家真的金鑰的樣子都收（自編、照各家的前綴與字元）。
+  for (const key of ['sk-proj-Ab_12-cd34EF56gh78', 'sk-ant-api03-Ab12_cd-34', 'AIzaSyAb12cd34_EF-56gh78ij', 'sk-or-v1-0123456789abcdef']) {
+    assert.deepEqual(keyOf(withSecret(connection, 'openai', 'real-shape'), id => (id === 'real-shape' ? key : null)), { ok: true, key }, key);
+  }
   assert.deepEqual(withSecret(connection, 'openai', null).secrets, {});
   assert.deepEqual(withSecret(connection, 'openai', 'Not Valid').secrets, {});
   assert.deepEqual(withSecret(connection, 'openai', '').secrets, {});
@@ -58,7 +65,7 @@ void test('金鑰：只記名稱，值向 SecretStorage 拿；沒選、找不到
     assert.deepEqual(readConnection({ secrets: { openai: id } }, providers).secrets, { openai: id }, id);
   }
   // 金鑰照服務分開：換到別家，沒選過就是沒有。
-  assert.equal(keyOf({ ...connection, provider: 'google' }, get), null);
+  assert.deepEqual(keyOf({ ...connection, provider: 'google' }, get), { ok: false, why: 'unset' });
 });
 
 void test('測試連線：成功是「連得上」；沒有金鑰不送出；每一種錯誤是套件的說明加下一步，金鑰不在結果裡', async () => {
@@ -70,33 +77,36 @@ void test('測試連線：成功是「連得上」；沒有金鑰不送出；每
   });
   const fake = cardsClient(fetch);
   replies['api.openai.com'] = { status: 200, body: { data: [{ id: 'gpt-5.6-terra' }] } };
-  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: FAKE_KEY }), { ok: true, text: '連得上。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: true, key: FAKE_KEY } }), { ok: true, text: '連得上。' });
   assert.equal(fetch.requests.at(-1)?.headers.authorization, `Bearer ${FAKE_KEY}`);
 
+  // 沒有可用的金鑰：各寫一句、指向金鑰，不送出（L2 第一輪 R4、R11 第 4 項）。
   const sent = fetch.requests.length;
-  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: null }), { ok: false, kind: 'no_key', text: '先在上面選一把這個服務的金鑰，或建立一把新的。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: false, why: 'unset' } }), { ok: false, kind: 'no_key', text: '先在上面選一把這個服務的金鑰，或建立一把新的。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: false, why: 'empty' } }), { ok: false, kind: 'empty_key', text: '這把金鑰是空的或找不到，請重新貼上，或選另一把。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: false, why: 'malformed' } }), { ok: false, kind: 'bad_key', text: '這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。' });
   assert.equal(fetch.requests.length, sent);
 
   replies['api.openai.com'] = { status: 401, body: { error: { message: `Incorrect API key provided: ${FAKE_KEY}` } } };
-  const auth = await testConnection(fake, { provider: 'openai', key: FAKE_KEY });
+  const auth = await testConnection(fake, { provider: 'openai', key: { ok: true, key: FAKE_KEY } });
   assert.deepEqual(auth, { ok: false, kind: 'auth', text: '金鑰不對或已失效，請到設定頁重新貼上。' });
   replies['api.openai.com'] = 'network';
-  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: FAKE_KEY }), { ok: false, kind: 'network', text: '網路連不上。確認這台電腦連得上網路，再按一次測試連線。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: true, key: FAKE_KEY } }), { ok: false, kind: 'network', text: '網路連不上。確認這台電腦連得上網路，再按一次測試連線。' });
   replies['generativelanguage.googleapis.com'] = { status: 429, body: { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } } };
-  const quota = await testConnection(fake, { provider: 'google', key: FAKE_KEY });
+  const quota = await testConnection(fake, { provider: 'google', key: { ok: true, key: FAKE_KEY } });
   assert.equal(quota.ok, false);
   assert.ok(!JSON.stringify([auth, quota]).includes(FAKE_KEY));
 
   // Anthropic 一律加瀏覽器直連的標頭（D-241 第 3 點）。
   replies['api.anthropic.com'] = { status: 200, body: { data: [{ id: 'claude-opus-5-5' }] } };
-  assert.equal((await testConnection(fake, { provider: 'anthropic', key: FAKE_KEY })).ok, true);
+  assert.equal((await testConnection(fake, { provider: 'anthropic', key: { ok: true, key: FAKE_KEY } })).ok, true);
   assert.equal(fetch.requests.at(-1)?.headers['anthropic-dangerous-direct-browser-access'], 'true');
 });
 
 void test('測試連線：關掉設定頁或停用外掛時中止，回 cancelled，請求真的停下', async () => {
   const fetch = mockFetch([{ status: 200, headersDelayMs: 60_000, chunks: ['{}'] }]);
   const controller = new AbortController();
-  const pending = testConnection(cardsClient(fetch), { provider: 'openai', key: FAKE_KEY, signal: controller.signal });
+  const pending = testConnection(cardsClient(fetch), { provider: 'openai', key: { ok: true, key: FAKE_KEY }, signal: controller.signal });
   controller.abort();
   const result = await pending;
   assert.equal(result.ok, false);

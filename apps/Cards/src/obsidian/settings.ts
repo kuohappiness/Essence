@@ -2,7 +2,7 @@ import { Modal, Platform, PluginSettingTab, requireApiVersion, SecretComponent, 
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
 import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, readConnection, REASONING_CHOICES, testConnection, withSecret } from '../core/connect/index.ts';
-import type { Connection } from '../core/connect/index.ts';
+import type { Connection, KeyLookup } from '../core/connect/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
 import { aiConnection, deepenRemindOff, phoneCards, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
@@ -393,7 +393,7 @@ class EssenceSettingTab extends PluginSettingTab {
     const controller = this.aiTest = new AbortController();
     try {
       const connection = readConnection(aiConnection.get(this.app), client.providers());
-      const key = requireApiVersion('1.11.4') ? keyOf(connection, id => this.app.secretStorage.getSecret(id)) : null;
+      const key: KeyLookup = requireApiVersion('1.11.4') ? keyOf(connection, id => this.app.secretStorage.getSecret(id)) : { ok: false, why: 'unset' };
       this.aiResult = null;
       this.refresh();
       const result = await testConnection(client, { provider: connection.provider, key, signal: controller.signal });
