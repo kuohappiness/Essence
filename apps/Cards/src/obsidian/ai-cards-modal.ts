@@ -152,7 +152,7 @@ class AiCardsModal extends Modal {
         const when = ago(Date.parse(api.at) || job.copiedMs, this.host.now());
         row.createEl('p', { text: api.received ? TEXT.resumeReceived(labelOf(job), when) : api.state === 'failed' ? TEXT.resumeFailed(labelOf(job), when) : TEXT.resumeNoReply(labelOf(job), when) });
         const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
-        if (api.received) buttons.createEl('button', { text: '接著看', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null, 'received'); });
+        if (api.received) buttons.createEl('button', { text: '接著看', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null); });
         else this.directButtons(buttons, row.createEl('p', { cls: 'essence-cards-issue-note' }), api.state !== 'failed', job);
         buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
       } else {
@@ -350,7 +350,7 @@ class AiCardsModal extends Modal {
     this.job = outcome.job;
     if (outcome.kind === 'received') {
       pasted.set(outcome.job.id, outcome.reply);
-      this.showPaste(null, 'received');
+      this.showPaste(null);
     } else this.showFailure(outcome.failure);
     return null;
   }
@@ -395,7 +395,7 @@ class AiCardsModal extends Modal {
       void cards.fallback(job).then(plain => {
         if (!plain) { message.setText('放不進剪貼簿；請再按一次'); return; }
         this.job = plain;
-        this.showPaste(null, 'fallback');
+        this.showPaste(null, true);
       });
     });
   }
@@ -437,15 +437,16 @@ class AiCardsModal extends Modal {
 
   /**
    * 第二、三步：已複製的說明、貼回、檢查、存成草稿（§2、§4）。chars 是剛複製的字數；接著貼回時是 null。
-   * mode（tasks/ai-direct.md §4 第 5、6 步、§6）：received 是直接製作收回的整段已經放進框裡，自動檢查、寫用量，不問用的是哪一家、不再複製；
-   * 檢查擋住時多「重送」與「改用複製貼上」。fallback 是送不成之後改用複製貼上（同一份提示已經複製，教材家長自己附）。
+   * 收到的（tasks/ai-direct.md §4 第 5、6 步、§6）由工作決定：工作裡有直接製作收回的整段就放進框裡，自動檢查、寫用量，不問用的是哪一家、不再複製；
+   * 檢查擋住時多「重送」與「改用複製貼上」。從哪個畫面回到這裡都一樣（L2 第一輪 R1：存草稿被擋下後「回上一步」）。
+   * fallback 是剛按了改用複製貼上（同一份提示已經複製，教材家長自己附），只換第一行的說明。
    */
-  private showPaste(chars: number | null, mode: 'paste' | 'received' | 'fallback' = 'paste'): void {
+  private showPaste(chars: number | null, fallback = false): void {
     const cards = this.host.cards(), job = this.job;
     if (!cards || !job) { this.close(); return; }
-    const received = mode === 'received';
+    const received = !!directJob(job)?.received;
     const el = this.reset();
-    el.createEl('p', { text: received ? TEXT.directPaste(labelOf(job)) + TEXT.received : mode === 'fallback' ? TEXT.fallback : (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
+    el.createEl('p', { text: received ? TEXT.directPaste(labelOf(job)) + TEXT.received : fallback ? TEXT.fallback : (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
     const evidence = received ? directJob(job)?.received ?? null : null;
     if (evidence) el.createEl('p', { text: usageLine(evidence), cls: 'essence-cards-issue-note' });
     el.createEl('p', { text: TEXT.local(job.id), cls: 'essence-cards-issue-note' });

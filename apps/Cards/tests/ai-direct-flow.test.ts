@@ -1,96 +1,13 @@
 import test from 'node:test';
-import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mockFetch, sse } from '../../../packages/ai-client/src/testing.ts';
+import { sse } from '../../../packages/ai-client/src/testing.ts';
 import type { MockReply } from '../../../packages/ai-client/src/testing.ts';
-import { parse } from 'yaml';
 import { directJob, rawPath, readJobs, readSnapshot, sha256Hex, sha256OfBytes } from '../src/core/ai/index.ts';
-import type { CardForm, CardJob, EmbeddedRules } from '../src/core/ai/index.ts';
-import { cardsClient, readConnection } from '../src/core/connect/index.ts';
-import type { DirectFailure, DirectLog, KeyLookup, Material } from '../src/core/connect/index.ts';
-import { createState } from '../src/state/index.ts';
-import { createAiCards } from '../src/obsidian/ai-cards.ts';
-import { createMemoryFiles } from './helpers/memory-files.ts';
+import type { Material } from '../src/core/connect/index.ts';
+import { FAKE_KEY, form, lesson, load, ok, propsOf, reply, sent, SNAPSHOT, unauthorized, WORD } from './helpers/ai-direct.ts';
 
 // 直接製作接上製卡流程（tasks/ai-direct.md §4～§6）：同一份提示加教材送出，收回的整段走貼回的同一條路；先存再送、一次一個、重送不重組。
 // 製卡流程（src/obsidian/ai-cards.ts）＋真正的 createState＋記憶體 Files＋套件的假 fetch。畫面另外在 Windows 實機看。
-
-const FAKE_KEY = 'AIzaSy-cards-direct-flow-3333';
-const rules: EmbeddedRules = { english: [{ name: '通用', version: 'v0.15', text: '# 通用', sha256: sha256Hex('# 通用') }, { name: '英文', version: 'v0.14', text: '# 英文', sha256: sha256Hex('# 英文') }] };
-const OLD = 'Essence Cards/學業/國二上/英文/國二上英文 L1 單字.md';
-const OLD_TEXT = '---\n年級學期: 國二上\n科目: 英文\n單元: L1 Hi\n狀態: 啟用\n---\n\n## 單字\n\n- hello 英翻中 ^k3m9qa\n    - 出處：p.10\n    - hello :: 你好\n';
-const reply = [
-  '國二上英文 L3 單字', '', '## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入', '',
-  '國二上英文 L3 文法', '', '## 文法', '', '- 能用 be going to 說未來的計畫', '    - 出處：p.42', '    - 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to', '<<<完>>>',
-].join('\n');
-const form: CardForm = { subject: 'english', term: '國二上', unit: 'L3 Sports', purpose: '準備段考', supplement: false, adjust: '', material: '' };
-const WORD = 'Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md';
-const SNAPSHOT = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
-const LESSON_BYTES = new Uint8Array([37, 80, 68, 70, 1, 2, 3]);
-const lesson: Material = { name: '英文 L3.pdf', mediaType: 'application/pdf', data: LESSON_BYTES, pages: 12, sha256: sha256OfBytes(LESSON_BYTES) };
-
-const ok = (text: string, finishReason = 'STOP'): MockReply => ({
-  status: 200, headers: { 'content-type': 'text/event-stream' },
-  chunks: [sse([
-    { data: { candidates: [{ content: { parts: [{ text }], role: 'model' } }], modelVersion: 'gemini-3.8-flash-001', responseId: 'gem-1' } },
-    { data: { candidates: [{ content: { parts: [], role: 'model' }, finishReason }], usageMetadata: { promptTokenCount: 18_000, candidatesTokenCount: 4_000, totalTokenCount: 22_000 } } },
-  ])],
-});
-const unauthorized: MockReply = { status: 400, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ error: { code: 400, message: 'API key not valid', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } })] };
-/** Gemini 的請求本文裡，提示那一段的字與附件的種類。 */
-function sent(body: string | null): { text: string; files: string[] } {
-  const parts = (JSON.parse(body ?? '{}') as { contents: { parts: { text?: string; inlineData?: { mimeType: string } }[] }[] }).contents[0].parts;
-  return { text: parts.filter(part => part.text !== undefined).map(part => part.text).join(''), files: parts.flatMap(part => part.inlineData ? [part.inlineData.mimeType] : []) };
-}
-
-function machine() {
-  const saved: { jobs: unknown; retired: string[]; last: { subject?: string; term?: string }; picks: Record<string, boolean> } = { jobs: null, retired: [], last: {}, picks: {} };
-  const store = {
-    jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
-    saveJobs(jobs: CardJob[]) { saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
-    retired: () => saved.retired,
-    retire(ids: readonly string[]) { saved.retired = [...new Set([...saved.retired, ...ids])]; },
-    last: () => saved.last,
-    saveLast(last: { subject: string; term: string }) { saved.last = last; },
-    picks: () => saved.picks,
-    savePick(key: string, pick: boolean) { saved.picks = { ...saved.picks, [key]: pick }; },
-  };
-  return { saved, store };
-}
-/** 每次載入同一串亂數：兩次載入配出的 ID 相同，存出的卡組才能逐字比。 */
-function seeded(): () => number {
-  let seed = 7;
-  return () => { seed = (seed * 48_271) % 2_147_483_647; return seed / 2_147_483_647; };
-}
-async function load(t: TestContext, replies: MockReply[] | ((index: number) => MockReply), options: { key?: KeyLookup; direct?: boolean; reasoning?: string; provider?: string; model?: string; box?: ReturnType<typeof machine>; memory?: ReturnType<typeof createMemoryFiles>; now?: () => number } = {}) {
-  const random = seeded();
-  const memory = options.memory ?? createMemoryFiles({ [OLD]: OLD_TEXT });
-  const box = options.box ?? machine();
-  const clipboard: string[] = [];
-  const errors: unknown[] = [];
-  const failures: DirectFailure[] = [];
-  const logs: DirectLog[] = [];
-  const fetch = mockFetch(Array.isArray(replies) ? replies : (_request, index) => replies(index));
-  const client = cardsClient(fetch);
-  const provider = options.provider ?? 'google';
-  const connection = readConnection({ provider, models: { [provider]: options.model ?? 'gemini-3.8-flash' }, secrets: { [provider]: 'my-key' }, ...options.reasoning ? { reasoning: options.reasoning } : {} }, client.providers());
-  const now = options.now ?? (() => Date.parse('2026-11-07T10:02:11+08:00'));
-  // eslint-disable-next-line prefer-const -- state 與流程互相參照
-  let state: ReturnType<typeof createState>;
-  const cards = createAiCards({
-    rules, state: () => state, store: box.store, random,
-    names: () => new Set([...memory.texts.keys()].filter(path => path.endsWith('.md')).map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
-    named: name => [...memory.texts.keys()].filter(path => path.endsWith('.md') && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
-    clipboard: text => { clipboard.push(text); return Promise.resolve(); },
-    now: () => ({ ms: now(), offset: 480 }),
-    onError: error => { errors.push(error); },
-    ...options.direct === false ? {} : { direct: { client, connection: () => connection, key: () => options.key ?? { ok: true, key: FAKE_KEY }, onFailure: (log, failure) => { failures.push(failure); logs.push(log); } } },
-  });
-  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random, reserved: () => cards.reserved(), now: () => Date.parse('2026-11-07T10:02:11+08:00'), offset: () => 480, onError() {} });
-  t.after(() => state.close());
-  await state.ready();
-  return { cards, memory, box, clipboard, errors, failures, logs, fetch };
-}
 
 void test('§4 驗收：直接製作收回的整段和貼回的一樣存成草稿；送出的提示和複製的一字不差，教材當附件、不帶檔名；先存工作再送', async t => {
   const pasted = await load(t, [ok(reply)], { direct: false });
@@ -188,12 +105,6 @@ const rich = (text: string): MockReply => ({
     { data: { candidates: [{ content: { parts: [], role: 'model' }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 18_000, cachedContentTokenCount: 2_000, candidatesTokenCount: 4_000, thoughtsTokenCount: 1_500, totalTokenCount: 23_500 } } },
   ])],
 });
-/** 快照的屬性區（解析後）與全文。 */
-function propsOf(memory: ReturnType<typeof createMemoryFiles>, path = SNAPSHOT): { props: Record<string, unknown>; text: string } {
-  const text = memory.texts.get(path);
-  assert.ok(text, path);
-  return { props: parse(text.slice(4, text.indexOf('\n---\n'))) as Record<string, unknown>, text };
-}
 /** 兩種接法都有、值也相同的欄（和複製貼上的快照比）。 */
 const COMMON = ['日期', '時間', '識別碼', '工作', '對象', '規則版本', '送出', '提示雜湊', '回覆原文', '已有目標', '記穩目標'];
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
