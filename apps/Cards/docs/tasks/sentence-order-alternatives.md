@@ -1,6 +1,6 @@
 # 英文句子排序：好幾種順序都算對（D-238，給 Claude）
 
-狀態：實作中｜下一步：程式寫完（分支 `claude/project-thread-vpoerm`），在使用者電腦看 Windows 畫面、對兩個正式 vault 跑 `compare-versions`，再送 L2｜等誰：Claude
+狀態：待審｜下一步：L2 第二輪只審第一輪的修正與閃動的改法（[審查紀錄](<../Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)），Windows 再看一次閃動；通過後請使用者同意合併 PR #73｜等誰：Claude
 
 來自：[D-238](../../../../docs/decisions.md#d-238-英文的句子排序好幾種順序都對時都算對)（第 3、6 點交給這份任務說明定）；併進[題型模組](question-type-modules.md)這一串做（同一塊程式、同一版 0.7.0）
 
