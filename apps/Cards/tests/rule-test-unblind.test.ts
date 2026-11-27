@@ -13,7 +13,7 @@ import { statusLines } from '../tools/rule-test/status.ts';
 import { tokensOf, unblindFolder, type DeckMetrics } from '../tools/rule-test/unblind.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
-// 乙的第一個目標有兩題，彼此的題幹有對方的答案（程式找的洩漏候選）。
+// 乙的第一個目標有兩題，彼此的題幹有對方的答案：別一題的不算洩漏（rule-test-d236.md §18），程式不列候選。
 const SECOND = '````markdown\n國二上英文 L3 單字\n- borrow 的用法\n    - borrow 英翻中 :: **借入**\n    - 「借入」的英文 :: borrow\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 const CROSS_RUBRIC = RUBRIC.replace(' 加題 aaaaa2 ', ' 另立 ');
 
@@ -97,7 +97,7 @@ void test('指標：照合併表與裁定另算；問題兩位聯集去重；教
   assert.deepEqual([second.harm, second.minor, second.crossRows, second.crossWrong], [{ 判錯: 1, 洩漏: 0, 漏的必備: 0, 其他: 0, total: 1 }, 2, 1, 1]);
   // 孩子的時間：3 題、確定考到的必備 1 列（R1 是部分不算），每個必備平均 3 題。
   assert.deepEqual([second.targets, second.prompts, second.childPrompts, second.sureRequired, second.perRequired], [2, 3, 3, 1, 3]);
-  assert.deepEqual(second.leakCandidates, ['目標 1 第 1 題的題幹有第 2 題的答案', '目標 1 第 2 題的題幹有第 1 題的答案']);
+  assert.deepEqual(second.leakCandidates, []);
   // 甲：漏 R2 算傷到學習；近義重複一對＝多餘的題 1。
   assert.deepEqual([first.nearDuplicates, first.duplicateGroups, first.extraPrompts, first.harm.total, first.targets, first.prompts, first.leakCandidates], [1, 1, 1, 1, 2, 2, []]);
   assert.equal(first.generationMs, 1200);

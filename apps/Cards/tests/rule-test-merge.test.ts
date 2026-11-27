@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { JudgeResult } from '../tools/rule-test/judge.ts';
-import { duplicateGroups, mergeDeck, mergeVerdict, sameAt, twoPrompts, type Verdict } from '../tools/rule-test/merge.ts';
+import { duplicateGroups, leakCandidates, mergeDeck, mergeVerdict, sameAt, twoPrompts, type MergedIssue, type Verdict } from '../tools/rule-test/merge.ts';
 import { wins } from '../tools/rule-test/stats.ts';
 
 void test('合併表 §6-2 的九格：兩位都有是有、都沒有是沒有（漏），其他都是部分', () => {
@@ -113,4 +113,24 @@ void test('近義重複（rule-test-d236.md §4）：兩行要是兩道不同的
   assert.deepEqual(duplicateGroups(chain), { groups: 1, extra: 5 });
   assert.deepEqual(duplicateGroups([['a', 'b'], ['c', 'd'], ['b', 'a']]), { groups: 2, extra: 2 });
   assert.deepEqual(duplicateGroups([]), { groups: 0, extra: 0 });
+});
+
+void test('程式找的洩漏候選（rule-test-d236.md §18）：只比同一題，答案原樣出現在自己的題幹才列；別一題的題幹有這個答案不算；評審記過的不列', () => {
+  const deck = [
+    '國二上英文 L3 單字',
+    '- borrow 的用法',
+    '    - borrow 英翻中 :: **借入**',
+    '    - 「借入」的英文 :: borrow',
+    '- lend 怎麼拼',
+    '    - 「借出」的英文 lend 怎麼拼？ :: lend',
+    '- lend 的句子',
+    '    - I ==lend== him my book. (lend：借出)',
+    '- 短的答案',
+    '    - I 是第幾人稱？ :: I',
+    '',
+  ].join('\n');
+  // 第 1 個目標兩題互相有對方的答案：別一題的不算。第 2 個目標問答題、第 3 個目標填空題挖空之後，題幹還有自己的答案。第 4 個目標的答案只有一個字，不比。
+  assert.deepEqual(leakCandidates(deck, []), ['目標 2 第 1 題的題幹有自己的答案', '目標 3 第 1 題的題幹有自己的答案']);
+  const recorded = (at: string): MergedIssue => ({ kind: '洩漏', at: [at], lines: [], judges: ['甲'], rubric: '', notes: [''] });
+  assert.deepEqual(leakCandidates(deck, [recorded('目標 2 第 1 題'), recorded('目標 3')]), []);
 });

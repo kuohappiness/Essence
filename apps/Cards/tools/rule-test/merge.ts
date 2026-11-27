@@ -156,20 +156,20 @@ function stemOf(prompt: Prompt): string {
 }
 
 /**
- * 程式找的洩漏候選（§5-8，照第一輪 cross.py）：同一個目標裡，一張卡的答案出現在另一張卡的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
- * 那張卡兩位評審都沒記洩漏的才算；一張卡算一筆。只比字面，換句話說的會漏；另列一個數，不進門檻。
+ * 程式找的洩漏候選（§5-8）：一題的答案原樣出現在自己的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
+ * 只比同一題（rule-test-d236.md §18）：別一題的題幹寫到這個答案不算洩漏，第一輪 cross.py 比的是別一題，不再照它。
+ * 評審在那一題（或它的目標）記過洩漏的不列；一題算一筆。只比字面，換句話說的會漏；同一張卡同時顯示的好幾格之間也不比，交給評審。另列一個數，不進門檻。
  */
 export function leakCandidates(deck: string, issues: readonly MergedIssue[]): string[] {
-  const recorded = new Set(issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at));
-  const found = new Map<string, number[]>();
+  const recorded = issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at);
+  const found: string[] = [];
   targetsOf(deck).forEach(({ target }, t) => {
-    const answers = target.prompts.map(prompt => answersOf(prompt).map(each => each.toLowerCase()).filter(each => [...each].length >= 2));
-    target.prompts.forEach((prompt, to) => {
+    target.prompts.forEach((prompt, p) => {
       const stem = stemOf(prompt).toLowerCase();
-      const from = answers.flatMap((list, i) => i !== to && list.some(answer => stem.includes(answer)) ? [i + 1] : []);
-      const at = unitName({ target: t, prompt: to, line: prompt.line + 1 });
-      if (from.length && !recorded.has(at) && !recorded.has(unitName({ target: t, prompt: null, line: target.line + 1 }))) found.set(at, from);
+      const leaked = answersOf(prompt).some(answer => [...answer].length >= 2 && stem.includes(answer.toLowerCase()));
+      const at = unitName({ target: t, prompt: p, line: prompt.line + 1 });
+      if (leaked && !recorded.some(each => sameAt(each, at))) found.push(at);
     });
   });
-  return [...found].map(([at, from]) => `${at}的題幹有第 ${from.join('、')} 題的答案`);
+  return found.map(at => `${at}的題幹有自己的答案`);
 }
