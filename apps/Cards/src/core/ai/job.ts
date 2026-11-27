@@ -68,9 +68,9 @@ export interface DirectEvidence {
 /**
  * 直接製作的工作（§7 `api`，這台電腦的資料）：最後一次送出的狀態（sending 送出中、received 收到、failed 失敗，kind 是失敗的種類）、
  * 送出的教材檔；收到時另存那一次的證據與整段（F2：收到後、存草稿前被關掉，重開不用再付一次錢）。
- * 狀態與種類照字串收（F12：之後的版本可能加新的值）。
+ * 狀態與種類照字串收（F12：之後的版本可能加新的值）。charged：拿到回應之後才失敗，可能已經計費，重開後的「重送」照樣寫會再計費；沒有這一欄是 false。
  */
-export interface DirectJob { state: string; kind: string | null; at: string; files: SentFile[]; received: DirectEvidence | null }
+export interface DirectJob { state: string; kind: string | null; at: string; files: SentFile[]; received: DirectEvidence | null; charged?: boolean }
 
 export interface CardJob {
   /** 6 碼，和考試範圍同一套產生法。 */
@@ -119,6 +119,7 @@ export function directEvidence(value: unknown): DirectEvidence | null {
 export function directJob(job: CardJob): DirectJob | null {
   const api: unknown = job.api;
   if (!isObject(api) || !isString(api.state) || !optString(api.kind) || !isString(api.at) || !Array.isArray(api.files) || !api.files.every(isFile)) return null;
+  if (api.charged !== undefined && typeof api.charged !== 'boolean') return null;
   if (api.received !== null && directEvidence(api.received) === null) return null;
   return api as unknown as DirectJob;
 }

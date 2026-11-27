@@ -246,7 +246,8 @@ export function createAiCards(deps: AiCardsDeps) {
       if (sent.failure.kind !== 'cancelled') {
         try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request, providerName(target.provider)), sent.failure); } catch (error) { deps.onError(error); }
       }
-      const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null });
+      // 拿到回應之後才失敗的記下來：重開 Obsidian 之後的清單也寫重送會再計費（Windows 實機第 2 批第 1 點）。
+      const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null, ...sent.failure.afterResponse ? { charged: true } : {} });
       return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };
     } finally {
       if (sending === controller) sending = null;

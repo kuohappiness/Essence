@@ -226,3 +226,19 @@ void test('L2 R10 送不成是金鑰不對：失敗的畫面有「打開設定�
   assert.ok(texts(again.contentEl).some(each => each.includes('這份教材太大')), texts(again.contentEl).join('|'));
   assert.equal(button(again.contentEl, '打開設定頁'), undefined);
 });
+
+void test('實機第 1 點 拿到回應之後才失敗（回答太長被截斷）：重開之後清單的重送也寫會再計費；拿到回應之前就失敗的不寫', async t => {
+  const first = await load(t, [ok(reply, 'MAX_TOKENS')]);
+  const cut = await first.cards.direct(form, [lesson]);
+  assert.ok(cut.kind === 'failed' && cut.failure.afterResponse, JSON.stringify(cut));
+  assert.equal(directJob(first.cards.jobs()[0])?.charged, true);
+  const { openModal } = await open(t, [], { box: first.box, memory: first.memory });
+  const list = openModal();
+  assert.ok(button(list.contentEl, '重送（會再計費一次）'), texts(list.contentEl).join('|'));
+  const second = await load(t, [unauthorized]);
+  assert.equal((await second.cards.direct(form, [lesson])).kind, 'failed');
+  assert.equal('charged' in (directJob(second.cards.jobs()[0]) ?? {}), false, '沒有計費的不寫這一欄');
+  const again = (await open(t, [], { box: second.box, memory: second.memory })).openModal();
+  assert.ok(button(again.contentEl, '重送'), texts(again.contentEl).join('|'));
+  assert.equal(button(again.contentEl, '重送（會再計費一次）'), undefined);
+});

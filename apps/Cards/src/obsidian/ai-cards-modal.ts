@@ -158,7 +158,7 @@ class AiCardsModal extends Modal {
         row.createEl('p', { text: api.received ? TEXT.resumeReceived(labelOf(job), when) : api.state === 'failed' ? TEXT.resumeFailed(labelOf(job), when) : TEXT.resumeNoReply(labelOf(job), when) });
         const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
         if (api.received) buttons.createEl('button', { text: '接著看', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null); });
-        else this.directButtons(buttons, row.createEl('p', { cls: 'essence-cards-issue-note' }), api.state !== 'failed', job);
+        else this.directButtons(buttons, row.createEl('p', { cls: 'essence-cards-issue-note' }), api.state !== 'failed' || api.charged === true, job);
         buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
       } else {
         row.createEl('p', { text: TEXT.resumePaste(labelOf(job), ago(job.copiedMs, this.host.now())) });
