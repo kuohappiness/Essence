@@ -155,6 +155,13 @@ function stemOf(prompt: Prompt): string {
   return text;
 }
 
+/** 答案在題幹裡：全是拉丁字母與數字的答案要是整個詞（前後不接字母或數字），免得 this 裡的 is、want 裡的 an 誤中；其他照字比（L2 §17 第 2 輪 P3-5）。 */
+function inStem(stem: string, answer: string): boolean {
+  if (!/^[a-z0-9][a-z0-9 '’-]*$/.test(answer)) return stem.includes(answer);
+  // 允許的字元在正規式裡都沒有特別意思，不用跳脫。
+  return new RegExp(`(?<![a-z0-9])${answer}(?![a-z0-9])`).test(stem);
+}
+
 /**
  * 程式找的洩漏候選（§5-8）：一題的答案原樣出現在自己的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
  * 只比同一題（rule-test-d236.md §18）：別一題的題幹寫到這個答案不算洩漏，第一輪 cross.py 比的是別一題，不再照它。
@@ -166,7 +173,7 @@ export function leakCandidates(deck: string, issues: readonly MergedIssue[]): st
   targetsOf(deck).forEach(({ target }, t) => {
     target.prompts.forEach((prompt, p) => {
       const stem = stemOf(prompt).toLowerCase();
-      const leaked = answersOf(prompt).some(answer => [...answer].length >= 2 && stem.includes(answer.toLowerCase()));
+      const leaked = answersOf(prompt).some(answer => [...answer].length >= 2 && inStem(stem, answer.toLowerCase()));
       const at = unitName({ target: t, prompt: p, line: prompt.line + 1 });
       if (leaked && !recorded.some(each => sameAt(each, at))) found.push(at);
     });

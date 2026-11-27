@@ -138,4 +138,7 @@ void test('程式找的洩漏候選（rule-test-d236.md §18）：只比同一�
   // 不分大小寫；挖空之後句子裡沒有答案的填空題不列。
   const more = ['國二上英文 L3 單字', '- borrow 的拼法', '    - BORROW 寫成小寫是什麼？ :: borrow', '- lend 的句子', '    - She ==lends== me a pen.', ''].join('\n');
   assert.deepEqual(leakCandidates(more, []), ['目標 1 第 1 題的題幹有自己的答案']);
+  // 英數字的答案要整個詞才算（L2 §17 第 2 輪 P3-5）：this 裡的 is、want 和 and 裡的 an 不算；中文照字比。
+  const words = ['國二上英文 L3 單字', '- be 動詞', '    - This ＿＿ (be) my book. :: is', '- 冠詞', '    - I want ＿＿ apple and a banana. :: an', '- 叫聲', '    - 小貓喵喵叫，叫聲寫成什麼？ :: **喵喵**', '- 句首', '    - Is 開頭的問句，is 要怎麼寫？ :: is', ''].join('\n');
+  assert.deepEqual(leakCandidates(words, []), ['目標 3 第 1 題的題幹有自己的答案', '目標 4 第 1 題的題幹有自己的答案']);
 });
