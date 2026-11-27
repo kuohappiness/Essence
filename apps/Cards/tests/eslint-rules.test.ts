@@ -279,6 +279,34 @@ void test('R8 state、review 不能 import ui；deck、study 不能 import ai、
   }
 });
 
+// ai-direct.md §1、L2 第一輪 R5：core/connect 會載入 AI 連線套件，state、複習、其他核心模組、畫面與發布前比較都不拿它的值。
+void test('R5 core/connect 只有 main.ts、src/obsidian/ 與它自己能 import 值；別處只拿型別', async () => {
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
+  const blocked = /core\/connect（AI 連線）只有 main\.ts、src\/obsidian\/ 與 core\/connect 自己能 import/;
+  for (const [path, code, message] of [
+    ['src/ui/prefs.ts', "import { readConnection } from '../core/connect/index.ts';", blocked],
+    ['src/ui/Entry.tsx', "import { type Connection } from '../core/connect/index.ts';", blocked],
+    ['src/state/index.ts', "import { cardsClient } from '../core/connect/index.ts';", blocked],
+    ['src/review/session.ts', "void import('../core/connect/index.ts');", blocked],
+    ['src/core/ai/index.ts', "export { cardsClient } from '../connect/index.ts';", blocked],
+    ['src/core/deck/parse.ts', "import '../connect/connection.ts';", /核心的模組之間只能 import 對方的 index\.ts/],
+    ['src/dev/compare.ts', "import { cardsClient } from '../core/connect/index.ts';", blocked],
+    ['tools/compare/adapter.ts', "import { cardsClient } from '../../src/core/connect/index.ts';", blocked],
+    // 不誤擋：接線的地方、模組自己、型別、測試。
+    ['src/main.ts', "import { cardsClient } from './core/connect/index.ts';", null],
+    ['src/obsidian/settings.ts', "import { cardsClient } from '../core/connect/index.ts';", null],
+    ['src/core/connect/connection.ts', "import { createAiClient } from './client.ts';", null],
+    ['src/ui/Entry.tsx', "import type { Connection } from '../core/connect/index.ts';", null],
+    ['src/state/index.ts', "type C = import('../core/connect/index.ts').Connection;", null],
+    ['tests/ai-connection.test.ts', "import { cardsClient } from '../src/core/connect/index.ts';", null],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    const found = result.messages.filter(isBoundary);
+    if (message) assert.ok(found.some(m => message.test(m.message)), path + ': ' + code + ' → ' + JSON.stringify(found.map(m => m.message)));
+    else assert.deepEqual(found, [], path + ': ' + code);
+  }
+});
+
 void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法都擋，src/desktop/ 只能由 main.ts 動態載入', async () => {
   const lint = new ESLint({ overrideConfig: syntaxOnly });
   const cases: [string, string, boolean][] = [

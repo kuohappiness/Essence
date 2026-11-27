@@ -123,11 +123,16 @@ const moduleBoundaries = {
      */
     const inBelowUi = /\/src\/(state|review)\//.test(path);
     const inUi = path.includes('/src/ui/');
+    // AI 連線（ai-direct.md §1，L2 第一輪 R5）：core/connect 會載入套件，只有 main.ts、src/obsidian/ 與它自己拿得到值；
+    // state、複習、core 的其他模組與發布前比較（tools/compare/）都不載入它，畫面要連 AI 的動作由 main.ts 交進來。型別照常可以拿。
+    const mayConnect = editorSide || path.includes('/src/core/connect/');
+    const guardConnect = inSrc || path.includes('/tools/compare/');
     function layerBoundary(name, typeOnly) {
       if (typeof name !== 'string' || !name.startsWith('.')) return undefined;
       const target = posix.normalize(posix.join(posix.dirname(path), name));
       if (inBelowUi && target.includes('/src/ui/')) return 'state 與 review 不能 import 畫面（ui）：依賴方向是 ui → review → state。';
       if (inUi && !typeOnly && /\/src\/core\/(backup|ai|settings)\//.test(target)) return 'ui 從 core 的 backup、ai、settings 只能 import 型別（import type）：執行期的動作由 main.ts 交進來。';
+      if (guardConnect && !mayConnect && !typeOnly && target.includes('/src/core/connect/')) return 'core/connect（AI 連線）只有 main.ts、src/obsidian/ 與 core/connect 自己能 import（型別除外）：它會載入 AI 連線套件，state、複習、其他核心模組與發布前比較都不載入它，畫面的動作由 main.ts 交進來（ai-direct.md §1）。';
       return undefined;
     }
     function check(node, source, dynamic) {
