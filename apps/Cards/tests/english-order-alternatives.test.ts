@@ -74,6 +74,9 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   invalid('她說她累了：＂==I\'m tired==,＂ ==she== ==said==.', ['另一種排法：==she== ==said==, ＂==I\'m tired==.＂'], /引號/);
   invalid('重排引句:"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
   invalid('她說她累了：&quot;==I\'m tired==,&quot; ==she== ==said==.', ['另一種排法：==she== ==said==, &quot;==I\'m tired==.&quot;'], /引號/);
+  // L2 第二輪（中途）：字元參照的名稱大小寫不同也算（HTML 認 `&QUOT;`）。
+  invalid('她說她累了：&QUOT;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
+  invalid('她說她累了：&#X22;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
 
   const twice = one(BECAUSE, [ALT, ALT]);
   assert.deepEqual(codes(twice), [[4, 'order-alt-invalid']], '第二行和前面一行相同');

@@ -160,10 +160,10 @@ export const ALT_LIKE = /^另一種排法\s*[：:]/u;
  * 直引號（半形、全形）前面是開頭、空白、冒號、開頭的括號、中文或全形標點時算開頭（L2 第一輪 R1）；逗號、句點、字母後面的是結束的引號。
  */
 const OPENING = /(?:[\p{Ps}\p{Pi}]|(?:^|[\s:\p{Ps}\p{Pi}\p{Script=Han}\u3000-\u303f\uff00-\uffef])["'＂＇])$/u;
-/** 字元參照寫的引號、括號（`&quot;`、`&#34;`）也看得出來（R1）：解開數字的參照與幾個引號、括號的名稱，其他照原文。 */
+/** 字元參照寫的引號、括號（`&quot;`、`&#34;`）也看得出來（R1）：解開數字的參照與幾個引號、括號的名稱（大小寫都算，HTML 也認 `&QUOT;`，L2 第二輪），其他照原文。 */
 const NAMED: Readonly<Record<string, string>> = { quot: '"', apos: "'", ldquo: '“', lsquo: '‘', laquo: '«', lsaquo: '‹', lpar: '(', lsqb: '[', lcub: '{' };
 const decoded = (text: string): string => text.replace(/&(?:#[xX]([0-9a-fA-F]+)|#(\d+)|([a-zA-Z]+));/g, (match, hex?: string, decimal?: string, name?: string) => {
-  if (name !== undefined) return Object.hasOwn(NAMED, name) ? NAMED[name] : match;
+  if (name !== undefined) return Object.hasOwn(NAMED, name.toLowerCase()) ? NAMED[name.toLowerCase()] : match;
   const point = hex !== undefined ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
   return point <= 0x10ffff ? String.fromCodePoint(point) : match;
 });
