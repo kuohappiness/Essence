@@ -88,3 +88,17 @@ void test('會變的格後面的字的記號找不到（在程式碼裡、出現
   fillTails(tails, [', ', ', ']);
   assert.equal((container.textContent ?? '').includes(tailMark(0)) || (container.textContent ?? '').includes(tailMark(1)), false);
 });
+
+void test('記號在圖片的替代文字或標題裡（L2 第二輪 F5）：畫面的屬性裡不留記號，格放在句尾', async () => {
+  const { tailMark } = await import('../src/ui/rendered.ts');
+  const container = document.createElement('div');
+  container.innerHTML = `<p><img alt="Practice ${m(0)}${tailMark(0)}${m(1)} ${m(2)}." title="see ${m(1)}" src="missing.png"><a href="https://example.com" aria-label="go ${tailMark(0)}">link</a></p>`;
+  const { slots, slotMissing, tails } = postProcess(container, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1), m(2)], tailMarkers: [tailMark(0)] });
+  assert.equal(slotMissing, true);
+  assert.equal(slots.length, 3);
+  assert.deepEqual(tails, [null]);
+  assert.equal(container.querySelector('img')?.getAttribute('alt'), 'Practice  .');
+  assert.equal(container.querySelector('img')?.getAttribute('title'), 'see ');
+  assert.equal(container.querySelector('a')?.getAttribute('aria-label'), 'go ');
+  assert.equal(container.querySelector('a')?.getAttribute('href'), 'https://example.com');
+});

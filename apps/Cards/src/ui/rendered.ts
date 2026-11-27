@@ -68,6 +68,7 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   const tails = options.mode === 'pick' && options.tailMarkers ? insertTails(container, options.tailMarkers) : [];
   const marked = options.mode === 'pick' && options.markers ? insertMarkedSlots(container, options.markers, !!options.breakFirst) : null;
   const pickSlot = options.mode === 'pick' && !marked ? insertPickSlot(container) : null;
+  if (options.mode === 'pick') stripMarkAttributes(container);
   const slotMissing = marked ? marked.some(each => !each) : options.mode === 'pick' && !pickSlot;
   const slots = marked ? marked.map(each => each ?? endSlot(container)) : [];
   // 比較卡一定要有空格（§3）：找不到時放在句尾。
@@ -90,6 +91,19 @@ export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE
   const code = hex ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
   return code >= 0xe000 && code <= 0xf8ff ? '' : reference;
 });
+
+/**
+ * 記號寫進了屬性（圖片的替代文字或標題，L2 第二輪 F5）就沒有位置可放，格照找不到放在句尾；屬性裡的記號拿掉，
+ * 圖片載入不了或輔助工具讀出來時不會碰到。題目文字裡本來的私用區字已經拿掉了（stripSlotMarks），這裡只會是記號。
+ */
+function stripMarkAttributes(container: HTMLElement): void {
+  for (const element of Array.from(container.querySelectorAll('*'))) {
+    for (const { name, value } of Array.from(element.attributes)) {
+      const clean = value.replace(PRIVATE_USE, '');
+      if (clean !== value) element.setAttribute(name, clean);
+    }
+  }
+}
 
 /**
  * 句子排序第 k 個會變的格後面的字在 Markdown 裡的記號（tasks/sentence-order-alternatives.md §5）：私用區的另一段（U+E800 起），和格的記號分開。
