@@ -334,3 +334,20 @@ void test('L2 第二輪 S4 拿到回應之後才取消：工作標 charged，重
   assert.ok(cancelled.kind === 'failed' && cancelled.failure.kind === 'cancelled');
   assert.equal(directJob(made.cards.jobs()[0])?.charged, true);
 });
+
+void test('L2 第三輪 T1 重送收到了、但收到的那一刻存不進這台電腦：存草稿當成複製貼上（照 R14），不配上一次的證據', async t => {
+  const second = reply.replace('我明天要去游泳。', '我明天要去跑步。');
+  assert.notEqual(second, reply);
+  const made = await load(t, [ok(reply), ok(second)]);
+  const received = await made.cards.direct(form, [lesson]);
+  assert.ok(received.kind === 'received');
+  const pending = made.cards.resend(received.job);
+  // 送出前那一次已經存了；收到的那一刻存不進去。
+  made.box.saved.failNext = 1;
+  const again = await pending;
+  assert.ok(again.kind === 'received' && again.reply === second, JSON.stringify(again));
+  assert.equal((await made.cards.save(again.job, again.reply, null, undefined, true)).kind, 'done');
+  const { props } = propsOf(made.memory);
+  assert.equal(props['接法'], '複製貼上');
+  for (const key of ['服務', '回應編號', '輸出用量', '收到的回覆', '收到時間']) assert.equal(key in props, false, key);
+});

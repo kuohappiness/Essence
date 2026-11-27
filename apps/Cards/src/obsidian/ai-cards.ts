@@ -454,7 +454,10 @@ export function createAiCards(deps: AiCardsDeps) {
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
       const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10), deps.phone === true ? latest.id : null);
-      const evidence = received ? directJob(latest)?.received ?? undefined : undefined;
+      // 證據只用存著的那一份，而且要和畫面拿的是同一次：重送收到的那一刻存不進這台電腦時，存著的還是上一次的，
+      // 配上去快照就對不上這一份回覆；照 R14 當成複製貼上（L2 第三輪 T1）。
+      const kept = received ? directJob(latest)?.received ?? undefined : undefined;
+      const evidence = kept && JSON.stringify(kept) === JSON.stringify(directJob(job)?.received) ? kept : undefined;
       const saved = beginSave(latest, reply, evidence ? null : service, planned, started, evidence);
       // 第 2 步：恢復資料先存進這台電腦，存不進去就不碰 vault。
       try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' } satisfies Outcome; }
