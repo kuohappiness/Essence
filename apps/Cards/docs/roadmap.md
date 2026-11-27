@@ -18,7 +18,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 製卡規則重整的比較測試 | 實作中 | 使用者決定國小社會換不換（〈結果〉門檻 3）；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一版照 §9 與[三層架構檢討](<Claude Codex Discussion/2026-11-25-three-layer-review.md>)測試 1 改，用[比較測試工具](tasks/rule-test-tool.md)跑 | 使用者 | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 | 題型模組（每個學習目標掛上一種題型） | 實作中 | 第 A 步已合併（PR #56，2026-11-26，`ff848530`）；先做[句子排序好幾種順序都算對](tasks/sentence-order-alternatives.md)（D-238，併進這一串），再照使用者同意的先後做[配對與單選](tasks/matching-single-choice.md) → 第 C 步 → 第 B 步；使用者回 §6 第 1～3 題與第 4 題的兩件 | 使用者、Claude | [任務說明](tasks/question-type-modules.md) |
-| 英文句子排序好幾種順序都算對（D-238、D-240） | 待審 | Codex 跑 L2 第四輪（最後一輪），只審第三輪之後的修正（[審查紀錄](<Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)：第三輪沒有 P1，F6、F7、F9、F10 收窄修好，F8 記成限制）；通過後請使用者同意合併 PR #73 | Codex | [任務說明](tasks/sentence-order-alternatives.md) |
+| 英文句子排序好幾種順序都算對（D-238、D-240） | 待審 | 使用者同意合併 PR #73（L2 四輪審完、第四輪判可以合併，[審查紀錄](<Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)）；合併後 iPhone 併進 0.7.0 那一次 | 使用者 | [任務說明](tasks/sentence-order-alternatives.md) |
 | Cards 直接呼叫 AI 製卡（設定頁、直接製作、加深） | 實作中 | 第 1 批已合併（PR #78，2026-11-27）；第 2 批照 §4～§8 實作，§7 已照[格式查核](<Claude Codex Discussion/2026-11-27-ai-direct-format-review.md>)改定，`服務` 寫什麼等使用者選（先照建議的甲做） | Claude | [任務說明](tasks/ai-direct.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。

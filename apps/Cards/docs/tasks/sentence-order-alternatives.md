@@ -1,6 +1,6 @@
 # 英文句子排序：好幾種順序都算對（D-238，給 Claude）
 
-狀態：待審｜下一步：Codex 跑 L2 第四輪（最後一輪），只審第三輪之後的修正（[審查紀錄](<../Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)：第三輪沒有 P1，F6、F7、F9、F10 收窄修好，F8 記成限制）；通過後請使用者同意合併 PR #73｜等誰：Codex
+狀態：待審｜下一步：使用者同意合併 PR #73（L2 四輪審完、第四輪判可以合併，[審查紀錄](<../Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)）；合併後 iPhone 併進 0.7.0 那一次｜等誰：使用者
 
 來自：[D-238](../../../../docs/decisions.md#d-238-英文的句子排序好幾種順序都對時都算對)（第 3、6 點交給這份任務說明定）；併進[題型模組](question-type-modules.md)這一串做（同一塊程式、同一版 0.7.0）
 

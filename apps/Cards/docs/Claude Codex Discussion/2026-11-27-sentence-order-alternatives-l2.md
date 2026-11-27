@@ -1,6 +1,6 @@
 # 句子排序多種排法的 L2 審查（Codex 回報）
 
-狀態：待審｜下一步：Codex 跑第四輪（最後一輪），只審 `a74e747a..1cc68213` 的修正｜等誰：Codex
+狀態：已結案 → [任務說明](../tasks/sentence-order-alternatives.md)｜完成：四輪審完（第一輪 `1b6b6868`、第二輪 `b35408c1`、第三輪 `4884048f`、第四輪 `537053b6`），都沒有 P1；第四輪判可以合併，剩下的兩項 P3 修完不再送審（〈Claude 核對（第四輪）〉）｜等誰：—
 
 待審 commit：分支 `claude/project-thread-vpoerm` 的 `1b6b6868`（PR #73，範圍 `23d084ee`..`1b6b6868`；任務說明：[sentence-order-alternatives.md](../tasks/sentence-order-alternatives.md)）。審查請求只放在使用者電腦的暫存資料夾，沒有進 repo。
 
@@ -211,3 +211,48 @@
 使用者電腦看到的兩個圖片限制（三格之間沒有空白和句號、背面只看到圖片框）和 main 相同，是把詞塊挖在圖片替代文字裡本來就有的，不修。
 
 送第四輪（D-171 的最後一輪）：只審 `a74e747a..1cc68213` 的修正。之後還有的，照 D-207 分成記成限制或交使用者選。兩個正式 vault 的 `compare-versions` 用新的 head 再跑一次；Windows 與 Obsidian 的畫面不必重看（只改認法、提示與屬性清理）。
+
+## 第四輪（只審修正，最後一輪）
+
+審 `537053b6`（範圍 `a74e747a..1cc68213` 的四個程式 commit 與文件 commit `d39b4d2a`；`f6c3ee68`、`537053b6` 是從 main 合進來的，不審），推理 high，819 秒、194,526 token。跑完後 5 小時額度剩 44%、每週剩 71%（12/3 17:11 重置）。審查請求與報告放在使用者電腦的暫存資料夾，沒有進 repo。
+
+- **兩個正式 vault 的 `compare-versions`**（`23d084ee` 對 `537053b6`）：甲、乙都是零差異，今天的份與前幾輪相同，讀取閘門兩邊都是「沒有」或「否」。
+
+### Codex 報告
+
+**PR #73 第四輪可以合併，無 P1。** 查核對象為 `537053b6`，範圍為第三輪後的四個程式 commit 與文件 commit `d39b4d2a`。另有兩項 P3，分別是拒收排法的背面縮排，以及已知限制尚未登錄到 backlog。
+
+| 項目 | 結果 | 證據 |
+|---|---|---|
+| F6 單直引號 | **修好** | `The boys' teacher said: '` 與 `A phrase from the '90s: '` 原例，第三輪各收下 1 種排法，本輪都收下 0 種，各有 1 個 `order-alt-invalid`、1 個草稿錯誤，指紋相同。實際 Review 流程排 `today / we / learn`，第三輪給 `✓` 並顯示 `The boys' teacher said: 'today, 'we learn.'`，本輪給 `✕`。`boys' `、字母後的閉單引號及成對全形雙引號仍可用。原本可用的 `'The sky is blue,' ` 現在會拒收，符合新規格明列的收窄。同一例改用 `‘…,’` 就會收下。 [order.ts](../../src/core/deck/kinds/order.ts#L187) |
+| F7 錯放的標籤 | **部分修好，符合收窄範圍** | 原例的連結標題與 HTML `title` 從各 1 個提示、1 個草稿錯誤降為 0。連結顯示文字及註解與反引號交錯的原例維持 0。同一行直接接標籤也從 1 降為 0。另行的普通或加粗標籤、縮排過深、放在錯誤題型底下的原例仍提示並擋稿。程式碼、公式與註解中的字面標籤維持 0。 [order.ts](../../src/core/deck/kinds/order.ts#L157) · [parse.ts](../../src/core/deck/parse.ts#L395) |
+| F9 拒收後的補充 | **原例修好，有新退步** | 原例的 `Child note.` 和 `After child.` 現在都按原順序進入 `extras`，答對後兩段都傳給 Markdown。換成引言或圍欄也保留，排法仍被拒收。空一行後接下一題的合法排法仍收下。另見 F11。 [parse.ts](../../src/core/deck/parse.ts#L315) · [OrderCard.tsx](../../src/ui/OrderCard.tsx#L46) |
+| F10 比較卡屬性 | **修好** | `borrow（borrow、lend） 比較` 原例中，第三輪的 DOM 把含 `U+E145` 的 `href` 改成 `https://example.test//cue`，也從 `title` 刪掉該字元。本輪的 `href`、`title` 和另測的 `data-cue` 都保留原值，與 `23d084ee` 相同。圖片替代文字裡本次插入的格記號仍會清除。 [rendered.ts](../../src/ui/rendered.ts#L69) |
+
+**F7、F8 收窄判斷**
+
+- **F7 合理，但草稿放行有實際影響。** 原本的 `How often? :: Every day. 另一種排法：==today==, ==we== ==learn==.` 在第三輪有 1 個草稿錯誤，本輪有 0 個。翻面後，Review 把 `Every day.` 和誤接的排法一起傳給答案的 Markdown。家長若直接採用，學生會在背面看到多餘內容。相同原文與 `23d084ee` 的題型、答案和指紋 `a0f393a8` 相同，沒有另外收下排序答案。要在一般問答中誤用排法標籤，還要接在答案同一行，估計機率低，符合條件即重現。可接受為已知限制，登錄時應寫明「可能存成答案的一部分」。 [parse.ts](../../src/core/deck/parse.ts#L327) · [check.ts](../../src/core/ai/check.ts#L216) · [syntax.md](../syntax.md)
+- **F8 合理。** `&NonBreakingSpace;` 與 `&semi;` 原例各拒收排法並擋草稿，換成 `&nbsp;` 或 `&#59;` 則各收下 1 種。用 `&NonBreakingSpace;` 的題目照主排法作答，顯示正確並給 `✓`。有無加上被拒收的排法，寫出的 `lt`、指紋 `a062d872`、各格 `cell`、`pick` 與評分相同。須在第一格前保留原始具名參照，並另寫一種排法，手寫卡觸發機率極低。 [order.ts](../../src/core/deck/kinds/order.ts#L167) · [syntax.md](../syntax.md)
+
+11. **F11｜P3｜F9 修正引入｜背面的普通補充段落變成程式碼。** 在縮排 8 欄的 `- 另一種排法：…` 後空一行，再用三個 Tab 縮排 `**After paragraph.**`。用 `markdown-it` 渲染整份原筆記，該行是清單內的粗體段落。第三輪的 Review 也顯示粗體。本輪 `extraOf` 從清單符號所在欄扣縮排，留下 4 欄，背面 DOM 變成 `<pre><code>**After paragraph.**</code></pre>`。這需要手寫筆記在本來就會拒收的排法下另放縮排段落，機率低。主排法仍可答對，指紋相同。建議按清單項目的內容起始欄去除外層縮排，保留內部相對縮排，並用背面 DOM 回歸這一例。Obsidian 實際渲染待驗證。 [parse.ts](../../src/core/deck/parse.ts#L315) · [markdown.ts](../../src/core/deck/markdown.ts#L154) · [任務說明](../tasks/sentence-order-alternatives.md)
+
+12. **F12｜P3｜F7、F8 尚未登錄到 Cards backlog 的〈已知的限制〉。** 文件 commit 已在語法與任務說明記下兩條限制。專案規範另指定由外掛 backlog 追蹤本次接受的 L2 限制，目前該表查不到這兩條。從 backlog 回查時會漏掉，使用者的出題與紀錄沒有直接影響。建議補上兩列，連到既有語法說明，附觸發條件、影響、避開方式與審查來源。 [品質規範](../../../../docs/agents/quality.md) · [Cards backlog](../backlog.md#已知的限制)
+
+**驗證結果**
+
+- **對照 `23d084ee`**：17 組沒有寫另一種排法的自編筆記，完整解析結果、題型、指紋、提示與原文位置全部相同。17 組 Review 傳給 Markdown 的字串全部相同，經 `markdown-it`、happy-dom 與各版 `postProcess` 處理後，16 組 DOM 相同，包含英文、國語比較卡及 F10 的屬性。唯一差異是已約定的 F5 清理，無替代排法的圖片挖空也會移除 `alt` 裡的格記號，三格仍放句尾。
+- **自動檢查**：共 135 項通過。原工作樹的跨版本測試遇到 Git `dubious ownership`，在系統暫存複本重跑後，7 個相關測試檔有 89 項通過。複本中兩項 Review 測試遇到 esbuild 存取拒絕，回原工作樹重跑 2 項均通過。另跑 AI 草稿、英文題型與流程 3 個測試檔，44 項通過。TypeScript、ESLint、knip、文件檢查及五個待審 commit 的 `git diff --check` 均通過。
+- **未重驗與待驗證**：兩個正式 vault 對 `537053b6` 的零差異，以及 Windows 閃動與圖片替代文字，沿用使用者已完成的實測。依 L2 規範，本輪獨立驗證採相關測試，完整 `npm run check` 沿用第三輪核對紀錄中 `1cc68213` 的雲端結果。F11 的 Obsidian 實際畫面與 iPhone 實機待驗證。
+
+追蹤檔案未修改，系統暫存複本、探針與輸出已刪除，工作樹乾淨。
+
+## Claude 核對（第四輪）
+
+兩項都照報告對過，都屬實；照 D-207 都是「修法不加機制、也不必再送 L2」的，當場修，L2 到這輪結束（D-171）。
+
+| 發現 | 修正 |
+|---|---|
+| F11 P3 | `4e37a56d`：不認的排法當補充時，外層的縮排照項目內容的起始欄（`contentColumn`）去掉、裡面的相對縮排留著，Tab 也照欄位算。測試：空一行後三個 Tab 的 `**After paragraph.**` 留成段落（`  **After paragraph.**`），第三輪 F9 的子項目與段落照原文的層次。只動 `extraOf` 一行，只影響本來就不認的那一行的補充。 |
+| F12 P3 | 這個 commit：Cards backlog〈已知的限制〉加兩列（寫在一行中間的標籤不提示、問答的答案可能多出那段；少見的字元參照名稱整題不認），附發生條件、影響、避開方式與來源。 |
+
+第四輪前的完整檢查是 `1cc68213` 的 3219 項全過；F11 這個 commit 的 pre-commit 又跑了一次 Cards 的完整檢查並通過。F11 的 Obsidian 實際畫面併進 iPhone 那一次（backlog 已有那一列），不另跑。結案，等使用者同意合併 PR #73。
