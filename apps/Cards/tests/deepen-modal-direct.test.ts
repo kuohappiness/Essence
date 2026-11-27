@@ -212,19 +212,21 @@ void test('§9 表單打開時讀不到這一篇：直接製作按不了、寫�
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
 });
 
-void test('§9 收到的回覆把框整個清空、關掉再開：框裡是收到的那一段，不是空的（L2 第一輪 R7）', async t => {
-  const { openModal } = await open(t, [ok(REPLY)]);
-  const modal = await openModal();
-  await sendFromForm(modal, []);
-  const box = textarea(modal.contentEl);
-  assert.ok(box);
-  box.value = '';
-  box.fire('input');
-  modal.close();
-  const again = await openModal();
-  assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
-  assert.equal(textarea(again.contentEl)?.value, REPLY);
-});
+for (const [label, value] of [['整個清空', ''], ['只剩空格', '   '], ['只剩換行', '\n\n'], ['只剩全形空白', '\u3000']] as const) {
+  void test(`§9 收到的回覆把框${label}、關掉再開：框裡是收到的那一段（L2 第一輪 R7、第二輪 S2）`, async t => {
+    const { openModal } = await open(t, [ok(REPLY)]);
+    const modal = await openModal();
+    await sendFromForm(modal, []);
+    const box = textarea(modal.contentEl);
+    assert.ok(box);
+    box.value = value;
+    box.fire('input');
+    modal.close();
+    const again = await openModal();
+    assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
+    assert.equal(textarea(again.contentEl)?.value, REPLY);
+  });
+}
 
 void test('§9 上一次沒有附教材檔、送不成按「重送」：重送的畫面不寫「上一次選的教材檔」，也不用選檔（L2 第一輪小項 4、實機第 2 點）', async t => {
   const { made, openModal } = await open(t, [unauthorized, ok(REPLY)]);

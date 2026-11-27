@@ -87,21 +87,23 @@ void test('L2 R1 重開之後「接著看」，第一次存被擋下再「回上
   assert.equal(directJob(made.cards.jobs()[0])?.state, 'received');
 });
 
-void test('加深第 3 批 L2 R7 收到的回覆把框整個清空、關掉再開「接著看」：框裡是收到的那一段，不是空的', async t => {
-  const { openModal } = await open(t, [ok(reply)]);
-  const modal = openModal();
-  await sendFromForm(modal);
-  const box = textarea(modal.contentEl);
-  assert.ok(box);
-  box.value = '';
-  box.fire('input');
-  modal.close();
-  const again = openModal();
-  button(again.contentEl, '接著看')?.click();
-  await sleep(10);
-  assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
-  assert.equal(textarea(again.contentEl)?.value, reply);
-});
+for (const [label, value] of [['整個清空', ''], ['只剩空格', '   '], ['只剩換行', '\n\n'], ['只剩全形空白', '\u3000']] as const) {
+  void test(`加深第 3 批 L2 R7、S2 收到的回覆把框${label}、關掉再開「接著看」：框裡是收到的那一段`, async t => {
+    const { openModal } = await open(t, [ok(reply)]);
+    const modal = openModal();
+    await sendFromForm(modal);
+    const box = textarea(modal.contentEl);
+    assert.ok(box);
+    box.value = value;
+    box.fire('input');
+    modal.close();
+    const again = openModal();
+    button(again.contentEl, '接著看')?.click();
+    await sleep(10);
+    assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
+    assert.equal(textarea(again.contentEl)?.value, reply);
+  });
+}
 
 void test('L2 R2、R4 收到的回覆檢查擋住，按「改用複製貼上」：框是空的；關掉重開是「接著貼回」，貼別處的回覆存成複製貼上的快照', async t => {
   const bad = `${reply}\n多出來的一行`;
