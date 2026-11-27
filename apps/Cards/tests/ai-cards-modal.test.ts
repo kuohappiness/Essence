@@ -165,6 +165,30 @@ void test('L2 R3 收到的回覆沒有 <<<完>>>：有「重送（會再計費�
   assert.equal(propsOf(made.memory).props['接法'], 'API');
 });
 
+void test('L2 第二輪 S2 收到的回覆重送沒成功：失敗的畫面有「回到收到的回覆」，回去是收到的那一份，勾了確定存成 API 的快照', async t => {
+  const unended = reply.replace('\n<<<完>>>', '');
+  const { made, openModal } = await open(t, [ok(unended), unauthorized]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  button(modal.contentEl, '重送（會再計費一次）')?.click();
+  await sleep(10);
+  button(modal.contentEl, '重送（會再計費一次）')?.click();
+  await sleep(80);
+  assert.equal(made.fetch.requests.length, 2);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('金鑰不對')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '回到收到的回覆')?.click();
+  await sleep(10);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+  assert.equal(textarea(modal.contentEl)?.value, unended);
+  const confirm = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'checkbox');
+  assert.ok(confirm);
+  confirm.checked = true;
+  confirm.fire('change');
+  button(modal.contentEl, '存成草稿')?.click();
+  await sleep(150);
+  assert.equal(propsOf(made.memory).props['接法'], 'API');
+});
+
 void test('實機第 3 點 送出中按關閉、在「要取消這一次嗎？」按「取消這一次」：視窗關掉，工作留在清單（可以重送）', async t => {
   const { made, openModal } = await open(t, [{ ...ok(reply), headersDelayMs: 5_000 }]);
   const modal = openModal();

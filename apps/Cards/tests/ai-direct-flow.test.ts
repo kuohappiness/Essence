@@ -306,3 +306,19 @@ void test('L2 第一輪 R8 記得的教材檔：存成草稿或放棄之後就�
   await made.cards.abandon(failed.job);
   assert.equal(made.cards.keeps(failed.job), false);
 });
+
+void test('L2 第二輪 S2 收到的回覆重送沒成功：收到的那一份留著、存得回去（接法 API）；重送中與失敗後都不被擠出「最多 5 個」（R13）', async t => {
+  let ms = Date.parse('2026-11-07T10:02:11+08:00');
+  const made = await load(t, [ok(reply), unauthorized], { now: () => ms });
+  const received = await made.cards.direct(form, [lesson]);
+  assert.ok(received.kind === 'received');
+  for (const unit of ['L4', 'L5', 'L6', 'L7', 'L8']) { ms += 60_000; assert.ok('job' in await made.cards.copy({ ...form, unit })); }
+  const failed = await made.cards.resend(received.job);
+  assert.ok(failed.kind === 'failed', JSON.stringify(failed));
+  const kept = made.cards.jobs().find(job => job.id === received.job.id);
+  assert.ok(kept, '沒被擠出清單');
+  assert.deepEqual([directJob(kept)?.state, directJob(kept)?.received?.text], ['failed', reply]);
+  assert.equal(readJobs(made.box.saved.jobs, ms).jobs.some(job => job.id === kept.id), true, '存放裡也還在');
+  assert.equal((await made.cards.save(kept, reply, null, undefined, true)).kind, 'done');
+  assert.equal(propsOf(made.memory).props['接法'], 'API');
+});

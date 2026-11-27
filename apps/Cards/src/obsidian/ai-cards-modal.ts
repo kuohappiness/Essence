@@ -394,6 +394,8 @@ class AiCardsModal extends Modal {
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
     this.directButtons(buttons, message, failure.afterResponse);
     if (failure.settings) this.settingsButton(buttons);
+    // 重送的是收到過的那一份：沒成功時它還在（L2 第二輪 S2），回去看、勾確定或存成草稿。
+    if (directJob(job)?.received) buttons.createEl('button', { text: '回到收到的回覆' }).addEventListener('click', () => { this.showPaste(null); });
     buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { void this.abandon(); });
     buttons.createEl('button', { text: '關閉' }).addEventListener('click', () => { this.close(); });
   }

@@ -266,7 +266,8 @@ export function createAiCards(deps: AiCardsDeps) {
         try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request, providerName(target.provider)), sent.failure); } catch (error) { deps.onError(error); }
       }
       // 拿到回應之後才失敗的記下來：重開 Obsidian 之後的清單也寫重送會再計費（Windows 實機第 2 批第 1 點）。
-      const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null, ...sent.failure.afterResponse ? { charged: true } : {} });
+      const latest = current(job) ?? job;
+      const saved = mark(latest, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: directJob(latest)?.received ?? null, ...sent.failure.afterResponse ? { charged: true } : {} });
       return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };
     } finally {
       if (sending === controller) sending = null;
@@ -396,7 +397,8 @@ export function createAiCards(deps: AiCardsDeps) {
       const ready = resendTarget(job, picked);
       if ('error' in ready) return { kind: 'blocked', message: ready.error };
       const { latest, materials, target, key, prompt } = ready;
-      const sendingNow: CardJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: null } };
+      // 收到過的那一份留到重送成功才換（L2 第二輪 S2）：重送沒成功還能接著看、存回去，也照舊不算進「最多 5 個」（R13）。
+      const sendingNow: CardJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: directJob(latest)?.received ?? null } };
       try { put(sendingNow); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
       sentMaterials.set(latest.id, materials);
       return send(sendingNow, prompt, materials, target, key, onProgress);
