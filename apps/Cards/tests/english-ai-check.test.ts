@@ -38,3 +38,25 @@ void test('候選卡片裡的英文目標也照英文的規則擋（L2 R2），�
   const found = check(body, { subject: '英文' }).issues.filter(each => each.level === '錯誤' && each.code.startsWith('english-')).map(each => [each.line, each.code]);
   assert.deepEqual(found, [[7, 'english-typed-invalid'], [8, 'english-order-invalid']]);
 });
+
+// 另一種排法（tasks/sentence-order-alternatives.md §6）：解析器的兩個提示在草稿都是錯誤，本文、候選框、已有框都擋，不分科。
+const altErrors = (text: string, subject = '英文'): [number, string][] => check(text, { subject }).issues.filter(each => each.level === '錯誤' && (each.code.startsWith('order-alt-') || each.code.startsWith('english-order'))).map(each => [each.line, each.code]);
+const BECAUSE = 'I was tired. I went to bed early.（用 because 合成一句）==I went to bed early== ==because== ==I was tired==.';
+const sentence = (...extras: string[]): string[] => ['- 用 because 合成一句 排序 ^a1b2c3', '    - ' + BECAUSE, ...extras.map(extra => '        - ' + extra)];
+
+void test('另一種排法：認得的不報；不認、少縮一層、排錯的太少在本文是錯誤；別科的題目底下寫了也是錯誤', () => {
+  assert.deepEqual(altErrors(sentence('另一種排法：==because== ==I was tired==, ==I went to bed early==.').join('\n') + '\n'), []);
+  assert.deepEqual(altErrors(sentence('另一種排法：==Because== ==I was tired==, ==I went to bed early==.').join('\n') + '\n'), [[2, 'order-alt-invalid']]);
+  assert.deepEqual(altErrors(sentence().join('\n') + '\n    - 另一種排法：==because== ==I was tired==, ==I went to bed early==.\n'), [[3, 'order-alt-invalid']]);
+  assert.deepEqual(altErrors('- 時間的位置 排序\n    - 我們明天中午見。See you ==tomorrow== ==at noon==.\n        - 另一種排法：See you ==at noon== ==tomorrow==.\n'), [[2, 'order-alt-all-right']]);
+  assert.deepEqual(altErrors('- 鳥鳴澗 排序\n    - ==人閒桂花落==，==夜靜春山空==。\n        - 另一種排法：==夜靜春山空==，==人閒桂花落==。\n', '國文'), [[2, 'order-alt-invalid']]);
+});
+
+void test('另一種排法：候選框與已有框也擋，行號是原文的行；已有框也跑英文的排序檢查', () => {
+  const box = (title: string, lines: readonly string[]): string => [`> [!note]- ${title}`, ...lines.map(line => '> ' + line)].join('\n') + '\n';
+  const body = '- go 過去式\n    - Yesterday I ＿＿ to school.（去） :: went\n\n';
+  const bad = sentence('另一種排法：==because I was tired==, ==I went to bed early==.');
+  assert.deepEqual(altErrors(body + box('候選卡片', [bad[0], '    - 理由：課本補充', ...bad.slice(1)])), [[7, 'order-alt-invalid']]);
+  assert.deepEqual(altErrors(body + box('加進已有的學習目標', bad)), [[6, 'order-alt-invalid']]);
+  assert.deepEqual(altErrors(body + box('加進已有的學習目標', ['- 間接問句 排序 ^d4e5f6', '    - I know ==where== he lives.'])), [[5, 'english-order-invalid']]);
+});
