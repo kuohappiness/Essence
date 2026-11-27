@@ -8,7 +8,12 @@ import { gitEnv, pluginRoot } from '../tools/git.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { Deck } from '../src/core/deck/index.ts';
 import { cardOf } from '../src/core/study/index.ts';
+import { RATE_DELAY } from '../src/review/index.ts';
+import type { Session } from '../src/review/index.ts';
+import { createPreviewFlow } from '../src/review/flow.ts';
 import { kindPoem, kindSentence } from './helpers/kinds.ts';
+import { check, pick, setup, skip, stage, tap, texts, view } from './helpers/pick-session.ts';
+import type { Harness } from './helpers/pick-session.ts';
 import { tempFolder } from './helpers/vault.ts';
 
 // 英文句子排序的另一種排法（D-238、D-240、tasks/sentence-order-alternatives.md）：認法。預期值照任務說明〈驗收〉的邊界表手寫。
@@ -160,6 +165,87 @@ void test('字鍵：兩塊、兩種都對的照舊打亂；組卡帶上另一種
   assert.deepEqual(card.group?.order, { head: 'I was tired. I went to bed early.（用 because 合成一句）', tails: [' ', ' ', '.'], starts: [true, false, false], others: [{ words: [B, C, A], tails: [' ', ', ', '.'], source: ALT }] });
   const plain = one(BECAUSE, []).targets[0];
   assert.equal('others' in (cardOf({ lt: 'lt', deck: 'x', target: plain, prompt: plain.prompts[0], isNew: false, early: false }).group?.order ?? {}), false);
+});
+
+// 判對錯（§4）：真的 session；紀錄行與 orders 的預期值照任務說明〈驗收〉手寫。
+const PATH = 'Essence Cards/英文/L1 合併句子.md';
+const deckOf = (question: string, extras: readonly string[]): string => `---\n科目: 英文\n---\n- 排一排 排序 ^order1\n    - ${question}\n${extras.map(extra => `        - 另一種排法：${extra}\n`).join('')}`;
+const BECAUSE_DECK = deckOf(BECAUSE, [ALT.slice('另一種排法：'.length)]);
+const FOUR = '排四個字。==alpha== ==bravo== ==charlie== ==delta==.';
+const W = ['alpha', 'bravo', 'charlie', 'delta'];
+async function answered(t: Parameters<typeof setup>[0], deck: string, picks: readonly (string | null)[]): Promise<{ h: Harness; s: Session }> {
+  const h = await setup(t, { [PATH]: deck });
+  const s = await h.open({ subject: '英文' });
+  for (const each of picks) if (each === null) skip(h, s); else tap(h, s, each);
+  check(h, s);
+  return { h, s };
+}
+const states = (s: Session): string[] => pick(s).cells.map(cell => cell.state);
+
+void test('判對錯：和某一種完全一樣是全對，跟那一種比；紀錄照現在的寫法', async t => {
+  const { h, s } = await answered(t, BECAUSE_DECK, [B, C, A]);
+  assert.deepEqual([stage(s), states(s), pick(s).orders, texts(s)], ['result', ['right', 'right', 'right'], [1], [B, C, A]]);
+  const v = view(s).card.prompt.fingerprint;
+  h.clock.now += RATE_DELAY;
+  assert.equal(s.rate('good'), true);
+  await h.state.flush();
+  assert.deepEqual(h.log().map(({ t: _, ...line }) => line), [{ lt: 'order1', r: 'good', v, cell: 1, pick: B, also: [{ v, r: 'good', cell: 2, pick: C }, { v, r: 'good', cell: 3, pick: A }] }]);
+
+  const main = await answered(t, BECAUSE_DECK, [A, B, C]);
+  assert.deepEqual([stage(main.s), pick(main.s).orders, texts(main.s)], ['result', [0], [A, B, C]]);
+});
+
+void test('判對錯：都不對時跟對得最多格的比；一樣多時第一格和孩子相同的在前，再照寫的順序', async t => {
+  const first = await answered(t, BECAUSE_DECK, [B, A, C]);
+  assert.deepEqual([stage(first.s), states(first.s), pick(first.s).orders], ['retry', ['right', 'retry', 'retry'], [1]], '乙甲丙跟另一種比');
+  const main = await answered(t, BECAUSE_DECK, [A, C, B]);
+  assert.deepEqual([states(main.s), pick(main.s).orders], [['right', 'retry', 'retry'], [0]], '甲丙乙跟題目那一行比');
+  const four = await answered(t, deckOf(FOUR, ['==charlie== ==delta== ==alpha== ==bravo==.']), ['charlie', 'delta', 'bravo', 'alpha']);
+  assert.deepEqual([states(four.s), pick(four.s).orders, pick(four.s).cursor], [['right', 'right', 'retry', 'retry'], [1], 2], '對兩格比零格');
+  tap(four.h, four.s, 'alpha');
+  assert.equal(states(four.s)[2], 'near');
+  const three = await answered(t, deckOf(BECAUSE, ['==because== ==I was tired== ==I went to bed early==.', '==I was tired== ==I went to bed early== ==because==.']), [C, B, A]);
+  assert.deepEqual([states(three.s), pick(three.s).orders], [['right', 'retry', 'retry'], [2]], '三種各對一格，第一格相同的是第三種');
+});
+
+void test('再選時的候選：選的字在某一種候選的這個位置是差一點、候選縮小；都不是是沒印象、候選不變', async t => {
+  const { h, s } = await answered(t, BECAUSE_DECK, [C, A, B]);
+  assert.deepEqual([states(s), pick(s).orders], [['retry', 'retry', 'retry'], [0, 1]], '丙甲乙兩種都 0 格');
+  tap(h, s, B);
+  assert.deepEqual(pick(s).orders, [1]);
+  tap(h, s, C);
+  tap(h, s, A);
+  assert.deepEqual([stage(s), states(s), pick(s).orders, texts(s)], ['result', ['near', 'near', 'near'], [1], [B, C, A]]);
+
+  const miss = await answered(t, deckOf(FOUR, ['==charlie== ==delta== ==alpha== ==bravo==.']), ['delta', 'charlie', 'bravo', 'alpha']);
+  assert.deepEqual(pick(miss.s).orders, [0, 1]);
+  tap(miss.h, miss.s, 'bravo');
+  assert.deepEqual([states(miss.s)[0], pick(miss.s).orders], ['miss', [0, 1]], '第 1 格選 bravo 不在任何一種的這個位置');
+  for (const each of ['bravo', 'charlie', 'delta']) tap(miss.h, miss.s, each);
+  assert.deepEqual([states(miss.s), pick(miss.s).orders, texts(miss.s)], [['miss', 'near', 'near', 'near'], [0], W]);
+
+  const narrow = await answered(t, deckOf(FOUR, ['==alpha== ==bravo== ==delta== ==charlie==.', '==bravo== ==alpha== ==charlie== ==delta==.']), ['delta', 'charlie', 'alpha', 'bravo']);
+  assert.deepEqual(pick(narrow.s).orders, [0, 1, 2], '三種都 0 格');
+  tap(narrow.h, narrow.s, 'alpha');
+  assert.deepEqual(pick(narrow.s).orders, [0, 1]);
+  tap(narrow.h, narrow.s, 'bravo');
+  tap(narrow.h, narrow.s, 'delta');
+  assert.deepEqual(pick(narrow.s).orders, [1]);
+  tap(narrow.h, narrow.s, 'charlie');
+  assert.deepEqual([stage(narrow.s), states(narrow.s), texts(narrow.s)], ['result', ['near', 'near', 'near', 'near'], ['alpha', 'bravo', 'delta', 'charlie']]);
+});
+
+void test('作答時按沒印象：照樣排先後；沒印象的格顯示那一種的詞塊', async t => {
+  const { s } = await answered(t, BECAUSE_DECK, [B, null, A]);
+  assert.deepEqual([stage(s), states(s), pick(s).orders, texts(s)], ['result', ['right', 'miss', 'right'], [1], [B, C, A]]);
+});
+
+void test('沒有另一種排法的卡沒有 orders；預覽是 [0]', async t => {
+  const { s } = await answered(t, deckOf(BECAUSE, []), [A, B, C]);
+  assert.equal('orders' in pick(s), false);
+  const target = one(BECAUSE, [ALT]).targets[0];
+  const card = cardOf({ lt: 'lt', deck: PATH, target, prompt: target.prompts[0], isNew: false, early: false });
+  assert.deepEqual(createPreviewFlow(card, true).view().pick?.orders, [0]);
 });
 
 // 舊版讀另一種排法（§7）：用真的 v0.6.0 標籤的程式，不是用現在的程式假裝舊版。
