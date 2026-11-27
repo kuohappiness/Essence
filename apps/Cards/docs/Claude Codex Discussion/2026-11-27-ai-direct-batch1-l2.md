@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 1 批的 L2 審查（審查紀錄）
 
-狀態：待審｜下一步：兩輪都通過、R2 已補；合併前等使用者過目 S3 列的畫面文字、同意合併｜等誰：使用者
+狀態：已結案 → [任務說明](../tasks/ai-direct.md)｜完成：兩輪都通過，R2 已補，使用者 2026-11-27 同意合併（PR #78）｜等誰：—
 
 審查請求：[ai-direct-l2.md](../tasks/ai-direct-l2.md)；任務說明：[ai-direct.md](../tasks/ai-direct.md)。
 
