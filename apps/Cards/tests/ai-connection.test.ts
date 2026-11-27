@@ -49,6 +49,12 @@ void test('金鑰：只記名稱，值向 SecretStorage 拿；沒選、找不到
   for (const id of ['cleared', 'blank', 'missing']) assert.equal(keyOf(withSecret(connection, 'openai', id), get), null, id);
   assert.deepEqual(withSecret(connection, 'openai', null).secrets, {});
   assert.deepEqual(withSecret(connection, 'openai', 'Not Valid').secrets, {});
+  assert.deepEqual(withSecret(connection, 'openai', '').secrets, {});
+  // - 連續或在頭尾也收（Obsidian 沒說不行，L2 第一輪 R9）；重讀這台電腦的設定時也留著。
+  for (const id of ['openai-', '-openai', 'open--ai']) {
+    assert.deepEqual(withSecret(connection, 'openai', id).secrets, { openai: id }, id);
+    assert.deepEqual(readConnection({ secrets: { openai: id } }, providers).secrets, { openai: id }, id);
+  }
   // 金鑰照服務分開：換到別家，沒選過就是沒有。
   assert.equal(keyOf({ ...connection, provider: 'google' }, get), null);
 });

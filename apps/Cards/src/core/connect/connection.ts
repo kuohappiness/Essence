@@ -29,8 +29,11 @@ export interface Connection {
   secrets: Record<string, string>;
 }
 
-/** SecretStorage 的名稱：小寫英數，可以用 - 連接（Obsidian 的 setSecret 只收這種）。 */
-const SECRET_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/**
+ * SecretStorage 的名稱：小寫英數與 -（Obsidian 的型別只寫「小寫英數，可以有 -」，沒說 - 能不能連續或在頭尾，所以都收；L2 第一輪 R9）。
+ * 名稱都是 SecretComponent 交回的，這條只用來濾掉這台電腦存的設定裡讀不懂的值，收得比 Obsidian 寬不會出錯。
+ */
+const SECRET_ID = /^[a-z0-9-]+$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const strings = (value: unknown, keep: (text: string) => boolean): Record<string, string> =>
   isRecord(value) ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && keep(entry[1]))) : {};
