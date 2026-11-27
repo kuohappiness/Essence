@@ -101,7 +101,7 @@ const geminiEvents = (text: string, finishReason: string): MockReply => ({
     { data: { candidates: [{ content: { parts: [], role: 'model' }, finishReason }], usageMetadata: { promptTokenCount: 18_000, candidatesTokenCount: 4_000, totalTokenCount: 22_000 } } },
   ])],
 });
-const send = (reply: MockReply | MockReply[], extra: { signal?: AbortSignal; maxAttempts?: number } = {}) => {
+const send = (reply: MockReply | MockReply[], extra: { signal?: AbortSignal; maxAttempts?: number; timeoutMs?: number } = {}) => {
   const fetch = mockFetch(Array.isArray(reply) ? reply : [reply]);
   const request = { ...directRequest({ connection: google, provider: provider('google'), apiKey: FAKE_KEY, prompt: '任務段', materials: [pdf(3)] }), ...extra };
   return { fetch, result: sendDirect(cardsClient(fetch), request) };
@@ -131,6 +131,14 @@ void test('§6 收到了但沒有正常結束：截斷、被擋、空的各一�
   const empty = await send(geminiEvents('  ', 'STOP')).result;
   assert.ok(!empty.ok);
   assert.deepEqual([empty.failure.kind, empty.failure.text], ['empty', 'AI 回了空的內容。']);
+  // 服務已經回完了才知道不成功：都可能已經計費，重送的按鈕要寫出來（L2 第一輪 R6）。
+  assert.deepEqual([cut.failure.afterResponse, filtered.failure.afterResponse, empty.failure.afterResponse], [true, true, true]);
+});
+
+void test('§6 逾時：整體逾時與等不到標頭都是同一句，不寫死等了幾分鐘（L2 第一輪 R6）', async () => {
+  const late = await send({ ...geminiEvents('國二上英文 L3 單字\n<<<完>>>', 'STOP'), headersDelayMs: 300 }, { timeoutMs: 50, maxAttempts: 1 }).result;
+  assert.ok(!late.ok);
+  assert.deepEqual([late.failure.kind, late.failure.text, late.failure.afterResponse], ['timeout', '等太久還沒收完。', false]);
 });
 
 void test('§6 套件丟的錯：金鑰錯（到設定頁）、額度、太頻繁、服務忙（寫送了幾次）、連不上、拿到回應後才斷（可能已經計費）、取消', async () => {

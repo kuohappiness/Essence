@@ -180,7 +180,8 @@ const FAILURES: Partial<Record<DirectFailure['kind'], { text: string; next: stri
   quota: { text: '這一家的額度或餘額用完了。', next: '明天再送、到那一家儲值，或改用複製貼上。' },
   rate_limit: { text: '一下子送太多次，AI 那邊請你等一下。', next: '等幾分鐘再送。' },
   network: { text: '連不上，請確認網路。', next: '確認網路之後重送。' },
-  timeout: { text: '等了 30 分鐘還沒收完。', next: '重送，或到設定頁換一個模型。' },
+  // 整體逾時（30 分鐘）與先回標頭的服務等不到標頭（約 2 分鐘）都是 timeout，不寫死分鐘數（L2 第一輪 R6）。
+  timeout: { text: '等太久還沒收完。', next: '重送，或到設定頁換一個模型。' },
   input_too_large: { text: '這份教材太大，這一家一次收不下。', next: '切成小一點的檔再送。' },
   unsupported_input: { text: '這個模型不收這種教材。', next: '到設定頁換一個模型，或改用另一種檔（PDF 或照片）。', settings: true },
   model_not_found: { text: '找不到設定的模型。', next: '到設定頁換模型，按「測試連線」。', settings: true },
@@ -207,12 +208,12 @@ function failureOf(error: unknown): DirectFailure {
   return { kind: error.kind, text: `出了沒預料到的錯：${describeAiError(error)}`, next: '重送；一直這樣，請改用複製貼上，並回報給開發者。', afterResponse: false, settings: false };
 }
 
-/** 收到了，但沒有正常結束（§6 的表：截斷、被擋、拒答）；正常結束是 null。服務已經回了，所以都可能已經計費。 */
+/** 收到了，但沒有正常結束（§6 的表：截斷、被擋、拒答）；正常結束是 null。服務已經回完了，所以都可能已經計費，重送的按鈕要寫出來（L2 第一輪 R6）。 */
 function stopFailure(result: Pick<GenerateResult, 'stopReason' | 'text'>): DirectFailure | null {
   const kind = result.stopReason === 'end' ? (result.text.trim() ? null : 'empty') : result.stopReason;
   if (kind === null) return null;
   const known = FAILURES[kind] ?? FAILURES.other!;
-  return { kind, text: known.text, next: known.next, afterResponse: false, settings: false };
+  return { kind, text: known.text, next: known.next, afterResponse: true, settings: false };
 }
 
 /**
