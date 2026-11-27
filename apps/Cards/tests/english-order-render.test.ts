@@ -102,3 +102,19 @@ void test('記號在圖片的替代文字或標題裡（L2 第二輪 F5）：畫
   assert.equal(container.querySelector('a')?.getAttribute('aria-label'), 'go ');
   assert.equal(container.querySelector('a')?.getAttribute('href'), 'https://example.com');
 });
+
+void test('屬性裡只拿掉這一次放的記號（L2 第三輪 F10）：作者寫的私用區字、沒放記號的比較卡照原樣', async () => {
+  const { tailMark } = await import('../src/ui/rendered.ts');
+  const own = String.fromCharCode(0xe145);
+  const html = `<p>${m(0)} ${m(1)}.<a href="https://example.test/${own}/cue" title="see ${own}${tailMark(0)}">x</a></p>`;
+  const sentence = document.createElement('div');
+  sentence.innerHTML = html;
+  postProcess(sentence, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1)], tailMarkers: [tailMark(0)] });
+  assert.equal(sentence.querySelector('a')?.getAttribute('href'), `https://example.test/${own}/cue`);
+  assert.equal(sentence.querySelector('a')?.getAttribute('title'), `see ${own}`);
+  const pick = document.createElement('div');
+  pick.innerHTML = `<p>I ==borrow== it.<a href="https://example.test/${own}/cue" title="${own}">x</a></p>`.replace('==borrow==', '<mark>borrow</mark>');
+  postProcess(pick, { mode: 'pick', lines: 1, english: true });
+  assert.equal(pick.querySelector('a')?.getAttribute('href'), `https://example.test/${own}/cue`);
+  assert.equal(pick.querySelector('a')?.getAttribute('title'), own);
+});

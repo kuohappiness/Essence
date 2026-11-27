@@ -68,7 +68,7 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   const tails = options.mode === 'pick' && options.tailMarkers ? insertTails(container, options.tailMarkers) : [];
   const marked = options.mode === 'pick' && options.markers ? insertMarkedSlots(container, options.markers, !!options.breakFirst) : null;
   const pickSlot = options.mode === 'pick' && !marked ? insertPickSlot(container) : null;
-  if (options.mode === 'pick') stripMarkAttributes(container);
+  if (options.mode === 'pick') stripMarkAttributes(container, [...options.markers ?? [], ...options.tailMarkers ?? []]);
   const slotMissing = marked ? marked.some(each => !each) : options.mode === 'pick' && !pickSlot;
   const slots = marked ? marked.map(each => each ?? endSlot(container)) : [];
   // 比較卡一定要有空格（§3）：找不到時放在句尾。
@@ -94,12 +94,13 @@ export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE
 
 /**
  * 記號寫進了屬性（圖片的替代文字或標題，L2 第二輪 F5）就沒有位置可放，格照找不到放在句尾；屬性裡的記號拿掉，
- * 圖片載入不了或輔助工具讀出來時不會碰到。題目文字裡本來的私用區字已經拿掉了（stripSlotMarks），這裡只會是記號。
+ * 圖片載入不了或輔助工具讀出來時不會碰到。只拿掉這一次放的記號（L2 第三輪 F10）：作者寫的私用區字、沒放記號的比較卡照原樣。
  */
-function stripMarkAttributes(container: HTMLElement): void {
+function stripMarkAttributes(container: HTMLElement, marks: readonly string[]): void {
+  if (!marks.length) return;
   for (const element of Array.from(container.querySelectorAll('*'))) {
     for (const { name, value } of Array.from(element.attributes)) {
-      const clean = value.replace(PRIVATE_USE, '');
+      const clean = marks.reduce((text, mark) => text.replaceAll(mark, ''), value);
       if (clean !== value) element.setAttribute(name, clean);
     }
   }
