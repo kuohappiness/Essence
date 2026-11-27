@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 2 批開工前的格式查核
 
-狀態：待審｜下一步：審查者照本檔查 [任務說明](ai-direct.md) §7，回報寫進 [查核紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-format-review.md>)；Codex 的週額度到 11-30 才重置，這一次照使用者的暫行做法由沒參與實作的 Fable 5.2 high 查（[quality.md〈開工前的格式查核〉](../../../../docs/agents/quality.md#開工前的格式查核)）｜等誰：Claude
+狀態：已結案 → [回報與 Claude 回應](<../Claude Codex Discussion/2026-11-27-ai-direct-format-review.md>)｜完成：Fable 5.2 high 2026-11-27 查完，Claude 核對後改定任務說明 §7，`服務` 的值交使用者選｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md` 與 `apps/Cards/AGENTS.md`。建議推理等級：**高**。請**新開一個對話**；只查核、不改產品程式與文件，可以在隔離環境寫小腳本驗證。
 
@@ -47,3 +47,8 @@
 ## 回報
 
 只回報，不改產品程式與文件。寫在 `apps/Cards/docs/Claude Codex Discussion/2026-11-27-ai-direct-format-review.md`，標題下第一行寫狀態（`狀態：待審｜下一步：Claude 核對回報、改任務說明 §7｜等誰：Claude`）。每項寫觸發條件、預期與實際、影響、位置與證據，區分「已重現」與「看規格推斷」，另標真實路徑會不會發生；能用小腳本對現有程式驗證的就驗證。照 [D-207](../../../../docs/decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制) 分：一定修、可記限制、交使用者選。
+
+## 結果
+
+- Fable 5.2 high 2026-11-27 查完（基準 `d73fa5f7`），19 項發現：一定修與建議修的都採用、寫進[任務說明](ai-direct.md) §5～§10；F13 與 F11 第 4 點記成[已知的限制](../backlog.md#已知的限制)；F16 改成檔名不送給 AI；F9（`服務` 寫什麼）交使用者選。
+- 延後的測試：無（這一份只查核、不改程式；§7 的測試照任務說明 §10 在實作時寫）。
