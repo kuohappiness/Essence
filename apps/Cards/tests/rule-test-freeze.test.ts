@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { RULE_SUBJECTS, taskSection, type CardForm, type ExistingTarget } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { embedRules } from '../tools/build.mjs';
-import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
+import { PLUGIN_TASK, readConfig } from '../tools/rule-test/config.ts';
 import { openFolder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps, verifyLock } from '../tools/rule-test/freeze.ts';
 import { initFolder } from '../tools/rule-test/init.ts';
@@ -174,11 +174,11 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
       - { 對話: A, 規則: { 自備: { 英文L3: 分段.md } }, 卡組: 是 }
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 20% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 20% }] }
 `);
   const lines: string[] = [];
   const lock = await freezeFolder(openFolder(folder), { root, log: line => lines.push(line) });
-  assert.equal(lock.commit, commit);
+  assert.deepEqual([lock.commit, lock.evaluation], [commit, 'D-236 v1']);
   const steps = readFrozenSteps(openFolder(folder));
   assert.deepEqual(steps.map(s => [s.file, s.deck, s.threeSections, s.pending]), [
     ['現行-英文L3.md', true, false, []],
@@ -197,7 +197,7 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
   assert.ok(!candidate.includes('加深'));
   assert.ok(candidate.includes('  - aaaaa2 borrow 英翻中｜國二上 L1｜第一題：borrow :: v. 借入'));
   assert.equal(steps[1].rulesChars, '## 核心規則\n- 一'.length + '## 英文規則\n- 二'.length);
-  assert.deepEqual(Object.keys(lock.files).sort(), ['<課庫>/英文L3/教材.pdf', '凍結/已有目標/英文L3.json', '凍結/提示.json', '凍結/提示/候選-英文L3.md', '凍結/提示/分段-英文L3-1.md', '凍結/提示/分段-英文L3-2.md', '凍結/提示/現行-英文L3.md', '凍結/範本/拿不準說明.md', '凍結/範本/裁定說明.md', '凍結/範本/評分說明.md', '提示/分段.md', '測試.yaml']);
+  assert.deepEqual(Object.keys(lock.files).sort(), ['<課庫>/英文L3/教材.pdf', '凍結/已有目標/英文L3.json', '凍結/提示.json', '凍結/提示/候選-英文L3.md', '凍結/提示/分段-英文L3-1.md', '凍結/提示/分段-英文L3-2.md', '凍結/提示/現行-英文L3.md', '凍結/範本/加深評分說明.md', '凍結/範本/地圖評分說明.md', '凍結/範本/拿不準說明.md', '凍結/範本/裁定說明.md', '凍結/範本/評分表寫法.md', '凍結/範本/評分表核對.md', '凍結/範本/評分說明.md', '凍結/評估規格.md', '提示/分段.md', '測試.yaml']);
   assert.ok(lines.some(line => line.includes('評分表還沒有')));
 
   // 重跑：已經凍結，什麼都不寫。
@@ -207,6 +207,13 @@ void test('freeze：凍結快照與每組每課每步的提示、鎖住雜湊；
   // 凍結的檔被改：停下並說是哪個。
   writeFileSync(join(folder, '凍結', '提示', '現行-英文L3.md'), '改過');
   assert.throws(() => verifyLock(openFolder(folder)), /凍結之後改過或不見了：凍結\/提示\/現行-英文L3\.md/);
+  // 評估版本不同（rule-test-d236.md §2）：每一步都停下，說用凍結時的 commit 跑。
+  const lockFile = join(folder, '凍結', '鎖.json');
+  const { evaluation: _, ...old } = JSON.parse(readFileSync(lockFile, 'utf8')) as Record<string, unknown>;
+  writeFileSync(lockFile, JSON.stringify(old));
+  assert.throws(() => verifyLock(openFolder(folder)), new RegExp(`舊的評估版本（D-236 以前）凍結的，現在的工具是 D-236 v1：用凍結時的 commit（${commit.slice(0, 8)}）跑`));
+  writeFileSync(lockFile, JSON.stringify({ ...old, evaluation: 'D-236 v0' }));
+  assert.throws(() => verifyLock(openFolder(folder)), /舊的評估版本（D-236 v0）/);
 });
 
 void test('freeze：教材、自備提示檔、commit 裡的規則檔不在就停下，說是哪一個，什麼都不寫（§4-2 設定的檢查）', async () => {
@@ -221,7 +228,7 @@ void test('freeze：教材、自備提示檔、commit 裡的規則檔不在就�
 組: [{ 名稱: 甲, 規則: { 外掛: english } }, { 名稱: 乙, 規則: ${rules} }]
 生成: [{ 生成器: claude, 模型: claude-opus-5-5 }]
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `;
   writeFileSync(join(folder, '測試.yaml'), yaml('{ 自備: { L3: 沒有.md } }'));
   await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), error => {
@@ -247,7 +254,7 @@ void test('freeze：外掛來源用到的檔有沒 commit 的修改就停下', a
 組: [{ 名稱: 現行, 規則: { 外掛: english } }, { 名稱: 候選, 規則: { 外掛: english } }]
 生成: [{ 生成器: claude, 模型: m }]
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   await assert.rejects(freezeFolder(openFolder(folder), { root, log: () => {} }), /沒 commit 的修改/);
 });
@@ -256,6 +263,9 @@ void test('init：建 測試.yaml 範本；已經有了、或在 repo 裡就停�
   const root = join(mkdtempSync(join(tmpdir(), 'rule-test-init-')), '新的一輪');
   initFolder(root);
   assert.match(readFileSync(join(root, '測試.yaml'), 'utf8'), /^# 比較測試的設定/);
+  // 範本本身讀得懂（D-236 的鍵：加深、加深規則、時間預算）。
+  const config = readConfig(readFileSync(join(root, '測試.yaml'), 'utf8'));
+  assert.deepEqual([config.deepen, config.groups[1].deepenRules?.files, config.gates.timeBudget], [{ generators: ['claude'] }, ['apps/Cards/docs/card-rules/next/core.md'], 'report']);
   assert.ok(existsSync(join(root, '提示')));
   assert.throws(() => initFolder(root), /已經有 測試\.yaml/);
   assert.throws(() => initFolder(join(REPO_ROOT, '比較測試')), /測試資料夾在 repo 裡/);
@@ -277,7 +287,7 @@ void test('init --from：沿用組、生成器、評審與門檻只換課；凍�
   - { 名稱: 候選, 規則: { commit: ${commit}, 檔案: [apps/Cards/docs/card-rules/next/core.md] } }
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 3 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 20% }] }
+門檻: { 基準: 現行, 候選: [候選], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 20% }] }
 `);
   await freezeFolder(openFolder(old), { root, log: () => {} });
   const fresh = (): string => {

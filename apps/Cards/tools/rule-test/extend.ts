@@ -1,6 +1,6 @@
 // 比較測試工具：extend（任務說明 tasks/rule-test-tool.md §5-10）。同一課多跑幾份：寫進 追加.jsonl（不改 測試.yaml），每一組各加同樣的份數
 // （算門檻的組份數相同，§4-2）；只能加已凍結的課與生成器，規則與門檻不能改。記原因、時間、是不是在某一批解開之後才加；
-// 加的份照樣 generate、check，blind 時成為新的一批。
+// 加的份照樣 generate、check（有加深再 deepen），blind 時成為新的一批。
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
@@ -31,7 +31,8 @@ export function extendFolder(folder: Folder, request: { lesson: string; generato
 export function extend(): Promise<void> {
   const [dir, lesson, generator, count, ...reason] = process.argv.slice(3);
   if (!dir || !lesson || !generator || !count || !reason.length) throw Error('用法：npm run rule-test -- extend <測試資料夾> <課> <生成器> <份數> <原因>');
-  const extension = extendFolder(openFolder(cliPath(dir, 'rule-test')), { lesson, generator, count: Number(count), reason: reason.join(' ') });
-  console.log(`追加了：課 ${extension.lesson}、生成器 ${extension.generator}，每組 ${String(extension.count)} 份${extension.afterBatch === null ? '' : `（在批 ${String(extension.afterBatch)} 解開之後）`}。下一步：generate、check、blind（成為新的一批）。`);
+  const folder = openFolder(cliPath(dir, 'rule-test'));
+  const extension = extendFolder(folder, { lesson, generator, count: Number(count), reason: reason.join(' ') });
+  console.log(`追加了：課 ${extension.lesson}、生成器 ${extension.generator}，每組 ${String(extension.count)} 份${extension.afterBatch === null ? '' : `（在批 ${String(extension.afterBatch)} 解開之後）`}。下一步：generate、check、${folder.config.deepen ? 'deepen、' : ''}blind（成為新的一批）。`);
   return Promise.resolve();
 }

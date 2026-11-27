@@ -8,6 +8,8 @@ import { openFolder, type Folder } from '../../tools/rule-test/folder.ts';
 import { freezeFolder } from '../../tools/rule-test/freeze.ts';
 import { runQueue } from '../../tools/rule-test/generate.ts';
 import type { JudgeResult } from '../../tools/rule-test/judge.ts';
+import type { DeepenResult } from '../../tools/rule-test/deepen-judge.ts';
+import type { MapResult } from '../../tools/rule-test/map.ts';
 
 export const RUBRIC = [
   '| 列 | 類別 | 要考的知識或判準 | 頁碼 | 可以接受的等價做法 | 跨單元 |',
@@ -20,13 +22,13 @@ export const RUBRIC = [
 const GOOD_REPLY = '````markdown\n國二上英文 L3 單字\n- borrow 英翻中\n    - borrow :: v. 借入\n- lend 英翻中\n    - lend :: v. 借出\n<<<完>>>\n````';
 
 /** 凍結、每組生成一份（replies 可以照組換回覆）、匿名做完的測試資料夾。groups 的第一組是基準、第二組是候選。 */
-export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = '', rubric = RUBRIC.replace(' 加題 aaaaa2 ', ' '), groups = ['甲', '乙']): Promise<Folder> {
+export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = {}, more = '', rubric = RUBRIC.replace(' 加題 aaaaa2 ', ' '), groups = ['甲', '乙'], prompts: Record<string, string> = {}): Promise<Folder> {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-'));
   mkdirSync(join(root, '課', 'L3'), { recursive: true });
   writeFileSync(join(root, '課', 'L3', '教材.pdf'), '%PDF-1.4 假的');
   writeFileSync(join(root, '課', 'L3', '評分表.md'), rubric);
   mkdirSync(join(root, '提示'));
-  for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), `組${name}\n\n{{任務段}}`);
+  for (const name of groups) writeFileSync(join(root, '提示', `${name}.md`), prompts[name] ?? `組${name}\n\n{{任務段}}`);
   writeFileSync(join(root, '測試.yaml'), `
 名稱: 評分測試
 課庫: 課
@@ -36,7 +38,7 @@ export async function blinded(replies: Partial<Record<'甲' | '乙', string>> = 
 ${groups.map(name => `  - { 名稱: ${name}, 規則: { 自備: { L3: ${name}.md } } }`).join('\n')}
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: ${groups[0]}, 候選: [${groups[1]}], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: ${groups[0]}, 候選: [${groups[1]}], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 ${more}`);
   await freezeFolder(openFolder(root), { log: () => {} });
   const folder = openFolder(root);
@@ -48,8 +50,9 @@ ${more}`);
 
 /**
  * 假的評審：從提示讀代號與列號，每份每列判「有」（證據第 2 行）；shape 可以照代號改結果（例如記問題），first 可以讓第一次交的不合格。
+ * 地圖評分的提示（rule-test-d236.md §5-3）照 shapeMap 改；加深評分（§6-3）每一項判接得對、每列拿第一項當證據判有（沒有項就沒有），照 shapeDeepen 改。
  */
-export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string[]) => void; first?: (result: JudgeResult) => void } = {}): { adapter: Adapter; requests: StepRequest[] } {
+export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string[]) => void; first?: (result: JudgeResult) => void; shapeMap?: (result: MapResult, codes: string[]) => void; shapeDeepen?: (result: DeepenResult, items: Map<string, string[]>) => void } = {}): { adapter: Adapter; requests: StepRequest[] } {
   const requests: StepRequest[] = [];
   let prompt = '';
   return {
@@ -58,6 +61,25 @@ export function fakeJudge(options: { shape?: (result: JudgeResult, codes: string
       requests.push(request);
       request.record('{}', '');
       if (request.resume === null) prompt = request.text;
+      if (prompt.startsWith('# 加深評分說明')) {
+        const codes = /- 加深：(.*)（共/.exec(prompt)![1].split('、').map(each => /加深\/(S\d+)\.md/.exec(each)![1]);
+        const chances = /- 要逐列判的加深機會（\d+ 列）：(.*)/.exec(prompt)?.[1].split('、') ?? [];
+        const items = new Map(codes.map(code => [code, [...new RegExp(`^  - ${code}：(.*)$`, 'm').exec(prompt)![1].matchAll(/(\d+-\d+)（/g)].map(match => match[1])]));
+        const result: DeepenResult = {
+          rows: chances.map(row => ({ row, decks: codes.map(deck => { const first = items.get(deck)!.at(0); return first ? { deck, evidence: '接住了', items: [first], verdict: '有' as const } : { deck, evidence: '', items: [], verdict: '沒有' as const }; }) })),
+          items: codes.flatMap(deck => items.get(deck)!.map(item => ({ deck, item, verdict: '接得對' as const, reason: '' as const, note: '' }))),
+          issues: [], unsure: '',
+        };
+        options.shapeDeepen?.(result, items);
+        return Promise.resolve({ kind: 'ok', reply: JSON.stringify(result), session: 'judge-deepen', warnings: [], ms: 1, models: [], structured: result });
+      }
+      if (prompt.startsWith('# 地圖評分說明')) {
+        const maps = /- 地圖：(.*)（共/.exec(prompt)![1].split('、').map(each => /地圖\/(S\d+)\.md/.exec(each)![1]);
+        const mapRows = /- 要逐列判的列（\d+ 列）：(.*)/.exec(prompt)![1].split('、');
+        const map: MapResult = { rows: mapRows.map(row => ({ row, decks: maps.map(deck => ({ deck, evidence: '全貌', lines: [2], verdict: '有' as const })) })), issues: [], unsure: '' };
+        options.shapeMap?.(map, maps);
+        return Promise.resolve({ kind: 'ok', reply: JSON.stringify(map), session: 'judge-map', warnings: [], ms: 1, models: [], structured: map });
+      }
       const codes = /- 卡組：(.*)（共/.exec(prompt)![1].split('、').map(each => /卡組\/(S\d+)\.md/.exec(each)![1]);
       const rows = /- 要逐列判的列（\d+ 列）：(.*)/.exec(prompt)![1].split('、');
       const result: JudgeResult = { pages: [], rows: rows.map(row => ({ row, decks: codes.map(deck => ({ deck, evidence: 'borrow 英翻中', lines: [2], verdict: '有' as const })) })), issues: [], unsure: '' };

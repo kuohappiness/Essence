@@ -8,8 +8,8 @@ import { claudeAdapter, codexAdapter, type Adapter, type StepResult } from './ad
 import { cliPath } from '../cli-path.ts';
 import { validity } from './deck-cut.ts';
 import { materialOf, openFolder, writeOnce, type Folder } from './folder.ts';
-import { readFrozenSteps, verifyLock, type FrozenStep } from './freeze.ts';
-import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent } from './jobs.ts';
+import { confirmSpec, readFrozenSteps, SPEC, verifyLock, type FrozenStep } from './freeze.ts';
+import { appendEvent, jobState, planJobs, readEvents, reopenFailed, type Job, type JobEvent, type JobState } from './jobs.ts';
 import { fillReplies } from './prompts.ts';
 
 /** 連續幾份失敗就整個佇列停下（斷路器，§5-4）。 */
@@ -17,7 +17,7 @@ const BREAKER = 3;
 /**
  * Codex 不收附件（探針 P6）：教材放進對話的資料夾，每個對話的第一步前面加這一句；各組相同（附件說明各組相同，§5-4），記進那一步的事件。
  */
-const CODEX_MATERIAL = '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）';
+export const CODEX_MATERIAL = '（教材是這個資料夾裡的 教材.pdf，先讀完再照下面做。）';
 
 export const rawName = (job: Job, step: FrozenStep): string => `${job.key}${job.steps.length > 1 ? `-${String(step.step)}` : ''}.md`;
 const attemptDir = (folder: Folder, job: Job, attempt: number): string => join(folder.root, '生成', '嘗試', `${job.key}-${String(attempt)}`);
@@ -42,6 +42,16 @@ function finalize(folder: Folder, job: Job, attempt: number): void {
 
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+}
+
+/**
+ * CLI 算要跑的工作（generate、deepen 共用）：待跑與待重試；停在「跑中」的，沒有活著的行程拿著鎖時也算（上一次的行程被砍掉，
+ * 開跑時 acquireLock 會改記中斷再跑，L2 第 1 輪 E）。手貼的「跑中」是在等使用者貼下一步，不算。
+ */
+export function startable(folder: Folder): (status: JobState['status'], manual?: boolean) => boolean {
+  const file = lockFile(folder);
+  const held = existsSync(file) && alive((JSON.parse(readFileSync(file, 'utf8')) as { pid: number }).pid);
+  return (status, manual = false) => status === 'pending' || status === 'retry' || (status === 'running' && !held && !manual);
 }
 
 /**
@@ -126,7 +136,7 @@ async function runJob(folder: Folder, job: Job, adapter: Adapter, temp: string):
       writeFileSync(join(dir, `${String(step.step)}.md`), result.reply, { encoding: 'utf8', flag: 'wx' });
       if (result.session) sessions.set(step.conversation, result.session);
       replies.set(replyName(job, step), result.reply);
-      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, chars: result.reply.length, ...note ? { material: note } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } });
+      appendEvent(folder, { type: 'step', job: job.key, attempt, step: step.step, detail: { ms: result.ms, costUsd: result.costUsd, usage: result.usage, models: result.models, sent: text.length, chars: result.reply.length, ...note ? { material: note } : {}, ...result.warnings.length ? { warnings: result.warnings } : {} } });
     }
     finalize(folder, job, attempt);
     return 'done';
@@ -206,7 +216,8 @@ export async function generate(): Promise<void> {
   const steps = readFrozenSteps(folder), events = readEvents(folder), retry = flags.includes('--retry');
   const jobs = planJobs(folder, steps, events);
   const failed = jobs.filter(job => jobState(events, job.key).status === 'failed');
-  const todo = jobs.filter(job => ['pending', 'retry'].includes(jobState(events, job.key).status) || (retry && failed.includes(job)));
+  const can = startable(folder);
+  const todo = jobs.filter(job => can(jobState(events, job.key).status, job.kind === 'manual') || (retry && failed.includes(job)));
   const auto = todo.filter(job => job.kind !== 'manual'), manual = todo.filter(job => job.kind === 'manual');
   if (failed.length && !retry) console.log(`放棄的 ${String(failed.length)} 份沒算進去（原因用 status 看；決定再試就加 --retry）：${failed.map(job => job.key).join('、')}\n`);
   if (!flags.includes('--confirmed')) {
@@ -216,9 +227,10 @@ export async function generate(): Promise<void> {
       const chars = mine.reduce((sum, job) => sum + job.steps.reduce((n, step) => n + step.chars, 0), 0);
       console.log(`${generator.name}（${generator.model}，${generator.effort}）：${String(mine.length)} 份、${String(mine.reduce((n, job) => n + job.steps.length, 0))} 次送出、提示共 ${chars.toLocaleString('en-US')} 字${generator.kind === 'manual' ? '（手貼）' : ''}`);
     }
-    console.log(todo.length ? '\n同意用量後加 --confirmed 開跑。' : '沒有要生成的了。');
+    console.log(todo.length ? `\n給使用者看用量時，一起給〈評估規格〉：${join(folder.root, SPEC)}。同意用量後加 --confirmed 開跑。` : '沒有要生成的了。');
     return;
   }
+  if (todo.length) confirmSpec(folder);
   if (retry && failed.length) console.log(`重開放棄的：${reopenFailed(folder, failed.map(job => job.key)).join('、')}`);
   for (const job of manual) console.log(`手貼說明：${writeManual(folder, job)}`);
   if (!auto.length) return;

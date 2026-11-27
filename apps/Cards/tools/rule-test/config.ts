@@ -2,6 +2,7 @@
 // 鍵用中文、和任務說明的範例一樣；值的意思也照任務說明。錯誤一次列完（每一條說是哪一項、為什麼）。
 import { parse } from 'yaml';
 import { PURPOSES, RULE_SUBJECTS, type CardForm, type Purpose } from '../../src/core/ai/index.ts';
+import { ADJUSTABLE, DEFAULT_LEVELS, type Levels } from './levels.ts';
 
 export interface TaskOptions {
   /** 點選填空的說明（pickRules）送不送；任務資料那一行照送。 */
@@ -21,7 +22,9 @@ export type RuleSource =
   | { kind: 'own'; files: Record<string, string> };
 
 interface Step { conversation: string; rules: RuleSource; deck: boolean }
-interface Group { name: string; steps: Step[] }
+/** 加深規則（rule-test-d236.md §6-1 第 5 點）：「檔案」與「自備」來源的組跑加深時一定要寫，送這幾個檔的送給 AI 段加上加深段。 */
+interface DeepenRules { commit: string; files: string[] }
+export interface Group { name: string; steps: Step[]; deepenRules: DeepenRules | null }
 
 export interface LessonConfig {
   code: string;
@@ -35,8 +38,20 @@ export type AdapterKind = 'claude' | 'codex' | 'manual';
 export interface Generator { name: string; kind: AdapterKind; model: string; effort: string; count: number; lessons: string[] | null; service: string | null }
 export interface Judge { name: string; kind: 'claude' | 'codex'; model: string; effort: string }
 
-const METRICS = ['規則字數', '整份提示字數', '孩子會碰到的錯', '孩子會碰到的錯（不算多解）', '重大錯誤', '題目品質', '近義重複', '漏的必備', '部分的必備', '題數', '目標數', '生成時間'] as const;
-export type Metric = (typeof METRICS)[number];
+/** 學習面的指標（rule-test-d236.md §7-2，D-236 第 4 點）：收益與不能變差只收這幾個，都是越少越好。 */
+export const LEARNING_METRICS = ['傷到學習', '判錯', '每個必備平均幾題', '多餘的題', '沒講為什麼', '地圖漏的必備', '地圖問題', '加深機會漏掉', '確定接錯'] as const;
+export type LearningMetric = (typeof LEARNING_METRICS)[number];
+/** 次要指標（§9）：只報告，學習面打平時才用。 */
+export const SECONDARY_METRICS = ['規則字數', '整份提示字數', 'token', '生成時間'] as const;
+export type SecondaryMetric = (typeof SECONDARY_METRICS)[number];
+
+/** 容許量＝max（百分比 × 基準平均，絕對下限）；下限處理基準平均是 0 的情況（§7-2 第 3、5 道）。 */
+export interface Tolerance { percent: number; floor: number }
+/** 不能變差的預設容許量（§7-2 的表）；傷到學習是第 3 道，另外設。 */
+export const NO_WORSE_DEFAULTS: Record<Exclude<LearningMetric, '傷到學習'>, Tolerance> = {
+  判錯: { percent: 0, floor: 0.5 }, 每個必備平均幾題: { percent: 0.1, floor: 0.2 }, 多餘的題: { percent: 0, floor: 0.5 }, 沒講為什麼: { percent: 0, floor: 0.5 },
+  地圖漏的必備: { percent: 0, floor: 0.5 }, 地圖問題: { percent: 0, floor: 0.5 }, 加深機會漏掉: { percent: 0, floor: 0.5 }, 確定接錯: { percent: 0, floor: 0.5 },
+};
 
 export interface Gates {
   baseline: string;
@@ -45,9 +60,21 @@ export interface Gates {
   majorErrors: 'zero' | 'notMore';
   rowMissGap: number;
   missedRows: number;
-  nearDuplicates: number;
-  benefits: { metric: Metric; atLeast: number }[];
-  noWorse: { metric: Metric; tolerance: number }[];
+  /** 多餘的題（近義重複）候選每份平均最多多幾題（§4）。 */
+  extraPrompts: number;
+  /** 第 3 道：傷到學習的容許量（§12 第 4 題，預設 0）。 */
+  harm: Tolerance;
+  benefits: { metric: LearningMetric; atLeast: number }[];
+  /** 收益列了 k 項時每一項用 5%÷k 判明顯（§7-1 第 3 點；§12 第 3 題的 (b) 是不校正）。 */
+  correction: boolean;
+  /** 不能變差：全部適用的學習面指標自動進來，這裡是改過的容許量。 */
+  noWorse: Record<Exclude<LearningMetric, '傷到學習'>, Tolerance>;
+  secondary: { metric: SecondaryMetric; atLeast: number; tolerance: number }[];
+  tieMinCopies: number;
+  /** 「打平，候選較省」工具直接標過，或只報告（§12 第 2 題）。 */
+  tieCheaper: 'pass' | 'report';
+  /** 時間預算（檢查表課 3，rule-test-d236.md §16）：目標多超過 15% 而必備沒多時只標出來，或算沒過。 */
+  timeBudget: 'report' | 'gate';
 }
 
 export interface Config {
@@ -65,6 +92,12 @@ export interface Config {
   /** 評分表的三個對話（§5-2）：寫的一方（也回應核對）與核對的一方。 */
   rubric: { writer: Judge; checker: Judge };
   gates: Gates;
+  /** 錯誤分級（rule-test-d236.md §3-1）。 */
+  levels: Levels;
+  /** 模擬首次加深（§6-1）：跑哪幾個生成器；沒寫是不跑。 */
+  deepen: { generators: string[] } | null;
+  /** 對照（§8）：甲對乙，只報告。 */
+  contrasts: { name: string; a: string; b: string }[];
 }
 
 type Raw = Record<string, unknown>;
@@ -75,7 +108,15 @@ class Errors {
   add(where: string, message: string): void { this.list.push(`${where}：${message}`); }
 }
 
+/** 鍵拼錯不會默默用預設值（L2 第 1 輪 I）：頂層與門檻只收認得的鍵。 */
+function knownKeys(raw: Raw, known: readonly string[], where: string, errors: Errors): void {
+  for (const key of Object.keys(raw)) if (!known.includes(key)) errors.add(where, `不認得「${key}」（認得的是 ${known.join('、')}）`);
+}
+const TOP_KEYS = ['名稱', '課庫', '系統提示', '逾時分鐘', '同時', '課', '組', '生成', '評審', '評審重評', '裁定', '評分表', '門檻', '錯誤分級', '加深', '對照'];
+const GATE_KEYS = ['基準', '候選', '生成器', '重大錯誤', '收益', '收益校正', '傷到學習容許', '不能變差', '多餘的題多出', '近義重複多出', '多漏差距', '多漏列數', '次要', '打平最少份數', '打平較省', '時間預算'];
 const text = (value: unknown): string | null => typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : null;
+/** 只能寫幾個字之一的設定：沒寫用預設；寫了但不是字（空白、是非、清單）回空字串，讓呼叫的地方報錯。 */
+const word = (value: unknown, fallback: string): string => value === undefined ? fallback : text(value) ?? '';
 function need(raw: Raw, key: string, where: string, errors: Errors): string {
   const value = text(raw[key]);
   if (!value) errors.add(where, `少了「${key}」`);
@@ -88,7 +129,8 @@ function yesNo(value: unknown, yes: string, no: string, where: string, errors: E
   return false;
 }
 function percent(value: unknown, where: string, errors: Errors): number {
-  const match = typeof value === 'number' ? [String(value), String(value)] : typeof value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*%?\s*$/.exec(value) : null;
+  // 數字也要有限、不小於 0（YAML 的 -1、.nan、.inf 是數字，字串的那一支本來就只收不帶負號的數）。
+  const match = typeof value === 'number' ? Number.isFinite(value) && value >= 0 ? [String(value), String(value)] : null : typeof value === 'string' ? /^\s*(\d+(?:\.\d+)?)\s*%?\s*$/.exec(value) : null;
   if (!match) { errors.add(where, '要寫百分比，例如 20%'); return 0; }
   return Number(match[1]) / 100;
 }
@@ -153,10 +195,44 @@ function form(raw: unknown, where: string, errors: Errors): { subjectKey: string
   };
 }
 
-function metric(value: unknown, where: string, errors: Errors): Metric {
+const SECONDARY_NOTE = '規則字數、整份提示字數、token、生成時間是次要指標，只能寫在「次要」（D-236 第 4 點）';
+function learning(value: unknown, where: string, errors: Errors): LearningMetric {
   const name = text(value) ?? '';
-  if (!(METRICS as readonly string[]).includes(name)) errors.add(where, `指標要是 ${METRICS.join('、')} 之一`);
-  return name as Metric;
+  if ((SECONDARY_METRICS as readonly string[]).includes(name)) errors.add(where, SECONDARY_NOTE);
+  else if (!(LEARNING_METRICS as readonly string[]).includes(name)) errors.add(where, `指標要是 ${LEARNING_METRICS.join('、')} 之一`);
+  return name as LearningMetric;
+}
+function secondary(value: unknown, where: string, errors: Errors): SecondaryMetric {
+  const name = text(value) ?? '';
+  if (!(SECONDARY_METRICS as readonly string[]).includes(name)) errors.add(where, `次要指標要是 ${SECONDARY_METRICS.join('、')} 之一`);
+  return name as SecondaryMetric;
+}
+function count(value: unknown, fallback: number, where: string, errors: Errors): number {
+  if (value === undefined) return fallback;
+  // 空白、是非、清單不當成數（Number(null) 是 0、Number([1]) 是 1）。
+  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(number) || number < 0) errors.add(where, '要是 0 以上的數');
+  return number;
+}
+
+function deepenRules(raw: unknown, where: string, errors: Errors): DeepenRules | null {
+  if (raw === undefined) return null;
+  const item = isRaw(raw) ? raw : (errors.add(where, '要寫成 { commit, 檔案 }'), {});
+  const files = list(item['檔案'], `${where} 檔案`, errors).map(String);
+  if (!files.length) errors.add(where, '少了「檔案」');
+  return { commit: need(item, 'commit', where, errors), files };
+}
+
+function levels(raw: unknown, errors: Errors): Levels {
+  if (raw === undefined) return { ...DEFAULT_LEVELS };
+  if (!isRaw(raw)) { errors.add('錯誤分級', '要寫成 { 種類: 傷到學習 或 小問題 }'); return { ...DEFAULT_LEVELS }; }
+  const out = { ...DEFAULT_LEVELS };
+  for (const [kind, level] of Object.entries(raw)) {
+    if (!(ADJUSTABLE as readonly string[]).includes(kind)) { errors.add(`錯誤分級 ${kind}`, `只能調 ${ADJUSTABLE.join('、')}（重大錯誤、存不了照 D-234 是重大；判錯、洩漏是 D-236 點名的傷到學習）`); continue; }
+    if (level !== '傷到學習' && level !== '小問題') { errors.add(`錯誤分級 ${kind}`, '要寫「傷到學習」或「小問題」'); continue; }
+    out[kind as keyof Levels] = level;
+  }
+  return out;
 }
 
 /** 讀設定；有錯就丟一個列出全部錯誤的 Error。 */
@@ -165,6 +241,7 @@ export function readConfig(source: string): Config {
   let doc: unknown;
   try { doc = parse(source); } catch (error) { throw Error(`測試.yaml 讀不懂：${error instanceof Error ? error.message : String(error)}`); }
   if (!isRaw(doc)) throw Error('測試.yaml 要是一個物件');
+  knownKeys(doc, TOP_KEYS, '設定', errors);
 
   const lessons = list(doc['課'], '課', errors).map((raw, i): LessonConfig => {
     const where = `課 第 ${String(i + 1)} 項`;
@@ -195,7 +272,7 @@ export function readConfig(source: string): Config {
       });
     if (steps.some(step => step.rules === null)) errors.add(where, '少了「規則」（組或每一步要有一個）');
     if (!steps.some(step => step.deck)) errors.add(where, '至少要有一步「卡組: 是」');
-    return { name, steps };
+    return { name, steps, deepenRules: deepenRules(raw['加深規則'], `${where} 加深規則`, errors) };
   });
   const names = pending.map(each => each.name);
   names.forEach((name, i) => { if (name && names.indexOf(name) !== i) errors.add('組', `名稱「${name}」重複`); });
@@ -210,7 +287,7 @@ export function readConfig(source: string): Config {
     return { ...resolved, ...rules.files ? { files: rules.files } : {}, ...rules.task === undefined ? {} : { task: taskOptions(rules.task, `${where} 任務段`, errors) } };
   };
   const groups: Group[] = pending.map(group => ({
-    name: group.name,
+    name: group.name, deepenRules: group.deepenRules ?? null,
     steps: group.steps.map((step, j) => {
       const rules = step.rules ? resolve(step.rules, `組「${group.name}」步驟 ${String(j + 1)}`, [group.name]) : { kind: 'plugin' as const, subject: '' };
       if (rules.kind === 'own') for (const code of codes) if (code && !rules.files[code]) errors.add(`組「${group.name}」步驟 ${String(j + 1)}`, `自備少了課「${code}」的檔`);
@@ -259,23 +336,92 @@ export function readConfig(source: string): Config {
   if (!gateGenerators.length) errors.add('門檻', '少了「生成器」（哪幾個生成器算門檻，第一輪沒寫這一項）');
   for (const name of [baseline, ...candidates]) if (name && !names.includes(name)) errors.add('門檻', `沒有叫「${name}」的組`);
   for (const name of gateGenerators) if (!generatorNames.includes(name)) errors.add('門檻', `沒有叫「${name}」的生成器`);
-  const majorText = text(rawGates['重大錯誤']) ?? '不比基準多';
+  const majorText = word(rawGates['重大錯誤'], '不比基準多');
+  const tolerance = (raw: unknown, where: string, fallback: Tolerance): Tolerance => {
+    if (raw === undefined) return { ...fallback };
+    if (!isRaw(raw)) { errors.add(where, '要寫成 { 百分比, 下限 }，例如 { 百分比: 10%, 下限: 0.5 }'); return { ...fallback }; }
+    const item = raw;
+    knownKeys(item, ['百分比', '下限'], where, errors);
+    return { percent: item['百分比'] === undefined ? fallback.percent : percent(item['百分比'], `${where} 百分比`, errors), floor: count(item['下限'], fallback.floor, `${where} 下限`, errors) };
+  };
+  const noWorse = { ...NO_WORSE_DEFAULTS };
+  const rawNoWorse = list(rawGates['不能變差'], '門檻 不能變差', errors);
+  rawNoWorse.forEach((raw, i) => {
+    const where = `門檻 不能變差 第 ${String(i + 1)} 項`;
+    const item = isRaw(raw) ? raw : {};
+    knownKeys(item, ['指標', '容許', '下限'], where, errors);
+    const name = learning(item['指標'], where, errors);
+    if (rawNoWorse.slice(0, i).some(each => isRaw(each) && text(each['指標']) === name)) errors.add('門檻 不能變差', `「${name}」重複`);
+    if (name === '傷到學習') { errors.add(where, '傷到學習是第 3 道，容許量寫在「傷到學習容許」'); return; }
+    if (!(name in noWorse)) return;
+    const key = name;
+    noWorse[key] = { percent: item['容許'] === undefined ? noWorse[key].percent : percent(item['容許'], `${where} 容許`, errors), floor: count(item['下限'], noWorse[key].floor, `${where} 下限`, errors) };
+  });
+  const tieText = word(rawGates['打平較省'], '過');
+  const budgetText = word(rawGates['時間預算'], '只報告');
   const gates: Gates = {
     baseline, candidates, generators: gateGenerators,
     majorErrors: majorText === '零' ? 'zero' : majorText === '不比基準多' ? 'notMore' : (errors.add('門檻 重大錯誤', '要寫「零」或「不比基準多」'), 'zero'),
-    rowMissGap: Number(rawGates['多漏差距'] ?? 0.5),
-    missedRows: Number(rawGates['多漏列數'] ?? 1),
-    nearDuplicates: Number(rawGates['近義重複多出'] ?? 0),
+    rowMissGap: count(rawGates['多漏差距'], 0.5, '門檻 多漏差距', errors),
+    missedRows: count(rawGates['多漏列數'], 1, '門檻 多漏列數', errors),
+    extraPrompts: count(rawGates['多餘的題多出'], 0, '門檻 多餘的題多出', errors),
+    harm: tolerance(rawGates['傷到學習容許'], '門檻 傷到學習容許', { percent: 0, floor: 0 }),
     benefits: list(rawGates['收益'], '門檻 收益', errors).map((raw, i) => {
       const item = isRaw(raw) ? raw : {};
-      return { metric: metric(item['指標'], `門檻 收益 第 ${String(i + 1)} 項`, errors), atLeast: percent(item['至少'], `門檻 收益 第 ${String(i + 1)} 項 至少`, errors) };
+      knownKeys(item, ['指標', '至少'], `門檻 收益 第 ${String(i + 1)} 項`, errors);
+      return { metric: learning(item['指標'], `門檻 收益 第 ${String(i + 1)} 項`, errors), atLeast: percent(item['至少'], `門檻 收益 第 ${String(i + 1)} 項 至少`, errors) };
     }),
-    noWorse: list(rawGates['不能變差'], '門檻 不能變差', errors).map((raw, i) => {
+    correction: (() => {
+      const value = word(rawGates['收益校正'], '要');
+      return value === '要' ? true : value === '不要' ? false : (errors.add('門檻 收益校正', '要寫「要」或「不要」'), true);
+    })(),
+    noWorse,
+    secondary: list(rawGates['次要'], '門檻 次要', errors).map((raw, i) => {
       const item = isRaw(raw) ? raw : {};
-      return { metric: metric(item['指標'], `門檻 不能變差 第 ${String(i + 1)} 項`, errors), tolerance: percent(item['容許'], `門檻 不能變差 第 ${String(i + 1)} 項 容許`, errors) };
+      const where = `門檻 次要 第 ${String(i + 1)} 項`;
+      knownKeys(item, ['指標', '至少', '容許'], where, errors);
+      return { metric: secondary(item['指標'], where, errors), atLeast: percent(item['至少'], `${where} 至少`, errors), tolerance: item['容許'] === undefined ? 0 : percent(item['容許'], `${where} 容許`, errors) };
     }),
+    tieMinCopies: count(rawGates['打平最少份數'], 3, '門檻 打平最少份數', errors),
+    tieCheaper: tieText === '過' ? 'pass' : tieText === '只報告' ? 'report' : (errors.add('門檻 打平較省', '要寫「過」或「只報告」'), 'pass'),
+    timeBudget: budgetText === '只報告' ? 'report' : budgetText === '算門檻' ? 'gate' : (errors.add('門檻 時間預算', '要寫「只報告」或「算門檻」'), 'report'),
   };
+  if (rawGates['近義重複多出'] !== undefined) errors.add('門檻 近義重複多出', '改成「多餘的題多出」（每組題數減一加總，rule-test-d236.md §4）');
   if (!gates.benefits.length) errors.add('門檻', '少了「收益」');
+  // 同一個指標列兩次會讓校正的 k 變大，門檻變嚴。
+  gates.benefits.forEach(({ metric }, i) => { if (gates.benefits.findIndex(each => each.metric === metric) !== i) errors.add('門檻 收益', `「${metric}」重複`); });
+  gates.secondary.forEach(({ metric }, i) => { if (gates.secondary.findIndex(each => each.metric === metric) !== i) errors.add('門檻 次要', `「${metric}」重複`); });
+  if (!Number.isInteger(gates.tieMinCopies)) errors.add('門檻 打平最少份數', '要是整數');
+  knownKeys(rawGates, GATE_KEYS, '門檻', errors);
+
+  // 加深與對照（rule-test-d236.md §2、§6-1、§8）。
+  let deepen: Config['deepen'] = null;
+  if (doc['加深'] !== undefined) {
+    const raw = isRaw(doc['加深']) ? doc['加深'] : (errors.add('加深', '要寫成 { 生成器: [...] }'), {});
+    const chosen = list(raw['生成器'], '加深 生成器', errors).map(String);
+    for (const name of chosen) {
+      const generator = generators.find(each => each.name === name);
+      if (!generator) errors.add('加深', `沒有叫「${name}」的生成器`);
+      else if (generator.kind === 'manual') errors.add('加深', `「${name}」是手貼的生成器，不跑加深（rule-test-d236.md §2）`);
+    }
+    if (!chosen.length) errors.add('加深', '少了「生成器」');
+    deepen = { generators: chosen };
+  }
+  const contrasts = list(doc['對照'], '對照', errors).map((raw, i) => {
+    const where = `對照 第 ${String(i + 1)} 項`;
+    const item = isRaw(raw) ? raw : (errors.add(where, '要寫成 { 名稱, 甲, 乙 }'), {});
+    const contrast = { name: need(item, '名稱', where, errors), a: need(item, '甲', where, errors), b: need(item, '乙', where, errors) };
+    for (const name of [contrast.a, contrast.b]) if (name && !names.includes(name)) errors.add(where, `沒有叫「${name}」的組`);
+    if (contrast.a && contrast.a === contrast.b) errors.add(where, '甲和乙是同一組');
+    return contrast;
+  });
+  if (deepen) {
+    const compared = new Set(comparedGroups({ baseline, candidates }, contrasts));
+    for (const group of groups.filter(each => compared.has(each.name) && !each.deepenRules)) {
+      const subjects = new Set(group.steps.filter(step => step.deck).map(step => step.rules.kind === 'plugin' ? step.rules.subject : null));
+      if (subjects.has(null) || subjects.size > 1) errors.add(`組「${group.name}」`, '跑加深的組，規則不是同一科的「外掛」來源時，要寫「加深規則: { commit, 檔案 }」（rule-test-d236.md §6-1 第 5 點）');
+    }
+  }
 
   // 算門檻的組份數相同（F11）：份數與跑哪幾課都寫在生成器上、每一組照跑，所以讀設定時一定成立；補跑時由 extend 檢查（§5-10）。
   const config: Config = {
@@ -289,12 +435,21 @@ export function readConfig(source: string): Config {
     adjudicator,
     rubric,
     gates,
+    levels: levels(doc['錯誤分級'], errors),
+    deepen, contrasts,
   };
   if (!(config.timeoutMinutes > 0)) errors.add('逾時分鐘', '要大於 0');
   if (!Number.isInteger(config.concurrency) || config.concurrency < 1) errors.add('同時', '要是 1 以上的整數');
   if (errors.list.length) throw Error(`測試.yaml 有 ${String(errors.list.length)} 個問題：\n${errors.list.map(each => `- ${each}`).join('\n')}`);
   return config;
 }
+
+/** 算門檻與對照用到的組（基準、候選、對照的甲乙）：跑加深的就是這幾組（rule-test-d236.md §6-1 第 1 點）。 */
+const comparedGroups = (gates: Pick<Gates, 'baseline' | 'candidates'>, contrasts: Config['contrasts']): string[] =>
+  [...new Set([gates.baseline, ...gates.candidates, ...contrasts.flatMap(each => [each.a, each.b])])];
+
+/** 跑加深的組；沒設定加深是空的。 */
+export const deepenGroups = (config: Config): string[] => config.deepen ? comparedGroups(config.gates, config.contrasts) : [];
 
 /** 一個生成器在哪幾課跑。 */
 export const lessonsOf = (config: Config, generator: Generator): LessonConfig[] =>

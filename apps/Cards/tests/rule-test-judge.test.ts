@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Adapter } from '../tools/rule-test/adapters.ts';
 import { jobState, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { judgePrompt, judgeSchema, rejudgeStats, runJudges, validateResult, type JudgeResult } from '../tools/rule-test/judge.ts';
-import { parseRubric } from '../tools/rule-test/rubric.ts';
+import { deepenChances, judgedRows, parseRubric } from '../tools/rule-test/rubric.ts';
 import { statusLines } from '../tools/rule-test/status.ts';
 import { blinded, fakeJudge, RUBRIC } from './helpers/rule-test.ts';
 
@@ -15,11 +15,44 @@ void test('評分表：讀列號、類別與跨單元；列號重複、類別不
   assert.deepEqual(rows.map(row => [row.id, row.kind, row.cross]), [['R1', '必備', ''], ['R2', '加分', '加題 aaaaa2'], ['M1', '重大錯誤', '']]);
   const broken = RUBRIC + '\n| R1 | 必要 | x | | | |\n| R3 | 必備 | y | | | 加題 zzzzz9 |\n| R4 | 必備 | z | | | 合併 |';
   assert.throws(() => parseRubric(broken, new Set(['aaaaa2'])), (error: Error) => {
-    assert.match(error.message, /類別「必要」不是 必備、加分、重大錯誤/);
+    assert.match(error.message, /類別「必要」不是 必備、加分、重大錯誤、加深機會/);
     assert.match(error.message, /跨單元 ID「zzzzz9」不在已有目標快照裡/);
     assert.match(error.message, /列「R4」的跨單元「合併」要寫/);
     return true;
   });
+});
+
+void test('評分表的加深機會（rule-test-d236.md §6-3）：用到哪幾個必備、要問什麼、課外的來源；不逐列判卡組；寫法不對列出來', () => {
+  const rows = parseRubric(RUBRIC + '\n| D1 | 加深機會 | 用到 R1：borrow 和 lend 的方向怎麼分 | p.3 | | |\n| D2 | 加深機會 | 用到 R1：借貸的英文說法（課外：高中英文 第一冊 L2） | p.3 | | |');
+  assert.deepEqual(deepenChances(rows), [
+    { id: 'D1', uses: ['R1'], ask: 'borrow 和 lend 的方向怎麼分', outside: null, pages: 'p.3' },
+    { id: 'D2', uses: ['R1'], ask: '借貸的英文說法（課外：高中英文 第一冊 L2）', outside: '高中英文 第一冊 L2', pages: 'p.3' },
+  ]);
+  assert.deepEqual(judgedRows(rows).map(row => row.id), ['R1', 'R2']);
+  const broken = RUBRIC + '\n| D1 | 加深機會 | 問更深的 | | | |\n| D2 | 加深機會 | 用到 R2、R9：x | | | |\n| D3 | 加深機會 | 用到 R1：y（課外：） | | | 另立 |';
+  assert.throws(() => parseRubric(broken), (error: Error) => {
+    assert.match(error.message, /列「D1」是加深機會，判準要寫成「用到 R1、R3：往下一層要問什麼」/);
+    assert.match(error.message, /列「D2」用到的 R2、R9 不是這張表的必備列/);
+    assert.match(error.message, /列「D3」是加深機會，跨單元要空著/);
+    assert.match(error.message, /列「D3」是課外，要在最後寫「（課外：可以查的來源）」/);
+    return true;
+  });
+});
+
+void test('評分表的依據欄（rule-test-d236.md §16，檢查表課 2、1a）：第七欄；必備寫正文、提問、後面要靠它、容易混、規律之一，其他類別空著；表頭要照兩種寫法之一', () => {
+  const header = '| 列 | 類別 | 要考的知識或判準 | 頁碼 | 可以接受的等價做法 | 跨單元 | 依據 |\n|---|---|---|---|---|---|---|\n';
+  const rows = parseRubric(`${header}| R1 | 必備 | borrow 的字義 | p.3 | | | 正文 |\n| R2 | 必備 | 借入與借出的方向 | p.3 | | | 容易混 |\n| R3 | 加分 | lend 的片語 | p.3 | | | |`);
+  assert.deepEqual(rows.map(row => [row.id, row.basis]), [['R1', '正文'], ['R2', '容易混'], ['R3', '']]);
+  // 沒有依據欄的舊表（第一輪的評分表）照樣讀得懂，依據是 null。
+  assert.deepEqual(parseRubric(RUBRIC).map(row => row.basis), [null, null, null]);
+  assert.throws(() => parseRubric(`${header}| R1 | 必備 | a | | | | |\n| R2 | 必備 | b | | | | 重要 |\n| R3 | 加分 | c | | | | 正文 |`), (error: Error) => {
+    assert.match(error.message, /列「R1」是必備，依據要寫 正文、提問、後面要靠它、容易混、規律 之一/);
+    assert.match(error.message, /列「R2」是必備，依據要寫 正文、提問、後面要靠它、容易混、規律 之一/);
+    assert.match(error.message, /列「R3」不是必備，依據要空著/);
+    return true;
+  });
+  assert.throws(() => parseRubric('| 列 | 類別 | 頁碼 | 要考的知識或判準 | 可以接受的等價做法 | 跨單元 |\n|---|---|---|---|---|---|\n| R1 | 必備 | p.3 | borrow | | |'), /表頭要是「\| 列 \| 類別 \| 要考的知識或判準 \| 頁碼 \| 可以接受的等價做法 \| 跨單元 \|」（可以在最後加「依據」）/);
+  assert.throws(() => parseRubric('| R1 | 必備 | borrow | p.3 | | |'), /少了表頭/);
 });
 
 void test('評審的 schema：全部必填、不用動態鍵；卡組代號是 enum', () => {
@@ -27,6 +60,9 @@ void test('評審的 schema：全部必填、不用動態鍵；卡組代號是 e
   assert.deepEqual(schema.required, ['pages', 'rows', 'issues', 'unsure']);
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.properties.issues.items.properties.deck.enum, ['S1', 'S2']);
+  // 種類只靠 schema 的 enum 擋（驗結果時不驗種類），所以直接看 enum：§17 的新種類要在裡面。
+  const kinds = (judgeSchema(['S1']) as { properties: { issues: { items: { properties: { kind: { enum: string[] } } } } } }).properties.issues.items.properties.kind.enum;
+  assert.ok(kinds.includes('沒講為什麼'));
 });
 
 const DECKS = new Map([['S1', ['- borrow 英翻中', '    - borrow :: 借入', '', '- lend 英翻中', '    - lend :: 借出', '']], ['S2', ['- borrow 英翻中', '    - borrow :: 借入', '']]]);
@@ -51,7 +87,7 @@ void test('驗評審的結果：列號一列一筆、每份一格、判有要有
     '列 M1：每份卡組要剛好一格（少了 S2，共寫了 1 格）',
     '列 M1 的 S1：行號 3 不是卡組裡有字的行',
     '問題第 1 筆（S2 近義重複）：行號 9 不是卡組裡有字的行',
-    '問題第 1 筆（S2 近義重複）：近義重複要剛好寫兩題的行號',
+    '問題第 1 筆（S2 近義重複）：近義重複要剛好寫兩道不同的題的行號（不是目標名稱行、不是同一題）',
     '問題第 2 筆（S1 跨單元去向）：rubric 要寫評分表的列號',
     '逐頁少了第 1、2 頁（教材共 2 頁）',
   ]);
@@ -59,6 +95,25 @@ void test('驗評審的結果：列號一列一筆、每份一格、判有要有
   noLines.rows[0].decks[0].lines = [];
   assert.deepEqual(validateResult(noLines, context), ['列 R1 的 S1：判「有」要寫證據的行號']);
   assert.deepEqual(validateResult('不是 JSON', context), ['不是照 schema 的 JSON（要有 pages、rows、issues、unsure）']);
+});
+
+void test('驗評審的結果：沒講為什麼一題一筆（rule-test-d236.md §17），行號要落在同一題；有好幾題的目標不寫名稱行，只有一題的可以', () => {
+  // S3 第 1 行是有兩題的目標名稱，第 2、3 行是兩題，第 4 行是第 3 行那一題的詳解。
+  const decks = new Map([...DECKS, ['S3', ['- borrow 的用法', '    - borrow 英翻中 :: 借入', '    - 「借入」的英文 :: borrow', '        - 詳解', '']]]);
+  const context = { rows: parseRubric(RUBRIC), codes: ['S1', 'S2', 'S3'], decks, pages: 1 };
+  const why = (deck: string, lines: number[]): JudgeResult => {
+    const result = good();
+    result.rows = result.rows.map(row => ({ ...row, decks: [...row.decks, { deck: 'S3', evidence: '', lines: [], verdict: '沒有' as const }] }));
+    result.issues = [{ deck, kind: '沒講為什麼', lines, rubric: '', note: '' }];
+    return result;
+  };
+  const wrong = '問題第 1 筆（S3 沒講為什麼）：沒講為什麼一題一筆，行號要落在同一題（題目行或它底下的行；有好幾題的目標不寫名稱行）';
+  assert.deepEqual(validateResult(why('S3', [3, 4]), context), []);
+  assert.deepEqual(validateResult(why('S1', [1]), context), []);
+  assert.deepEqual(validateResult(why('S3', [1]), context), [wrong]);
+  assert.deepEqual(validateResult(why('S3', [2, 3]), context), [wrong]);
+  // 兩個目標各自的第 1 題（S1 第 2、5 行）也不是同一題（L2 §17 第 2 輪 P3-7）。
+  assert.deepEqual(validateResult(why('S1', [2, 5]), context), [wrong.replace('S3', 'S1')]);
 });
 
 void test('judge：每個區組、每位評審一個新對話（只開 Read、照 schema 交、資料夾是複本）；兩位都交了就鎖定', async () => {
@@ -120,7 +175,7 @@ void test('judge：試滿 3 次的放棄、這一批鎖不了；重開（--retry
 
 void test('評審的提示：凍結的評分說明在前，附這個區組的卡組、列號與教材', async () => {
   const folder = await blinded();
-  const text = judgePrompt(folder, { name: 'L3-B01', lesson: 'L3', generator: 'claude', codes: ['S2', 'S1'] }, parseRubric(RUBRIC), 12, false);
+  const text = judgePrompt(folder, { name: 'L3-B01', lesson: 'L3', generator: 'claude', codes: ['S2', 'S1'], maps: [], deepens: [] }, parseRubric(RUBRIC), 12, false);
   assert.ok(text.startsWith(readFileSync(join(folder.root, '凍結', '範本', '評分說明.md'), 'utf8').trim()));
   assert.ok(text.endsWith('## 這一次\n\n- 卡組：卡組/S2.md、卡組/S1.md（共 2 份）\n- 要逐列判的列（2 列）：R1、R2\n- 教材：資料夾裡的 教材.pdf，共 12 頁'));
 });

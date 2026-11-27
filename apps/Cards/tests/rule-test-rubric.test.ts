@@ -24,7 +24,7 @@ async function frozen(): Promise<Folder> {
 組: [{ 名稱: 甲, 規則: { 自備: { L3: 甲.md } } }]
 生成: [{ 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }]
 評審: [{ 評審: codex, 模型: gpt-6.2-sol }, { 評審: claude, 模型: claude-fable-5-2 }]
-門檻: { 基準: 甲, 候選: [甲], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [甲], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   await freezeFolder(openFolder(root), { log: () => {} });
   return openFolder(root);
