@@ -609,7 +609,8 @@ export function wireAiCards(plugin: Plugin, host: AiCardsModalHost): { refresh()
   // 停用外掛、手機關掉製卡：送出中的那一個直接取消，不問（§6）。
   const closeAll = (): void => { for (const modal of [...modals]) modal.forceClose(); };
   plugin.register(closeAll);
-  const open = (): void => { if (host.cards()) new AiCardsModal(plugin.app, host, modals).open(); };
+  // 一次只開一個製卡視窗（L2 第一輪 R12）：開著時再按圖示或命令不開第二個，兩個視窗同時改同一份工作的路走不到。
+  const open = (): void => { if (host.cards() && !modals.size) new AiCardsModal(plugin.app, host, modals).open(); };
   const icon = plugin.addRibbonIcon('sparkles', 'Essence Cards：AI 製卡', open);
   plugin.addCommand({ id: 'ai-cards', name: TEXT.title, checkCallback: checking => {
     if (!host.cards()) return false;

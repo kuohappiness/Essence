@@ -177,3 +177,15 @@ void test('實機第 3 點 送出中按關閉、在「要取消這一次嗎？�
   assert.equal(made.cards.sending(), false);
   assert.equal(directJob(made.cards.jobs()[0])?.kind, 'cancelled');
 });
+
+void test('L2 R12 製卡視窗開著時再按圖示：不開第二個；關掉之後才開得了新的', async t => {
+  const { openModal } = await open(t, []);
+  const first = openModal();
+  const again = openModal();
+  assert.equal(again, first, '開著的那一個還是最上面的');
+  assert.ok(first.isOpen);
+  first.close();
+  const next = openModal();
+  assert.notEqual(next, first);
+  assert.ok(next.isOpen);
+});
