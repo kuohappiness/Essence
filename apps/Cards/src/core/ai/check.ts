@@ -210,7 +210,7 @@ function sameSentenceTwice(target: CheckedTarget, issue: Report): void {
 }
 
 /**
- * 另一種排法的兩個提示（tasks/sentence-order-alternatives.md §6）：解析器照補充顯示、照樣出題，AI 的草稿算錯誤，退回重做；不分科
+ * 另一種排法的兩個提示（tasks/sentence-order-alternatives.md §6）：解析器只提示、照樣出題，AI 的草稿算錯誤，退回重做；不分科
  * （別科的題目底下寫了也是寫錯）。本文與候選框在 checkPick 升級，已有框在 parseBox。
  */
 const ORDER_ALT: ReadonlySet<string> = new Set(['order-alt-invalid', 'order-alt-all-right']);

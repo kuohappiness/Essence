@@ -384,7 +384,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     // 另一種排法寫在別的地方（§1 第 6 點）：句子排序的題目底下的在 readKind 讀了；其他卡型照背面補充顯示，新舊版一致。
     const sentence = target.kind?.id === 'order' && target.kind.order.style === 'sentence';
     for (const each of target.prompts) {
-      if (!sentence && each.extras.some(extra => ALT_LIKE.test(extra))) problems.push({ line: each.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法只有英文句子排序的題目底下認得，這裡照背面補充顯示' });
+      if (!sentence && each.extras.some(extra => ALT_LIKE.test(extra))) problems.push({ line: each.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法只有英文句子排序的題目底下認得，這裡不算對的順序，照這種卡原本的樣子顯示（翻面卡在背面補充，全詩排序的畫面不顯示）' });
     }
     // 寫在題目的下一層以外的地方（§1 第 6 點、L2 第一輪 R3）：照現在的讀法（另一題、共用補充、補充或答案的一部分），只提示。
     const misplaced = (node: Item, depth: number): void => {
