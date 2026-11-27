@@ -112,6 +112,8 @@ void test('驗評審的結果：沒講為什麼一題一筆（rule-test-d236.md 
   assert.deepEqual(validateResult(why('S1', [1]), context), []);
   assert.deepEqual(validateResult(why('S3', [1]), context), [wrong]);
   assert.deepEqual(validateResult(why('S3', [2, 3]), context), [wrong]);
+  // 兩個目標各自的第 1 題（S1 第 2、5 行）也不是同一題（L2 §17 第 2 輪 P3-7）。
+  assert.deepEqual(validateResult(why('S1', [2, 5]), context), [wrong.replace('S3', 'S1')]);
 });
 
 void test('judge：每個區組、每位評審一個新對話（只開 Read、照 schema 交、資料夾是複本）；兩位都交了就鎖定', async () => {
