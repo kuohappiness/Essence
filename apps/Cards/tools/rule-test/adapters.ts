@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findClaude, findCodex, type Cli } from './clis.ts';
 import { runProcess } from './proc.ts';
-import { parseStream, userMessage } from './stream.ts';
+import { fullReply, parseStream, userMessage } from './stream.ts';
 
 export interface StepRequest {
   text: string;
@@ -70,8 +70,12 @@ export function claudeAdapter(find: () => Cli = findClaude): Adapter {
     if (run.init && (run.init.tools.some(tool => !allowed.includes(tool)) || run.init.mcpServers.length)) return { kind: 'fatal', message: `隔離沒生效：工具 ${String(run.init.tools.length)} 個、MCP ${String(run.init.mcpServers.length)} 個` };
     if (!run.result) return { kind: 'fail', message: `沒有 result（exit ${String(result.code)}）：${result.stderr.slice(0, 300)}` };
     if (run.result.isError) return QUOTA_TEXT.test(text) ? { kind: 'quota', message: text.slice(0, 200) } : { kind: 'fail', message: `${run.result.subtype ?? 'error'}：${text.slice(0, 300)}` };
-    const warnings = run.result.models.length && !run.result.models.some(model => model.startsWith(request.model)) ? [`用的模型是 ${run.result.models.join('、')}，不是 ${request.model}`] : [];
-    return { kind: 'ok', reply: text, session: run.result.sessionId ?? null, warnings, ms: run.result.durationMs ?? result.ms, costUsd: run.result.costUsd, usage: run.result.usage, models: run.result.models, ...request.jsonSchema ? { structured: run.result.structured } : {} };
+    const reply = fullReply(run);
+    const warnings = [
+      ...run.result.models.length && !run.result.models.some(model => model.startsWith(request.model)) ? [`用的模型是 ${run.result.models.join('、')}，不是 ${request.model}`] : [],
+      ...reply.continued ? [`回覆碰到輸出上限，CLI 接著寫了 ${String(reply.continued)} 次；${String(reply.continued + 1)} 則照順序接成一份`] : [],
+    ];
+    return { kind: 'ok', reply: reply.text, session: run.result.sessionId ?? null, warnings, ms: run.result.durationMs ?? result.ms, costUsd: run.result.costUsd, usage: run.result.usage, models: run.result.models, ...request.jsonSchema ? { structured: run.result.structured } : {} };
   };
 }
 
