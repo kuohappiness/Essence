@@ -292,3 +292,17 @@ void test('§8 送不成的錯誤紀錄：種類與套件的訊息、服務、�
   const text = JSON.stringify(made.logs);
   for (const secret of [FAKE_KEY, '小明', 'L3.pdf', '任務段']) assert.equal(text.includes(secret), false, secret);
 });
+
+void test('L2 第一輪 R8 記得的教材檔：存成草稿或放棄之後就忘掉（不再重送，不留在記憶體）', async t => {
+  const made = await load(t, [ok(reply), unauthorized]);
+  const received = await made.cards.direct(form, [lesson]);
+  assert.ok(received.kind === 'received');
+  assert.equal(made.cards.keeps(received.job), true);
+  assert.equal((await made.cards.save(received.job, received.reply, null, undefined, true)).kind, 'done');
+  assert.equal(made.cards.keeps(received.job), false);
+  const failed = await made.cards.direct({ ...form, unit: 'L4 Food' }, [lesson]);
+  assert.ok(failed.kind === 'failed');
+  assert.equal(made.cards.keeps(failed.job), true);
+  await made.cards.abandon(failed.job);
+  assert.equal(made.cards.keeps(failed.job), false);
+});

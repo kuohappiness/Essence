@@ -87,6 +87,8 @@ export function createAiCards(deps: AiCardsDeps) {
   const subjects = RULE_SUBJECTS.filter(subject => deps.rules[subject.key]?.length);
   const loaded = readJobs(deps.store.jobs(), deps.now().ms);
   let jobs = loaded.jobs;
+  /** 這次開著 Obsidian 的期間，每一份直接製作的工作送了哪些教材（重送用；教材的內容不存，§5〈只送不存〉）。 */
+  const sentMaterials = new Map<string, Material[]>();
   /**
    * 存回這台裝置：沒開始存草稿的最多 5 個、14 天（readJobs 照規則拿掉）。存不進去丟錯。
    * 存完讀回來核對，一字不差才算存好（tasks/phone-cards.md §2-5：手機的存放可能被系統清掉或存不下）；不同也丟錯，呼叫的一方照「存不進去」處理。
@@ -96,6 +98,8 @@ export function createAiCards(deps: AiCardsDeps) {
     deps.store.saveJobs(kept);
     if (JSON.stringify(readJobs(deps.store.jobs(), deps.now().ms).jobs) !== JSON.stringify(kept)) throw Error('存進這台裝置之後讀回來不同');
     jobs = kept;
+    // 工作清掉了（存完、放棄、過期、被擠掉）或開始存了，就不會再重送：記得的教材檔一起忘掉（L2 第一輪 R8）。
+    for (const id of sentMaterials.keys()) if (!kept.some(job => job.id === id && !job.save)) sentMaterials.delete(id);
   }
   const put = (job: CardJob): void => { persist([job, ...jobs.filter(each => each.id !== job.id)]); };
   const drop = (job: CardJob): void => { persist(jobs.filter(each => each.id !== job.id)); };
@@ -200,8 +204,6 @@ export function createAiCards(deps: AiCardsDeps) {
     deps.store.saveLast({ subject: job.subject.key, term: job.form.term });
     deps.store.savePick(job.subject.key, job.form.pick === true);
   }
-  /** 這次開著 Obsidian 的期間，每一份直接製作的工作送了哪些教材（重送用；教材的內容不存，§5〈只送不存〉）。 */
-  const kept = new Map<string, Material[]>();
   /** 正在送出的那一個的中止開關（一次只送一個）。 */
   let sending: AbortController | null = null;
   /** 設定頁選的服務與模型（§2）；選的服務不在目錄、沒有模型（OpenRouter 沒填）時是原因。 */
@@ -348,11 +350,11 @@ export function createAiCards(deps: AiCardsDeps) {
       const job: CardJob = { ...made.job, api: { state: 'sending', kind: null, at: made.job.copiedAt, files: sentFiles(materials), received: null } };
       try { put(job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
       remember(job);
-      kept.set(job.id, [...materials]);
+      sentMaterials.set(job.id, [...materials]);
       return send(job, made.prompt.text, materials, target, key.key, onProgress);
     },
     /** 這次開著 Obsidian 的期間記得這一份的教材檔（重送不用重選，§6）。 */
-    keeps: (job: CardJob): boolean => kept.has(job.id),
+    keeps: (job: CardJob): boolean => sentMaterials.has(job.id),
     /**
      * 重送（§6）：同一份提示，不重組；教材用這次記得的，重開過 Obsidian 的由家長重選後交進來（picked，格式查核 F15）。
      * 工作已經結束、開始存了，或教材不在了是 blocked。
@@ -363,7 +365,7 @@ export function createAiCards(deps: AiCardsDeps) {
       if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
       const latest = current(job);
       if (!latest || latest.save) return { kind: 'blocked', message: '這次製卡已經結束或開始存了，不能重送' };
-      const materials = picked ? [...picked] : kept.get(latest.id);
+      const materials = picked ? [...picked] : sentMaterials.get(latest.id);
       if (!materials) return { kind: 'blocked', message: '上次選的教材檔已經不在了（重開過 Obsidian），請重新選一次，或改用複製貼上' };
       const problem = materialProblem(materials);
       if (problem) return { kind: 'blocked', message: problem };
@@ -375,7 +377,7 @@ export function createAiCards(deps: AiCardsDeps) {
       if (limit) return { kind: 'blocked', message: limit };
       const sendingNow: CardJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: null } };
       try { put(sendingNow); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
-      kept.set(latest.id, materials);
+      sentMaterials.set(latest.id, materials);
       return send(sendingNow, latest.parts.map(part => part.text).join('\n\n'), materials, target, key.key, onProgress);
     },
     /** 取消送出中的那一個（§6）：關掉製卡視窗之前問過、停用外掛時。 */
@@ -392,7 +394,7 @@ export function createAiCards(deps: AiCardsDeps) {
       if (!await recopy(job)) return null;
       const plain: CardJob = { ...current(job) ?? job };
       delete plain.api;
-      kept.delete(plain.id);
+      sentMaterials.delete(plain.id);
       try { put(plain); } catch (error) { deps.onError(error); }
       return plain;
     },
