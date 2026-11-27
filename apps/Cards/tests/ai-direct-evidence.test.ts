@@ -5,7 +5,8 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { sse } from '../../../packages/ai-client/src/testing.ts';
 import type { MockReply } from '../../../packages/ai-client/src/testing.ts';
-import { sha256Hex, sha256OfBytes } from '../src/core/ai/index.ts';
+import { directJob, sha256Hex, sha256OfBytes } from '../src/core/ai/index.ts';
+import type { DirectJob } from '../src/core/ai/index.ts';
 import type { Material } from '../src/core/connect/index.ts';
 import { form, lesson, load, ok, propsOf, reply, sent, unauthorized } from './helpers/ai-direct.ts';
 
@@ -113,4 +114,33 @@ void test('§7 服務回報的費用帶浮點雜訊（0.30000000000000004）：�
   const { props, text } = await saved(t, [router], [lesson], { provider: 'openrouter', model: 'openai/gpt-5.6-terra' });
   assert.deepEqual([props['費用'], props['費用來源']], [0.3, '服務回報']);
   assert.match(text, /^費用: 0\.3$/m);
+});
+
+void test('§6、§7 重送成功、重選了另一個教材檔、時鐘也走了：教材檔是重送那一次的；送出時間是第一次按的（重送沿用同一份提示）', async t => {
+  let ms = Date.parse('2026-11-07T10:02:11+08:00');
+  const made = await load(t, [unauthorized, ok(reply)], { now: () => ms });
+  const failed = await made.cards.direct(form, [lesson]);
+  assert.equal(failed.kind, 'failed');
+  ms += 3_600_000;
+  const bytes = new Uint8Array([9, 8, 7]);
+  const other: Material = { ...lesson, name: '英文 L3 第二版.pdf', data: bytes, pages: 10, sha256: sha256OfBytes(bytes) };
+  const again = await made.cards.resend(failed.job, undefined, [other]);
+  assert.ok(again.kind === 'received', JSON.stringify(again));
+  assert.equal((await made.cards.save(again.job, again.reply, null, undefined, true)).kind, 'done');
+  const { props } = propsOf(made.memory);
+  assert.deepEqual(props['教材檔'], [`${other.sha256} 10頁 英文 L3 第二版.pdf`]);
+  assert.equal(props['送出時間'], '2026-11-07T10:02:11+08:00');
+});
+
+void test('§7 工作的 charged 不是 true 或 false：整份 api 當讀不懂（照複製貼上的工作走）；沒有這一欄照舊讀得懂', async t => {
+  const made = await load(t, [unauthorized]);
+  const failed = await made.cards.direct(form, [lesson]);
+  assert.ok(failed.kind === 'failed');
+  const api = directJob(failed.job);
+  assert.ok(api);
+  assert.equal(directJob({ ...failed.job, api: { ...api, charged: 'yes' } as unknown as DirectJob }), null);
+  assert.notEqual(directJob({ ...failed.job, api: { ...api, charged: true } }), null);
+  const without: DirectJob = { ...api };
+  delete without.charged;
+  assert.notEqual(directJob({ ...failed.job, api: without }), null);
 });
