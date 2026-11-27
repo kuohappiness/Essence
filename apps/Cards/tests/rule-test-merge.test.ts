@@ -133,4 +133,9 @@ void test('程式找的洩漏候選（rule-test-d236.md §18）：只比同一�
   assert.deepEqual(leakCandidates(deck, []), ['目標 2 第 1 題的題幹有自己的答案', '目標 3 第 1 題的題幹有自己的答案']);
   const recorded = (at: string): MergedIssue => ({ kind: '洩漏', at: [at], lines: [], judges: ['甲'], rubric: '', notes: [''] });
   assert.deepEqual(leakCandidates(deck, [recorded('目標 2 第 1 題'), recorded('目標 3')]), []);
+  // 記在別的目標的洩漏不擋這一題（L2 §17 第 2 輪 P3-6）。
+  assert.deepEqual(leakCandidates(deck, [recorded('目標 1 第 1 題')]), ['目標 2 第 1 題的題幹有自己的答案', '目標 3 第 1 題的題幹有自己的答案']);
+  // 不分大小寫；挖空之後句子裡沒有答案的填空題不列。
+  const more = ['國二上英文 L3 單字', '- borrow 的拼法', '    - BORROW 寫成小寫是什麼？ :: borrow', '- lend 的句子', '    - She ==lends== me a pen.', ''].join('\n');
+  assert.deepEqual(leakCandidates(more, []), ['目標 1 第 1 題的題幹有自己的答案']);
 });

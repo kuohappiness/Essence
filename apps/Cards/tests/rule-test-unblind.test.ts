@@ -159,6 +159,17 @@ void test('沒講為什麼（rule-test-d236.md §17）：兩位在同一題記�
   assert.deepEqual([cell('摘要.md', '| 組 |', '乙'), cell('明細.md', '| 批 |', second)], ['2.0', '2']);
 });
 
+void test('程式找的洩漏候選進每一份的指標與明細（rule-test-d236.md §18）：題幹有自己的答案的題才列', async () => {
+  // 乙只有一題的 lend 目標改成題幹有自己的答案；第一個目標兩題互相有對方的答案，不列。
+  const folder = await blinded({ 乙: SECOND.replace('    - lend :: v. 借出', '    - 「借出」的英文 lend 怎麼拼？ :: lend') });
+  await runJudges(folder, { adapters: { codex: fakeJudge().adapter, claude: fakeJudge().adapter }, log: () => {} });
+  await runDisputes(folder, { adapters: { claude: () => Promise.reject(Error('沒有要裁定的')) }, log: () => {} });
+  checkFolder(folder, () => {});
+  const deck = unblindFolder(folder, { log: () => {} }).decks.find(each => each.group === '乙')!;
+  assert.deepEqual(deck.leakCandidates, ['目標 2 第 1 題的題幹有自己的答案']);
+  assert.match(readFileSync(join(folder.root, '結果', '明細.md'), 'utf8'), /- 洩漏候選（程式找的）：目標 2 第 1 題的題幹有自己的答案\n/);
+});
+
 void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀錄加一行；再跑不重算、不重記', async () => {
   const { folder } = await judged();
   await ruling(folder);
