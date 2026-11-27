@@ -192,13 +192,20 @@ function readOther(source: string, cells: SentenceCells, before: readonly Senten
   const space = (part: string): string => part.replace(/\s+/g, ' ').trim();
   const head = space(text.slice(0, blanks[0].start));
   if (!space(cells.head).endsWith(head)) return `第一格前面的「${head}」不是題目第一格前面那段的結尾；可以不寫，要寫就照抄題目那段的結尾`;
-  const at = tails.findIndex((tail, i) => tail !== cells.tails[i] && /[\p{L}\p{N}]/u.test(tail + cells.tails[i]));
-  if (at >= 0) return `第 ${String(at + 1)} 格後面的字和題目那一行不同（「${tails[at]}」對「${cells.tails[at]}」）；空格外面的字每一種排法都要一樣，只有標點可以不同，會移動的字挖成詞塊`;
+  const at = tails.findIndex((tail, i) => tail !== cells.tails[i] && !(plainMarks(tail) && plainMarks(cells.tails[i])));
+  if (at >= 0 && /[\p{L}\p{N}]/u.test(tails[at] + cells.tails[at])) return `第 ${String(at + 1)} 格後面的字和題目那一行不同（「${tails[at]}」對「${cells.tails[at]}」）；空格外面的字每一種排法都要一樣，只有標點可以不同，會移動的字挖成詞塊`;
+  if (at >= 0) return `第 ${String(at + 1)} 格後面不一樣的地方只能是一般的標點與空白（「${tails[at]}」對「${cells.tails[at]}」）；* _ % # & [ ] \\ 和 :: 在 Obsidian 是格式記號，放在會移動的位置會讓空格跑掉`;
   const same = (other: readonly string[]): boolean => other.every((word, i) => word === words[i]);
   if (same(cells.words)) return '和題目那一行的順序相同';
   if (before.some(other => same(other.words))) return '和前面另一行的順序相同';
   return { words, tails, source };
 }
+
+/**
+ * 格後面會因排法不同的字只能是一般的標點與空白（§1 第 4 點，L2 第一輪 R4）：Obsidian 的格式記號（`%%` 註解、`::` 問答、`*`、`_`、`#` 標籤、
+ * `&` 字元參照、`[`、`]`、`\\`）和其他符號（`=`、`~`、`$`…）不算，拼在一起會吃掉空格的記號，畫面就把格子放到句尾。
+ */
+const plainMarks = (tail: string): boolean => /^[\s\p{P}]*$/u.test(tail) && !/[*_\\%#&[\]]|::/.test(tail);
 
 /** a 有、b 沒有的詞塊（同一塊寫兩次算兩塊）。 */
 function without(a: readonly string[], b: readonly string[]): string[] {

@@ -63,6 +63,13 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   invalid(BECAUSE, ['另一種排法：because I was tired, I went to bed early.'], /兩格以上/);
   invalid(BECAUSE, ['另一種排法：==because== ==[I was tired](a.md)==, ==I went to bed early==.'], /兩格以上/);
   invalid('她說她累了。"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
+  // L2 第一輪 R4：會移動的地方只能是一般的標點與空白，Obsidian 的格式記號（`%%`、`::`、`*`、`#`…）不認。
+  const LEARN = '我們今天學。==we== ==learn== ==today==.';
+  invalid(LEARN, ['另一種排法：==today== %%==we==%% ==learn==.'], /第 1 格後面.*格式記號/s);
+  invalid(LEARN, ['另一種排法：==today== :: ==we== ==learn==.'], /第 1 格後面.*格式記號/s);
+  invalid(LEARN, ['另一種排法：==today==* ==we== ==learn==.'], /格式記號/);
+  invalid(LEARN, ['另一種排法：==today== # ==we== ==learn==.'], /格式記號/);
+  invalid(LEARN, ['另一種排法：==today== = ==we== ==learn==.'], /格式記號/);
   // L2 第一輪 R1：全形直引號、半形冒號後面的直引號、字元參照寫的引號也是開頭的引號。
   invalid('她說她累了：＂==I\'m tired==,＂ ==she== ==said==.', ['另一種排法：==she== ==said==, ＂==I\'m tired==.＂'], /引號/);
   invalid('重排引句:"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
