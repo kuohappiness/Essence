@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 1 批（L2 審查請求）
 
-狀態：待審｜下一步：兩輪都通過（[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)），R2 已補；合併前等使用者過目 S3 列的文字、同意合併｜等誰：使用者
+狀態：已結案 → [任務說明](ai-direct.md)｜完成：兩輪審完（[報告與核對](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)），第二輪通過、不再送審；使用者 2026-11-27 同意 R2 與合併（PR #78）｜等誰：—
 
 遵守 repo 根目錄的 `AGENTS.md` 與 `apps/Cards/AGENTS.md`。建議推理等級：**高**。每一輪都**新開一個對話**；只審查、不改產品程式，可以在隔離環境重現。重現只用假金鑰與假的 `fetch`，不連真的 AI 服務。
 
@@ -97,3 +97,9 @@
   6. R11 第 2 項不修（理由同上）。
 - **驗證**：`apps/Cards` 的 `npm run check`；改到套件的 `d25a771f` 另跑了 `packages/ai-client` 的 `npm run check`。
 - **回報**：接在審查紀錄後面，標「第二輪」；格式與權限照上面〈回報與權限〉。
+
+## 結果
+
+兩輪審完（[報告與核對](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)）：第一輪沒有 P1，R1～R11 修完或記進限制；第二輪通過，S1、S4 修完、S2、S5 寫進任務說明、S3 的畫面文字列給使用者看過。使用者 2026-11-27 同意 R2（`apps/Cards/AGENTS.md` 的轉接檔例外）與合併，PR #78 squash 合併（`main` 的 `805ca453`）。
+
+延後的測試：無（審查本身沒有延後的；L2 之後才改的畫面文字的實機、家長貼真金鑰的那一次與 iPhone 屬於[任務說明](ai-direct.md#結果)的驗收，記在那裡）。
