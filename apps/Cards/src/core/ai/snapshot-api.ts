@@ -1,6 +1,6 @@
 import type { DirectEvidence } from './job.ts';
 
-// 直接製作寫進快照的欄（tasks/ai-direct.md §7、syntax.md §7）：製卡（publish.ts）與加深（deepen-job.ts）共用同一份。
+// 直接製作寫進快照的欄（tasks/ai-direct.md §7、syntax.md §6）：製卡（publish.ts）與加深（deepen-job.ts）共用同一份。
 
 /** 寫進屬性區的外來字串（檔名、服務回傳的模型與編號，F11）：一律單行，換行與控制字元換成一個空白，最多 200 字。 */
 function oneLine(text: string): string {

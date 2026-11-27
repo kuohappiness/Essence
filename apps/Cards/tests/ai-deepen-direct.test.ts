@@ -58,7 +58,7 @@ void test('§9 加深的直接製作：送出和複製的同一份提示加上�
   assert.equal(props['教材說明'], '補充講義');
   assert.equal(props['複製時間'], undefined);
   assert.equal(props['收到的回覆'], undefined);
-  // 欄位順序（syntax.md §7 的範例）：送出時間、收到時間換掉複製時間；接法以後的在教材說明、教材檔之後；加深的原有目標照舊在記穩目標後面。
+  // 欄位順序（syntax.md §6 的範例）：送出時間、收到時間換掉複製時間；接法以後的在教材說明、教材檔之後；加深的原有目標照舊在記穩目標後面。
   const keys = Object.keys(props);
   const order = ['回覆原文', '送出時間', '收到時間', '已有目標', '記穩目標', '原有目標', '教材說明', '教材檔', '接法', '服務', '要求的模型', '模型', '推理等級', '輸入用量', '輸出用量', '費用', '費用來源', '牌價日期', '回應編號'];
   assert.deepEqual(keys.filter(key => order.includes(key)), order);
@@ -220,18 +220,33 @@ void test('§9 送出前擋下：沒有金鑰、沒選服務標 settings；PDF �
   assert.equal(phone.deepen.canDirect(), false);
 });
 
-void test('§9 收到的那一刻存不進這台電腦：存草稿時證據對不上手上的，當成複製貼上（同製卡的 L2 第三輪 T1）', async t => {
+void test('§9 畫面手上的不是收到的那一份（重送之後還拿著失敗時那一份）：寫進卡組時證據對不上，當成複製貼上（同製卡的 L2 第三輪 T1）', async t => {
   const made = await load(t, [unauthorized, ok(REPLY)]);
   const failed = await made.deepen.direct(DECK, '', '', undefined, []);
   assert.equal(failed.kind, 'failed');
   if (failed.kind !== 'failed') return;
-  made.box.saved.failNext = 0;
   const again = await made.deepen.resend(failed.job);
   assert.equal(again.kind, 'received');
   if (again.kind !== 'received') return;
   // 畫面手上的是失敗時那一份（沒有收到的整段）：存的時候對不上，照複製貼上寫。
   assert.equal((await made.deepen.save(failed.job, again.reply, null, true)).kind, 'done');
   assert.equal(propsOf(made.memory).props['接法'], '複製貼上');
+});
+
+void test('§9 收到的那一刻存不進這台電腦（L2 第一輪小項 1）：記一筆錯；存放停在送出中，寫進卡組時當成複製貼上（backlog〈已知的限制〉）', async t => {
+  const made = await load(t, [ok(REPLY)]);
+  made.box.saved.failIf = jobs => jobs.some(job => directJob(job)?.state === 'received');
+  const outcome = await made.deepen.direct(DECK, '', '', undefined, [lesson]);
+  assert.equal(outcome.kind, 'received');
+  if (outcome.kind !== 'received') return;
+  assert.equal(made.errors.length, 1);
+  made.box.saved.failIf = undefined;
+  const stored = (made.box.saved.jobs as DeepenJob[]).find(job => job.deck === DECK);
+  assert.equal(directJob(stored!)?.state, 'sending');
+  assert.equal((await made.deepen.save(outcome.job, outcome.reply, null, true)).kind, 'done');
+  const { props } = propsOf(made.memory);
+  assert.equal(props['接法'], '複製貼上');
+  assert.equal(props['服務'], undefined);
 });
 
 void test('§9 恢復資料裡的證據讀不懂（較新的版本存的，F12）：不寫任何檔，停下來請家長更新', async () => {

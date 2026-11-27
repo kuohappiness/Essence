@@ -28,13 +28,16 @@ const PAGE = new Uint8Array([37, 80, 68, 70, 9, 8, 7]);
 export const lesson: Material = { name: '自然 2-1 補充.pdf', mediaType: 'application/pdf', data: PAGE, pages: 4, sha256: sha256OfBytes(PAGE) };
 
 export function machine() {
-  // failNext：接下來幾次存工作丟錯（存不進這台電腦）。
-  const saved: { jobs: unknown; retired: string[]; skips: unknown; picks: Record<string, boolean>; failNext: number } = { jobs: null, retired: [], skips: null, picks: {}, failNext: 0 };
+  // failNext：接下來幾次存工作丟錯（存不進這台電腦）；failIf：要存的這一份符合時丟錯（例如收到回覆的那一刻）。
+  const saved: { jobs: unknown; retired: string[]; skips: unknown; picks: Record<string, boolean>; failNext: number; failIf?: (jobs: DeepenJob[]) => boolean } = { jobs: null, retired: [], skips: null, picks: {}, failNext: 0 };
   return {
     saved,
     store: {
       jobs: () => saved.jobs === null ? null : JSON.parse(JSON.stringify(saved.jobs)) as unknown,
-      saveJobs(jobs: DeepenJob[]) { if (saved.failNext > 0) { saved.failNext--; throw Error('存不進去（測試）'); } saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
+      saveJobs(jobs: DeepenJob[]) {
+        if (saved.failNext > 0) { saved.failNext--; throw Error('存不進去（測試）'); }
+        if (saved.failIf?.(jobs)) throw Error('存不進去（測試）');
+        saved.jobs = JSON.parse(JSON.stringify(jobs)) as unknown; },
       retire(ids: readonly string[]) { saved.retired = [...new Set([...saved.retired, ...ids])]; },
       skips: () => saved.skips,
       saveSkips(value: Record<string, { ids: string[]; at: string }>) { saved.skips = JSON.parse(JSON.stringify(value)) as unknown; },
