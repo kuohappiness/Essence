@@ -191,6 +191,20 @@ void test('L2 第二輪 S2 收到的回覆重送沒成功：失敗的畫面有�
   assert.equal(propsOf(made.memory).props['接法'], 'API');
 });
 
+void test('L2 第三輪 T3 收到過回覆的那一份重送沒成功：重開之後清單寫的是收到那時候，不是重送的時間', async t => {
+  const first = await load(t, [ok(reply), unauthorized]);
+  const received = await first.cards.direct(form, [lesson]);
+  assert.ok(received.kind === 'received');
+  assert.equal((await first.cards.resend(received.job)).kind, 'failed');
+  // 收到是 3 小時前、重送是剛剛。
+  const [job] = first.box.saved.jobs as { api: { at: string; received: { receivedAt: string } } }[];
+  job.api.at = new Date(Date.now()).toISOString();
+  job.api.received.receivedAt = new Date(Date.now() - 3 * 3_600_000).toISOString();
+  const { openModal } = await open(t, [], { box: first.box, memory: first.memory });
+  const modal = openModal();
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('接著存上一次收到的回覆') && each.endsWith('3 小時前收到）')), texts(modal.contentEl).join('|'));
+});
+
 void test('實機第 3 點 送出中按關閉、在「要取消這一次嗎？」按「取消這一次」：視窗關掉，工作留在清單（可以重送）', async t => {
   const { made, openModal } = await open(t, [{ ...ok(reply), headersDelayMs: 5_000 }]);
   const modal = openModal();

@@ -155,7 +155,8 @@ class AiCardsModal extends Modal {
       } else if (directJob(job)) {
         // 直接製作的（§6〈中斷後接手〉）：收到了就接著存；沒收到或沒成功就重送、改用複製貼上或放棄，不自動重送（可能已經計費）。
         const api = directJob(job)!;
-        const when = ago(Date.parse(api.at) || job.copiedMs, this.host.now());
+        // 收到了的寫收到那時候：重送沒成功時 at 是重送的時間，收到的那一份還是原本那一次的（L2 第三輪 T3）。
+        const when = ago(Date.parse(api.received?.receivedAt ?? api.at) || job.copiedMs, this.host.now());
         row.createEl('p', { text: api.received ? TEXT.resumeReceived(labelOf(job), when) : api.state === 'failed' ? TEXT.resumeFailed(labelOf(job), when) : TEXT.resumeNoReply(labelOf(job), when) });
         const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
         if (api.received) buttons.createEl('button', { text: '接著看', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null); });
