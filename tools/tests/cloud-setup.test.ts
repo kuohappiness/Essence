@@ -1,10 +1,10 @@
 // 雲端 session 開場的 hook（.claude/hooks/cloud-setup.mjs，D-208 第二步 §A3、§A5）：只有雲端驗得到的部分，這裡先擋住寫錯的接線與清單。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +62,9 @@ void test('§A3 SessionStart 接到 cloud-setup.mjs：settings.json 的指令寫
 void test('§A5 cloud-setup 每個資料夾都寫一句結果：沒有相依、鎖檔沒變、找不到 package.json 各有理由', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-cloud-setup-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: root };
+  // HOME 換成空的資料夾：沒加 --setup-script 時不碰使用者設定。
+  const home = join(root, 'home');
+  const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: root, HOME: home };
   for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   delete env.CLAUDE_ENV_FILE;
   execFileSync('git', ['init', '-q'], { cwd: root, env });
@@ -86,6 +88,76 @@ void test('§A5 cloud-setup 每個資料夾都寫一句結果：沒有相依、�
   for (const dir of missing) assert.match(context, new RegExp(`${dir.replace('.', '\\.')}：找不到 package\\.json，沒有安裝`));
   assert.match(context, /core\.hooksPath 已設為 \.githooks/);
   assert.equal(execFileSync('git', ['config', 'core.hooksPath'], { cwd: root, env, encoding: 'utf8' }).trim(), '.githooks');
+  assert.equal(existsSync(join(home, '.claude')), false, '沒加 --setup-script 不寫使用者設定');
+});
+
+interface Hook { type: string; command: string }
+interface Settings { [key: string]: unknown; hooks: Record<string, { matcher?: string; hooks: Hook[] }[]> }
+
+/** 跑一支抄過去的 hook 指令：和 Claude Code 一樣交給 sh，stdin 給 JSON。 */
+function runCopied(command: string, projectDir: string, stdin: string): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sh', ['-c', command], { env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir }, stdio: ['pipe', 'ignore', 'ignore'] });
+    child.on('error', reject);
+    child.on('close', resolve);
+    child.stdin.end(stdin);
+  });
+}
+
+void test('第 1 步 setup script：repo 的 Claude hook 抄進使用者設定，專案資料夾不是 repo 也跑得到、是 repo 時不跑兩次', async t => {
+  const base = await mkdtemp(join(tmpdir(), 'essence-cloud-setup-user-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  // repo 放在上一層資料夾底下，和專案討論串一樣：專案資料夾是 base，repo 是 base/Essence。
+  const root = join(base, 'Essence');
+  const home = join(base, 'home');
+  await mkdir(join(root, '.claude/hooks'), { recursive: true });
+  for (const file of ['settings.json', 'hooks/cloud-setup.mjs', 'hooks/block-dangerous-git.mjs']) await copyFile(join(ROOT, '.claude', file), join(root, '.claude', file));
+  const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: root, HOME: home };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  delete env.CLAUDE_ENV_FILE;
+  execFileSync('git', ['init', '-q'], { cwd: root, env });
+  // 使用者設定原本就有的：別的 hook 與設定要留著；上次抄的（寫到這個 repo 的 hook）要換掉，不重複。
+  const userFile = join(home, '.claude/settings.json');
+  await mkdir(join(home, '.claude'), { recursive: true });
+  const other = { type: 'command', command: 'echo other' };
+  await writeFile(userFile, JSON.stringify({
+    model: 'keep-me',
+    hooks: { Stop: [{ hooks: [other] }], PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `node "${root}/.claude/hooks/old.mjs"` }] }] },
+  }));
+
+  const once = await run(process.execPath, [HOOK, '--setup-script'], { cwd: root, env, encoding: 'utf8' });
+  assert.match(once.stdout, /^core\.hooksPath 已設為 \.githooks$/m, 'setup script 的輸出一行一件，不是 hook 的 JSON');
+  assert.match(once.stdout, /repo 的 3 個 Claude hook 已接到 /);
+  const first = await readFile(userFile, 'utf8');
+  await run(process.execPath, [HOOK, '--setup-script'], { cwd: root, env, encoding: 'utf8' });
+  assert.equal(await readFile(userFile, 'utf8'), first, '重跑結果一樣');
+
+  const user = JSON.parse(first) as Settings;
+  const own = JSON.parse(await readFile(join(root, '.claude/settings.json'), 'utf8')) as Settings;
+  assert.equal(user.model, 'keep-me');
+  assert.deepEqual(user.hooks.Stop, [{ hooks: [other] }]);
+  assert.deepEqual(Object.keys(user.hooks).sort(), [...new Set(['Stop', ...Object.keys(own.hooks)])].sort());
+  for (const [event, groups] of Object.entries(own.hooks)) {
+    assert.equal(user.hooks[event].length, groups.length, `${event} 的群組照 repo 的設定抄，沒有留下舊的`);
+    groups.forEach((group, i) => {
+      assert.equal(user.hooks[event][i].matcher, group.matcher);
+      group.hooks.forEach((hook, j) => {
+        const copied = user.hooks[event][i].hooks[j].command;
+        assert.ok(copied.startsWith('[ -f "$CLAUDE_PROJECT_DIR/.claude/hooks/cloud-setup.mjs" ] || '), copied);
+        assert.ok(copied.endsWith(hook.command.replaceAll('$CLAUDE_PROJECT_DIR', root)), `${event} 的指令改成絕對路徑：${copied}`);
+      });
+    });
+  }
+
+  // 抄過去的擋危險 git 指令：專案資料夾是上一層（或沒有）時照樣擋；專案資料夾就是 repo 時直接結束，由 repo 自己的設定擋。
+  const pre = user.hooks.PreToolUse.flatMap(group => group.hooks).find(hook => hook.command.includes('block-dangerous-git.mjs'));
+  assert.ok(pre);
+  const input = (command: string) => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+  const stash = input('git stash');
+  assert.equal(await runCopied(pre.command, base, stash), 2);
+  assert.equal(await runCopied(pre.command, '', stash), 2, 'CLAUDE_PROJECT_DIR 是空的也擋');
+  assert.equal(await runCopied(pre.command, base, input('git status')), 0);
+  assert.equal(await runCopied(pre.command, root, stash), 0);
 });
 
 void test('§A5 cloud-setup 在本機什麼都不做', async t => {

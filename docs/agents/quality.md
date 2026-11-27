@@ -27,7 +27,19 @@
 - 雲端 session 照它自己的規則只推自己的 `claude/` 分支，不直接推 `main`（只改文件也一樣）；做完開 PR 合併。
 - 只改 Markdown 文件的 PR：開 PR 後訂閱 PR 動態，CI 綠燈就 squash 合併、回報，不再先問；有程式、設定、hook、workflow、skill、`AGENTS.md`，或 `apps/Cards/docs/syntax.md`、`docs/transcript.md` 的實質修改，照舊先問使用者（[D-239](../decisions.md#d-239-只改文件的-prci-綠燈就合併)）。
 - 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備：設 `core.hooksPath`、淺層 clone 沒有的 git tag 補抓（跨版本測試要用）、PATH 上的 Node 低於 24 時改用映像裡 `/opt/node24`、在 CI 用到的資料夾（`tools`、`apps/Cards`、`apps/Capture`、`apps/Mindboard`、`packages/ai-client`）`npm ci`（沒有相依的跳過），每個資料夾印一行結果。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
-- 改 `.claude/hooks/cloud-setup.mjs` 或 `.claude/settings.json` 的 `SessionStart` 的任務，合併前在那個分支開一個雲端 session（在 claude.ai/code 開；專案討論串開的 session 專案資料夾是 repo 的上一層資料夾、repo 在它底下，不載 repo 的 `.claude/settings.json`，hook 不會跑，2026-11-26 [AI 連線模組〈結果〉](../tasks/ai-client.md#結果)遇到），由那個 session 的 Claude 做兩件事，兩段原文附在回覆裡、寫進任務的〈結果〉：① 讀自己的開場訊息，確認 hook 有跑、之後的指令用 Node 24、`core.hooksPath` 是 `.githooks`；② 新的 session 可能從前一個 session 的快照開機、`node_modules` 已在（只會印「鎖檔沒變，跳過」，2026-11-22 [D-218 改名](../tasks/rename-plugins-to-apps.md#結果)驗收第 10 項遇到），所以另開一個沒有 `node_modules` 的 worktree，PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑一次 hook，確認有相依的 `tools`、`apps/Cards` 是「`npm ci` 完成」、沒有相依的外掛是「沒有相依，跳過」。分派表只跑得到它們的測試，這幾件只在雲端看得到（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第二步 §A3）。
+- 兩條路會跑到它。claude.ai/code 開的 session 專案資料夾就是 repo，由 `.claude/settings.json` 的 `SessionStart` 跑。專案討論串開的 session 專案資料夾是 repo 的上一層、讀不到那份設定（2026-11-26 [AI 連線模組〈結果〉](../tasks/ai-client.md#結果)遇到），改由雲端環境「Essence」的 setup script 在開機時跑（加 `--setup-script`）：它同時把那份設定的 hook 抄進這台機器的使用者設定 `~/.claude/settings.json`（指令換成絕對路徑；專案資料夾就是 repo 時直接結束，不跑兩次），所以專案討論串一樣有開場設定、擋危險 git 指令與 main 紅燈提醒。setup script 只呼叫這支程式，出錯不擋開場（session 開場時會再跑一次，把結果告訴 Claude），全文：
+
+  ```sh
+  # Essence 的雲端開場設定：設 git hook、補 tag、裝套件、把 repo 的 Claude hook 接到這台機器。
+  # 邏輯在 repo 的 .claude/hooks/cloud-setup.mjs（改它要經過 PR 與檢查），這裡只呼叫它。
+  # 出錯不擋開場：session 開場時它會再跑一次，把結果告訴 Claude。
+  if [ -f Essence/.claude/hooks/cloud-setup.mjs ]; then
+    (cd Essence && PATH="/opt/node24/bin:$PATH" CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR="$PWD" node .claude/hooks/cloud-setup.mjs --setup-script) || echo "Essence 的開場設定沒有做完"
+  fi
+  ```
+
+  專案改用別的雲端環境時這些都不會跑：commit 前在 repo 的上一層手動跑一次中間那一行。串中途併 main 或換分支帶進新的鎖檔時，commit 前的檢查會說哪個資料夾的套件和鎖檔對不上、要 `npm ci`。
+- 改 `.claude/hooks/cloud-setup.mjs` 或 `.claude/settings.json` 的 hook 的任務，合併前在那個分支開一個雲端 session（在 claude.ai/code 開、選那個分支；專案討論串開機時跑的是預設分支的程式），由那個 session 的 Claude 做兩件事，兩段原文附在回覆裡、寫進任務的〈結果〉：① 讀自己的開場訊息，確認 hook 有跑、之後的指令用 Node 24、`core.hooksPath` 是 `.githooks`；② 新的 session 可能從前一個 session 的快照開機、`node_modules` 已在（只會印「鎖檔沒變，跳過」，2026-11-22 [D-218 改名](../tasks/rename-plugins-to-apps.md#結果)驗收第 10 項遇到），所以另開一個沒有 `node_modules` 的 worktree，PATH 拿掉 `/opt/node24/bin`、設 `CLAUDE_CODE_REMOTE=true` 與 `CLAUDE_PROJECT_DIR=<worktree>` 跑一次 hook，確認有相依的 `tools`、`apps/Cards` 是「`npm ci` 完成」、沒有相依的外掛是「沒有相依，跳過」。分派表只跑得到它們的測試，這幾件只在雲端看得到（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第二步 §A3）。改的是 setup script 那條路（`--setup-script`）時，專案討論串開機跑的是預設分支的程式，合併前驗不到：合併前在自己的 session 從 repo 的上一層照上面那一行跑一次（使用者設定改了會立刻生效，可以直接試擋危險的 git 指令），合併後請 coordinator 開一個新的專案討論串，由它確認開場訊息、Node 24、`core.hooksPath`、危險的 git 指令被擋，並做一次合併確認 `pre-merge-commit` 有跑。
 - 雲端 session 不會回報給本機，本機 session 的工具也讀不到它的對話：要本機接著做時，請使用者給它的 `claude.ai/code/…` 網址，用內建瀏覽器讀（窗格要登入 claude.ai）。
 
 ## 檢查指令
