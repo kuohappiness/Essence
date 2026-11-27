@@ -55,7 +55,7 @@
 
 | 編號 | 假設 | 探針 | 結果 |
 |---|---|---|---|
-| P1 | Obsidian 電腦版的 `fetch` 呼叫四家（OpenAI、Anthropic 加 `anthropic-dangerous-direct-browser-access: true`、Google、OpenRouter）不會被 CORS 擋 | 開發命令用假金鑰各送一次和製卡同形狀的 POST（`apps/Cards/src/obsidian/dev-ai-probe.ts`）：拿到 401／400 算通過（CORS 擋住時 `fetch` 直接丟 `TypeError`）。測試連線用的 `check` 打的是另一組端點（各家的 `GET …/models`，OpenRouter 是 `GET /api/v1/key`），CORS 照端點與方法回，第 1 批的實機另外驗（§10，L2 第一輪 R1） | 通過（2026-11-27，見〈結果〉）：四家都讀得到 401／400；Anthropic 沒加那個標頭就被 CORS 擋 |
+| P1 | Obsidian 電腦版的 `fetch` 呼叫四家（OpenAI、Anthropic 加 `anthropic-dangerous-direct-browser-access: true`、Google、OpenRouter）不會被 CORS 擋 | 開發命令用假金鑰各送一次和製卡同形狀的 POST（`apps/Cards/src/obsidian/dev-ai-probe.ts`）：拿到 401／400 算通過（CORS 擋住時 `fetch` 直接丟 `TypeError`）。測試連線用的 `check` 打的是另一組端點（各家的 `GET …/models`，OpenRouter 是 `GET /api/v1/key`），CORS 照端點與方法回，第 1 批的實機另外驗（§10，L2 第一輪 R1） | 通過（2026-11-27，見〈結果〉）：四家都讀得到 401／400；Anthropic 沒加那個標頭就被 CORS 擋。測試連線的清單端點在第 1 批的實機也都讀得到（〈結果〉） |
 | P2 | 回應本文在 Obsidian 裡是串流的（文字一段一段到，不是收完才交） | 第 1 批做完後用家長貼的真金鑰跑一次，記第一段文字與最後一段的時間 | 待驗（要真金鑰，第 2 批的實機） |
 | P3 | `app.secretStorage` 在 1.15 電腦版可用；存的金鑰不寫進 vault 資料夾、重開 Obsidian 還在、換 vault 讀不到 | 開發命令存一個假值、重開、在 vault 資料夾搜這個值、換測試 vault 讀 | 大部分通過（2026-11-27）：存得進去、重開還在、vault 的設定資料夾沒有；「換 vault 讀不到」沒驗（只有一個測試 vault）；沒有刪除的方法，清掉只能存空字串 |
 | P4 | `loadPdfJs()` 載得到內建的 PDF 元件；記下版本、能不能把幾頁另存成新 PDF、能不能把一頁畫成圖片 | 開發命令用自編的三頁 PDF 試切第 2 頁、畫第 2 頁 | 內建的不能切（2026-11-27）：pdf.js 5.3.34，讀得出頁數、文字，畫得出圖片，沒有 `extractPages`。Cards 不切頁（〈使用者的決定〉第 2 點），只用它讀總頁數（§5）；切頁的結果轉給 Capture |
@@ -85,9 +85,11 @@ P1 有一家不通時，那一家改用 `requestUrl` 包成的傳輸層（不串
 - **欄位**：
   - 服務：下拉，列套件目錄的廠商（OpenAI、Anthropic、Google AI Studio、OpenRouter），推薦的照 [AI 模型推薦](../../../../docs/ai-models.md)排在最上面並標「推薦」「免費」。「自訂」（網址＋方言）放到第 2 類，先不做。
   - 金鑰：Obsidian 的 `SecretComponent`，金鑰存在 `secretStorage`，Cards 只存金鑰的名稱，不存值（存在哪裡見下面〈這台電腦的設定〉）。每一家的金鑰分開存。旁邊一行：「金鑰只存在這台電腦，不會同步到手機；其他外掛也讀得到 Obsidian 存的金鑰」（不宣稱隔離，architecture §6）。
+    - 施工時補（L2 第一輪 R8）：`SecretComponent` 選了之後只顯示遮罩，看不出是哪一把；同一個名稱已經設給另一家時，這一列多寫一句「這把金鑰也設給了 ○○；每一家的金鑰不能通用，請確認選對了。」，不擋。
   - 模型：下拉，列目錄裡這一家的模型，推薦的放最上面；OpenRouter 沒有內建模型，改成一欄自己填（例如 `google/gemini-3.8-flash`）。
   - 推理等級：「照服務的預設」（預設）、低、中、高。冒煙測試裡 Gemini 3.8 Flash 設「低」的兩次都超過 2 分鐘，不設的那次 116 秒，看不出設低比較快，所以預設不指定。
   - 「測試連線」按鈕：呼叫套件的 `check`，結果一句話：成功寫「連得上」，失敗照錯誤的種類寫原因與下一步（金鑰錯、額度用完、連不上網路等，用套件的 `describeAiError` 再翻成家長看得懂的中文）。
+    - 施工時補（L2 第一輪 R4、R6）：沒有可用的金鑰時不送出，分三種各寫一句：沒選、選了但是空的或找不到、樣子不像金鑰（短於 8 個字、夾了空白或全形字）。直接製作（第 2 批）用同一個判斷（`core/connect` 的 `keyOf`）。拿金鑰或重畫時出錯，寫「測試連線沒有完成…」、按鈕回來，錯誤進錯誤紀錄（`where: "ai"`）。
 - **這台電腦的設定**：服務、模型、推理等級存在這台裝置（`saveLocalStorage`，和 `src/ui/prefs.ts` 的裝置偏好同一個做法），不進 vault。家長換電腦要重新設。
   - 施工時改成：每一家金鑰的名稱也存在這台裝置，不存 `data.json`。Cards 的設定已經搬到 vault 裡的設定檔，`data.json` 只讀不寫（`tasks/settings-vault-file.md` §1）；金鑰的值本來就只在這台電腦，名稱跟著存在這台，另一台電腦也不會看到一個找不到值的名稱。
 - **驗收**：
@@ -210,3 +212,13 @@ D-231 要「送出前顯示估計的費用」；最上層 backlog〈AI 連線套
 - P4（`do=pdf`）：內建的 pdf.js 是 5.3.34；三頁的自編 PDF 讀得出第 2 頁的字（「Page two: water」），畫成 612×792 的圖片也成功；文件物件有 `saveDocument`（存整份），沒有 `extractPages`，不能切頁。所以照〈使用者的決定〉的甲加 `pdf-lib`：1.17.1（MIT），只用到載入、複製頁、存檔時，用 Cards 的建置設定（esbuild 壓縮）打包約 432 KB（gzip 約 180 KB），沒超過 0.5 MB 的回報線；現在的 `main.js` 約 1.87 MB。手機也會載入同一個 `main.js`，第 2 批量一次外掛載入時間（`onloadMs`）前後的差別。`pdf-lib` 從 2021 年後沒有新版，第 2 批開工時再比一次有人維護的分支（例如 `@cantoo/pdf-lib`）。
   - 後來使用者定 Cards 不切頁（〈使用者的決定〉第 2 點）：Cards 不加 `pdf-lib`，只用內建的讀總頁數（探針讀得出 3 頁）；上面 `pdf-lib` 的數字轉給 Capture 用（2026-11-27）。
 - 開發版裝在測試 vault（`0.6.0+328998b3`），正式 vault 沒碰。
+
+第 1 批的實機（2026-11-27，使用者的 Windows 電腦，Obsidian 1.15.1，測試 vault、四把自編的假金鑰，`14e4dbd7` 的開發版；Claude 用偵錯埠在 Obsidian 裡跑，截圖用 Electron 的 `capturePage`）：
+
+- 設定頁：段落是複習、學期、AI 連線、備份；服務、模型、推理等級的選單照 §2；OpenRouter 換成一欄自己填；金鑰那一列是 Obsidian 的 `SecretComponent`，旁邊那句說明看得到。
+- 測試連線：四家各按一次，都是「金鑰不對或已失效，請到設定頁重新貼上。」，也就是 `check` 用的清單端點（各家的 `GET …/models`、OpenRouter 的 `GET /api/v1/key`）在 Obsidian 裡都讀得到回應，沒有被 CORS 擋（L2 第一輪 R1）；金鑰存成空字串時是「先在上面選一把…」。
+- 存讀：選 Google、Gemini 3.5 Flash-Lite、推理等級低，重開 Obsidian 後都還在，四家的金鑰名稱也在。
+- 金鑰不外流：測試 vault 整個資料夾（含 `.obsidian`，7,679 個檔）與 Obsidian 的設定資料夾（UTF-8、UTF-16 都查）找不到假金鑰；這台的 localStorage 只有名稱；錯誤紀錄沒有新的行。
+- 和預想不同的一點：`SecretComponent` 選了金鑰之後顯示「•••••••」與「變更」，不顯示名稱；畫面上看不出選的是哪一把。
+- 那台電腦的 `npm run check`：`core.autocrlf=true` 取出的 CRLF 讓 4 個比對文字的測試失敗（和這一批無關）；換成 LF 後 3189 個全過。
+- 測完四把假金鑰都存成空字串，測試 vault 的 Cards 換回原本的 `0.6.0+328998b3`，worktree 刪掉；正式 vault 沒碰。

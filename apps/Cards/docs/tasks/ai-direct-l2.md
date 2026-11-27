@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 1 批（L2 審查請求）
 
-狀態：待審｜下一步：使用者選這一輪由誰審（現在用 Fable 5.2 high，或等 Codex 額度），審查者照本檔審第 1 批（§1～§3），回報寫進 [審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)｜等誰：使用者
+狀態：待審｜下一步：第二輪只審第一輪的修正（〈第二輪〉）｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md` 與 `apps/Cards/AGENTS.md`。建議推理等級：**高**。每一輪都**新開一個對話**；只審查、不改產品程式，可以在隔離環境重現。重現只用假金鑰與假的 `fetch`，不連真的 AI 服務。
 
@@ -80,3 +80,20 @@
 ## 回報與權限
 
 只審查，不改產品程式；可以在隔離環境重現。回報照 code-quality 的 `review.md`〈審查請求範本〉與〈回報格式〉：每項寫觸發條件、預期／實際、影響、位置與證據，區分「已重現」「靜態推斷」「待驗證」，並標真實路徑會不會發生與發生機率。回報寫進[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)的〈第一輪〉。
+
+## 第二輪（只審修正）
+
+這一輪只讀：本節、〈審查對象〉、[審查紀錄〈Claude 回應（第一輪）〉](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md#claude-回應第一輪>)。第一輪的報告只在需要時照發現 ID 查。
+
+- **待審**：`14e4dbd782e8cc20b290f83a31175a0ccf310a0e` 到這一節所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/ai-direct-l2.md`）；一項一個 commit，對照表在〈Claude 回應（第一輪）〉。
+- **還沒結的發現**：R4、R5、R6、R8、R9、R11（第 1、4、5、6 項）的修法；R2 等使用者回覆（不在這一輪）。R1 已用實機結掉，R3、R7、R10、R11 第 3 項只改文件。
+- **要看**：每一項修了沒有、修法有沒有帶進新的問題、同一類的其他路徑有沒有一起涵蓋。第一輪看過、修正沒碰到的程式不用重審。
+- **實作者另外選的做法**（請判斷站不站得住）：
+  1. R4：`keyOf` 回 `{ ok, key }` 或 `{ ok: false, why }`，金鑰的樣子用 `/^[!-~]{8,}$/`（看得見的半形字、至少 8 個）；空的與找不到算同一種（`empty`）。
+  2. R5：除了 `src/`，`tools/compare/` 也不准拿 `core/connect` 的值；型別照常可以拿。
+  3. R6：錯誤交給 `SettingsHost.aiFailed`（main.ts 接到錯誤紀錄，`where: "ai"`），沒有再往上丟。
+  4. R8：只提醒、不擋；名稱用 `providerName`（`docs/ai-models.md` 的選單名稱）。
+  5. R9：放寬成 `/^[a-z0-9-]+$/`，沒有先在實機試 Obsidian 收不收（理由在〈Claude 回應（第一輪）〉）。
+  6. R11 第 2 項不修（理由同上）。
+- **驗證**：`apps/Cards` 的 `npm run check`；改到套件的 `d25a771f` 另跑了 `packages/ai-client` 的 `npm run check`。
+- **回報**：接在審查紀錄後面，標「第二輪」；格式與權限照上面〈回報與權限〉。
