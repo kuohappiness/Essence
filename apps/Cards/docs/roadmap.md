@@ -19,7 +19,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 | 題型模組（每個學習目標掛上一種題型） | 實作中 | 第 A 步已合併（PR #56，2026-11-26，`ff848530`）；先做[句子排序好幾種順序都算對](tasks/sentence-order-alternatives.md)（D-238，併進這一串），再照使用者同意的先後做[配對與單選](tasks/matching-single-choice.md) → 第 C 步 → 第 B 步；使用者回 §6 第 1～3 題與第 4 題的兩件 | 使用者、Claude | [任務說明](tasks/question-type-modules.md) |
 | 英文句子排序好幾種順序都算對（D-238、D-240） | 實作中 | 開分支實作（〈請使用者確認〉使用者 2026-11-27 選了，寫成 D-240）；寫完送 L2 | Claude | [任務說明](tasks/sentence-order-alternatives.md) |
-| Cards 直接呼叫 AI 製卡（設定頁、直接製作、加深） | 待審 | 第 1 批（§1～§3）寫完，等合併前的 L2（[審查請求](tasks/ai-direct-l2.md)）與 Windows 版 Obsidian 的實機（§10）；`apps/Cards/AGENTS.md` 的轉接檔例外等使用者回覆；第 2 批開工前 §7 的格式查核等 Codex 額度（11-30 重置） | 使用者 | [任務說明](tasks/ai-direct.md) |
+| Cards 直接呼叫 AI 製卡（設定頁、直接製作、加深） | 待審 | 第 1 批（§1～§3）寫完、Windows 實機做完、L2 兩輪通過（[審查紀錄](<Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)）；合併前等使用者：`apps/Cards/AGENTS.md` 的轉接檔例外（L2 R2）、過目 L2 加的畫面文字（S3）、同意合併 PR #78；第 2 批開工前 §7 的格式查核等 Codex 額度（11-30 重置） | 使用者 | [任務說明](tasks/ai-direct.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
 

@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 1 批的 L2 審查（審查紀錄）
 
-狀態：待審｜下一步：第二輪只審第一輪的修正（[審查請求〈第二輪〉](../tasks/ai-direct-l2.md#第二輪只審修正)）；R2 等使用者回覆｜等誰：Claude、使用者
+狀態：待審｜下一步：兩輪都通過；合併前等使用者回 R2、過目 S3 列的畫面文字｜等誰：使用者
 
 審查請求：[ai-direct-l2.md](../tasks/ai-direct-l2.md)；任務說明：[ai-direct.md](../tasks/ai-direct.md)。
 
@@ -193,3 +193,136 @@
 R1 的實機：第 1 批的 Windows 實機（2026-11-27）四家各用假金鑰按測試連線，都是「金鑰不對或已失效…」，清單端點沒有被 CORS 擋（[任務說明〈結果〉](../tasks/ai-direct.md#結果)）。R1 結了。
 
 R9 的實機沒有另外試尾端有 `-` 的名稱：放寬之後比 Obsidian 寬，Obsidian 收不收都不影響這條。
+
+## 第二輪
+
+狀態：再審通過（審查者原文；R2 仍等使用者回覆，不在這一輪）
+
+審查者：Fable 5.2 high（新開的子代理，沒有參與實作，也沒有看過第一輪的對話）。以下是原文（暫存資料夾的路徑略去）。
+
+### 審查報告（原文）
+
+#### 待審範圍與結論
+
+- **範圍**：`git diff 14e4dbd782e8cc20b290f83a31175a0ccf310a0e..e3211508`，分支 `claude/project-thread-q0jv5f`，HEAD `e3211508a3c2ecf1d21139e696d3f98783a35de2`；主工作樹乾淨。
+- **結論**：通過。R4、R5、R6、R8、R9、R11（第 1、4、5、6 項）都修了，修法沒有帶進擋合併的問題，回歸測試大多守得住（下面的變異測試）。
+- **新發現**：五項，全是低，可以隨手修或記下，不必再送 L2。
+- **合併前還剩**：第一輪的 R2（`apps/Cards/AGENTS.md` 的轉接檔例外），等使用者回覆。
+
+#### 每一項修了沒有
+
+| 發現 | 判定 | 證據 |
+|---|---|---|
+| R4、R11 第 4 項 | 修了 | 已重現：設定頁用 15 種金鑰值各按一次，沒有一種再出現「請求格式不對…請回報給開發者」。另跑 6,000 個隨機值（四家各 1,500）：`keyOf` 收的 4,199 個都送出並分類成 `auth`，不收的 1,801 個一個都沒送出，0 個違反。 |
+| R5 | 修了 | 已重現：40 種 import 寫法與位置。`state`、`review`、`ui`、`dev`、`desktop`、`core` 其他模組、`tools/compare/`（含子資料夾）拿 `core/connect` 的值都被擋，靜態、`export * from`、動態、`require`、`import =` 都擋；型別照常放行；`main.ts`、`src/obsidian/`、模組自己不誤擋。 |
+| R6 | 修了 | 已重現：`getSecret` 丟錯後寫「測試連線沒有完成…」，按鈕可按，沒有未處理的 rejection，錯誤紀錄有 `where:"ai"`。恢復後再按一次送得出去、得到「連得上。」。丟錯時設定頁已關也不卡。 |
+| R8 | 修了（提醒，不擋） | 已重現：三家同名時列出另外兩家；localStorage 裡不認得的服務同名不列；換成別的名稱或清掉後提醒消失。 |
+| R9 | 修了 | 已重現：`open--ai-` 存得下、重畫後還在。 |
+| R11 第 1 項 | 修了 | 變異測試：在 `runTest` 把金鑰寫進另一筆 localStorage，「金鑰的值不出現在任何寫入」的測試就失敗。 |
+| R11 第 5 項 | 修了 | 選單是「Google Gemini（免費）」，和 `docs/ai-models.md:95-97` 一致。 |
+| R11 第 6 項 | 修了 | `packages/ai-client/src/types.ts:16` 的註解和 `estimate.ts:57-61`、`client.ts:617` 的行為一致；`docs/tasks/ai-client.md`〈5〉已改。 |
+| R3、R7、R10、R11 第 3 項 | 文件已補 | `node tools/check-docs.ts` 通過（468 個檔、9,792 個連結）；backlog 各列有觸發點與完成條件。 |
+
+**變異測試**：九個變異殺掉八個。
+
+- 殺掉的：`KEY_SHAPE` 放寬成任何字、`empty` 改回 `unset`、`sharedWith` 把自己算進去、`SECRET_ID` 改回舊式、catch 不清 `aiTest`、`aiFailed` 改成空的、`guardConnect` 拿掉 `tools/compare/`、`mayConnect` 放寬成整個 core。
+- 活下來的：`{8,}` 改成 `{9,}`（見 S4）。
+
+#### 對〈實作者另外選的做法〉
+
+1. **R4（`keyOf` 回 `KeyLookup`、`/^[!-~]{8,}$/`、空的與找不到合成 `empty`）：站得住。**
+   - 這條比套件嚴：套件只擋短於 8 個字與超出 Latin-1 的字，Cards 另外擋掉中間的空白與 Latin-1 的字。
+   - 四家的金鑰字元都在範圍內；被引號包住的會送出、得到「金鑰不對」，可以接受。
+   - 空的和找不到在畫面上分不出來也沒關係，下一步相同。
+2. **R5（`tools/compare/` 也擋）：站得住。**
+   - 沒擋到的 `tools/compare-versions.ts`、`tools/export-compare.ts`、`tools/rule-test/` 不構成漏洞：`compare-versions.ts` 只 import core 的 `backup`、`settings`、`study`，這三個自己拿不到 `core/connect`。
+   - 轉一手也走不通：`state`、`review`、`core` import `src/obsidian/` 已被既有規則擋（已重現）。
+   - `ui` import `src/obsidian/`、任何檔 import `main.ts` 沒有規則擋，但要有人在那裡刻意再轉出 `core/connect` 的值才繞得過，不算發現。
+   - 現況用 esbuild 的模組圖核對：`src/state/index.ts`、`src/review/index.ts`、`src/core/ai/index.ts`、`tools/compare/adapter.ts`、`src/ui/prefs.ts` 都沒帶進套件或 `core/connect`，只有 `main.ts` 有。
+3. **R6（交給 `aiFailed`、不再往上丟）：站得住。** 設定頁當場寫一句，錯誤進錯誤紀錄，不必再跳通知。小瑕疵見 S1。
+4. **R8（只提醒、不擋，名稱用 `providerName`）：技術上站得住。** 沒問使用者就選了這一邊，見 S3。
+5. **R9（放寬成 `/^[a-z0-9-]+$/`、沒先上實機）：站得住。**
+   - `obsidian.d.ts:8142` 只寫「Lowercase alphanumeric ID with optional dashes」，新的式子涵蓋這句話的任何讀法。
+   - 名稱只從 `SecretComponent.onChange` 來；Cards 的正式程式不呼叫 `setSecret`（只有開發探針用自己的常數，`dev-ai-probe.ts:91`）。
+   - 剩下的待驗證：真的 Obsidian 如果收得比型別寫的寬（大寫、底線），名稱還是會被默默拿掉（替身上 `Open_AI` 已重現）。機率低，第 2 批實機順手試一個就好。
+6. **R11 第 2 項不修：站得住（靜態推斷）。** 兩張抄表不同步時都是擋下，不會漏放：
+   - `eslint.config.js` 的 `packageAdapter` 少了就擋轉接檔。
+   - `tools/check-app-imports.ts` 照 `PACKAGE_USERS` 獨立再擋一次。
+   - `BUNDLED_PACKAGES` 少了，建置與安裝測試解析不到套件就失敗。
+
+#### 發現（依嚴重程度）
+
+##### S1（R6 修正引入）catch 裡先報錯才清狀態，`aiFailed` 自己丟錯時又卡在「測試中…」
+
+- **哪一軸**：規範與設計（呼叫順序）。
+- **觸發條件**：`runTest` 進了 catch，`host.aiFailed` 又丟例外。
+- **預期／實際**：預期無論如何按鈕都回來。實際 `aiTest` 沒清，重畫後是「測試中…」、按鈕不能按，另有一個未處理的 rejection。
+- **影響**：和第一輪 R6 同一個症狀，關掉設定頁再開才恢復。
+- **真實路徑與機率**：幾乎走不到。`main.ts:209` 的 `aiFailed` 只呼叫 `fail`（`main.ts:602-605`）：`console.error` 加 `errors.record`，後者整段包了 try 不丟（`src/core/errors/log.ts:225-237`）。
+- **位置**：`apps/Cards/src/obsidian/settings.ts:407-414`（`aiFailed` 在 409）。
+- **證據**：已重現（替身裡把 `console.error` 換成丟錯）。
+- **建議**：隨手修，不加機制。先清 `aiTest`、設 `aiResult`，再呼叫 `aiFailed`，最後重畫；被換掉的那一次照舊只報不畫。不修也可以。
+
+##### S2　第 1 批實機做完了，狀態行還寫在等實機；實機紀錄是修正前的版本
+
+- **哪一軸**：規範與設計（roadmap 與狀態行，D-141）。
+- **預期／實際**：`e3211508` 在 `ai-direct.md`〈結果〉補了第 1 批的 Windows 實機，但 `apps/Cards/docs/tasks/ai-direct.md:3` 與 `apps/Cards/docs/roadmap.md:22` 還寫「等合併前的 L2…與 Windows 版 Obsidian 的實機（§10）」。
+- **另一點**：那次實機用的是 `14e4dbd7`（修正前）。紀錄裡「金鑰存成空字串時是『先在上面選一把…』」是舊句子，現在是「這把金鑰是空的或找不到…」。R4 的三句、R6 的一句、R8 的提醒、選單的「Google Gemini」都只在替身上驗過。
+- **影響**：讀入口的人以為實機還沒做，或以為實機看過的就是現在的文字。
+- **證據**：靜態推斷。
+- **建議**：合併前改兩處狀態行（只改文件）；〈結果〉加一句「R4、R6、R8、R11 第 5 項的文字在實機之後才改，併進第 2 批的實機一起看」。我不認為要為這幾句單獨再上一次實機：R8 的提醒和已在實機顯示過的測試連線結果是同一種畫法（`descEl.createDiv`）。
+
+##### S3（延續 R8）看得到的行為改了，沒有使用者選擇的紀錄
+
+- **哪一軸**：規範（`.claude/skills/code-quality/review.md`〈修正後收尾〉：修法會改到看得到的行為的，先問使用者）。
+- **預期／實際**：第一輪 R8 的建議是「記成已知的限制，或多寫一句提示，請使用者選」。〈Claude 回應（第一輪）〉直接選了提示，`ai-direct.md` §2 寫成「施工時補」，沒有使用者的回覆。
+- **同一批新增的文字**：R4 三句、R6 一句、R8 一句、選單名稱改成 Google Gemini。
+- **影響**：行為本身合理、隨時改得回來，是程序上少一步。
+- **證據**：靜態推斷（讀審查紀錄與任務說明）。
+- **建議**：不擋合併。和 R2 一起交給使用者時，把這六句列出來請使用者過目。
+
+##### S4（R4 修正引入）「8 個字」是抄套件的數字，邊界沒有測試、也沒有一致性檢查
+
+- **哪一軸**：規範與設計（同一條規則兩處各寫一份）。
+- **觸發條件**：套件的 `MIN_SECRET_LENGTH`（`packages/ai-client/src/redact.ts:8`）以後調高，Cards 的 `KEY_SHAPE`（`apps/Cards/src/core/connect/connection.ts:104`）沒跟著改。
+- **預期／實際**：介於兩個數字之間的金鑰應該請家長重貼。實際 `keyOf` 放行、套件丟 `invalid_request`，R4 原本的句子默默回來，沒有測試會失敗。
+- **證據**：已重現一半：把 `{8,}` 改成 `{9,}` 測試全過（測試只有 7 個字的例子，沒有剛好 8 個字的）。「套件調高」是靜態推斷。
+- **真實路徑與機率**：現在不會發生；要套件改門檻才碰到，低。
+- **建議**：記下或隨手補一個性質測試：`keyOf` 收的金鑰（含剛好 8 個字）交給 `testConnection` 配 `mockFetch`，結果不會是 `invalid_request`。這樣不用 import 套件的常數也對得上。我用探針跑過這個性質，現在成立。
+
+##### S5（R4 修正引入，未來）`keyOf` 不分服務，接「自訂」端點時會擋掉本機伺服器
+
+- **哪一軸**：規格邊界（§2 把「自訂」放到第 2 類）。
+- **觸發條件**：之後加自訂端點，家長連本機伺服器（不用金鑰，或用很短的金鑰）。
+- **預期／實際**：套件對 localhost 放行短金鑰（`client.ts:583` 的 `isLocalUrl`），沒有認證的端點不要金鑰（`!r.auth`）。`keyOf` 會先回 `unset` 或 `malformed`，送不出去。
+- **真實路徑與機率**：現在走不到，選單只有四家雲端服務。
+- **位置**：`apps/Cards/src/core/connect/connection.ts:104,112-118`。
+- **證據**：靜態推斷。
+- **建議**：記進「自訂」那一項的 backlog 或任務說明：做的時候 `keyOf` 要看端點。現在不改。
+
+#### 我跑了什麼
+
+都用假金鑰與假的 `fetch`，沒有連任何 AI 服務。
+
+- **主工作樹（HEAD `e3211508`，只讀）**：`ai-connection`、`ai-connect`、`settings-tab`、`eslint-rules` 四個測試檔 44 個通過；`apps/Cards` 的 typecheck、lint、knip 通過；`check-docs`、`check-app-imports`、`check-local-paths` 通過；`packages/ai-client` 的 `npm run check` 232 個通過。
+- **暫存的 worktree**（做完已移除，主工作樹沒動、沒有 commit）：ESLint 探針 40 例（R5）；設定頁探針五組（R6 的丟錯與恢復、`aiFailed` 自己丟、設定頁已關；R8 的多家同名與不認得的服務；R4 的 15 種金鑰值）；`keyOf` 加 `testConnection` 的隨機測試兩輪各 6,000 個；變異測試九個；esbuild 模組圖六個入口。
+
+#### 沒驗的項目與原因
+
+- **Cards 的完整測試**（約 4 分鐘）：照指示沒有整包跑；`build.test.ts`、`install.test.ts` 沒跑，這一輪的修正沒碰建置。實作者回報每個 commit 的 pre-commit 都跑過完整檢查，我沒有重驗。
+- **真的 Obsidian**（這裡沒有，替身驗不了，都標待驗證）：R8 的提醒在真的 `Setting` 列上長什麼樣；`SecretComponent` 清掉時 `onChange` 給 `null` 還是空字串（兩種程式都處理了，替身已重現）；`getSecret` 在鑰匙圈不能用時會不會丟、丟的訊息裡有什麼（R6 之後這個錯誤會寫進 console 與 vault 的錯誤紀錄；Obsidian 自己的錯誤訊息帶明文的機率估極低，沒辦法驗）；金鑰名稱實際收哪些字（R9）。
+- **第 1 批實機的結果**（R1）：是實作者在 `14e4dbd7` 做的，只讀了紀錄，沒有重驗，也不涵蓋之後的修正（S2）。
+- **iPhone**：沒有，這一輪的修正都在電腦專用的設定區。
+- **R2**：不在這一輪。
+
+### Claude 回應（第二輪）
+
+| 發現 | 處理 | commit |
+|---|---|---|
+| S1 | 修：catch 先清狀態、設結果，再交給錯誤紀錄，重畫放在 `finally`。沒有另加測試：要讓錯誤紀錄本身丟錯，測試的 rejection 會被測試框架當成失敗，審查者的探針已重現修正前的情況 | `7c6eec2a` |
+| S2 | 修：任務說明與 roadmap 的狀態行改成實機做完；〈結果〉補一句實機之後才改的文字 | 本節所在的 commit |
+| S3 | 合併前把 L2 加的六句畫面文字列給使用者過目，和 R2 一起問 | — |
+| S4 | 修：加性質測試，`keyOf` 收的金鑰（剛好 8 個字、每一個看得見的半形字）四家都送得出去、不會是 `invalid_request`；少一個字的不收。把 `{8,}` 改成 `{9,}` 這個測試會失敗 | `50265337` |
+| S5 | 記進任務說明〈待決〉的「自訂」那一項：做的時候 `keyOf` 要看端點 | 本節所在的 commit |
+
+兩輪都通過，不再送第三輪（S1、S4 不加機制、不改公開行為）。
