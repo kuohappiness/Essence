@@ -18,6 +18,7 @@ import { join, posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { APPS_ROOT, DOCS_ONLY, FOLDERS, PACKAGES, PACKAGES_ROOT } from './apps.ts';
+import { PACKAGE_USERS } from './dispatch.ts';
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 interface Entry { path: string; mode: string; object: string }
@@ -29,6 +30,16 @@ const PACKAGE = /^((?:apps|packages)\/[^/]+)\/package\.json$/;
 const ROOT_CODE = /^(?:src|tests|tools)\//;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
+/**
+ * 套件的入口（docs/tasks/ai-client.md〈9〉：別的程式用相對路徑 import 這兩個檔）。軟體裡照 tools/dispatch.ts 的 PACKAGE_USERS 放行：
+ * 主入口只給轉接檔，testing 入口（假的 fetch）只給軟體的測試（tests/ 底下）。
+ */
+const PACKAGE_ENTRY = 'src/index.ts';
+const PACKAGE_TESTING = 'src/testing.ts';
+/** 資料夾 → 代號（apps/Cards → cards、packages/ai-client → ai-client）。 */
+const APP_OF = new Map(Object.entries(FOLDERS).map(([id, dir]) => [dir as string, id as keyof typeof FOLDERS]));
+const PACKAGE_OF = Object.entries(PACKAGES) as [keyof typeof PACKAGES, string][];
+
 const isRelative = (spec: string) => spec === '.' || spec === '..' || spec.startsWith('./') || spec.startsWith('../');
 const inside = (path: string, dir: string) => path === dir || path.startsWith(dir + '/');
 /** 從 from 那個檔所在的資料夾解開相對路徑；跑出 repo 的回傳以 ../ 開頭的路徑。 */
@@ -38,6 +49,21 @@ function lineOf(text: string, pos: number): number {
   let line = 1;
   for (let i = 0; i < pos && i < text.length; i++) if (text.charCodeAt(i) === 10) line++;
   return line;
+}
+
+/**
+ * 軟體的程式指到套件裡（docs/tasks/ai-client.md〈8〉第三步）：放行回傳 undefined，擋下回傳原因；target 不在套件裡回傳 null（照一般規則）。
+ */
+function packageImport(path: string, plugin: string, target: string): string | undefined | null {
+  const found = PACKAGE_OF.find(([, dir]) => inside(target, dir));
+  if (!found) return null;
+  const [id, dir] = found;
+  const app = APP_OF.get(plugin);
+  const adapter = app && (PACKAGE_USERS[id] as Partial<Record<string, string>>)[app];
+  if (!adapter) return `${plugin} 不在 tools/dispatch.ts 的 PACKAGE_USERS：要用 ${dir} 先登記轉接檔，其他檔只 import 轉接檔（docs/tasks/ai-client.md〈8〉第三步）`;
+  if (target === `${dir}/${PACKAGE_ENTRY}` && path === `${plugin}/${adapter}`) return undefined;
+  if (target === `${dir}/${PACKAGE_TESTING}` && path.startsWith(`${plugin}/tests/`)) return undefined;
+  return `只有轉接檔 ${plugin}/${adapter} 能 import ${dir}/${PACKAGE_ENTRY}；軟體的測試另准 import ${dir}/${PACKAGE_TESTING}，其他檔改 import 轉接檔（D-232 第 5 點，tools/dispatch.ts 的 PACKAGE_USERS）`;
 }
 
 /** 一個程式檔的問題。path 是 repo 裡的路徑（/ 分隔）。 */
@@ -51,9 +77,30 @@ export function checkSource(path: string, text: string): Problem[] {
     if (!isRelative(fileName)) continue;
     const target = resolveFrom(path, fileName);
     if (plugin && !inside(target, plugin)) {
-      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `跑出 ${plugin}/：軟體與套件不 import 其他軟體、套件與最上層的程式（D-208 第 10 點）` });
+      const toPackage = plugin.startsWith(APPS_ROOT) ? packageImport(path, plugin, target) : null;
+      if (toPackage === undefined) continue;
+      problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: toPackage ?? `跑出 ${plugin}/：軟體與套件不 import 其他軟體、套件與最上層的程式（D-208 第 10 點）` });
     } else if (rootCode && target.startsWith(APPS_ROOT)) {
       problems.push({ file: path, line: lineOf(text, pos), target: fileName, reason: `根目錄的程式不 import ${APPS_ROOT} 裡的軟體（D-208 第 10 點）` });
+    }
+  }
+  return problems;
+}
+
+/**
+ * 表和實際的 import 一致（docs/tasks/ai-client.md〈8〉第三步）：PACKAGE_USERS 上的每個轉接檔都在，而且 import 了套件的主入口。
+ * 不在表上的軟體 import 套件由 checkSource 擋。imports 是追蹤的程式檔 → 它 import 到的路徑（解開成 repo 相對）。
+ */
+export function checkUsers(imports: Map<string, string[]>): Problem[] {
+  const problems: Problem[] = [];
+  for (const [id, users] of Object.entries(PACKAGE_USERS) as [keyof typeof PACKAGES, Partial<Record<keyof typeof FOLDERS, string>>][]) {
+    for (const [app, adapter] of Object.entries(users) as [keyof typeof FOLDERS, string][]) {
+      const file = `${FOLDERS[app]}/${adapter}`;
+      const entry = `${PACKAGES[id]}/${PACKAGE_ENTRY}`;
+      const targets = imports.get(file);
+      const listed = `tools/dispatch.ts 的 PACKAGE_USERS 寫 ${app} 用 ${id}、轉接檔是這個檔`;
+      if (!targets) problems.push({ file, line: 1, target: 'PACKAGE_USERS', reason: `${listed}，但這個檔不在：搬了就改表，不用了就刪掉這一列` });
+      else if (!targets.includes(entry)) problems.push({ file, line: 1, target: 'PACKAGE_USERS', reason: `${listed}，但這個檔沒有 import ${entry}：改回 import 主入口，或改表` });
     }
   }
   return problems;
@@ -300,6 +347,15 @@ export function checkPluginImports(root: string, { staged = false }: { staged?: 
   const texts = staged ? blobs(root, files.map(e => e.object)).map(b => b.toString('utf8'))
     : files.map(e => (existsSync(join(root, e.path)) ? readFileSync(join(root, e.path), 'utf8') : ''));
   files.forEach((e, i) => problems.push(...(e.path.endsWith('package.json') ? checkPackage(e.path, texts[i]) : checkSource(e.path, texts[i]))));
+  // 轉接檔和表一致：只在有表的 repo 查（測試的暫存 repo 沒有 tools/dispatch.ts）。
+  if (all.some(e => e.path === 'tools/dispatch.ts')) {
+    const imports = new Map<string, string[]>();
+    files.forEach((e, i) => {
+      if (e.path.endsWith('package.json')) return;
+      imports.set(e.path, ts.preProcessFile(texts[i], true, true).importedFiles.filter(f => isRelative(f.fileName)).map(f => resolveFrom(e.path, f.fileName)));
+    });
+    problems.push(...checkUsers(imports));
+  }
   // 資料夾的表與大小寫（D-218 §3 第 1～3 點）：路徑看全部追蹤的（含 symlink），內容看一般檔，含 NUL 的當二進位不看。
   problems.push(...checkLayout(all.map(e => e.path)));
   const regular = all.filter(e => e.mode !== '120000' && e.mode !== '160000');

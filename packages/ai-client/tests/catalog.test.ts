@@ -9,14 +9,19 @@ import { KEY, instantClock, loadCases, readSse } from './helpers.ts';
 type Overrides = NonNullable<AiClientOptions['catalog']>;
 const BAD: unknown[] = [null, {}, [], [null], 7, -1, 0, 1.5, Number.NaN, 'x', '', true];
 
+const MEDIA_FIELDS = [
+  'mediaTokens', 'mediaTokens.pdfPage', 'mediaTokens.pdfPage.low', 'mediaTokens.pdfPage.high', 'mediaTokens.image', 'mediaTokens.image.low',
+  'mediaTokens.source', 'mediaTokens.asOf', 'mediaTokens.guessed',
+];
 const PROVIDER_FIELDS = [
   'dialect', 'baseUrl', 'auth', 'auth.header', 'auth.scheme', 'headers', 'headers.x-extra', 'options', 'options.checkPath',
   'options.maxTokensField', 'options.streamUsage', 'options.systemRole', 'limits', 'limits.maxRequestBytes', 'limits.maxFileBytes',
   'limits.maxPdfPages', 'defaults', 'defaults.inputs', 'defaults.reasoning', 'defaults.maxOutputTokens', 'models', 'label',
+  ...MEDIA_FIELDS,
 ];
 const MODEL_FIELDS = [
   'id', 'inputs', 'reasoning', 'reasoning.path', 'reasoning.values', 'maxOutputTokens', 'contextTokens', 'prices', 'prices.0',
-  'prices.0.input', 'prices.0.longContext', 'prices.0.effectiveFrom', 'pricesAsOf',
+  'prices.0.input', 'prices.0.longContext', 'prices.0.effectiveFrom', 'pricesAsOf', ...MEDIA_FIELDS,
 ];
 
 /** 照路徑（a.b.0）把值放進物件，中間沒有的層補上。 */
@@ -50,6 +55,13 @@ async function exercise(catalog: Overrides, label: string): Promise<void> {
   }
   const checked = await client.check({ endpoint: { provider: 'openai' }, apiKey: KEY }).catch((error: unknown) => assert.fail(`${label}：check 丟了 ${String(error)}`));
   assert.ok(typeof checked.ok === 'boolean', label);
+  try {
+    const pdf = { type: 'file' as const, mediaType: 'application/pdf', data: new Uint8Array([1]), pages: 2 };
+    const image = { type: 'image' as const, mediaType: 'image/png', data: new Uint8Array([1]) };
+    client.estimate({ endpoint: { provider: 'openai' }, model: 'gpt-5.6-terra', input: [{ role: 'user', content: [pdf, image] }] }, { expectedOutputTokens: { low: 1, high: 2 } });
+  } catch (error) {
+    assert.ok(isAiError(error), `${label}：estimate 丟了 ${String(error)}`);
+  }
 }
 
 void test('目錄的每個欄位換成錯的型別：client 建得起來，generate 與 check 只回結果或 AiError（L2 第二輪 延續 R14）', async () => {
@@ -66,6 +78,19 @@ void test('目錄的每個欄位換成錯的型別：client 建得起來，gener
       const bad = withValue(structuredClone(validModel), field, value);
       await exercise({ providers: [{ id: 'openai', models: [bad, validModel] }] } as unknown as Overrides, `模型 ${field}=${JSON.stringify(value)}`);
     }
+  }
+});
+
+void test('mediaTokens 寫壞了：那一筆跳過並回報（範圍要是正整數、low 不大於 high，日期要合法）', () => {
+  const BAD_MEDIA: unknown[] = [
+    { pdfPage: { low: 0, high: 5 } }, { pdfPage: { low: 6, high: 5 } }, { image: { low: 1.5, high: 5 } }, { image: { low: 1 } },
+    { image: [1, 2] }, { asOf: '2026-02-30' }, { source: 7 }, { guessed: 'yes' }, [], 'x',
+  ];
+  for (const mediaTokens of BAD_MEDIA) {
+    const asModel = createAiClient({ catalog: { providers: [{ id: 'openai', models: [{ ...validModel, mediaTokens }] }] } as unknown as Overrides });
+    assert.ok(asModel.catalogProblems.some(p => p.provider === 'openai' && p.model === 'gpt-5.6-terra'), `模型 ${JSON.stringify(mediaTokens)}`);
+    const asProvider = createAiClient({ catalog: { providers: [{ id: 'brand-new', dialect: 'openai-chat', baseUrl: 'https://x.example/v1', auth: null, mediaTokens, models: [] }] } as unknown as Overrides });
+    assert.ok(asProvider.catalogProblems.some(p => p.provider === 'brand-new'), `廠商 ${JSON.stringify(mediaTokens)}`);
   }
 });
 

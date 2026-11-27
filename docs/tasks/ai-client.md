@@ -80,7 +80,7 @@ packages/ai-client/
 
 用法寫在套件的 [README](../../packages/ai-client/README.md)，型別以 `src/types.ts` 為準。這裡只記會影響之後的決定：
 
-- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
+- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`（送出前估費用）在 Cards 要顯示預估時加了（[Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) §3，2026-11-27，用法見套件的 README）；`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄與證據照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。標頭組好之後整份驗一次：名稱要是合法的 token、值不能有換行或 NUL、每個字都在 0～255（標準的 `Headers` 只收這些），認證標頭不能用套件固定的 `content-type`、`accept`；目錄、自訂服務、`extraHeaders`、認證的前綴與金鑰哪一個壞了，都回 `invalid_request`、不送出，訊息只寫標頭名稱（L2 第四輪 第 9 項）。
@@ -101,7 +101,7 @@ packages/ai-client/
 - 一律要求串流（SSE）；服務回 `application/json` 時照非串流讀。每種方言有自己的「做完」訊號，連線正常關閉卻沒看到算 `network`，收到的文字放在 `partialText`。看到傳完的事件就不再讀、直接交回（Responses 的 `response.completed`／`incomplete`、Anthropic 的 `message_stop`、Chat 的 `[DONE]`；Chat 的 `finish_reason` 只算做完，因為用量在它之後另一塊）。Chat 有 `finish_reason` 卻沒等到 `[DONE]` 就關了，照樣成功、記 warning（用量可能沒到）；Gemini 沒有傳完的事件，讀到服務關串流為止。已經看到做完的訊號、串流卻一直沒關時，閒置或整體逾時照已收到的交回，記 warning，不作廢已經付錢的結果（L2 R10）。
 - 每個 `fixtures/<方言>/case.json` 寫依據的官方文件網址與查的日期。
 - OpenAI 送 `store: false`，不用背景模式（之後要「斷線接回」就得開 `store`，那時再定）。Gemini 用 generateContent：Google 把它標成 Legacy 但寫明繼續完整支援，Interactions 還是 Beta；之後另加 `gemini-interactions` 方言。Anthropic 的 API 版號和方言綁在一起，不放在可覆蓋的標頭。
-- **目錄**：`catalog.json` 的 `schemaVersion` 是 1；一筆廠商寫方言、網址、認證標頭、上限（`maxRequestBytes`、`maxFileBytes`、`maxPdfPages`）、預設的輸入種類與推理寫法、`options`（`openai-chat` 各家的差異：`maxTokensField` 只能是 `max_tokens` 或 `max_completion_tokens`、`streamUsage`、`systemRole`；`checkPath` 給列模型不用金鑰的服務）與模型。一筆模型寫能收的輸入、推理寫法、輸出上限、價格（可以有好幾筆，照 `effectiveFrom` 換；長輸入另一組價）與查價日期。壞掉的那一筆跳過、回報在 `catalogProblems`，不讓整個套件不能用；形狀不對（該是物件或陣列的不是、`limits` 不是正整數）與日曆上沒有的日期（`2026-02-30`）也算壞掉（L2 R14）。
+- **目錄**：`catalog.json` 的 `schemaVersion` 是 1；一筆廠商寫方言、網址、認證標頭、上限（`maxRequestBytes`、`maxFileBytes`、`maxPdfPages`）、預設的輸入種類與推理寫法、`options`（`openai-chat` 各家的差異：`maxTokensField` 只能是 `max_tokens` 或 `max_completion_tokens`、`streamUsage`、`systemRole`；`checkPath` 給列模型不用金鑰的服務）與模型，另可寫 `mediaTokens`（每頁 PDF、每張圖大約幾個 token 的範圍，送出前估費用用，附官方網址與查的日期；Cards 第三步加的）。一筆模型寫能收的輸入、推理寫法、輸出上限、價格（可以有好幾筆，照 `effectiveFrom` 換；長輸入另一組價）與查價日期，和廠商不同時也寫 `mediaTokens`。壞掉的那一筆跳過、回報在 `catalogProblems`，不讓整個套件不能用；形狀不對（該是物件或陣列的不是、`limits` 不是正整數）與日曆上沒有的日期（`2026-02-30`）也算壞掉（L2 R14）。
 - 推薦哪一個給製卡，不寫在套件裡，寫在 Cards 的資料，和 [ai-models.md](../ai-models.md) 同步。Fable 建議套件只留一小份模型種子、主檔放 Cards（第 11 點）：第三步接上時一起定，現在的模型資料標了查價日期。
 - **快取**：不做 `cache: 'auto'`。Anthropic 的自動快取把斷點放在最後一個區塊，每課不同的 PDF 在最後，等於每次多付寫入、永遠讀不到（Fable 第 13 點）。之後要做時做成「到這個區塊為止可快取」的標記；第三步組請求時，規則放 `instructions`、PDF 放在文字前面。
 
