@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -275,6 +276,20 @@ void test('畫面的字串：作答時藏起不一樣的標點、最後一格後
   assert.deepEqual(others(park, 1), ['He played basketball in the park after school yesterday.']);
   const half = orderOf(one('I was tired. I went to bed early. (用 because 合成一句) ==I went to bed early== ==because== ==I was tired==.', [ALT]));
   assert.deepEqual(others(half, 0), ['because I was tired, I went to bed early.'], '半形括號：開頭的 ) 拿掉；句首不大寫（starts 照 §4-6）');
+});
+
+// 文件的例子（§6、§9）：英文規則與出題語法裡寫了另一種排法的例子，照英文的卡組讀得出另一種排法、沒有提示。
+const fencesWith = (path: string, needle: string): string[] => [...readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/^( *)```(?:markdown)?\r?\n([\s\S]*?)\r?\n *```/gm)]
+  .map(m => m[2].split('\n').map(line => line.startsWith(m[1]) ? line.slice(m[1].length) : line).join('\n')).filter(text => text.includes(needle));
+
+void test('英文規則與出題語法的例子：讀得出另一種排法、沒有提示', () => {
+  const examples = [...fencesWith('../docs/card-rules/english.md', '另一種排法：'), ...fencesWith('../docs/syntax.md', '另一種排法：')];
+  assert.equal(examples.length, 2);
+  for (const text of examples) {
+    const deck = text.startsWith('---') ? parseDeck(text) : english(text);
+    assert.deepEqual(deck.problems, [], text);
+    assert.deepEqual(kindSentence(deck.targets[0])?.prompts.map(cells => cells.others?.length ?? 0), [1], text);
+  }
 });
 
 // 舊版讀另一種排法（§7）：用真的 v0.6.0 標籤的程式，不是用現在的程式假裝舊版。
