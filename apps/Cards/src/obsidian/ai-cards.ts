@@ -1,9 +1,12 @@
 import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
+import { directRequest, materialProblem, modelOf, providerProblem, sendDirect, sendingLine } from '../core/connect/index.ts';
+import type { AiClient, Connection, DirectFailure, GenerateResult, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
 // AI 製卡的流程（tasks/ai-cards-mvp.md §2、§3、§5）：複製提示、貼回檢查、存草稿與繼續。畫面在 ai-cards-modal.ts；這裡不碰 Obsidian，測試直接用。
+// 直接製作（tasks/ai-direct.md §4～§6）：同一份提示加上家長選的教材檔，用設定頁「AI 連線」的服務送出；收回的整段和貼回的走同一條路（檢查、存成草稿）。
 
 /** 目錄認得的年級學期（syntax §2-1）：小一上～高三下。 */
 const TERMS: readonly string[] = ['小', '國', '高'].flatMap((stage, s) => (s === 0 ? '一二三四五六' : '一二三').split('').flatMap(grade => [`${stage}${grade}上`, `${stage}${grade}下`]));
@@ -29,7 +32,24 @@ export interface AiCardsDeps {
   now: () => { ms: number; offset: number };
   random?: () => number;
   onError: (error: unknown) => void;
+  /**
+   * 直接製作（tasks/ai-direct.md §4）：只在電腦，沒有這一欄就只有複製提示。connection 是設定頁「AI 連線」存的設定，
+   * key 每次送出前才向 SecretStorage 拿（用完不留）；onFailure 是送不成時給錯誤紀錄的（§8，家長取消的不記）。
+   */
+  direct?: { client: AiClient; connection: () => Connection; key: () => KeyLookup; onFailure?: (failure: DirectFailure, error: unknown, result: GenerateResult | null) => void };
 }
+
+/** 直接製作送出之前就擋下（沒有建工作、沒有送出）的原因，或送出之後的結果（§4、§6）。 */
+export type DirectOutcome =
+  | { kind: 'blocked'; message: string }
+  | { kind: 'received'; job: CardJob; reply: string; result: GenerateResult }
+  | { kind: 'failed'; job: CardJob; failure: DirectFailure; partial: string | null };
+/** 沒有可用的金鑰時「直接製作」不能按（§2，tasks/ai-direct.md）：照 keyOf 的原因說。 */
+const NO_KEY: Record<Exclude<KeyLookup, { ok: true }>['why'], string> = {
+  unset: '先到設定頁的「AI 連線」選好這個服務的金鑰，才能直接製作。',
+  empty: '設定頁「AI 連線」選的金鑰是空的或找不到；重新貼上之後才能直接製作。',
+  malformed: '設定頁「AI 連線」選的金鑰看起來不完整；重新貼上之後才能直接製作。',
+};
 
 /** 存草稿或繼續之後：done 是快照寫成（製卡成功）；stop 寫原因，deck 是要家長選的那一篇。 */
 export type Outcome =
@@ -149,6 +169,67 @@ export function createAiCards(deps: AiCardsDeps) {
     }
   }
 
+  /**
+   * 複製提示與直接製作共用的第二步（§3）：照現況組提示與一份待貼回的工作，還沒存。讀不完、還原中、這一科沒有規則時是原因。
+   * 同步做完，不等 I/O：剪貼簿要在按下的當下寫（L2 第四輪）。
+   */
+  function compose(form: CardForm): { job: CardJob; prompt: ReturnType<typeof buildPrompt> } | { error: string } {
+    const state = deps.state();
+    const subject = subjects.find(each => each.key === form.subject);
+    const block = state?.writeBlock(true);
+    if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+    if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
+    if (block === 'restore' || block === 'restoreStuck') return { error: '正在還原，還原完才知道學生已有哪些學習目標；等一下再按' };
+    if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
+    // 送來通知、還在讀的卡組：不等，請家長等一下再按（L2 第四輪：剪貼簿要在按下的當下寫，iPhone 等過 I/O 可能被拒；等的期間開關、還原也可能變）。
+    if (!state.aiSettled()) return { error: '正在讀取剛同步來的卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
+    if (!subject) return { error: '這一科還沒有規則' };
+    const existing = state.aiExisting(subject.subject, form.term);
+    const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
+    const prompt = buildPrompt(form, subject, deps.rules[subject.key], existing, words);
+    const at = deps.now();
+    const job: CardJob = {
+      id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }),
+      copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms, form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
+      parts: prompt.parts, promptSha: prompt.sha256, existing: existing.map(each => ({ ...each })), save: null,
+    };
+    return { job, prompt };
+  }
+  /** 這台電腦記下這次選的科目、年級學期與點選填空（下次的預設）。 */
+  function remember(job: CardJob): void {
+    deps.store.saveLast({ subject: job.subject.key, term: job.form.term });
+    deps.store.savePick(job.subject.key, job.form.pick === true);
+  }
+  /** 這次開著 Obsidian 的期間，每一份直接製作的工作送了哪些教材（重送用；教材的內容不存，§5〈只送不存〉）。 */
+  const kept = new Map<string, Material[]>();
+  /** 正在送出的那一個的中止開關（一次只送一個）。 */
+  let sending: AbortController | null = null;
+  /** 設定頁選的服務與模型（§2）；選的服務不在目錄、沒有模型（OpenRouter 沒填）時是原因。 */
+  function endpoint(direct: NonNullable<AiCardsDeps['direct']>): { connection: Connection; provider: ProviderSpec; model: string } | { error: string } {
+    const connection = direct.connection();
+    const provider = direct.client.providers().find(each => each.id === connection.provider);
+    if (!provider) return { error: '設定頁「AI 連線」還沒選服務。' };
+    const model = modelOf(connection, provider);
+    if (!model) return { error: '設定頁「AI 連線」還沒填模型。' };
+    return { connection, provider, model };
+  }
+  /** 送出一次（§4 第 2～5 步）：成功交回整段；不成功交給錯誤紀錄（取消的不記，§8）。 */
+  async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+    const direct = deps.direct!;
+    const controller = new AbortController();
+    sending = controller;
+    try {
+      const sent = await sendDirect(direct.client, directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} }));
+      if (sent.ok) return { kind: 'received', job, reply: sent.result.text, result: sent.result };
+      if (sent.failure.kind !== 'cancelled') {
+        try { direct.onFailure?.(sent.failure, sent.error, sent.result); } catch (error) { deps.onError(error); }
+      }
+      return { kind: 'failed', job, failure: sent.failure, partial: sent.partial };
+    } finally {
+      if (sending === controller) sending = null;
+    }
+  }
+
   return {
     /** 讀不懂、沒辦法用的工作數（請家長重新複製一次）。 */
     broken: loaded.broken,
@@ -192,31 +273,80 @@ export function createAiCards(deps: AiCardsDeps) {
     },
     /** 第二步：組提示、存成待貼回的工作（按下的當下就存，F1），再放進剪貼簿。 */
     async copy(form: CardForm): Promise<{ job: CardJob; chars: number } | { error: string }> {
-      const state = deps.state();
-      const subject = subjects.find(each => each.key === form.subject);
-      const block = state?.writeBlock(true);
-      if (!state || block === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
-      if (block === 'phone') return { error: '這台裝置的製卡沒有打開（設定頁的「在這台裝置製卡」）' };
-      if (block === 'restore' || block === 'restoreStuck') return { error: '正在還原，還原完才知道學生已有哪些學習目標；等一下再按' };
-      if (block === 'unread' || state.unread().length > 0) return { error: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），讀到才知道學生已有哪些學習目標；等一下再按' };
-      // 送來通知、還在讀的卡組：不等，請家長等一下再按（L2 第四輪：剪貼簿要在按下的當下寫，iPhone 等過 I/O 可能被拒；等的期間開關、還原也可能變）。
-      if (!state.aiSettled()) return { error: '正在讀取剛同步來的卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
-      if (!subject) return { error: '這一科還沒有規則' };
-      const existing = state.aiExisting(subject.subject, form.term);
-      const words = subject.subject === '英文' ? state.aiWords(subject.subject, form.term) : null;
-      const prompt = buildPrompt(form, subject, deps.rules[subject.key], existing, words);
-      const at = deps.now();
-      const job: CardJob = {
-        id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }),
-        copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms, form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
-        parts: prompt.parts, promptSha: prompt.sha256, existing: existing.map(each => ({ ...each })), save: null,
-      };
+      const made = compose(form);
+      if ('error' in made) return made;
+      const { job, prompt } = made;
       try { put(job); } catch (error) { deps.onError(error); return { error: '存不進這台電腦，這次沒有複製；請再按一次' }; }
-      deps.store.saveLast({ subject: subject.key, term: form.term });
-      deps.store.savePick(subject.key, form.pick === true);
+      remember(job);
       try { await deps.clipboard(prompt.text); } catch (error) { deps.onError(error); return { error: '放不進剪貼簿；請再按一次' }; }
       return { job, chars: prompt.text.length };
     },
+    /** 這台有沒有直接製作（電腦才有，§4 入口）。 */
+    canDirect: (): boolean => deps.direct !== undefined,
+    /**
+     * 直接製作能不能按、按了會送出什麼（§2、§4〈送出前〉）：不能按時是原因。組一次提示算字數與費用，不存、不送。
+     * 每次表單或教材改了就問一次；沒有直接製作的裝置是 null。
+     */
+    directPreview(form: CardForm, materials: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string } | null {
+      const direct = deps.direct;
+      if (!direct) return null;
+      if (!form.unit.trim()) return { ok: false, reason: '先填單元。' };
+      const target = endpoint(direct);
+      if ('error' in target) return { ok: false, reason: target.error };
+      const key = direct.key();
+      if (!key.ok) return { ok: false, reason: NO_KEY[key.why] };
+      const problem = materialProblem(materials);
+      if (problem) return { ok: false, reason: problem };
+      const made = compose(form);
+      if ('error' in made) return { ok: false, reason: made.error };
+      const chars = made.prompt.text.length;
+      const limit = providerProblem(target.provider, target.model, materials, chars);
+      if (limit) return { ok: false, reason: limit };
+      const request = directRequest({ connection: target.connection, provider: target.provider, apiKey: key.key, prompt: made.prompt.text, materials });
+      return { ok: true, line: sendingLine(direct.client, target.provider, request, materials, chars) };
+    },
+    /**
+     * 直接製作（§4 第 1～5 步）：組提示、建一份待貼回的工作（先存再送：送到一半 Obsidian 被關掉，下次打開還找得到），送出、等回覆。
+     * 送出前擋下的不建工作；送出之後不論成功與否都留著那一份工作（§6：重送、改用複製貼上或放棄）。一次只送一個（§6 最後一點）。
+     */
+    async direct(form: CardForm, materials: readonly Material[], onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+      const direct = deps.direct;
+      if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
+      if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
+      const target = endpoint(direct);
+      if ('error' in target) return { kind: 'blocked', message: target.error };
+      const key = direct.key();
+      if (!key.ok) return { kind: 'blocked', message: NO_KEY[key.why] };
+      const problem = materialProblem(materials);
+      if (problem) return { kind: 'blocked', message: problem };
+      const made = compose(form);
+      if ('error' in made) return { kind: 'blocked', message: made.error };
+      const limit = providerProblem(target.provider, target.model, materials, made.prompt.text.length);
+      if (limit) return { kind: 'blocked', message: limit };
+      try { put(made.job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+      remember(made.job);
+      kept.set(made.job.id, [...materials]);
+      return send(made.job, made.prompt.text, materials, target, key.key, onProgress);
+    },
+    /** 重送（§6）：同一份提示與教材，不重組；這次開著 Obsidian 的期間記得教材。工作已經結束或放棄、教材不在了是 blocked。 */
+    async resend(job: CardJob, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+      const direct = deps.direct;
+      if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
+      if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
+      const latest = current(job);
+      if (!latest || latest.save) return { kind: 'blocked', message: '這次製卡已經結束或開始存了，不能重送' };
+      const materials = kept.get(latest.id);
+      if (!materials) return { kind: 'blocked', message: '上次選的教材檔已經不在了（重開過 Obsidian），請改用複製貼上，或做新的一課' };
+      const target = endpoint(direct);
+      if ('error' in target) return { kind: 'blocked', message: target.error };
+      const key = direct.key();
+      if (!key.ok) return { kind: 'blocked', message: NO_KEY[key.why] };
+      return send(latest, latest.parts.map(part => part.text).join('\n\n'), materials, target, key.key, onProgress);
+    },
+    /** 取消送出中的那一個（§6）：關掉製卡視窗之前問過、停用外掛時。 */
+    cancel(): void { sending?.abort(); },
+    /** 現在有沒有一個正在送出。 */
+    sending: (): boolean => sending !== null,
     /** 再放一次剪貼簿：照存下的每一部分，不重組（§3）。 */
     async recopy(job: CardJob): Promise<boolean> {
       try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }

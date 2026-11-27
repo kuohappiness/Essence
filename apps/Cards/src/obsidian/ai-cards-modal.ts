@@ -2,11 +2,15 @@ import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
 import { freeName, groupHints, issueText, PURPOSES } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
+import { materialType, usageLine } from '../core/connect/index.ts';
+import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
 import { inspectionKey, PICK_NOTE, SERVICES } from './ai-cards.ts';
-import type { AiCards, Outcome } from './ai-cards.ts';
+import type { AiCards, DirectOutcome, Outcome } from './ai-cards.ts';
 
 // AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：電腦一直有；手機在設定頁打開才有（D-226、tasks/phone-cards.md §2-1）。入口與目錄不放（D-100）。
 // 用 Obsidian 的視窗、和存檔按鈕的小視窗同一種做法：家長要在瀏覽器與 Obsidian 之間來回，視窗不蓋住整個工作區。
+// 直接製作（tasks/ai-direct.md §4～§6）：電腦才有。第一步多一欄教材檔、多一個「直接製作」；送出中看得到等了多久、收到多少字，可以取消；
+// 收完放進貼回的框、自動檢查，之後和貼回一模一樣。
 
 const TEXT = {
   title: 'AI 製卡',
@@ -24,7 +28,27 @@ const TEXT = {
   // 清掉的時機照 readJobs（載入與存工作時）：寫「可能」，不寫成到期那一刻就清（L2 R7）。
   local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒開始存成草稿的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
   broken: (n: number) => `有 ${String(n)} 份之前複製的提示讀不懂，已經拿掉；要用的話請重新複製一次。`,
+  files: '選擇檔案',
+  filesNote: '課本那一課的 PDF 或照片（JPG、PNG），也可以拖進來。請先切出這一課的頁面，整本送會貴很多倍。',
+  notMaterial: (name: string) => `「${name}」不是 PDF、JPG 或 PNG，沒有加進來。`,
+  unreadable: (name: string) => `讀不到「${name}」，沒有加進來；請再選一次。`,
+  thinking: (time: string) => `AI 正在想（已經 ${time}）`,
+  receiving: (chars: number, time: string) => `已收到 ${chars.toLocaleString('en-US')} 字（已經 ${time}）`,
+  slowStart: '有些 AI 要想 2～3 分鐘才開始回答。',
+  retrying: (seconds: number, attempt: number) => `AI 那邊忙或連不上，${String(seconds)} 秒後再送一次（第 ${String(attempt)} 次）。`,
+  askCancel: '要取消這一次嗎？如果 AI 已經開始做，這一次可能仍會計費。',
+  received: 'AI 回好了，整段已經放進下面的框、檢查過；看過結果再存成草稿。',
+  directPaste: (label: string) => `${label}：AI 的回覆在下面的框裡。`,
+  fallback: '已複製同一份提示；到 ChatGPT、Gemini 或 Claude 開一個新對話，自己附上教材檔，貼上提示送出；AI 回完後，按回覆裡程式碼區塊右上角的「複製」，貼在下面。',
 };
+
+/** 「1 分 20 秒」「35 秒」。 */
+function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return seconds < 60 ? `${String(seconds)} 秒` : `${String(Math.floor(seconds / 60))} 分 ${String(seconds % 60)} 秒`;
+}
+/** 「1.2 MB」「340 KB」。 */
+const size = (bytes: number): string => bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${String(Math.max(1, Math.round(bytes / 1000)))} KB`;
 
 /** 給家長看的「多久以前」。 */
 function ago(ms: number, now: number): string {
@@ -34,7 +58,7 @@ function ago(ms: number, now: number): string {
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${String(hours)} 小時前` : `${String(Math.round(hours / 24))} 天前`;
 }
-const labelOf = (job: CardJob): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
+const labelOf = (job: { form: CardForm; subject: Pick<CardJob['subject'], 'subject' | 'label'> }): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
 
 export interface AiCardsModalHost {
   cards: () => AiCards | null;
@@ -42,14 +66,18 @@ export interface AiCardsModalHost {
   openNote: (path: string) => void;
   notify: (message: string) => void;
   now: () => number;
+  /** PDF 的總頁數（Obsidian 內建的 PDF 元件，tasks/ai-direct.md §5）；讀不出來是 null。只在電腦（直接製作）用。 */
+  pdfPages?: (data: Uint8Array) => Promise<number | null>;
 }
 
-/** 貼到一半的回覆：關掉視窗也留著，下次接著貼回（只在這次開著 Obsidian 的期間）。 */
+/** 貼到一半的回覆：關掉視窗也留著，下次接著貼回（只在這次開著 Obsidian 的期間）。直接製作收回的整段也放這裡。 */
 const pasted = new Map<string, string>();
+/** 直接製作收完的用量那一行（§4 第 6 步）：關掉視窗再打開也看得到（只在這次開著 Obsidian 的期間）。 */
+const usage = new Map<string, string>();
 
 class AiCardsModal extends Modal {
   private readonly host: AiCardsModalHost;
-  private readonly modals: Set<Modal>;
+  private readonly modals: Set<AiCardsModal>;
   private job: CardJob | null = null;
   private form: CardForm | null = null;
   private inspection: Inspection | null = null;
@@ -58,7 +86,13 @@ class AiCardsModal extends Modal {
   private busy = false;
   /** 畫面是重開命令時的工作清單（start）。 */
   private inList = false;
-  constructor(app: App, host: AiCardsModalHost, modals: Set<Modal>) {
+  /** 第一步選的教材檔（直接製作，§5）：只在這個視窗開著的期間，內容不存。 */
+  private materials: Material[] = [];
+  /** 送出中畫面的計時器；畫面換掉或關掉時停。 */
+  private timer: number | null = null;
+  /** 關掉視窗前問過要不要取消送出中的那一個（§6 最後一點）；停用外掛時不問。 */
+  private forced = false;
+  constructor(app: App, host: AiCardsModalHost, modals: Set<AiCardsModal>) {
     super(app);
     this.host = host;
     this.modals = modals;
@@ -69,7 +103,16 @@ class AiCardsModal extends Modal {
     this.titleEl.setText(TEXT.title);
     this.start();
   }
-  onClose(): void { this.modals.delete(this); this.contentEl.empty(); }
+  onClose(): void { this.stopTimer(); this.modals.delete(this); this.contentEl.empty(); }
+  /** 送出中按關閉（Esc、右上角的 ×）：先問要不要取消（§6）；停用外掛時直接關。 */
+  close(): void {
+    const cards = this.host.cards();
+    if (!this.forced && this.timer !== null && cards?.sending()) { this.askCancel(); return; }
+    super.close();
+  }
+  /** 停用外掛、手機關掉製卡：取消送出中的那一個，不問。 */
+  forceClose(): void { this.forced = true; this.host.cards()?.cancel(); this.close(); }
+  private stopTimer(): void { if (this.timer !== null) { window.clearInterval(this.timer); this.timer = null; } }
 
   /** 重開命令時有沒完成的工作就先問（§2、§5）。 */
   private start(): void {
@@ -99,6 +142,7 @@ class AiCardsModal extends Modal {
     }
   }
   private reset(): HTMLElement {
+    this.stopTimer();
     this.inList = false;
     this.contentEl.empty();
     this.contentEl.addClass('essence-cards-ai');
@@ -142,19 +186,33 @@ class AiCardsModal extends Modal {
     adjust.value = form.adjust;
     const material = field('教材').createEl('input', { type: 'text', placeholder: '選填，例如「課本 p.40～51 的照片」' });
     material.value = form.material;
+    const direct = cards.canDirect();
+    const files = direct ? this.materialField(field('教材檔'), () => { refresh(); }) : null;
     const rules = el.createEl('p', { cls: 'essence-cards-issue-note' });
     const same = el.createEl('p');
     const existing = el.createEl('p', { cls: 'essence-cards-issue-note' });
-    const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const message = el.createEl('p', { cls: 'essence-cards-issue-note essence-cards-direct-message' });
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
+    const send = direct ? buttons.createEl('button', { text: '直接製作' }) : null;
     const copy = buttons.createEl('button', { text: '複製提示', cls: 'mod-cta' });
+    const preview = direct ? el.createEl('p', { cls: 'essence-cards-issue-note' }) : null;
     const refresh = (): void => {
+      files?.();
       rules.setText('規則：' + cards.rulesLine(form.subject));
       const found = cards.sameUnit(form);
       same.setText(found.length ? `已經有：${found.map(each => `${each.name}（${each.status}）`).join('、')}。還是要做一份新的嗎？舊的不會動。` : '');
       const count = cards.existing(form);
       existing.setText(count === 'loading' ? '正在讀取卡組…' : count === 'unread' ? '還有卡組沒讀到（可能還在從 iCloud 下載），讀到才知道已有哪些學習目標' : count ? `會一起送出 ${String(count)} 個已有的學習目標` : '已有的學習目標：無');
       copy.disabled = this.busy || !form.unit.trim();
+      // 直接製作（§2、§4〈送出前〉）：設好金鑰時是主按鈕；不能按時寫原因，能按時寫會送出什麼、約多少錢。
+      if (send && preview) {
+        const ready = cards.directPreview(form, this.materials);
+        const ok = ready?.ok === true;
+        send.disabled = this.busy || !ok;
+        send.toggleClass('mod-cta', ok);
+        copy.toggleClass('mod-cta', !ok);
+        preview.setText(ready === null ? '' : ready.ok ? ready.line : ready.reason);
+      }
     };
     subject.addEventListener('change', () => {
       form.subject = subject.value;
@@ -172,6 +230,17 @@ class AiCardsModal extends Modal {
     pick.addEventListener('change', () => { form.pick = pick.checked; });
     adjust.addEventListener('input', () => { form.adjust = adjust.value; });
     material.addEventListener('input', () => { form.material = material.value; });
+    send?.addEventListener('click', () => {
+      this.busy = true;
+      refresh();
+      const label = labelOf({ form, subject: cards.subjects.find(each => each.key === form.subject) ?? cards.subjects[0] });
+      void this.sendNow(label, progress => cards.direct({ ...form, unit: form.unit.trim() }, this.materials, progress)).then(blocked => {
+        if (blocked === null) return;
+        this.busy = false;
+        this.showForm();
+        this.contentEl.querySelector('.essence-cards-direct-message')?.setText(blocked);
+      });
+    });
     copy.addEventListener('click', () => {
       this.busy = true;
       refresh();
@@ -187,25 +256,162 @@ class AiCardsModal extends Modal {
     unit.focus();
   }
 
-  /** 第二、三步：已複製的說明、貼回、檢查、存成草稿（§2、§4）。chars 是剛複製的字數；接著貼回時是 null。 */
-  private showPaste(chars: number | null): void {
+  /**
+   * 第一步的「教材檔」（tasks/ai-direct.md §5）：選擇檔案或拖進來，PDF 讀總頁數；列出檔名、大小、頁數，可以拿掉。
+   * 回傳重畫清單的函式；清單變了時呼叫 changed（重算預覽）。
+   */
+  private materialField(cell: HTMLElement, changed: () => void): () => void {
+    const input = cell.createEl('input', { type: 'file', attr: { accept: '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png', multiple: '' } });
+    input.hide();
+    cell.createEl('button', { text: TEXT.files }).addEventListener('click', () => { input.click(); });
+    const list = cell.createEl('ul');
+    const note = cell.createDiv({ text: TEXT.filesNote, cls: 'essence-cards-ai-pick-note' });
+    const problems = cell.createDiv({ cls: 'essence-cards-backup-problem' });
+    const draw = (): void => {
+      list.empty();
+      this.materials.forEach((material, index) => {
+        const pages = material.mediaType === 'application/pdf' ? `${material.pages === null ? '讀不出頁數' : `${String(material.pages)} 頁`}，` : '';
+        const item = list.createEl('li', { text: `${material.name}（${pages}${size(material.data.length)}） ` });
+        item.createEl('button', { text: '拿掉' }).addEventListener('click', () => { this.materials.splice(index, 1); changed(); });
+      });
+      note.toggle(!this.materials.length);
+    };
+    const add = async (picked: readonly File[]): Promise<void> => {
+      const notes: string[] = [];
+      for (const file of picked) {
+        const type = materialType(file.name);
+        if (!type) { notes.push(TEXT.notMaterial(file.name)); continue; }
+        let data: Uint8Array;
+        try { data = new Uint8Array(await file.arrayBuffer()); } catch { notes.push(TEXT.unreadable(file.name)); continue; }
+        // pdf.js 可能把交給它的緩衝區移到背景執行緒，給它一份複本，送出的那一份才不會變成空的。
+        const pages = type === 'application/pdf' ? await (this.host.pdfPages?.(data.slice()) ?? Promise.resolve(null)) : null;
+        this.materials.push({ name: file.name, mediaType: type, data, pages });
+      }
+      problems.setText(notes.join(' '));
+      changed();
+    };
+    input.addEventListener('change', () => { void add(Array.from(input.files ?? [])); input.value = ''; });
+    // 從檔案總管拖進整個視窗（§5）。
+    this.contentEl.addEventListener('dragover', event => { event.preventDefault(); });
+    this.contentEl.addEventListener('drop', event => { event.preventDefault(); void add(Array.from(event.dataTransfer?.files ?? [])); });
+    return draw;
+  }
+
+  /**
+   * 送出中（§4 第 4 步）：等了多久、收到多少字；1 分鐘還沒有字時補一句；一直可以取消。
+   * work 送出並交回結果；送出前就擋下時回傳原因（畫面回第一步），其他情況由這裡畫下一步，回傳 null。
+   */
+  private async sendNow(label: string, work: (progress: (event: ProgressEvent) => void) => Promise<DirectOutcome>): Promise<string | null> {
+    const el = this.reset();
+    const status = el.createEl('p', { text: `${label}：${TEXT.thinking(elapsed(0))}` });
+    const slow = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const retry = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    this.ask = el.createDiv();
+    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
+    buttons.createEl('button', { text: '取消' }).addEventListener('click', () => { this.host.cards()?.cancel(); });
+    const started = this.host.now();
+    let chars = 0;
+    const draw = (): void => {
+      const time = elapsed(this.host.now() - started);
+      status.setText(`${label}：${chars ? TEXT.receiving(chars, time) : TEXT.thinking(time)}`);
+      slow.setText(!chars && this.host.now() - started >= 60_000 ? TEXT.slowStart : '');
+    };
+    this.timer = window.setInterval(draw, 1000);
+    const outcome = await work(event => {
+      if (event.type === 'text') { chars = event.totalChars; retry.setText(''); draw(); }
+      else if (event.type === 'retrying') retry.setText(TEXT.retrying(Math.round(event.delayMs / 1000), event.attempt));
+    });
+    this.stopTimer();
+    this.ask = null;
+    this.busy = false;
+    if (outcome.kind === 'blocked') return outcome.message;
+    this.job = outcome.job;
+    if (outcome.kind === 'received') {
+      pasted.set(outcome.job.id, outcome.reply);
+      usage.set(outcome.job.id, usageLine(outcome.result));
+      this.showPaste(null, 'received');
+    } else this.showFailure(outcome.failure);
+    return null;
+  }
+  /** 送出中「要取消這一次嗎？」那一列（§6 最後一點）：畫在送出中畫面的按鈕上面。 */
+  private ask: HTMLElement | null = null;
+  private askCancel(): void {
+    const el = this.ask;
+    if (!el) return;
+    el.empty();
+    el.createEl('p', { text: TEXT.askCancel });
+    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
+    buttons.createEl('button', { text: '取消這一次', cls: 'mod-warning' }).addEventListener('click', () => { this.host.cards()?.cancel(); });
+    buttons.createEl('button', { text: '繼續等' }).addEventListener('click', () => { el.empty(); });
+  }
+
+  /** 送不成（§6 的表）：一句話、下一步；可以重送（同一份提示與教材）、改用複製貼上（複製同一份提示，教材自己附）或放棄。 */
+  private showFailure(failure: DirectFailure): void {
     const cards = this.host.cards(), job = this.job;
     if (!cards || !job) { this.close(); return; }
     const el = this.reset();
-    el.createEl('p', { text: (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
+    el.createEl('p', { text: `${labelOf(job)}：${failure.text}` });
+    if (failure.next) el.createEl('p', { text: failure.next, cls: 'essence-cards-issue-note' });
+    const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
+    this.directButtons(buttons, message, failure.afterResponse);
+    buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { void this.abandon(); });
+    buttons.createEl('button', { text: '關閉' }).addEventListener('click', () => { this.close(); });
+  }
+  /** 「重送」與「改用複製貼上」（§6）：送不成的畫面與檢查不過的貼回畫面共用。charged：服務已經回了才斷，重送會再計費，按鈕寫出來。 */
+  private directButtons(buttons: HTMLElement, message: HTMLElement, charged: boolean): void {
+    const cards = this.host.cards(), job = this.job;
+    if (!cards || !job) return;
+    buttons.createEl('button', { text: charged ? '重送（會再計費一次）' : '重送', cls: 'mod-cta' }).addEventListener('click', () => {
+      this.busy = true;
+      void this.sendNow(labelOf(job), progress => cards.resend(job, progress)).then(blocked => {
+        if (blocked === null) return;
+        this.busy = false;
+        this.showFailure({ kind: 'unknown', text: blocked, next: '', afterResponse: false, settings: false });
+      });
+    });
+    buttons.createEl('button', { text: '改用複製貼上' }).addEventListener('click', () => {
+      void cards.recopy(job).then(ok => {
+        if (!ok) { message.setText('放不進剪貼簿；請再按一次'); return; }
+        usage.delete(job.id);
+        this.showPaste(null, 'fallback');
+      });
+    });
+  }
+
+  /**
+   * 第二、三步：已複製的說明、貼回、檢查、存成草稿（§2、§4）。chars 是剛複製的字數；接著貼回時是 null。
+   * mode（tasks/ai-direct.md §4 第 5、6 步、§6）：received 是直接製作收回的整段已經放進框裡，自動檢查、寫用量，不問用的是哪一家、不再複製；
+   * 檢查擋住時多「重送」與「改用複製貼上」。fallback 是送不成之後改用複製貼上（同一份提示已經複製，教材家長自己附）。
+   */
+  private showPaste(chars: number | null, mode: 'paste' | 'received' | 'fallback' = 'paste'): void {
+    const cards = this.host.cards(), job = this.job;
+    if (!cards || !job) { this.close(); return; }
+    const received = mode === 'received';
+    const el = this.reset();
+    el.createEl('p', { text: received ? TEXT.directPaste(labelOf(job)) + TEXT.received : mode === 'fallback' ? TEXT.fallback : (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
+    const spent = usage.get(job.id);
+    if (received && spent) el.createEl('p', { text: spent, cls: 'essence-cards-issue-note' });
     el.createEl('p', { text: TEXT.local(job.id), cls: 'essence-cards-issue-note' });
-    const again = el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: chars === null ? '再複製一次提示' : '再複製一次' });
-    again.addEventListener('click', () => { void cards.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
+    if (!received) {
+      const again = el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: chars === null ? '再複製一次提示' : '再複製一次' });
+      again.addEventListener('click', () => { void cards.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
+    }
     const box = el.createEl('textarea', { cls: 'essence-cards-ai-paste', attr: { placeholder: TEXT.paste, rows: '12' } });
     box.value = pasted.get(job.id) ?? '';
-    const service = el.createDiv({ cls: 'essence-cards-ai-form' });
-    service.createEl('label', { text: '用的是（選填）' });
-    const pick = service.createDiv().createEl('select', { cls: 'dropdown' });
-    pick.createEl('option', { text: '不選', value: '' });
-    for (const each of SERVICES) pick.createEl('option', { text: each, value: each });
-    pick.value = this.service ?? '';
-    pick.addEventListener('change', () => { this.service = pick.value || null; });
+    // 直接製作收到的：哪一家、哪個模型由程式記（§7），不問家長。
+    if (!received) {
+      const service = el.createDiv({ cls: 'essence-cards-ai-form' });
+      service.createEl('label', { text: '用的是（選填）' });
+      const pick = service.createDiv().createEl('select', { cls: 'dropdown' });
+      pick.createEl('option', { text: '不選', value: '' });
+      for (const each of SERVICES) pick.createEl('option', { text: each, value: each });
+      pick.value = this.service ?? '';
+      pick.addEventListener('change', () => { this.service = pick.value || null; });
+    }
     const result = el.createDiv();
+    const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const again = received ? el.createDiv({ cls: 'essence-cards-issue-buttons' }) : null;
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
     buttons.createEl('button', { text: '取消' }).addEventListener('click', () => { this.close(); });
     const checkButton = buttons.createEl('button', { text: '檢查' });
@@ -216,24 +422,31 @@ class AiCardsModal extends Modal {
       saveButton.disabled = this.busy || !ready;
       checkButton.disabled = this.busy || !box.value.trim();
     };
-    box.addEventListener('input', () => { pasted.set(job.id, box.value); this.inspection = null; this.confirmed = false; result.empty(); update(); });
-    checkButton.addEventListener('click', () => {
+    const check = (): void => {
       const inspection = cards.inspect(job, box.value);
+      again?.empty();
       if ('error' in inspection) { result.setText(inspection.error); return; }
       this.inspection = inspection;
       this.confirmed = false;
       this.showResult(result, inspection, update);
+      // 收到的回覆檢查不過（§6）：和貼回一樣顯示結果，多「重送」；服務已經回了，重送會再計費。
+      if (again && inspection.errors.length) this.directButtons(again, message, true);
       update();
-    });
+    };
+    box.addEventListener('input', () => { pasted.set(job.id, box.value); this.inspection = null; this.confirmed = false; result.empty(); update(); });
+    checkButton.addEventListener('click', check);
     saveButton.addEventListener('click', () => {
       this.busy = true;
       update();
       // 存的是檢查過的那一份、綁著看到的結果（D-226 第 5 點）：改過字的話 inspection 已經清掉，按不到這裡。
       const shown = this.inspection;
       if (!shown) return;
-      void this.finish(cards.save(job, box.value, this.service, inspectionKey(shown)));
+      void this.finish(cards.save(job, box.value, received ? null : this.service, inspectionKey(shown)));
     });
-    update();
+    this.inspection = null;
+    this.confirmed = false;
+    if (received && box.value.trim()) check();
+    else update();
   }
 
   /** 檢查的結果（§4 最後一點）：可以存時每一篇一列，底下列出提示；有擋住的只有原因與行號。 */
@@ -327,8 +540,9 @@ class AiCardsModal extends Modal {
  * 手機（tasks/phone-cards.md §2-1）：host.cards() 在設定頁沒打開時是 null，命令不列、圖示藏起來；refresh() 在開關變了時呼叫，關掉就關掉開著的視窗。
  */
 export function wireAiCards(plugin: Plugin, host: AiCardsModalHost): { refresh(): void } {
-  const modals = new Set<Modal>();
-  const closeAll = (): void => { for (const modal of [...modals]) modal.close(); };
+  const modals = new Set<AiCardsModal>();
+  // 停用外掛、手機關掉製卡：送出中的那一個直接取消，不問（§6）。
+  const closeAll = (): void => { for (const modal of [...modals]) modal.forceClose(); };
   plugin.register(closeAll);
   const open = (): void => { if (host.cards()) new AiCardsModal(plugin.app, host, modals).open(); };
   const icon = plugin.addRibbonIcon('sparkles', 'Essence Cards：AI 製卡', open);

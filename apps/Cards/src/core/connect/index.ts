@@ -2,3 +2,6 @@
 export { createAiClient, describeAiError, isAiError } from './client.ts';
 export { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from './connection.ts';
 export type { Connection, KeyLookup } from './connection.ts';
+export { directRequest, materialProblem, materialType, providerProblem, sendDirect, sendingLine, usageLine } from './direct.ts';
+export type { DirectFailure, Material } from './direct.ts';
+export type { AiClient, GenerateResult, ProgressEvent, ProviderSpec } from './client.ts';
