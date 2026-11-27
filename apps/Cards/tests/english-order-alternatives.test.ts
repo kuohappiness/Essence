@@ -119,7 +119,11 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   // L2 第三輪 F9：不認的排法照原文整段當補充，子項目後面空一行接的段落也不漏前面的。
   const both = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n            - Child note.\n\n          After child.\n`);
   assert.deepEqual(codes(both), [[4, 'order-alt-invalid']]);
-  assert.equal(both.targets[0].prompts[0].extras[0], `${ALT}\n    - Child note.\n\n  After child.`);
+  assert.equal(both.targets[0].prompts[0].extras[0], `${ALT}\n  - Child note.\n\nAfter child.`);
+  // L2 第四輪 F11：照項目內容的起始欄去掉外層的縮排，空一行後縮排的段落不會變成程式碼區塊（Tab 也一樣）。
+  const tabbed = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n\n\t\t\t**After paragraph.**\n`);
+  assert.deepEqual(codes(tabbed), [[4, 'order-alt-invalid']]);
+  assert.equal(tabbed.targets[0].prompts[0].extras[0], `${ALT}\n\n  **After paragraph.**`);
   const spaced = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n\n    - ${PARK}\n`);
   assert.deepEqual(codes(spaced), [], '後面空一行接下一題：排法底下沒有東西');
   assert.equal(othersOf(spaced)?.length, 1);
