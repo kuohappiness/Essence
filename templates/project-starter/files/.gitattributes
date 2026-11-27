@@ -1,0 +1,2 @@
+# 文字檔一律 LF：Windows 取出成 CRLF 會讓 git hook 跑不起來、比對出錯。
+* text=auto eol=lf

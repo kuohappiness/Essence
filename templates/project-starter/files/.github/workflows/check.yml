@@ -1,0 +1,28 @@
+name: Check
+# 只在 push 跑：PR 的檢查就是分支最新一次 push 的結果，同一個 commit 不跑兩次。
+# 被新的 push 取代的 run 照樣跑完、不取消：取消的 run 證明不了是綠的，gate 會把它算成紅燈。
+# main 的保護規則（.github/ruleset-main.json）要求 gate 通過：gate 一定會跑、不能設成只在某些檔改動時才跑，
+# 不然有些 PR 永遠等不到它。之後加 job 時，把它加進 gate 的 needs。
+on: [push]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/check.mjs
+
+  gate:
+    needs: [check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # 前面每個 job 都成功才算過；失敗、取消、被跳過都算紅燈。
+      - run: |
+          echo "$NEEDS"
+          node -e "const n=JSON.parse(process.env.NEEDS);const bad=Object.entries(n).filter(([,j])=>j.result!=='success');if(bad.length){console.error('沒通過：'+bad.map(([k,j])=>k+'='+j.result).join('、'));process.exit(1)}"
+        env:
+          NEEDS: ${{ toJSON(needs) }}
