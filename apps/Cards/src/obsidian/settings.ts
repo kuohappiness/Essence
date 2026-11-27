@@ -1,7 +1,7 @@
 import { Modal, Platform, PluginSettingTab, requireApiVersion, SecretComponent, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
-import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, readConnection, REASONING_CHOICES, testConnection, withSecret } from '../core/connect/index.ts';
+import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from '../core/connect/index.ts';
 import type { Connection, KeyLookup } from '../core/connect/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
@@ -55,6 +55,7 @@ const AI = {
   testNote: '讀一次這個服務的模型清單，確認金鑰能用；不產生內容、不花錢。',
   testing: '測試中…',
   failed: '測試連線沒有完成，請再按一次；一直這樣，請回報給開發者。',
+  shared: (names: string) => `這把金鑰也設給了 ${names}；每一家的金鑰不能通用，請確認選對了。`,
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -352,7 +353,7 @@ class EssenceSettingTab extends PluginSettingTab {
         this.draw();
       });
     });
-    new Setting(containerEl).setName(AI.key).setDesc(AI.keyNote).addComponent(el => new SecretComponent(this.app, el)
+    const keyRow = new Setting(containerEl).setName(AI.key).setDesc(AI.keyNote).addComponent(el => new SecretComponent(this.app, el)
       .setValue(connection.secrets[provider.id] ?? '')
       .onChange(id => {
         update(saved => withSecret(saved, provider.id, id));
@@ -360,6 +361,8 @@ class EssenceSettingTab extends PluginSettingTab {
         this.aiResult = null;
         this.refresh();
       }));
+    const shared = sharedWith(connection).map(id => providers.find(item => item.id === id)).filter(item => item !== undefined).map(providerName);
+    if (shared.length) keyRow.descEl.createDiv({ text: AI.shared(shared.join('、')), cls: 'essence-cards-backup-problem' });
     const models = modelChoices(provider);
     const model = new Setting(containerEl).setName(AI.model);
     const saveModel = (id: string): void => { update(saved => ({ ...saved, models: { ...saved.models, [provider.id]: id.trim() } })); };

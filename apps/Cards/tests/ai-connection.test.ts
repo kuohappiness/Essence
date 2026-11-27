@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mockFetch } from '../../../packages/ai-client/src/testing.ts';
-import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, testConnection, withSecret } from '../src/core/connect/index.ts';
+import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from '../src/core/connect/index.ts';
 
 const FAKE_KEY = 'sk-cards-settings-test-1111';
 const client = cardsClient();
@@ -66,6 +66,13 @@ void test('金鑰：只記名稱，值向 SecretStorage 拿；沒選、找不到
   }
   // 金鑰照服務分開：換到別家，沒選過就是沒有。
   assert.deepEqual(keyOf({ ...connection, provider: 'google' }, get), { ok: false, why: 'unset' });
+  // 同一個名稱設給好幾家（L2 第一輪 R8）：列出其他用同名的那幾家，自己不算；沒選、名稱不同的不列。
+  const both = withSecret(withSecret(withSecret(connection, 'google', 'my-openai-key'), 'anthropic', 'my-openai-key'), 'openrouter', 'other-key');
+  assert.deepEqual(sharedWith(both), ['google', 'anthropic']);
+  assert.deepEqual(sharedWith({ ...both, provider: 'google' }), ['openai', 'anthropic']);
+  assert.deepEqual(sharedWith({ ...both, provider: 'openrouter' }), []);
+  assert.deepEqual(sharedWith(connection), []);
+  assert.deepEqual(sharedWith(readConnection({ provider: 'openai' }, providers)), []);
 });
 
 void test('測試連線：成功是「連得上」；沒有金鑰不送出；每一種錯誤是套件的說明加下一步，金鑰不在結果裡', async () => {

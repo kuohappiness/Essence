@@ -479,3 +479,18 @@ void test('AI 連線：拿金鑰時丟錯，按鈕回來、寫一句，錯誤進
   assert.match(logged, /"where":"ai"/);
   assert.match(logged, /keychain locked/);
 });
+
+void test('AI 連線：同一個金鑰名稱設給了另一家，金鑰那一列寫是哪幾家；換成不同的名稱就不寫（L2 第一輪 R8）', async t => {
+  const h = await open(t, { desktop: true, secrets: { 'family-openai': AI_KEY, 'family-gemini': 'AIza-cards-settings-tab-3333' } });
+  const hint = /這把金鑰也設給了/;
+  h.row(KEY).secret?.choose('family-openai');
+  assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));
+  h.row(PROVIDER).dropdown?.choose('google');
+  h.row(KEY).secret?.choose('family-openai');
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 OpenAI；每一家的金鑰不能通用，請確認選對了。'));
+  h.row(PROVIDER).dropdown?.choose('openai');
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 Google Gemini；每一家的金鑰不能通用，請確認選對了。'));
+  h.row(PROVIDER).dropdown?.choose('google');
+  h.row(KEY).secret?.choose('family-gemini');
+  assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));
+});

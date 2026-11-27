@@ -79,6 +79,16 @@ export function modelOf(connection: Connection, provider: ProviderSpec): string 
   return choices[0]?.id ?? '';
 }
 
+/**
+ * 這一家選的金鑰名稱也設給了哪幾家（L2 第一輪 R8）：各家的金鑰不通用，同名多半是選錯，測試連線或製作時會把金鑰送到另一家。
+ * SecretComponent 選了之後只顯示遮罩，畫面上看不出是哪一把，所以由設定頁提醒；不擋，家長自己改。
+ */
+export function sharedWith(connection: Connection): string[] {
+  const id = connection.secrets[connection.provider];
+  if (!id) return [];
+  return Object.entries(connection.secrets).filter(([provider, name]) => provider !== connection.provider && name === id).map(([provider]) => provider);
+}
+
 /** 換金鑰的名稱：SecretComponent 交回的名稱，null 或不合格式時拿掉這一家的。 */
 export function withSecret(connection: Connection, provider: string, id: string | null): Connection {
   const secrets = { ...connection.secrets };
