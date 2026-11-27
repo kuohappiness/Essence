@@ -179,9 +179,12 @@ void test('字鍵：相同文字的詞塊只列舉不同的排法（GitHub 上 C
   assert.deepEqual([...keys].sort(), [...Array(9).fill('very') as string[], 'good'].sort());
 });
 
-void test('字鍵：兩塊、兩種都對的照舊打亂；組卡帶上另一種排法，沒有的不帶', () => {
-  const two = one('我們明天中午見。See you ==tomorrow== ==at noon==.', ['另一種排法：See you ==at noon== ==tomorrow==.'], '時間的位置 排序');
-  for (let times = 0; times <= 5; times++) assert.deepEqual([...keysAt(two, times)].sort(), ['at noon', 'tomorrow']);
+void test('字鍵：兩塊、兩種都對的照舊打亂（L2 第一輪 R6：和沒寫另一種排法時每一次都一樣）；組卡帶上另一種排法，沒有的不帶', () => {
+  const question = '我們明天中午見。See you ==tomorrow== ==at noon==.';
+  const two = one(question, ['另一種排法：See you ==at noon== ==tomorrow==.'], '時間的位置 排序');
+  const plainTwo = one(question, [], '時間的位置 排序');
+  for (let times = 0; times <= 9; times++) assert.deepEqual(keysAt(two, times), keysAt(plainTwo, times), `第 ${String(times)} 次`);
+  for (let times = 0; times <= 9; times++) assert.deepEqual(keysAt(plainTwo, times), ['at noon', 'tomorrow'], `第 ${String(times)} 次（舊規則避開題目那一行）`);
   const card = cardOf({ lt: 'lt', deck: 'Essence Cards/英文/L1.md', target: one(BECAUSE, [ALT]).targets[0], prompt: one(BECAUSE, [ALT]).targets[0].prompts[0], isNew: false, early: false });
   assert.deepEqual(card.group?.order, { head: 'I was tired. I went to bed early.（用 because 合成一句）', tails: [' ', ' ', '.'], starts: [true, false, false], others: [{ words: [B, C, A], tails: [' ', ', ', '.'], source: ALT }] });
   const plain = one(BECAUSE, []).targets[0];

@@ -224,7 +224,7 @@ const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.len
  * 兩句的詩、句子都相同時沒有別的排法，照舊。avoid 是要避開的對的順序，沒給時是 lines 自己（全詩、沒有另一種排法的句子）。
  */
 function orderKeys(lines: readonly string[], seed: string, before: readonly string[], avoid: readonly (readonly string[])[] = [lines]): string[] {
-  if (avoid.length > 1) return avoidingKeys(shuffled(lines, seeded(seed)), before, avoid);
+  if (avoid.length > 1) return avoidingKeys(shuffled(lines, seeded(seed)), before, avoid) ?? orderKeys(lines, seed, before);
   const keys = shuffled(lines, seeded(seed));
   if (sameOrder(keys, lines)) keys.push(keys.shift() as string);
   if (!sameOrder(keys, before)) return keys;
@@ -241,9 +241,10 @@ function orderKeys(lines: readonly string[], seed: string, before: readonly stri
 
 /**
  * 有另一種排法的句子（§3）：先避開每一種對的順序，再求和上一次不同。照上面的方法（移一個、再找兩個交換）都撞到時，
- * 照固定的順序列舉打亂結果的排列，取第一個兩樣都符合的；沒有就取第一個不是對的順序的；連這個都沒有（每一種都對）照打亂的結果。
+ * 照固定的順序列舉打亂結果的排列，取第一個兩樣都符合的；沒有就取第一個不是對的順序的；連這個都沒有（每一種都對）是 null，
+ * 照沒有另一種排法的規則打亂（L2 第一輪 R6）。
  */
-function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly (readonly string[])[]): string[] {
+function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly (readonly string[])[]): string[] | null {
   const right = (order: readonly string[]): boolean => avoid.some(each => sameOrder(order, each));
   const fresh = (order: readonly string[]): boolean => !right(order) && !sameOrder(order, before);
   if (right(keys)) keys.push(keys.shift() as string);
@@ -261,7 +262,7 @@ function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly
     if (fresh(order)) return order;
     if (!wrong && !right(order)) wrong = order;
   }
-  return wrong ?? keys;
+  return wrong;
 }
 
 /**
