@@ -1,7 +1,7 @@
 // 讀廠商與模型的資料、驗格式、合併呼叫端加的或蓋掉的（docs/tasks/ai-client.md〈7〉第 10 點）。
 // 壞掉的那一筆跳過並回報，不讓整個套件不能用。
 import builtin from '../catalog.json' with { type: 'json' };
-import type { Catalog, InputKind, ModelSpec, PriceSpec, ProviderSpec, ReasoningLevel, ReasoningSpec } from './types.ts';
+import type { Catalog, InputKind, MediaTokens, ModelSpec, PriceSpec, ProviderSpec, ReasoningLevel, ReasoningSpec } from './types.ts';
 import { REASONING_LEVELS } from './types.ts';
 
 const INPUTS: readonly InputKind[] = ['text', 'image', 'pdf'];
@@ -64,6 +64,24 @@ function inputsProblem(inputs: unknown): string | null {
   return null;
 }
 
+/** 每頁、每張的 token 範圍（估費用用）：範圍是正整數、low 不大於 high。 */
+function mediaTokensProblem(media: unknown): string | null {
+  if (media === undefined) return null;
+  if (!isObject(media)) return 'mediaTokens 要是物件';
+  const m = media as MediaTokens;
+  for (const key of ['pdfPage', 'image'] as const) {
+    const range = m[key] as unknown;
+    if (range === undefined) continue;
+    if (!isObject(range) || !Number.isInteger(range.low) || !Number.isInteger(range.high) || (range.low as number) <= 0 || (range.low as number) > (range.high as number)) {
+      return `mediaTokens.${key} 要是 { low, high }，正整數、low 不大於 high`;
+    }
+  }
+  if (m.source !== undefined && typeof m.source !== 'string') return 'mediaTokens.source 要是字串';
+  if (m.asOf !== undefined && !isDate(m.asOf)) return 'mediaTokens.asOf 不是合法日期';
+  if (m.guessed !== undefined && typeof m.guessed !== 'boolean') return 'mediaTokens.guessed 要是 true 或 false';
+  return null;
+}
+
 function priceProblem(price: PriceSpec): string | null {
   if (!isObject(price)) return 'prices 的每一筆要是物件';
   if (price.longContext !== undefined && !isObject(price.longContext)) return 'longContext 要是物件';
@@ -80,7 +98,7 @@ function modelProblem(model: ModelSpec): string | null {
   if (typeof model.id !== 'string' || !model.id) return '模型沒有 id';
   const inputs = inputsProblem(model.inputs);
   if (inputs) return inputs;
-  const reasoning = reasoningProblem(model.reasoning);
+  const reasoning = reasoningProblem(model.reasoning) ?? mediaTokensProblem(model.mediaTokens);
   if (reasoning) return reasoning;
   for (const key of ['maxOutputTokens', 'contextTokens'] as const) {
     const value = model[key];
@@ -117,7 +135,7 @@ function providerShapeProblem(p: ProviderSpec): string | null {
   if (o.systemRole !== undefined && o.systemRole !== 'system' && o.systemRole !== 'developer') return 'options.systemRole 要是 system 或 developer';
   const max = isObject(p.defaults) ? p.defaults.maxOutputTokens : undefined;
   if (max !== undefined && (!Number.isInteger(max) || max <= 0)) return 'defaults.maxOutputTokens 要是正整數';
-  return null;
+  return mediaTokensProblem(p.mediaTokens);
 }
 
 const MAX_TOKENS_FIELDS: readonly unknown[] = ['max_tokens', 'max_completion_tokens'];
