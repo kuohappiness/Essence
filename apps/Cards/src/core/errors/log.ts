@@ -15,7 +15,7 @@ export type ReportKind = 'content' | 'display' | 'stuck' | 'audio' | 'other';
 /** 學生回報的那張卡：卡組、學習目標 ID 與題目指紋（D-160 第 2 點）。 */
 interface Report { kind: ReportKind; path: string; lt: string; v: string }
 
-/** 直接製作送不成時多記的欄（tasks/ai-direct.md §8）：服務名稱（D-242）、要求的模型、HTTP 狀態碼、請求編號、送了幾次。不記金鑰、提示、教材與檔名。 */
+/** 直接製作送不成時多記的欄（tasks/ai-direct.md §8）：服務名稱（D-244）、要求的模型、HTTP 狀態碼、請求編號、送了幾次。不記金鑰、提示、教材與檔名。 */
 interface AiContext { service: string; model: string; status: number | null; requestId: string | null; attempts: number }
 
 export interface ErrorLog {

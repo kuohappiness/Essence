@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：實作中｜下一步：第一、二步做完（〈結果〉）；第三步照 [Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) 做（Cards 不切頁，切頁與轉錄放 Capture，使用者 2026-11-27），第 1 批（設定頁與測試連線）已合併（PR #78），接著做第 2 批的直接製作；雲端設定第 ① 件記成[補測](../backlog.md#技術債)｜等誰：Claude
+狀態：實作中｜下一步：第一、二步做完（〈結果〉）；第三步照 [Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) 做（Cards 不切頁，切頁與轉錄放 Capture，使用者 2026-11-27），第 1 批（設定頁與測試連線）已合併（PR #78），接著做第 2 批的直接製作｜等誰：Claude
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -214,6 +214,7 @@ packages/ai-client/
 - L2 第四輪（最後一輪）：12 項，使用者 2026-11-25 說「用 fable 5.2 xhigh 看一次，如果他也同意就不再送審」；Fable 有條件同意，照條件修了 10 項、第 2 項記進已知的限制，不再送 Codex（[審查報告〈Claude 修正（第四輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)）。最後版本 `480470ec` 在雲端與使用者的 Windows 電腦上，套件 220 個測試、共用檢查都過。
 - D-232：使用者 2026-11-26 同意，已寫成 [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)。
 - 第 ① 件：使用者 2026-11-26 在決定卡選「合併後我自己驗」。合併後用一次性排程開了新的專案討論串，它回報的原文：hook 的輸出「沒看到 hook 輸出」；`git log --oneline -1` 是 `c0561be`；`git config core.hooksPath` 空白（exit 1）；`node --version` 是 `v22.23.5`（`/opt/node22/bin/node`）；三個 `node_modules` 都不存在。原因是專案討論串的 session 專案資料夾是 repo 的上一層資料夾、repo clone 在它底下，不載 repo 的 `.claude/settings.json`（這個 session 的 `CLAUDE_PROJECT_DIR` 也是空的），所以 hook 根本沒被叫到，不是這次改壞的。要在 claude.ai/code 開的一般雲端 session 才驗得到，記成技術債；[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)補上要在哪裡開。
+- 第 ① 件補驗（2026-11-27）：「優化 Essence 開發流程」第 1 步（PR #80，main `69acd7db`）讓專案討論串開機時由雲端環境「Essence」的 setup script 跑 `cloud-setup.mjs`，並把 repo 的 hook 接到使用者設定。專案切到這個環境後新開的專案討論串，沒有手動補任何設定，開場訊息原文：「雲端環境設定：PATH 上的 Node 是 22.23.5，之後的指令改用 /opt/node24/bin 的 v24.22.3；core.hooksPath 已設為 .githooks；tools：鎖檔沒變，跳過；apps/Cards：鎖檔沒變，跳過；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：鎖檔沒變，跳過」；`node -v` 是 `v24.22.3`、`core.hooksPath` 是 `.githooks`、`v*` 的 tag 有 6 個。開場時有叫到 hook，這一項的完成條件都符合。
 - 冒煙測試（第二步）：2026-11-27 在使用者的 Windows 電腦（main `a902f97e`，金鑰只放在環境變數），每一家送一段自編短文與一頁程式產生的 PDF，總共不到 US$0.003。原始結果：
   - OpenAI `gpt-5.6-terra`（推理 low）：成功，3.8 秒，回應標頭約 3.1 秒到；輸入 50、輸出 24 token，US$0.000388，停止原因 `completed`。
   - Anthropic `claude-haiku-5-5`（low）：成功，0.8 秒，標頭約 0.57 秒到；輸入 1626、輸出 57，US$0.0001911，`end_turn`。
@@ -224,4 +225,4 @@ packages/ai-client/
   - 串流診斷（關掉標頭時限，請它寫約 600 字）：flash-lite 標頭 0.6 秒到、文字 1.8 秒內分 17 段送完；Haiku 標頭 0.9 秒到、6.1 秒內分 247 段；3.8 Flash 第一次 503、自動重送，第二次送出後約 176.6 秒標頭才到，文字在之後 5 秒內分 20 段送完（輸出 1552，推理 1062）。
   - 結論：Gemini 的思考不串流，想完才送回應標頭，套件原本 120 秒的標頭時限會把正常的請求算成逾時。照步驟 2「對不上的照實改」，改成 Gemini 預設不另外限時、只照整體期限（〈7〉第 4 點，PR #67，先寫重現 121 秒逾時的失敗測試再改，套件 222 個測試通過）。「連不上時照樣重送」的推斷（[已知的限制](../backlog.md#已知的限制)）對 Gemini 不成立，那一列改寫了。四種方言照現在的解析都拿到文字、用量與停止原因，範例回應不用改。
 
-延後的測試：「補測：雲端設定第 ① 件」
+延後的測試：無（原本延後的雲端設定第 ① 件，2026-11-27 補驗完，見上）

@@ -47,7 +47,7 @@ const blockOf = (node: Node, container: HTMLElement): Element => node.parentElem
  * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、空格連著後面的標點、
  * 喇叭那一格。回傳放線的那一格（找不到 ＿＿ 或不是打字卡時是 null）與喇叭那一格。
  */
-export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean; markers?: readonly string[]; breakFirst?: boolean }): { slot: HTMLElement | null; slots: HTMLElement[]; tail: HTMLElement; slotMissing: boolean } {
+export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean; markers?: readonly string[]; tailMarkers?: readonly string[]; breakFirst?: boolean }): { slot: HTMLElement | null; slots: HTMLElement[]; tail: HTMLElement; slotMissing: boolean; tails: (TailParts | null)[] } {
   const blanks: HTMLElement[] = [];
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
@@ -64,8 +64,11 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   }
   const typedSlot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
   // 英文的句子排序（tasks/english-typed-order.md §6-1、L2 R1）：每一格照自己的記號放，不找 ＿＿；找不到的格放在句尾。
+  // 會變的格後面的字（tasks/sentence-order-alternatives.md §5）先放好位置，格的記號旁邊就沒有私用區的字。
+  const tails = options.mode === 'pick' && options.tailMarkers ? insertTails(container, options.tailMarkers) : [];
   const marked = options.mode === 'pick' && options.markers ? insertMarkedSlots(container, options.markers, !!options.breakFirst) : null;
   const pickSlot = options.mode === 'pick' && !marked ? insertPickSlot(container) : null;
+  if (options.mode === 'pick') stripMarkAttributes(container, [...options.markers ?? [], ...options.tailMarkers ?? []]);
   const slotMissing = marked ? marked.some(each => !each) : options.mode === 'pick' && !pickSlot;
   const slots = marked ? marked.map(each => each ?? endSlot(container)) : [];
   // 比較卡一定要有空格（§3）：找不到時放在句尾。
@@ -74,7 +77,7 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   else if (slot) { blanks.push(slot); slots.push(slot); }
   if (options.english) glueText(container);
   blanks.forEach(gluePunctuation);
-  return { slot, slots, tail: attachTail(container), slotMissing };
+  return { slot, slots, tail: attachTail(container), slotMissing, tails };
 }
 
 /**
@@ -88,6 +91,68 @@ export const stripSlotMarks = (text: string): string => text.replace(PRIVATE_USE
   const code = hex ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
   return code >= 0xe000 && code <= 0xf8ff ? '' : reference;
 });
+
+/**
+ * 記號寫進了屬性（圖片的替代文字或標題，L2 第二輪 F5）就沒有位置可放，格照找不到放在句尾；屬性裡的記號拿掉，
+ * 圖片載入不了或輔助工具讀出來時不會碰到。只拿掉這一次放的記號（L2 第三輪 F10）：作者寫的私用區字、沒放記號的比較卡照原樣。
+ */
+function stripMarkAttributes(container: HTMLElement, marks: readonly string[]): void {
+  if (!marks.length) return;
+  for (const element of Array.from(container.querySelectorAll('*'))) {
+    for (const { name, value } of Array.from(element.attributes)) {
+      const clean = marks.reduce((text, mark) => text.replaceAll(mark, ''), value);
+      if (clean !== value) element.setAttribute(name, clean);
+    }
+  }
+}
+
+/**
+ * 句子排序第 k 個會變的格後面的字在 Markdown 裡的記號（tasks/sentence-order-alternatives.md §5）：私用區的另一段（U+E800 起），和格的記號分開。
+ * 另一種排法讓某個位置的標點跟著作答改變時，句子的 Markdown 不變、不重畫（重畫時整句空一個畫面，L2 第一輪在 Windows 量到），只改這裡的字。
+ */
+export const tailMark = (index: number): string => String.fromCharCode(0xe800 + index);
+
+/** 一個會變的格後面的字放的三段：前面的標點和前一格包在一起、後面的開括號和下一格包在一起（gluePunctuation），中間照常換行。 */
+export interface TailParts { close: Element; mid: Element; open: Element }
+
+/** 照記號的順序各放三段空的 span；找不到（在受保護的內容裡）或畫面上不只一個的是 null，記號從畫面上拿掉。 */
+function insertTails(container: HTMLElement, markers: readonly string[]): (TailParts | null)[] {
+  return markers.map(marker => {
+    if ((container.textContent ?? '').split(marker).length === 2) {
+      for (const node of textNodes(container)) {
+        const text = node.textContent ?? '';
+        const at = text.indexOf(marker);
+        if (at < 0) continue;
+        const after = node.splitText(at);
+        after.textContent = text.slice(at + marker.length);
+        const part = (name: string): Element => {
+          const span = document.createElement('span');
+          span.className = 'ec-tail-text ' + name;
+          return span;
+        };
+        const parts = { close: part('is-close'), mid: part('is-mid'), open: part('is-open') };
+        after.before(parts.close, parts.mid, parts.open);
+        return parts;
+      }
+    }
+    for (const node of allText(container)) if (node.textContent?.includes(marker)) node.textContent = node.textContent.replaceAll(marker, '');
+    return null;
+  });
+}
+
+/** 會變的格後面的字照 texts（記號的順序）換：只改那三段的字，開括號那一段在格的 .ec-glue 裡時跟著標 has-opening。 */
+export function fillTails(tails: readonly (TailParts | null)[], texts: readonly string[]): void {
+  tails.forEach((parts, i) => {
+    if (!parts) return;
+    const text = texts[i] ?? '';
+    const close = closingRun(text);
+    const open = openingRun(text.slice(close));
+    parts.close.textContent = text.slice(0, close);
+    parts.mid.textContent = text.slice(close, text.length - open);
+    parts.open.textContent = text.slice(text.length - open);
+    if (parts.open.parentElement?.matches('.ec-glue')) parts.open.parentElement.classList.toggle('has-opening', open > 0);
+  });
+}
 
 /**
  * 照記號的順序各放一格；找不到（記號在程式碼、公式等受保護的內容裡）或畫面上不只一個（別的寫法也渲染出同一個字）的是 null，
@@ -138,19 +203,31 @@ function gluedAround(element: Element): HTMLElement {
 function gluePunctuation(blank: HTMLElement): void {
   const before = blank.previousSibling instanceof Text ? blank.previousSibling : null;
   const after = blank.nextSibling instanceof Text ? blank.nextSibling : null;
+  // 會變的格後面的字（insertTails）：前一段的開括號、後一段的標點整段包進來，字由 fillTails 放。
+  const openTail = tailPart(blank, 'is-open');
+  const closeTail = tailPart(blank, 'is-close');
   const opening = before ? openingRun(before.textContent ?? '') : 0;
   const closing = after ? closingRun(after.textContent ?? '') : 0;
-  if (!opening && !closing) return;
+  if (!opening && !closing && !openTail && !closeTail) return;
   const glue = gluedAround(blank);
-  if (before && opening) {
+  if (openTail) glue.append(openTail);
+  else if (before && opening) {
     glue.classList.add('has-opening');
     glue.append(before.splitText(before.length - opening));
   }
   glue.append(blank);
-  if (after && closing) {
+  if (closeTail) glue.append(closeTail);
+  else if (after && closing) {
     after.splitText(closing);
     glue.append(after);
   }
+}
+
+/** 格前面（is-open）或後面（is-close）緊接的那一段會變的字；中間空的文字節點（插格時切出來的）跳過。 */
+function tailPart(blank: HTMLElement, name: 'is-open' | 'is-close'): Element | null {
+  let node = name === 'is-open' ? blank.previousSibling : blank.nextSibling;
+  while (node instanceof Text && !node.length) node = name === 'is-open' ? node.previousSibling : node.nextSibling;
+  return node instanceof Element && node.matches('.ec-tail-text.' + name) ? node : null;
 }
 
 const emptySlot = (): HTMLElement => {

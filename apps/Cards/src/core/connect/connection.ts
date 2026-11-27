@@ -11,7 +11,7 @@ const RECOMMENDED: readonly { provider: string; tag: string; model: string }[] =
 ];
 
 /**
- * 服務的名稱（不含標籤）：只有一套，就是目錄的名稱（ChatGPT、Claude、Gemini、OpenRouter，D-242）。
+ * 服務的名稱（不含標籤）：只有一套，就是目錄的名稱（ChatGPT、Claude、Gemini、OpenRouter，D-244）。
  * 選單、畫面、快照的 `服務` 與錯誤紀錄都用它，和複製貼上選的服務同一套名字。
  */
 export function providerName(provider: ProviderSpec): string {

@@ -43,7 +43,7 @@ interface DirectUsage { input: number | null; cacheRead: number | null; cacheWri
 
 /** 成功那一次的證據（§7）：服務名稱、要求與回報的模型、推理等級與實際送出的參數、收到的時刻、用量、費用、編號、送出的教材檔、收到的整段。 */
 export interface DirectEvidence {
-  /** 服務名稱（ChatGPT、Claude、Gemini、OpenRouter）：名稱只有一套，快照的 `服務` 照寫（D-242）。 */
+  /** 服務名稱（ChatGPT、Claude、Gemini、OpenRouter）：名稱只有一套，快照的 `服務` 照寫（D-244）。 */
   service: string;
   requestedModel: string;
   /** 服務回報的模型原樣；沒回報是 null（快照寫「未回報」）。 */

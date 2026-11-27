@@ -144,7 +144,7 @@ function tokens(n: number): string {
 const tokenCount = (value: number | null): number | null => value !== null && Number.isSafeInteger(value) && value >= 0 ? value : null;
 
 /**
- * 成功那一次的證據（§7）：service 是服務的名稱（providerName，D-242），files 是這一次送出的教材檔，reasoning 是設定頁的推理等級（照服務的預設是 null），now 是收到的當下（取時區）。
+ * 成功那一次的證據（§7）：service 是服務的名稱（providerName，D-244），files 是這一次送出的教材檔，reasoning 是設定頁的推理等級（照服務的預設是 null），now 是收到的當下（取時區）。
  * 收到的時刻用套件的 trace.finishedAt；讀不出來才用 now。收到的整段用 result.text（套件遮過金鑰的整段，不自己累加串流的片段）。
  */
 export function evidenceOf(result: GenerateResult, service: string, files: readonly SentFile[], reasoning: string | null, now: { ms: number; offset: number }): DirectEvidence {
@@ -234,7 +234,7 @@ export async function sendDirect(client: AiClient, request: GenerateRequest): Pr
   return failure ? { ok: false, failure, error: null, result, partial: result.text || null } : { ok: true, result };
 }
 
-/** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務名稱（D-242）、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */
+/** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務名稱（D-244）、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */
 export interface DirectLog { msg: string; service: string; model: string; status: number | null; requestId: string | null; attempts: number }
 
 /** 錯誤紀錄裡服務給的字串最多幾個字（模型名稱、請求編號）：一行有 2,000 bytes 的上限，太長的整行會被丟掉。 */

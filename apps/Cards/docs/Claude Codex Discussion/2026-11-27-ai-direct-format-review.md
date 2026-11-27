@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 2 批的格式查核（查核紀錄）
 
-狀態：已結案 → [D-242](../../../../docs/decisions.md#d-242-ai-服務的名稱只有一套)｜完成：F9 由使用者 2026-11-27 定成服務名稱只有一套；其餘照〈Claude 回應〉改進了任務說明 §7，第 2 批照做（PR #83）｜等誰：—
+狀態：已結案 → [D-244](../../../../docs/decisions.md#d-244-ai-服務的名稱只有一套)｜完成：F9 由使用者 2026-11-27 定成服務名稱只有一套；其餘照〈Claude 回應〉改進了任務說明 §7，第 2 批照做（PR #83）｜等誰：—
 
 查核請求：[ai-direct-format-review.md](../tasks/ai-direct-format-review.md)；任務說明：[ai-direct.md](../tasks/ai-direct.md) §7。
 
@@ -134,7 +134,7 @@
 
 #### F9 `服務`：同一個鍵兩種值域，直接製作的值用顯示名稱會變
 
-→ [D-242](../../../../docs/decisions.md#d-242-ai-服務的名稱只有一套)（2026-11-27）
+→ [D-244](../../../../docs/decisions.md#d-244-ai-服務的名稱只有一套)（2026-11-27）
 
 - **觸發條件**：複製貼上寫家長選的 `ChatGPT`、`Claude`、`Gemini`、`其他`（產品名，自己說的、選填）。直接製作 §7 寫「廠商的名稱」，例如 `Google AI Studio`；但設定頁的名稱第 1 批 L2 就改過一次（「Google Gemini」），目錄裡是 `Anthropic Claude`（`packages/ai-client/catalog.json:34`）。
 - **預期與實際**：之後照 `服務` 分組時，`Claude`（貼上）和 `Anthropic Claude`（API）、改名前後的名稱會散成好幾組。現在沒有程式讀 `服務`（已 grep），所以不會出錯，只是之後難用。

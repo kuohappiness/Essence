@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { depsState } from './deps-state.ts';
 import { NAMES, TARGETS, dispatch, folder, readChanges, shown, type Dispatch, type Target } from './dispatch.ts';
 import { mergeHeads } from './git-state.ts';
 
@@ -38,6 +39,18 @@ function cleanEnv(root: string): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (names.has(key.toUpperCase())) delete env[key];
   return env;
+}
+
+/** 套件和鎖檔對不上時的說明：原本會停在「找不到某個套件」，看不出是要重裝（優化 Essence 開發流程第 1 步）。 */
+const staleDeps = (who: string, where: string, detail: string) =>
+  `${who}裝的套件和鎖檔對不上（${detail}；多半是併了 main 或換了分支）：先在${where}執行 npm ci。`;
+
+/** 共用檢查用 tools/ 的套件：.githooks/ 只確認裝過，這裡再和鎖檔比。 */
+function toolsReady(root: string): boolean {
+  const deps = depsState(join(root, 'tools'));
+  if (deps.state === 'ok') return true;
+  console.error(deps.state === 'missing' ? '先在 tools/ 執行 npm ci（共用檢查的相依）' : staleDeps('共用檢查用的 tools/ ', ' tools/ ', deps.detail));
+  return false;
 }
 
 /** 外掛的 package.json 有沒有相依：有的話要先 npm ci。 */
@@ -108,8 +121,14 @@ function runTarget(root: string, copy: string, target: Target, result: Dispatch,
     console.error(`${name}：${where}沒有 package.json，跑不了檢查。`);
     return undefined;
   }
-  if (needsInstall(dir) && !existsSync(join(root, folder(target), 'node_modules'))) {
+  // 鎖檔讀副本的（這次要 commit 的），套件是工作樹裝的（副本借用的那份）。
+  const deps = needsInstall(dir) ? depsState(dir, join(root, folder(target))) : undefined;
+  if (deps?.state === 'missing') {
     console.error(`${name} 要檢查，先在${where}執行 npm ci。`);
+    return undefined;
+  }
+  if (deps?.state === 'stale') {
+    console.error(staleDeps(`${name} 要檢查，但${where}`, where, deps.detail));
     return undefined;
   }
   // 測試改用 dot reporter：通過的只印一個點，失敗的照常印出，exit code 照常傳回。AI 讀 commit 的輸出要花 token，
@@ -141,7 +160,7 @@ export function preCommit(root: string): number {
     console.error(`擋下：${result.blocked.map(shown).join('、')} 是子模組（gitlink），這個 repo 不支援子模組。`);
     return 1;
   }
-  if (!runShared(root)) return 1;
+  if (!toolsReady(root) || !runShared(root)) return 1;
   const env = cleanEnv(root);
   const parts = ['共用檢查通過'];
   // 有對象要跑才取出副本（照表全部跳過的 commit 不多花時間）。
@@ -182,7 +201,7 @@ const gh = (args: string[], env: NodeJS.ProcessEnv) =>
  */
 export function preMergeCommit(root: string): number {
   // 合併不經過 pre-commit：在原本的環境跑一次共用檢查，讀合併的索引。
-  if (!runShared(root)) return 1;
+  if (!toolsReady(root) || !runShared(root)) return 1;
   let branch = '';
   try { branch = git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD']); } catch { /* 分離的 HEAD：不是 main */ }
   if (branch !== 'main') return 0;

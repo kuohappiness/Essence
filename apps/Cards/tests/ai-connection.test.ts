@@ -19,7 +19,7 @@ void test('服務的選單：ChatGPT（推薦）、Gemini（免費）排最上�
   assert.deepEqual(modelChoices(provider('anthropic')).map(choice => choice.label), ['Claude Opus 5.5', 'Claude Sonnet 5.5', 'Claude Haiku 5.5', 'Claude Fable 5.2']);
   assert.deepEqual(modelChoices(provider('openrouter')), []);
   assert.deepEqual(REASONING_CHOICES.map(choice => choice.label), ['照服務的預設', '低', '中', '高']);
-  // 服務的名稱只有一套（D-242）：選單、畫面、快照與錯誤紀錄都是這幾個，和複製貼上選的服務同一套。
+  // 服務的名稱只有一套（D-244）：選單、畫面、快照與錯誤紀錄都是這幾個，和複製貼上選的服務同一套。
   assert.deepEqual(providers.map(providerName), ['ChatGPT', 'Claude', 'Gemini', 'OpenRouter']);
   for (const id of ['openai', 'anthropic', 'google']) assert.ok((SERVICES as readonly string[]).includes(providerName(provider(id))), id);
 });

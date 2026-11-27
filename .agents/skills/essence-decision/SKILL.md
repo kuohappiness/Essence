@@ -10,7 +10,7 @@ description: 把使用者明確同意的事寫成 Essence Cards 的 D-ID 決定�
 ## 步驟
 
 1. **要不要寫成 D-ID**（D-215 第 5 點）：改不回來的（資料格式、學習目標 ID、複習紀錄、排程、相容）、跨外掛或整個專案的規則、產品範圍，才寫成 D-ID。其他小事，在那件事現在的位置（任務說明、plans、討論稿或 backlog 的那一項）寫「使用者 YYYY-MM-DD 同意」加一句內容，不寫 D-ID。拿不準就寫 D-ID。
-2. **查重**：已知 D-ID 用 `node tools/decisions-index.ts D-xxx`（預設只印一層，`--deep` 全印）；不知道時讀索引裡相關的主題。D-ID 不重用：新編號是 `origin/main` 的最大號加一（先 `git fetch`）；同時有別的 session 在寫決定時，先用 SendMessage 預約。分支上寫的決定，合併前再查一次有沒有撞號（D-172 曾被 main 先用掉，分支的改成 D-174）。
+2. **查重**：已知 D-ID 用 `node tools/decisions-index.ts D-xxx`（預設只印一層，`--deep` 全印）；不知道時讀索引裡相關的主題。D-ID 不重用：新編號用 `node tools/in-flight.ts` 最後一行的「下一個可以用」（`origin/main` 與開著的 PR 都算過）；同時有別的 session 在寫決定、還沒開 PR 時，先用 SendMessage 預約。分支上寫的決定，合併前再跑一次確認沒有撞號（D-172 曾被 main 先用掉，分支的改成 D-174）。
 3. **寫條目**：在正文最後加：
 
    ```markdown

@@ -82,13 +82,13 @@
 說明書的「申請 API 金鑰」一節（D-048 補充）以這裡推薦的服務為準，每一家都寫到「打開官方頁面」，細節連到官方說明，並寫上查核日期：
 
 - **Google AI Studio**（選單上叫 Gemini）：用 Google 帳號登入，建立 API 金鑰。
-- **OpenAI**（選單上叫 ChatGPT；使用者 2026-10-14 要求加入）：寫明這是 OpenAI 的 API 金鑰、另外計費，和 ChatGPT 的訂閱無關（D-242 第 5 點）。在 API 金鑰頁面（platform.openai.com/api-keys）建立金鑰，Project 要選**開啟了資料分享的那個專案**，用量才會算進每天的免費額度；金鑰只顯示一次，要當場複製。開啟資料分享的方法也要寫（設定裡的 Data controls）。
+- **OpenAI**（選單上叫 ChatGPT；使用者 2026-10-14 要求加入）：寫明這是 OpenAI 的 API 金鑰、另外計費，和 ChatGPT 的訂閱無關（D-244 第 5 點）。在 API 金鑰頁面（platform.openai.com/api-keys）建立金鑰，Project 要選**開啟了資料分享的那個專案**，用量才會算進每天的免費額度；金鑰只顯示一次，要當場複製。開啟資料分享的方法也要寫（設定裡的 Data controls）。
 - **Mistral**：申請時要驗證手機號碼。
 - 金鑰貼進外掛的設定頁；外掛只存在電腦本機（D-003）。
 
 ## 外掛的預設選單
 
-家長選一個、貼上金鑰；網址與模型由外掛填好，也可以選「自訂」自己填（D-072）。選單照這張表做；服務的名稱只有一套（ChatGPT、Claude、Gemini、OpenRouter），寫在共用套件的目錄 `packages/ai-client/catalog.json`，快照與錯誤紀錄也用同一套（[D-242](decisions.md#d-242-ai-服務的名稱只有一套)）：
+家長選一個、貼上金鑰；網址與模型由外掛填好，也可以選「自訂」自己填（D-072）。選單照這張表做；服務的名稱只有一套（ChatGPT、Claude、Gemini、OpenRouter），寫在共用套件的目錄 `packages/ai-client/catalog.json`，快照與錯誤紀錄也用同一套（[D-244](decisions.md#d-244-ai-服務的名稱只有一套)）：
 
 | 選單上的名稱 | 網址 | 製卡的模型 |
 |---|---|---|
