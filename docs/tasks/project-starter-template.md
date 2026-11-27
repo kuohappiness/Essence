@@ -1,6 +1,6 @@
 # 新專案的初始架構：起步包與成長包（給 Claude，雲端執行）
 
-狀態：實作中｜下一步：另開一串照本文件做第 1 批（`files/` 的文件、三個 skill 與 Essence 這邊的登記）｜等誰：Claude
+狀態：實作中｜下一步：第 1 批 PR 等使用者同意合併；接著做第 2 批（防線）｜等誰：使用者、Claude
 
 來自：[D-247](../decisions.md#d-247-新專案的初始架構分起步包與成長包防線第-0-天就帶)
 
@@ -220,6 +220,13 @@ Essence 這邊：
 
 ## 結果
 
-（實作後填：每一批做了什麼、〈9〉每一件查到什麼、驗收每一項的結果、過程中發現要回頭改 Essence 的事。）
+### 第 1 批：文件與登記（2026-11-27）
+
+- **做了什麼**：`files/` 的 `AGENTS.md`、`CLAUDE.md`、`docs/workflow.md`、`docs/roadmap.md`、`docs/backlog.md`、`docs/decisions/`（`README.md` 與 `D-001.md`）、`docs/agents/quality.md`；三個 skill（`discuss`、`decision`、`code-quality` 連同 `UPSTREAM.md`）；`README.md` 初稿。Essence 這邊：分派表加第 9 條「給新專案的模板」（`templates/` 只讓共用工具跑相關測試，CI 升成共用工具完整；原第 9、10 條改成第 10、11 條），architecture 的樹狀圖與〈每一類放哪裡〉各一行，測試 `tools/tests/project-starter.test.ts`。
+- **〈9〉第 1 件（巢狀的 `.claude/`）**：會載入。雲端用 Claude Code 2.1.332 的 `claude -p` 在暫存 repo 實測：開場不列，但一讀到子資料夾裡的檔，那裡 `.claude/skills/` 的 skill 就出現在可用清單。所以 `files/` 裡改叫 `dot-claude/`，使用說明的複製步驟加一步改回 `.claude/`；測試擋 `files/.claude` 再出現。驗收第 2 項的複製步驟（第 2 批）照這個做。
+- **順帶查到：巢狀的 `AGENTS.md`、`CLAUDE.md` 也會載入**：同一個實測裡，讀到子資料夾的檔時，那裡的 `AGENTS.md`（有沒有 `CLAUDE.md` 都會）被當成那個資料夾的規則送進來。所以 Essence 的 session 編輯模板時，會看到模板的 `AGENTS.md`。不改名：這兩個檔是起步包的核心，改名會讓複製多一步、容易漏；內容是通用規則，滿是【待填】，看得出是範本；architecture 那一行寫明 Essence 不照著做。
+- **〈9〉第 2 件（文件檢查會不會把模板的 roadmap、backlog 當成 Essence 的）**：不會。文件檢查、狀態板同步、進度白板認 roadmap、backlog、決策紀錄與狀態檔，都是從 repo 根目錄或 `apps/<軟體>/` 起算的固定路徑；模板的 Markdown 只查連結（實測放一個壞連結會被擋）。skill 一致性檢查只看根目錄的 `.claude/skills/`、`.agents/skills/`。都不用排除。lint、型別檢查與 knip 的範圍是 `tools/`，模板還沒有程式，第 2 批加 `.mjs` 時再確認。
+- **驗收**：第 1 項（掃字詞與決定編號，出處那一行是唯一例外）、第 7 項（授權全文和 Essence 那份一樣）由 `project-starter.test.ts` 守；第 9 項由分派表的測試（模板裡的 hook、CI、程式都不觸發任何軟體）與共用檢查守。
+- **分派的取捨**：commit 時「相關測試」只選寫到改動路徑全名的測試，模板的測試寫的是資料夾，所以只改模板的 commit 不跑它，CI 跑。要 commit 時也跑，得改分派的找法（任務說明說改分派邏輯要停下來做 L2），好處不大，沒做。
 
 延後的測試：（收尾時填）
