@@ -309,14 +309,15 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       return [body, ...node.children.map(child => markdown(child, base, true)).filter(Boolean)].join('\n');
     }
     /**
-     * 題目的一項補充。另一種排法照它在原文的範圍放（L2 第一輪 R2、第二輪 F4）：底下的資料欄位、子項目，清單不建項目的圍欄程式碼與引言都在，
+     * 題目的一項補充。另一種排法照它在原文的範圍放（L2 第一輪 R2、第二輪 F4、第三輪 F9）：底下的資料欄位、子項目，清單不建項目的圍欄程式碼與引言都在，
      * 有就多出一行、不認（order.ts 的 readOther）；欄位照樣屬於整個目標。
      */
     const extraOf = (child: Item): string => {
       if (!ALT_LIKE.test(child.text)) return markdown(child);
-      const rest = lines.slice(child.starts[child.starts.length - 1].line + 1, child.end).map(({ raw }) =>
+      // 整段照原文（L2 第三輪 F9）：接續行、子項目、後面的段落照原本的順序，不只取最後一條接續行之後的。
+      const rest = lines.slice(child.line + 1, child.end).map(({ raw }) =>
         raw.trim() ? ' '.repeat(Math.max(0, /^ */.exec(expandTabs(raw))![0].length - child.indent)) + raw.trim() : '');
-      return [child.text, ...rest].join('\n');
+      return [lines[child.line].raw.slice(child.starts[0].column).trimEnd(), ...rest].join('\n');
     };
     /** 寫在題目的下一層、當成那一題補充的另一種排法：句子排序在 readKind 讀，其他卡型下面提示；其他位置的由 misplaced 提示。 */
     const placed = new Set<Item>();

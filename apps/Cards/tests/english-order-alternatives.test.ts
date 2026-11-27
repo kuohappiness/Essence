@@ -112,6 +112,10 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   under(['```', 'note', '```'], '底下是圍欄程式碼');
   under(['> note'], '底下是引言');
   under(['', 'note'], '空一行後的段落');
+  // L2 第三輪 F9：不認的排法照原文整段當補充，子項目後面空一行接的段落也不漏前面的。
+  const both = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n            - Child note.\n\n          After child.\n`);
+  assert.deepEqual(codes(both), [[4, 'order-alt-invalid']]);
+  assert.equal(both.targets[0].prompts[0].extras[0], `${ALT}\n    - Child note.\n\n  After child.`);
   const spaced = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n\n    - ${PARK}\n`);
   assert.deepEqual(codes(spaced), [], '後面空一行接下一題：排法底下沒有東西');
   assert.equal(othersOf(spaced)?.length, 1);
