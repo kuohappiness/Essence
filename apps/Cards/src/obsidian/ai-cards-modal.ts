@@ -97,6 +97,8 @@ class AiCardsModal extends Modal {
   private timer: number | null = null;
   /** 關掉視窗前問過要不要取消送出中的那一個（§6 最後一點）；停用外掛時不問。 */
   private forced = false;
+  /** 拖進視窗的檔交給誰（§5）：只有畫著教材欄的畫面有，換畫面時清掉。監聽器只在開視窗時掛一次，重畫教材欄不再多掛（PR #83 的 GitHub 審查）。 */
+  private dropped: ((files: File[]) => void) | null = null;
   constructor(app: App, host: AiCardsModalHost, modals: Set<AiCardsModal>) {
     super(app);
     this.host = host;
@@ -106,6 +108,13 @@ class AiCardsModal extends Modal {
     this.modals.add(this);
     this.modalEl.addClass('essence-cards-ai-modal');
     this.titleEl.setText(TEXT.title);
+    // 從檔案總管拖進整個視窗（§5）：沒有教材欄的畫面不攔，照 Obsidian 原本的處理。
+    this.contentEl.addEventListener('dragover', event => { if (this.dropped) event.preventDefault(); });
+    this.contentEl.addEventListener('drop', event => {
+      if (!this.dropped) return;
+      event.preventDefault();
+      this.dropped(Array.from(event.dataTransfer?.files ?? []));
+    });
     this.start();
   }
   onClose(): void { this.stopTimer(); this.modals.delete(this); this.contentEl.empty(); }
@@ -158,6 +167,7 @@ class AiCardsModal extends Modal {
   private reset(): HTMLElement {
     this.stopTimer();
     this.inList = false;
+    this.dropped = null;
     this.contentEl.empty();
     this.contentEl.addClass('essence-cards-ai');
     return this.contentEl;
@@ -305,9 +315,7 @@ class AiCardsModal extends Modal {
       changed();
     };
     input.addEventListener('change', () => { void add(Array.from(input.files ?? [])); input.value = ''; });
-    // 從檔案總管拖進整個視窗（§5）。
-    this.contentEl.addEventListener('dragover', event => { event.preventDefault(); });
-    this.contentEl.addEventListener('drop', event => { event.preventDefault(); void add(Array.from(event.dataTransfer?.files ?? [])); });
+    this.dropped = files => { void add(files); };
     return draw;
   }
 
