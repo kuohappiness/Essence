@@ -6,7 +6,7 @@ import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv, pluginRoot } from '../tools/git.ts';
-import { otherSentences, parseDeck, shownTails } from '../src/core/deck/index.ts';
+import { movingTails, otherSentences, parseDeck, shownTails } from '../src/core/deck/index.ts';
 import type { Deck } from '../src/core/deck/index.ts';
 import { cardOf } from '../src/core/study/index.ts';
 import { RATE_DELAY } from '../src/review/index.ts';
@@ -322,6 +322,8 @@ void test('畫面的字串：作答時藏起不一樣的標點、最後一格後
   assert.deepEqual(shownTails(order, [1]), [' ', ', ', '.']);
   assert.deepEqual(shownTails(order, [0]), [' ', ' ', '.']);
   assert.deepEqual(shownTails(order, undefined), [' ', ' ', '.']);
+  assert.deepEqual(movingTails(order), [false, true, false], '只有第 2 格後面會變（畫面只換那裡的字）');
+  assert.deepEqual(movingTails(orderOf(one(BECAUSE, []))), [false, false, false]);
   assert.deepEqual(others(order, 1), ['I went to bed early because I was tired.']);
   assert.deepEqual(others(order, 0), ['Because I was tired, I went to bed early.']);
 

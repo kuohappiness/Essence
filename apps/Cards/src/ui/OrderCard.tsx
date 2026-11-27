@@ -1,10 +1,10 @@
-import { otherSentences, shownTails } from '../core/deck/index.ts';
+import { movingTails, otherSentences, shownTails } from '../core/deck/index.ts';
 import { extraLabel, orderNotes } from '../review/index.ts';
 import type { PickView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
 import { MARKS, partsOf, pickScreen } from './PickCard.tsx';
-import { slotMark, stripSlotMarks } from './rendered.ts';
+import { slotMark, stripSlotMarks, tailMark } from './rendered.ts';
 import type { BodyProps, Screen } from './screen.tsx';
 
 // 排序的畫面（題型 order，題型模組任務說明 §1-8）：全詩順序卡（D-187、D-204）與英文的句子排序（tasks/english-typed-order.md §6）兩個題目區，
@@ -30,8 +30,12 @@ function SentenceBody({ view, app, act, onPainted, onFail }: BodyProps): React.J
   const starts = order?.starts ?? [];
   // 每一格用自己的記號（L2 R1）：題目本來的 ＿＿、相鄰的兩格都不會搞混。
   // 格後面的字照還算數的那幾種對的順序的共同部分（tasks/sentence-order-alternatives.md §5）；沒有另一種排法時照題目那一行。
+  // 每一種對的順序都一樣的照寫進句子；不一樣的位置寫 tailMark、字另外給（tailTexts），作答時句子不重新渲染（L2 第一輪：重畫會閃一下）。
   const tails = order ? shownTails(order, pick.orders) : [];
-  const text = stripSlotMarks(order?.head ?? '') + card.blanks.map((_, i) => slotMark(i) + stripSlotMarks(tails[i] ?? '')).join('');
+  const moving = order ? movingTails(order) : [];
+  const marks = moving.reduce<number[]>((list, each, at) => each ? [...list, at] : list, []);
+  const text = stripSlotMarks(order?.head ?? '') + card.blanks.map((_, i) => slotMark(i) + (moving[i] ? tailMark(marks.indexOf(i)) : stripSlotMarks(tails[i] ?? ''))).join('');
+  const tailTexts = marks.map(at => tails[at] ?? '');
   const slots = card.blanks.map((_, index) => {
     const cell = pick.cells[index];
     const shown = starts[index] && cell.text && cell.state !== 'skipped' && cell.state !== 'miss' ? capital(cell.text) : cell.text;
@@ -46,7 +50,7 @@ function SentenceBody({ view, app, act, onPainted, onFail }: BodyProps): React.J
     <ul className="ec-pick-rows"><li className={'ec-pick-row' + (pick.stage === 'result' ? ' is-locked' : '')}>
       <span className="ec-pick-mark" data-state={mark}>{MARKS[mark] ?? ''}</span>
       <div className="ec-pick-text">
-        <Markdown app={app} text={text} sourcePath={card.deck} mode="pick" english slotNodes={slots} breakFirst={starts[0]} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
+        <Markdown app={app} text={text} sourcePath={card.deck} mode="pick" english slotNodes={slots} breakFirst={starts[0]} {...(marks.length ? { tailTexts } : {})} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
       </div>
     </li></ul>
     {extras.length > 0 && <div className="ec-ex ec-answer">{extras.map((extra, index) => {

@@ -5,7 +5,7 @@ import type { App } from 'obsidian';
 import type { Session } from '../src/review/index.ts';
 import { setup } from './helpers/pick-session.ts';
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
-import { slotMark } from '../src/ui/rendered.ts';
+import { slotMark, tailMark } from '../src/ui/rendered.ts';
 
 // 英文的句子排序卡的畫面（tasks/english-typed-order.md §6-1、§6-2）：用 hook 替身跑真的 Review。版面在 Obsidian 用開發命令看。
 const NO_OWNER = { term: null, subject: null, unit: null };
@@ -58,7 +58,12 @@ const ALT_DECK = `---
         - 詳解：because 放前面時，兩個子句中間加逗號
 `;
 const HEAD = 'I was tired. I went to bed early.（用 because 合成一句）';
-const sentenceText = (ui: ReviewUi): unknown => ui.find('ec-pick-text')[0].children.map(child => typeof child === 'string' ? child : child.props.text)[0];
+const sentenceProps = (ui: ReviewUi): Record<string, unknown> => {
+  const markdown = ui.find('ec-pick-text')[0].children[0];
+  return typeof markdown === 'string' ? {} : markdown.props;
+};
+// 句子的 Markdown 文字作答中不變（L2 第一輪：字一變整句重畫、閃一下），會變的格後面的字另外給（tailTexts）。
+const SENTENCE = HEAD + slotMark(0) + ' ' + slotMark(1) + tailMark(0) + slotMark(2) + '.';
 const exRows = (ui: ReviewUi): [string, unknown][] => ui.find('ec-ex-item').map(item => {
   const label = ui.find('ec-ex-label').find(each => item.children.includes(each));
   const row = item.children.find(child => typeof child !== 'string' && child.props.className === 'ec-ex-row');
@@ -70,13 +75,13 @@ void test('另一種排法：作答時第 2 格後面是空白；排另一種是
   const h = await setup(t, { [P]: ALT_DECK });
   const s = await h.open({ subject: '英文' });
   const ui = await show(t, s);
-  assert.equal(sentenceText(ui), HEAD + slotMark(0) + ' ' + slotMark(1) + ' ' + slotMark(2) + '.');
+  assert.deepEqual([sentenceProps(ui).text, sentenceProps(ui).tailTexts], [SENTENCE, [' ']]);
   for (const word of ['because', 'I was tired', 'I went to bed early']) { h.clock.now += 400; ui.click(ui.find('ec-pick-key')[keyTexts(ui).indexOf(word)]); }
   h.clock.now += 400;
   ui.click(ui.find('ec-pick-check')[0]);
   await ui.settle();
   assert.equal(ui.text(ui.find('ec-pick-mark')[0]), '✓');
   assert.deepEqual(slotTexts(ui), ['Because', 'I was tired', 'I went to bed early']);
-  assert.equal(sentenceText(ui), HEAD + slotMark(0) + ' ' + slotMark(1) + ', ' + slotMark(2) + '.');
+  assert.deepEqual([sentenceProps(ui).text, sentenceProps(ui).tailTexts], [SENTENCE, [', ']]);
   assert.deepEqual(exRows(ui), [['另一種排法：', 'I went to bed early because I was tired.'], ['詳解：', 'because 放前面時，兩個子句中間加逗號']]);
 });

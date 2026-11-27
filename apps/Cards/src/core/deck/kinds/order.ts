@@ -95,6 +95,14 @@ export function shownTails(order: SentenceShape, orders: readonly number[] | und
 }
 
 /**
+ * 格後面的字在每一種對的順序都一樣嗎（§5）：不一樣的位置（true）畫面另外放、作答時只換那裡的字，句子本身不重新渲染（L2 第一輪：重畫會閃一下）。
+ * 沒有另一種排法時都是 false。
+ */
+export function movingTails(order: SentenceShape): boolean[] {
+  return order.tails.map((tail, at) => (order.others ?? []).some(other => other.tails[at] !== tail));
+}
+
+/**
  * 結果是第 result 種時，其他對的順序的整句（照寫的順序，題目那一行最前）：題目第一格前面看得到的英文（sentenceLead），
  * 接上詞塊與格後面的字，句首大寫照 starts。words 是題目那一行的詞塊（CardGroup.members）。
  */
