@@ -137,6 +137,9 @@ void test('§9 重開 Obsidian 之後：上一次有附教材的要重選才能�
   await sleep(10);
   assert.ok(button(modal.contentEl, '重送')?.disabled, '還沒選教材不能送');
   assert.ok(texts(modal.contentEl).some(each => each.includes('要重新選一次')));
+  // 教材欄的說明寫要選，不寫「選填」（L2 第一輪小項 4）。
+  assert.ok(!texts(modal.contentEl).some(each => each.startsWith('選填')), texts(modal.contentEl).join('|'));
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('上一次附了教材檔')), texts(modal.contentEl).join('|'));
   const file = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'file');
   assert.ok(file);
   file.files = [pdf()];
@@ -221,6 +224,21 @@ void test('§9 收到的回覆把框整個清空、關掉再開：框裡是收�
   const again = await openModal();
   assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
   assert.equal(textarea(again.contentEl)?.value, REPLY);
+});
+
+void test('§9 上一次沒有附教材檔、送不成按「重送」：重送的畫面不寫「上一次選的教材檔」，也不用選檔（L2 第一輪小項 4、實機第 2 點）', async t => {
+  const { made, openModal } = await open(t, [unauthorized, ok(REPLY)]);
+  const modal = await openModal();
+  await sendFromForm(modal, []);
+  button(modal.contentEl, '重送')?.click();
+  await sleep(10);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('上一次沒有附教材檔')), texts(modal.contentEl).join('|'));
+  assert.ok(!texts(modal.contentEl).some(each => each.includes('上一次選的教材檔')), texts(modal.contentEl).join('|'));
+  assert.ok(!all(modal.contentEl).some(each => each.tag === 'input' && each.type === 'file'));
+  button(modal.contentEl, '重送')?.click();
+  await sleep(100);
+  assert.equal(made.fetch.requests.length, 2);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
 });
 
 void test('§9 送不成按「改用複製貼上」：同一份提示進剪貼簿，框是空的、說明換成自己附教材；貼回存成複製貼上的快照', async t => {

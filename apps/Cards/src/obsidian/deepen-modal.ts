@@ -30,6 +30,9 @@ const TEXT = {
   unreadable: '讀不到這一篇（可能還在從 iCloud 下載）；等一下再按「重試」。',
   /** 加深送的是這一篇的地圖與記穩的目標，通常不用附課本（§9）。 */
   filesNote: '選填。加深通常不用附課本；要附的話放這一課的 PDF 或照片（JPG、PNG），也可以拖進來。',
+  /** 重送的畫面（L2 第一輪小項 4）：上一次附了教材、重開過要重選的，這一欄是必選；上一次沒附的，不寫「上一次選的教材檔」。 */
+  reselectNote: '上一次附了教材檔，選好才能重送；PDF 或照片（JPG、PNG），也可以拖進來。',
+  resendNoFiles: '上一次沒有附教材檔，用同一份提示重送；照設定頁現在的服務與模型送出。',
   reading: '正在讀這一篇…',
   received: 'AI 回好了，整段已經放進下面的框、檢查過；看過結果再寫進卡組。',
   /** 收到的回覆沒有 <<<完>>>（同製卡的 L2 第一輪 R3）：不是家長沒複製完，是 AI 沒寫完。 */
@@ -342,12 +345,12 @@ class DeepenModal extends Modal {
     const before = directJob(job)?.files.map(file => file.sha256) ?? [];
     this.materials = [];
     const el = this.reset();
-    el.createEl('p', { text: `${nameOf(job.deck)}：${kept ? DIRECT_TEXT.resendKept : DIRECT_TEXT.reselect}` });
+    el.createEl('p', { text: `${nameOf(job.deck)}：${!kept ? DIRECT_TEXT.reselect : before.length ? DIRECT_TEXT.resendKept : TEXT.resendNoFiles}` });
     let files: { draw(): void } | null = null;
     if (!kept) {
       const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
       grid.createEl('label', { text: '教材檔' });
-      const field = materialField(grid.createDiv(), this.materials, TEXT.filesNote, this.host.pdfPages, () => { refresh(); });
+      const field = materialField(grid.createDiv(), this.materials, TEXT.reselectNote, this.host.pdfPages, () => { refresh(); });
       this.dropped = picked => { void field.add(picked); };
       files = field;
     }
