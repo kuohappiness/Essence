@@ -119,3 +119,30 @@ void test('L2 R1 重開之後「接著看」，第一次存被擋下再「回上
   assert.equal(textarea(modal.contentEl)?.value, reply);
   assert.equal(directJob(made.cards.jobs()[0])?.state, 'received');
 });
+
+void test('L2 R2、R4 收到的回覆檢查擋住，按「改用複製貼上」：框是空的；關掉重開是「接著貼回」，貼別處的回覆存成複製貼上的快照', async t => {
+  const bad = `${reply}\n多出來的一行`;
+  const { made, openModal } = await open(t, [ok(bad)]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  button(modal.contentEl, '改用複製貼上')?.click();
+  await sleep(20);
+  assert.equal(made.clipboard.length, 1);
+  assert.equal(textarea(modal.contentEl)?.value, '', '框裡不留直接製作收到的那一份');
+  modal.close();
+  const again = openModal();
+  assert.ok(button(again.contentEl, '接著貼回'), texts(again.contentEl).join('|'));
+  assert.equal(button(again.contentEl, '接著看'), undefined);
+  button(again.contentEl, '接著貼回')?.click();
+  await sleep(10);
+  const box = textarea(again.contentEl);
+  assert.ok(box);
+  box.value = reply;
+  box.fire('input');
+  button(again.contentEl, '檢查')?.click();
+  button(again.contentEl, '存成草稿')?.click();
+  await sleep(150);
+  const { props } = propsOf(made.memory);
+  assert.equal(props['接法'], '複製貼上');
+  assert.equal('收到的回覆' in props, false);
+});

@@ -394,6 +394,8 @@ class AiCardsModal extends Modal {
     buttons.createEl('button', { text: '改用複製貼上' }).addEventListener('click', () => {
       void cards.fallback(job).then(plain => {
         if (!plain) { message.setText('放不進剪貼簿；請再按一次'); return; }
+        // 框裡放的是直接製作收到的那一份：改用複製貼上要貼的是別處的回覆，清空（L2 第一輪 R2）。
+        pasted.delete(plain.id);
         this.job = plain;
         this.showPaste(null, true);
       });
