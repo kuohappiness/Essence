@@ -137,7 +137,7 @@ export function evaluationSpec(config: Config, steps: readonly FrozenStep[]): st
       ...ISSUE_KINDS.flatMap(kind => { const level = levelOf(kind, config.levels); return level ? [[kind, level]] : []; }),
       ['存不了', '重大'], ['漏的必備', '傷到學習'],
     ]), '',
-    '近義重複算孩子的時間（多餘的題），值得學不是錯。', '',
+    '近義重複算孩子的時間（多餘的題），沒講為什麼是自己的學習面指標（§4），值得學不是錯。', '',
     '## 4. 指標', '',
     ...STATIC_METRICS.map(([name, text]) => `- ${name}：${text}。`), '',
     '## 5. 門檻', '',
