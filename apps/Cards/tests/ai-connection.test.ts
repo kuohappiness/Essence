@@ -119,3 +119,21 @@ void test('測試連線：關掉設定頁或停用外掛時中止，回 cancelle
   assert.equal(result.ok, false);
   assert.equal(result.ok ? '' : result.kind, 'cancelled');
 });
+
+// 金鑰的樣子和套件的檢查對得上（L2 第二輪 S4）：keyOf 收的每一把（剛好 8 個字、各種看得見的半形字）都送得出去，
+// 不會在套件裡變成 invalid_request（那句是「請回報給開發者」）；少一個字的 keyOf 自己就不收。不 import 套件的常數，照結果比。
+void test('keyOf 收的金鑰，套件都送得出去：剛好 8 個字與每一個看得見的半形字', async () => {
+  const fetch = mockFetch(() => ({ status: 401, headers: { 'content-type': 'application/json' }, chunks: [JSON.stringify({ error: { message: 'bad key' } })] }));
+  const fake = cardsClient(fetch);
+  const printable = Array.from({ length: 0x7e - 0x21 + 1 }, (_, i) => String.fromCharCode(0x21 + i)).join('');
+  const keys = [printable.slice(0, 8), printable.slice(-8), ...Array.from({ length: Math.ceil(printable.length / 8) }, (_, i) => printable.slice(i * 8, i * 8 + 8).padEnd(8, 'k')), printable];
+  for (const provider of ['openai', 'anthropic', 'google', 'openrouter']) {
+    for (const value of keys) {
+      const key = keyOf({ provider, models: {}, reasoning: 'default', secrets: { [provider]: 'k' } }, () => value);
+      assert.deepEqual(key, { ok: true, key: value }, `${provider} ${value}`);
+      const result = await testConnection(fake, { provider, key });
+      assert.equal(result.ok ? 'ok' : result.kind, 'auth', `${provider} ${value}`);
+    }
+    assert.deepEqual(keyOf({ provider, models: {}, reasoning: 'default', secrets: { [provider]: 'k' } }, () => printable.slice(0, 7)), { ok: false, why: 'malformed' });
+  }
+});
