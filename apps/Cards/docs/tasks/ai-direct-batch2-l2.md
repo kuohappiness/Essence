@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 2 批（L2 審查請求）
 
-狀態：待審｜下一步：沒參與實作的 Fable 5.2 high 照本檔審（Codex 的週額度到 11-30 才重置，照使用者的暫行做法），回報寫進[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch2-l2.md>)｜等誰：Claude
+狀態：待審｜下一步：沒參與實作的 Fable 5.2 high 新開一個對話，照下面〈第二輪〉審第一輪之後的改動，回報寫進[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch2-l2.md>)〈第二輪〉｜等誰：Claude
 
 遵守 repo 根目錄的 `AGENTS.md` 與 `apps/Cards/AGENTS.md`。建議推理等級：**高**。每一輪都**新開一個對話**；只審查、不改產品程式，可以在隔離環境重現。重現只用假金鑰與假的 `fetch`，不連真的 AI 服務。
 
@@ -69,3 +69,11 @@
 ## 回報與權限
 
 只回報，不改產品程式與文件。寫在 `apps/Cards/docs/Claude Codex Discussion/2026-11-27-ai-direct-batch2-l2.md`〈第一輪〉，每項寫觸發條件、預期與實際、影響、位置與證據，區分「已重現」與「看規格推斷」，另標真實路徑會不會發生；能用小腳本或測試對現有程式驗證的就驗證。照 [D-207](../../../../docs/decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制) 分：一定修、可記限制、交使用者選。
+
+## 第二輪
+
+- **範圍**：`96634010`（第一輪審到這裡）到這一段所在的 commit（`git log -1 --format=%H -- apps/Cards/docs/tasks/ai-direct-batch2-l2.md`）。一項發現一個 commit，訊息寫著對應的 R 編號或「Windows device test note N」；`fff10984` 是使用者新定的 [D-242](../../../../docs/decisions.md#d-242-ai-服務的名稱只有一套)（服務名稱只有一套，改到共用套件的 `catalog.json`），一起看。
+- **先讀**審查紀錄的〈Claude 回應（第一輪）〉，逐項確認：修法對不對、有沒有帶進新問題、回歸測試真的會在沒修時失敗。R9（重送一律先到重送的畫面）、R10（打開設定頁）、R12（一次只開一個製卡視窗）、`charged`（重開後的重送寫會再計費）與 D-242 是新行為，照第一輪的軸審。
+- **不必重看**第一輪〈總結〉列的「沒發現問題的部分」，除非這一輪的改動碰到。
+- **驗證方式**同上。新的測試在 `tests/ai-cards-modal.test.ts`（製卡視窗，用共用的 obsidian 替身）與 `tests/ai-direct-evidence.test.ts`、`tests/ai-direct-old-version.test.ts`。這一輪改過的畫面（重送的畫面、打開設定頁、沒有 `<<<完>>>` 的收到畫面、改用複製貼上、關閉時取消、新的服務名稱）合併前在 Windows 實機再看一次，請標待驗。
+- **回報**寫在紀錄〈第二輪〉，格式與分法同第一輪。
