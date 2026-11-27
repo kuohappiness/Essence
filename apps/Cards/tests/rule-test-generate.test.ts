@@ -290,7 +290,20 @@ process.stdin.on('end', () => {
   const tools = [...args[args.indexOf('--tools') + 1] === 'Read' ? ['Read'] : [], ...schema ? ['StructuredOutput'] : [], ...mode === 'tools' ? ['Bash'] : []];
   say({ type: 'system', subtype: 'init', model: 'claude-opus-5-5', tools, mcp_servers: [] });
   if (mode === 'quota') say({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1800000000 } });
-  const text = mode === 'login' ? 'Not logged in · Please run /login' : JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) });
+  // 碰到輸出上限：CLI 自己送一則接著寫的訊息，result 只放最後一則（規則循環第一輪 §5）。一個內容塊一則 assistant 事件。
+  const reply = (id, blocks) => blocks.forEach(block => say({ type: 'assistant', message: { id, role: 'assistant', content: [block] } }));
+  if (mode === 'continued') {
+    reply('m1', [{ type: 'thinking', thinking: '想' }, { type: 'text', text: '<<<全貌>>>\\n前半，切在一句的中' }]);
+    say({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Output token limit hit. Resume directly.' }] } });
+    reply('m2', [{ type: 'thinking', thinking: '再想' }, { type: 'text', text: '間\\n<<<卡組>>>\\n後半\\n<<<完>>>' }]);
+  }
+  if (mode === 'one') reply('m1', [{ type: 'thinking', thinking: '想' }, { type: 'text', text: '整份' }]);
+  if (mode === 'read') {
+    reply('m1', [{ type: 'text', text: '先讀教材' }, { type: 'tool_use', name: 'Read', input: { file_path: '教材.pdf' } }]);
+    reply('m2', [{ type: 'text', text: '評好了' }]);
+  }
+  const last = { continued: '間\\n<<<卡組>>>\\n後半\\n<<<完>>>', one: '整份', read: '評好了' }[mode];
+  const text = mode === 'login' ? 'Not logged in · Please run /login' : last ?? JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) });
   say({ type: 'result', subtype: 'success', is_error: mode === 'login' || mode === 'quota', result: text, session_id: 'sess-1', duration_ms: 7, modelUsage: { 'claude-opus-5-5': {} }, ...schema ? { structured_output: { rows: [] } } : {} });
 });
 `);
@@ -320,6 +333,19 @@ void test('claude 轉接器：safe-mode、不開工具、stream-json 進出、PD
   assert.deepEqual(await claudeAdapter(() => fakeCli('tools'))(request({ tools: 'Read', jsonSchema: '{"type":"object"}' })), { kind: 'fatal', message: '隔離沒生效：工具 3 個、MCP 0 個' });
   assert.equal((await claudeAdapter(() => fakeCli('quota'))(request())).kind, 'quota');
   assert.deepEqual(await claudeAdapter(() => { throw Error('找不到 claude'); })(request()), { kind: 'fatal', message: '找不到 claude' });
+});
+
+void test('claude 轉接器：碰到輸出上限、CLI 接著寫時，同一次的文字照順序接成一份並記一筆提醒；一則的、讀過檔的照 result', async () => {
+  const request = (over: Partial<StepRequest> = {}): StepRequest => ({ text: '提示', pdf: null, resume: null, model: 'claude-opus-5-5', effort: 'high', systemPrompt: null, cwd: tmpdir(), timeoutMs: 20_000, record: () => undefined, ...over });
+  const continued = await claudeAdapter(() => fakeCli('continued'))(request());
+  assert.ok(continued.kind === 'ok', JSON.stringify(continued));
+  assert.equal(continued.reply, '<<<全貌>>>\n前半，切在一句的中間\n<<<卡組>>>\n後半\n<<<完>>>');
+  assert.deepEqual(continued.warnings, ['回覆碰到輸出上限，CLI 接著寫了 1 次；2 則照順序接成一份']);
+  const one = await claudeAdapter(() => fakeCli('one'))(request());
+  assert.ok(one.kind === 'ok' && one.reply === '整份' && one.warnings.length === 0, JSON.stringify(one));
+  // 評審讀檔前說的話不是回覆：有工具的不接。
+  const read = await claudeAdapter(() => fakeCli('read'))(request({ tools: 'Read' }));
+  assert.ok(read.kind === 'ok' && read.reply === '評好了' && read.warnings.length === 0, JSON.stringify(read));
 });
 
 void test('Codex 生成：不收附件，教材放進對話的資料夾，每個對話的第一步前面加同一句說明（記進事件）', async () => {

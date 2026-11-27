@@ -98,6 +98,7 @@ export const geminiGenerateContent: Dialect = {
   id: 'gemini-generate-content',
   defaultAuth: { header: 'x-goog-api-key' },
   requestIdHeader: null,
+  headersAfterThinking: true,
 
   buildGenerate(ctx: BuildContext): HttpCall {
     const body: Json = {

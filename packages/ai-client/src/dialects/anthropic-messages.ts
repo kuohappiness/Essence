@@ -64,6 +64,7 @@ export const anthropicMessages: Dialect = {
   id: 'anthropic-messages',
   defaultAuth: { header: 'x-api-key' },
   requestIdHeader: 'request-id',
+  headersAfterThinking: false,
 
   buildGenerate(ctx: BuildContext): HttpCall {
     const body: Json = {

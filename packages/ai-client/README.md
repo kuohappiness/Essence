@@ -10,12 +10,14 @@
 
 | 方言 | 涵蓋 | 實測 |
 |---|---|---|
-| `openai-responses` | OpenAI | 沒有（雲端環境連不到；範例照官方文件） |
-| `openai-chat` | OpenRouter、DeepSeek、Groq、Mistral、xAI、Ollama、LM Studio 等「OpenAI 相容」 | 沒有（同上） |
-| `gemini-generate-content` | Google AI Studio（Gemini） | 2026-11-25 用假金鑰確認網址與錯誤分類 |
-| `anthropic-messages` | Anthropic Claude | 2026-11-25 用假金鑰確認網址與錯誤分類 |
+| `openai-responses` | OpenAI | 2026-11-27 `gpt-5.6-terra` |
+| `openai-chat` | OpenRouter、DeepSeek、Groq、Mistral、xAI、Ollama、LM Studio 等「OpenAI 相容」 | 2026-11-27 經 OpenRouter 的 `anthropic/claude-haiku-5.5`；其他家沒測過 |
+| `gemini-generate-content` | Google AI Studio（Gemini） | 2026-11-27 `gemini-3.5-flash-lite`、`gemini-3.8-flash` |
+| `anthropic-messages` | Anthropic Claude | 2026-11-27 `claude-haiku-5-5` |
 
-「沒有實測」的方言不宣稱可用；真的金鑰跑過 `npm run smoke` 才改成已實測（日期、模型）。
+「沒有實測」的方言不宣稱可用；真的金鑰跑過 `npm run smoke` 才改成已實測（日期、模型）：送一段短文與一頁 PDF，拿到回答、用量與費用。
+
+Gemini 想完才送回應標頭（`gemini-3.8-flash` 量到 2～3 分鐘），所以套件對它預設不另外限時等標頭，只照整體期限（預設 30 分鐘）。
 
 ## 怎麼用
 
