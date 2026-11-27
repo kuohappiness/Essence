@@ -322,3 +322,13 @@ void test('L2 第二輪 S2 收到的回覆重送沒成功：收到的那一份�
   assert.equal((await made.cards.save(kept, reply, null, undefined, true)).kind, 'done');
   assert.equal(propsOf(made.memory).props['接法'], 'API');
 });
+
+void test('L2 第二輪 S4 拿到回應之後才取消：工作標 charged，重開後的「重送」照樣寫會再計費', async t => {
+  const made = await load(t, [{ ...ok(reply), delayMs: 5_000 }]);
+  const pending = made.cards.direct(form, [lesson]);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  made.cards.cancel();
+  const cancelled = await pending;
+  assert.ok(cancelled.kind === 'failed' && cancelled.failure.kind === 'cancelled');
+  assert.equal(directJob(made.cards.jobs()[0])?.charged, true);
+});

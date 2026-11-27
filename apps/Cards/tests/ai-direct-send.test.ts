@@ -169,3 +169,26 @@ void test('§6 套件丟的錯：金鑰錯（到設定頁）、額度、太頻�
   assert.ok(!cancelled.ok);
   assert.deepEqual([cancelled.failure.kind, cancelled.failure.text], ['cancelled', '已取消；如果 AI 已經開始做，這一次可能仍會計費。']);
 });
+
+void test('L2 第二輪 S4 拿到回應之後才取消、服務回了 200 卻完全沒有輸出（被擋）：照自己的一句話，標 afterResponse（可能已經計費）；還沒拿到回應就取消的不標', async () => {
+  const controller = new AbortController();
+  const streaming = send({ ...geminiEvents('國二上英文 L3 單字', 'STOP'), delayMs: 5_000 }, { signal: controller.signal });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  controller.abort();
+  const cancelled = await streaming.result;
+  assert.ok(!cancelled.ok);
+  assert.deepEqual([cancelled.failure.kind, cancelled.failure.text, cancelled.failure.afterResponse], ['cancelled', '已取消；如果 AI 已經開始做，這一次可能仍會計費。', true]);
+  const blocked: MockReply = {
+    status: 200, headers: { 'content-type': 'text/event-stream' },
+    chunks: [sse([{ data: { promptFeedback: { blockReason: 'SAFETY' }, usageMetadata: { promptTokenCount: 18_000, totalTokenCount: 18_000 } } }])],
+  };
+  const refused = await send(blocked).result;
+  assert.ok(!refused.ok);
+  assert.deepEqual([refused.failure.kind, refused.failure.text, refused.failure.afterResponse], ['content_blocked', 'AI 拒絕回答這份教材。', true]);
+  const early = new AbortController();
+  const waiting = send({ ...geminiEvents('慢', 'STOP'), headersDelayMs: 5_000 }, { signal: early.signal });
+  early.abort();
+  const before = await waiting.result;
+  assert.ok(!before.ok);
+  assert.deepEqual([before.failure.kind, before.failure.afterResponse], ['cancelled', false]);
+});

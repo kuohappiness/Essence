@@ -204,7 +204,8 @@ function failureOf(error: unknown): DirectFailure {
   }
   if (error.kind === 'invalid_request') return { kind: error.kind, text: `設定有問題：${describeAiError(error)}`, next: '到設定頁換模型，按「測試連線」。', afterResponse: false, settings: true };
   const known = FAILURES[error.kind];
-  if (known) return { kind: error.kind, text: known.text, next: known.next, afterResponse: false, settings: known.settings ?? false };
+  // 取消與「完全沒有輸出就被擋」照自己的一句話；拿到回應之後才發生的照樣標 afterResponse：可能已經計費，重送寫會再計費（L2 第二輪 S4）。
+  if (known) return { kind: error.kind, text: known.text, next: known.next, afterResponse: error.afterResponse, settings: known.settings ?? false };
   return { kind: error.kind, text: `出了沒預料到的錯：${describeAiError(error)}`, next: '重送；一直這樣，請改用複製貼上，並回報給開發者。', afterResponse: false, settings: false };
 }
 
