@@ -194,6 +194,21 @@ void test('§9 沒設金鑰：直接製作按不了、寫原因，有「打開�
   assert.equal(modal.isOpen, false);
 });
 
+void test('§9 表單打開時讀不到這一篇：直接製作按不了、寫原因，有「再讀一次」；讀得到之後按它，直接製作就能按（L2 第一輪 R4）', async t => {
+  const { made, openModal } = await open(t, [ok(REPLY)]);
+  made.memory.failing.add(DECK);
+  const modal = await openModal();
+  assert.ok(button(modal.contentEl, '直接製作')?.disabled);
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('讀不到這一篇')), texts(modal.contentEl).join('|'));
+  made.memory.failing.delete(DECK);
+  button(modal.contentEl, '再讀一次')?.click();
+  await sleep(20);
+  assert.equal(button(modal.contentEl, '再讀一次'), undefined);
+  assert.ok(line(modal), texts(modal.contentEl).join('|'));
+  await sendFromForm(modal, []);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+});
+
 void test('§9 送不成按「改用複製貼上」：同一份提示進剪貼簿，框是空的、說明換成自己附教材；貼回存成複製貼上的快照', async t => {
   const { made, openModal } = await open(t, [unauthorized]);
   const modal = await openModal();

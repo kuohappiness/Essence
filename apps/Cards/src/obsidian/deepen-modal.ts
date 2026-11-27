@@ -203,6 +203,16 @@ class DeepenModal extends Modal {
     const copy = row.createEl('button', { text: '複製提示', cls: 'mod-cta' });
     const preview = direct ? el.createEl('p', { cls: 'essence-cards-issue-note' }) : null;
     const settings = direct ? this.settingsButton(row) : null;
+    // 表單打開時讀不到（例如還在從 iCloud 下載）：不必關掉視窗重開，按這個再讀一次（L2 第一輪 R4）。
+    const reread = direct ? row.createEl('button', { text: '再讀一次' }) : null;
+    const load = (): void => {
+      const round = this.round;
+      void deepen.context(this.path).then(ctx => {
+        if (round !== this.round) return;
+        this.ctx = ctx;
+        refresh();
+      });
+    };
     const refresh = (): void => {
       files?.draw();
       copy.disabled = this.busy;
@@ -217,7 +227,9 @@ class DeepenModal extends Modal {
       copy.toggleClass('mod-cta', !ok);
       preview.setText(ready === null ? '' : ready.ok ? ready.line : ready.reason);
       if (ready && !ready.ok && 'settings' in ready && ready.settings) settings?.show(); else settings?.hide();
+      if (ctx !== null && 'error' in ctx && !this.busy) reread?.show(); else reread?.hide();
     };
+    reread?.addEventListener('click', () => { this.ctx = null; refresh(); load(); });
     direction.addEventListener('input', () => { this.direction = direction.value; refresh(); });
     material.addEventListener('input', () => { this.material = material.value; refresh(); });
     pick.addEventListener('change', () => { this.pick = pick.checked; refresh(); });
@@ -242,14 +254,7 @@ class DeepenModal extends Modal {
       });
     });
     // 送出前那一行用的材料：表單打開時讀一次（按下直接製作時會再讀一次最新的）。
-    if (direct && this.ctx === null) {
-      const round = this.round;
-      void deepen.context(this.path).then(ctx => {
-        if (round !== this.round) return;
-        this.ctx = ctx;
-        refresh();
-      });
-    }
+    if (direct && this.ctx === null) load();
     refresh();
     direction.focus();
   }
