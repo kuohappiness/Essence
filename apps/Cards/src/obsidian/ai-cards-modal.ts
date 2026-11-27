@@ -392,7 +392,8 @@ class AiCardsModal extends Modal {
     if (failure.next) el.createEl('p', { text: failure.next, cls: 'essence-cards-issue-note' });
     const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
-    this.directButtons(buttons, message, failure.afterResponse);
+    // 收到過回覆的那一份已經付過一次（L2 第三輪 T2）：和收到的畫面一樣寫會再計費。
+    this.directButtons(buttons, message, failure.afterResponse || !!directJob(job)?.received);
     if (failure.settings) this.settingsButton(buttons);
     // 重送的是收到過的那一份：沒成功時它還在（L2 第二輪 S2），回去看、勾確定或存成草稿。
     if (directJob(job)?.received) buttons.createEl('button', { text: '回到收到的回覆' }).addEventListener('click', () => { this.showPaste(null); });

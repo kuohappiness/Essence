@@ -176,6 +176,8 @@ void test('L2 第二輪 S2 收到的回覆重送沒成功：失敗的畫面有�
   await sleep(80);
   assert.equal(made.fetch.requests.length, 2);
   assert.ok(texts(modal.contentEl).some(each => each.includes('金鑰不對')), texts(modal.contentEl).join('|'));
+  // 收到的那一份已經付過一次：失敗的畫面也寫會再計費（L2 第三輪 T2）。
+  assert.ok(button(modal.contentEl, '重送（會再計費一次）'), texts(modal.contentEl).join('|'));
   button(modal.contentEl, '回到收到的回覆')?.click();
   await sleep(10);
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
