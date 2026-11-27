@@ -353,7 +353,7 @@ void test('AI 連線：舊版 Obsidian（沒有 SecretStorage）只寫一句要�
 
 void test('AI 連線：選單與預設；換服務時模型跟著換、OpenRouter 自己填；每次改都存在這台裝置，換回來模型還在', async t => {
   const { row, storage } = await open(t, { desktop: true });
-  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['OpenAI（推薦）', 'Google AI Studio（Gemini）（免費）', 'Anthropic Claude', 'OpenRouter']);
+  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['OpenAI（推薦）', 'Google Gemini（免費）', 'Anthropic Claude', 'OpenRouter']);
   assert.equal(row(PROVIDER).dropdown?.value, 'openai');
   assert.equal(row(MODEL).dropdown?.value, 'gpt-5.6-terra');
   assert.equal(row(REASONING).dropdown?.value, 'default');

@@ -4,11 +4,19 @@
 import { createAiClient, describeAiError, isAiError } from './client.ts';
 import type { AiClient, AiErrorKind, FetchLike, ProviderSpec } from './client.ts';
 
-/** 推薦（docs/ai-models.md〈外掛的預設選單〉，D-072）：這幾家排在最上面、名稱後面加標籤，推薦的模型也放最上面。 */
-const RECOMMENDED: readonly { provider: string; tag: string; model: string }[] = [
+/**
+ * 推薦（docs/ai-models.md〈外掛的預設選單〉，D-072）：這幾家排在最上面、名稱後面加標籤，推薦的模型也放最上面。
+ * name 是那張表「選單上的名稱」，和目錄的名稱不同時才寫（L2 第一輪 R11 第 5 項）。
+ */
+const RECOMMENDED: readonly { provider: string; tag: string; model: string; name?: string }[] = [
   { provider: 'openai', tag: '推薦', model: 'gpt-5.6-terra' },
-  { provider: 'google', tag: '免費', model: 'gemini-3.8-flash' },
+  { provider: 'google', tag: '免費', model: 'gemini-3.8-flash', name: 'Google Gemini' },
 ];
+
+/** 選單上的服務名稱（不含標籤）：docs/ai-models.md 有寫的照它，其他照目錄。 */
+export function providerName(provider: ProviderSpec): string {
+  return RECOMMENDED.find(r => r.provider === provider.id)?.name ?? provider.label;
+}
 
 /** 推理等級（§2）：預設不指定，照服務自己的預設。 */
 export const REASONING_CHOICES = [
@@ -43,7 +51,7 @@ export function providerChoices(providers: readonly ProviderSpec[]): { id: strin
   const rank = (id: string): number => { const at = RECOMMENDED.findIndex(r => r.provider === id); return at < 0 ? RECOMMENDED.length : at; };
   return [...providers].sort((a, b) => rank(a.id) - rank(b.id)).map(provider => {
     const tag = RECOMMENDED.find(r => r.provider === provider.id)?.tag;
-    return { id: provider.id, label: tag ? `${provider.label}（${tag}）` : provider.label };
+    return { id: provider.id, label: tag ? `${providerName(provider)}（${tag}）` : providerName(provider) };
   });
 }
 
