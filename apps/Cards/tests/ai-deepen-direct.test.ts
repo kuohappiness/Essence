@@ -270,3 +270,15 @@ void test('§9 按下直接製作、還在讀這一篇時取消（PR #99 的 Git
   // 之後照常送得出去。
   assert.equal((await made.deepen.direct(DECK, '', '', undefined, [])).kind, 'received');
 });
+
+void test('§9 提醒一區的列（第 3 批 L2 R1）：直接製作的那一份不寫「提示已複製」，照送不成、收到了寫', async t => {
+  const made = await load(t, [unauthorized, ok(REPLY)]);
+  const failed = await made.deepen.direct(DECK, '', '', undefined, []);
+  assert.equal(failed.kind, 'failed');
+  if (failed.kind !== 'failed') return;
+  await made.deepen.refresh();
+  assert.deepEqual(made.deepen.rows().find(row => row.path === DECK), { path: DECK, kind: 'waiting', text: '國二上自然 2-1 溫度：加深直接製作沒有成功，還沒處理' });
+  assert.equal((await made.deepen.resend(failed.job)).kind, 'received');
+  await made.deepen.refresh();
+  assert.equal(made.deepen.rows().find(row => row.path === DECK)?.text, '國二上自然 2-1 溫度：加深直接製作收到回覆了，還沒寫進卡組');
+});

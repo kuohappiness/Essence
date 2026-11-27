@@ -261,7 +261,8 @@ export function createDeepen(deps: DeepenDeps) {
       const { props } = entry.deck;
       if (props.isTranscript || props.status !== 'active' || !isDeckPath(entry.path) || state.deckStatus(entry.path).needsUpdate) continue;
       const name = fileName(entry.path);
-      const waiting = jobs.some(job => job.deck === entry.path);
+      const job = jobs.find(each => each.deck === entry.path);
+      const waiting = job !== undefined;
       let pending = false;
       if (!waiting) {
         // 一篇讀不到只略過那一篇，不讓整次重算失敗、留著舊的列（L2 R4）。
@@ -279,15 +280,20 @@ export function createDeepen(deps: DeepenDeps) {
         const mastery = masteryOf(active, history.reviews, id => history.incomplete || history.held.includes(id));
         remind = remindOf(active, mastery, chooseBase(base && base.at !== null ? { at: base.at, stable: base.stable ?? [], first: base.kind !== 'deepen' } : null, skip));
       }
-      const row = deepenRow(entry.path, name, { waiting, writing: waiting && busyDeck(entry.path), pending, remind });
+      const row = deepenRow(entry.path, name, { waiting, writing: waiting && busyDeck(entry.path), direct: job && directState(job), pending, remind });
       if (row) found.push(row);
     }
     return found;
   }
+  /** 直接製作的那一份現在的情況（提醒一區的字，第 3 批 L2 R1）；複製貼上的是 undefined。 */
+  function directState(job: DeepenJob): 'sent' | 'failed' | 'received' | undefined {
+    const api = directJob(job);
+    return api ? api.received ? 'received' : api.state === 'failed' ? 'failed' : 'sent' : undefined;
+  }
   /** 只有這台電腦自己知道的列：等你貼回、正在寫。 */
   function waitingRows(state: State): DeepenRow[] {
     const known = new Set(state.decks().map(entry => entry.path));
-    return jobs.filter(job => known.has(job.deck)).flatMap(job => deepenRow(job.deck, fileName(job.deck), { waiting: true, writing: busy.has(job.id), pending: false, remind: null }) ?? []);
+    return jobs.filter(job => known.has(job.deck)).flatMap(job => deepenRow(job.deck, fileName(job.deck), { waiting: true, writing: busy.has(job.id), direct: directState(job), pending: false, remind: null }) ?? []);
   }
   /** 重算一次（同時只跑一份，中間又被叫就再跑一次）；回傳時已經算好。 */
   function refresh(): Promise<void> {
