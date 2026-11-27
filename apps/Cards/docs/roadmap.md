@@ -18,6 +18,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 製卡規則重整的比較測試 | 實作中 | 使用者決定國小社會換不換（〈結果〉門檻 3）；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一版照 §9 與[三層架構檢討](<Claude Codex Discussion/2026-11-25-three-layer-review.md>)測試 1 改，用[比較測試工具](tasks/rule-test-tool.md)跑 | 使用者 | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 | 題型模組（每個學習目標掛上一種題型） | 實作中 | 第 A 步已合併（PR #56，2026-11-26，`ff848530`）；先做[句子排序好幾種順序都算對](tasks/sentence-order-alternatives.md)（D-238，併進這一串），再照使用者同意的先後做[配對與單選](tasks/matching-single-choice.md) → 第 C 步 → 第 B 步；使用者回 §6 第 1～3 題與第 4 題的兩件 | 使用者、Claude | [任務說明](tasks/question-type-modules.md) |
+| 英文句子排序好幾種順序都算對（D-238、D-240） | 實作中 | 開分支實作（〈請使用者確認〉使用者 2026-11-27 選了，寫成 D-240）；寫完送 L2 | Claude | [任務說明](tasks/sentence-order-alternatives.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
 
