@@ -238,7 +238,8 @@ export function createErrorLog(options: ErrorLogOptions): ErrorLog {
         const key = own[0] ?? (frames.length ? [msg, frames[0]] : msg);
         const ai = context?.ai;
         const extra = ai ? { service: ai.service, model: ai.model, status: ai.status ?? undefined, requestId: ai.requestId ?? undefined, attempts: ai.attempts } : {};
-        write(JSON.stringify([where, path ?? null, key]), { where, msg, path, ...extra, stack: frames.length ? frames.join('\n') : undefined });
+        // 直接製作的再加服務與模型：同一句「連不上」換了一家也要看得到（L2 第一輪 R11）；請求編號每次不同，不加。
+        write(JSON.stringify([where, path ?? null, key, ...ai ? [ai.service, ai.model] : []]), { where, msg, path, ...extra, stack: frames.length ? frames.join('\n') : undefined });
       } catch {
         // 記錄器永遠不拋錯（D-155 第 4 點）：例如時區不合法時 formatTime 拋錯，這一行就不記。
       }
