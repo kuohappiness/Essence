@@ -5,7 +5,7 @@ import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv, pluginRoot } from '../tools/git.ts';
-import { parseDeck } from '../src/core/deck/index.ts';
+import { otherSentences, parseDeck, shownTails } from '../src/core/deck/index.ts';
 import type { Deck } from '../src/core/deck/index.ts';
 import { cardOf } from '../src/core/study/index.ts';
 import { RATE_DELAY } from '../src/review/index.ts';
@@ -246,6 +246,35 @@ void test('沒有另一種排法的卡沒有 orders；預覽是 [0]', async t =>
   const target = one(BECAUSE, [ALT]).targets[0];
   const card = cardOf({ lt: 'lt', deck: PATH, target, prompt: target.prompts[0], isNew: false, early: false });
   assert.deepEqual(createPreviewFlow(card, true).view().pick?.orders, [0]);
+});
+
+// 畫面的字串（§5）：純函式。格後面的字照 orders 的共同部分；其他排法是整句。
+const orderOf = (deck: Deck) => {
+  const target = deck.targets[0];
+  const group = cardOf({ lt: 'lt', deck: PATH, target, prompt: target.prompts[0], isNew: false, early: false }).group;
+  if (!group?.order) throw Error('不是排序卡');
+  return { ...group.order, members: group.members };
+};
+const others = (order: ReturnType<typeof orderOf>, result: number): string[] => otherSentences(order, result, order.members);
+
+void test('畫面的字串：作答時藏起不一樣的標點、最後一格後面不一樣時不顯示；結果照那一種；其他排法是整句', () => {
+  const order = orderOf(one(BECAUSE, [ALT]));
+  const line = (tails: readonly string[]): string => order.head + tails.map((tail, i) => `[${String(i + 1)}]${tail}`).join('');
+  assert.equal(line(shownTails(order, [0, 1])), 'I was tired. I went to bed early.（用 because 合成一句）[1] [2] [3].');
+  assert.deepEqual(shownTails(order, [1]), [' ', ', ', '.']);
+  assert.deepEqual(shownTails(order, [0]), [' ', ' ', '.']);
+  assert.deepEqual(shownTails(order, undefined), [' ', ' ', '.']);
+  assert.deepEqual(others(order, 1), ['I went to bed early because I was tired.']);
+  assert.deepEqual(others(order, 0), ['Because I was tired, I went to bed early.']);
+
+  const last = orderOf(one('他問我在哪裡。==where== ==are== ==you==?', ['另一種排法：==you== ==are== ==where==!']));
+  assert.deepEqual(shownTails(last, [0, 1]), [' ', ' ', ''], '最後一格後面不一樣');
+
+  const park = orderOf(one(PARK, ['另一種排法：==in the park== ==yesterday== ==after school==.'], '副詞的位置 排序'));
+  assert.deepEqual(others(park, 0), ['He played basketball in the park yesterday after school.']);
+  assert.deepEqual(others(park, 1), ['He played basketball in the park after school yesterday.']);
+  const half = orderOf(one('I was tired. I went to bed early. (用 because 合成一句) ==I went to bed early== ==because== ==I was tired==.', [ALT]));
+  assert.deepEqual(others(half, 0), ['because I was tired, I went to bed early.'], '半形括號：開頭的 ) 拿掉；句首不大寫（starts 照 §4-6）');
 });
 
 // 舊版讀另一種排法（§7）：用真的 v0.6.0 標籤的程式，不是用現在的程式假裝舊版。

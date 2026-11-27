@@ -76,6 +76,43 @@ function plainBlock(raw: string): string | null {
   return /[*_[\]<>`$\\|~]|&#?\w+;/.test(text) ? null : text;
 }
 
+// ── 有另一種排法時畫面上的字（tasks/sentence-order-alternatives.md §5）：純函式，畫面只拿來用。 ──
+
+/** 畫面要的那幾欄：CardGroup.order（core/study）和 SentenceCells 都是這個樣子。 */
+interface SentenceShape { head: string; tails: readonly string[]; starts?: readonly boolean[]; others?: readonly SentenceAlt[] }
+
+/** 第 i 種對的順序的格後面的字：0 是題目那一行，其他照 others。 */
+const tailsOf = (order: SentenceShape, i: number): readonly string[] => i === 0 ? order.tails : order.others?.[i - 1]?.tails ?? order.tails;
+
+/**
+ * 每一格後面顯示的字：orders（PickView.orders）每一種都一樣的位置照顯示；不一樣的位置（只會是標點與空白，§1 第 4 點）顯示一個空白，
+ * 最後一格後面不一樣時什麼都不顯示。沒有 orders（沒有另一種排法）照題目那一行。
+ */
+export function shownTails(order: SentenceShape, orders: readonly number[] | undefined): string[] {
+  if (!orders?.length) return [...order.tails];
+  const all = orders.map(i => tailsOf(order, i));
+  return all[0].map((tail, at) => all.every(each => each[at] === tail) ? tail : at === all[0].length - 1 ? '' : ' ');
+}
+
+/**
+ * 結果是第 result 種時，其他對的順序的整句（照寫的順序，題目那一行最前）：題目第一格前面看得到的英文（sentenceLead），
+ * 接上詞塊與格後面的字，句首大寫照 starts。words 是題目那一行的詞塊（CardGroup.members）。
+ */
+export function otherSentences(order: SentenceShape, result: number, words: readonly string[]): string[] {
+  const lead = sentenceLead(order.head);
+  const orders = [{ words, tails: order.tails }, ...(order.others ?? [])];
+  return orders.flatMap((each, i) => i === result ? [] : [lead + each.words.map((word, at) => (order.starts?.[at] ? word.charAt(0).toUpperCase() + word.slice(1) : word) + each.tails[at]).join('')]);
+}
+
+/**
+ * 題目第一格前面看得到的英文：最後一個中文或全形標點之後的字，開頭的結束括號與空白拿掉（半形的 `(用 because 合成一句) ` 不留 `) `）。
+ */
+function sentenceLead(head: string): string {
+  const visible = visibleText(head);
+  const cut = [...visible.matchAll(/[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/gu)].at(-1);
+  return (cut ? visible.slice(cut.index + cut[0].length) : visible).replace(/^[\s\p{Pe}]+/u, '');
+}
+
 /** 題目文字看得到的樣子（判斷句首用，L2 第二輪）：連結換成顯示的字，格式記號拿掉。 */
 function visibleText(text: string): string {
   return text
