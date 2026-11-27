@@ -301,12 +301,18 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     }
     // 補充或多行答案裡的資料也屬於整個目標。
     for (const child of root.children) collectFields(child);
-    function markdown(node: Item, base = node.indent, nested = false): string {
-      if (fieldStart.test(node.text)) return '';
+    /** 一項連同底下的子項目的原文；資料欄位不放（collectFields 讀了），fields 是 true 時照放。 */
+    function markdown(node: Item, base = node.indent, nested = false, fields = false): string {
+      if (!fields && fieldStart.test(node.text)) return '';
       const prefix = nested ? ' '.repeat(node.indent - base) + lines[node.line].raw.trimStart().match(/^(?:[-*+]|\d+[.)])\s*/)?.[0] : '';
       const body = (prefix ?? '') + node.text;
-      return [body, ...node.children.map(child => markdown(child, base, true)).filter(Boolean)].join('\n');
+      return [body, ...node.children.map(child => markdown(child, base, true, fields)).filter(Boolean)].join('\n');
     }
+    /**
+     * 題目的一項補充：另一種排法連底下的資料欄位也放（L2 第一輪 R2），底下有子項目就看得出來、不認（order.ts 的 readOther）；
+     * 欄位照樣屬於整個目標。
+     */
+    const extraOf = (child: Item): string => markdown(child, child.indent, false, ALT_LIKE.test(child.text));
     function prompt(node: Item): Prompt {
       const body = stripId(node.text).text;
       const { colon, blanks } = questionSyntax(body);
@@ -330,7 +336,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
       else if (typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字；要打字改成問答題');
-      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(extraOf), fingerprint: fingerprint(body, '') };
       const own = anchorNotes(children);
       if (own) promptNotes.set(cloze, own);
       return cloze;

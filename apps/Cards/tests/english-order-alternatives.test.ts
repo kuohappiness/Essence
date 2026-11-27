@@ -84,6 +84,13 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   assert.deepEqual(codes(nested), [[4, 'order-alt-invalid']], '底下又有子項目');
   assert.match(nested.problems[0].message, /同一行/);
   assert.equal(othersOf(nested), undefined);
+
+  // L2 第一輪 R2：底下的子項目是資料欄位也不認；欄位照現在的讀法屬於整個目標。
+  const field = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n            - 狀態：暫停\n`);
+  assert.deepEqual(codes(field), [[4, 'order-alt-invalid']], '底下是資料欄位');
+  assert.match(field.problems[0].message, /同一行/);
+  assert.equal(othersOf(field), undefined);
+  assert.equal(field.targets[0].fields.paused, true, '欄位照樣讀');
 });
 
 void test('結束的引號（L2 第一輪 R1）：逗號、句點後面的直引號不是開頭，照樣認', () => {
