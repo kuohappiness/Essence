@@ -1,5 +1,7 @@
-import type { PoemOrder, Prompt, SentenceCells, SentenceOrder, Target } from '../types.ts';
+import { questionSyntax } from '../markdown.ts';
+import type { PoemOrder, Prompt, SentenceAlt, SentenceCells, SentenceOrder, Target } from '../types.ts';
 import { readGroup } from './group.ts';
+import type { PickReading } from './group.ts';
 import { endingOf } from './shared.ts';
 
 // ── 全詩順序卡（D-187 第 3、10 點、D-204）：點選填空的一種，用填空寫，從名稱最後的「排序」認；和比較卡不互搶（比較卡的題目都是問答）。 ──
@@ -31,8 +33,21 @@ const OPENS = /(?:^|[\p{Script=Han}\u3000-\u303f\uff00-\uffef])$/u;
 
 /** 一題的格（§4-5、§4-6）；不到兩格、有一格沒有字（空的或只有標點）時是 null。 */
 function sentenceCells(prompt: Prompt): SentenceCells | null {
-  if (prompt.kind !== 'cloze' || prompt.blanks.length < 2) return null;
+  if (prompt.kind !== 'cloze') return null;
   const { text, blanks } = prompt;
+  const blocks = readBlocks(text, blanks);
+  if (!blocks) return null;
+  const head = visibleText(text.slice(0, blanks[0].start)).replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
+  const starts = blocks.words.map((_, i) => i === 0 && OPENS.test(head));
+  return { head: text.slice(0, blanks[0].start), words: blocks.words, tails: blocks.tails, starts };
+}
+
+/**
+ * 一行填空的詞塊與每一格後面的字（§4-3、§4-5）：題目那一行與另一種排法共用同一套（tasks/sentence-order-alternatives.md §2）。
+ * 不到兩格、有一格不是純文字或只有標點時是 null。
+ */
+function readBlocks(text: string, blanks: readonly { start: number; end: number }[]): { words: string[]; tails: string[] } | null {
+  if (blanks.length < 2) return null;
   // 詞塊是純文字（L2 R6 與第二輪）：成對的粗體、斜體拿掉，鍵、句首大寫與比對都照看得到的字；題目的指紋照原文。
   const read = blanks.map(blank => plainBlock(text.slice(blank.start + 2, blank.end - 2)));
   if (read.some(word => word === null)) return null;
@@ -48,9 +63,7 @@ function sentenceCells(prompt: Prompt): SentenceCells | null {
   }
   // 只有標點的格不是詞塊（`==?==`）：照原題型。
   if (words.some(word => !/[\p{L}\p{N}]/u.test(word))) return null;
-  const head = visibleText(text.slice(0, blanks[0].start)).replace(/[\s\p{Ps}\p{Pi}"'*_]+$/u, '');
-  const starts = words.map((_, i) => i === 0 && OPENS.test(head));
-  return { head: text.slice(0, blanks[0].start), words, tails, starts };
+  return { words, tails };
 }
 
 /**
@@ -73,12 +86,92 @@ function visibleText(text: string): string {
 
 /**
  * 英文的句子排序卡（§4-1）：英文卡組裡名稱最後一段是「排序」、沒有「全詩」、沒有方向，名稱也讀不出點選填空的組；每一題都是兩格以上的填空。
- * 不是時照原題型（填空翻面），不提示；AI 的草稿另外擋（§5）。
+ * 不是時照原題型（填空翻面），不提示；AI 的草稿另外擋（§5）。是的時候順便讀每一題底下的另一種排法，problems 是它們的提示。
  */
-export function readSentence(target: Target): SentenceOrder | null {
+export function readSentence(target: Target): { sentence: SentenceOrder | null; problems: KindProblem[] } {
   const { name, prompts } = target;
-  if (target.implicit || target.direction !== null || readGroup(name) || endingOf(name) !== '排序' || /(^|\s)全詩\s*排序$/.test(name) || !prompts.length) return null;
-  const cells = prompts.map(sentenceCells);
-  if (cells.some(each => each === null)) return null;
-  return { title: name.replace(/\s*排序$/, '').trim(), prompts: cells as SentenceCells[] };
+  if (target.implicit || target.direction !== null || readGroup(name) || endingOf(name) !== '排序' || /(^|\s)全詩\s*排序$/.test(name) || !prompts.length) return { sentence: null, problems: [] };
+  const cells: SentenceCells[] = [], problems: KindProblem[] = [];
+  for (const prompt of prompts) {
+    const each = sentenceCells(prompt);
+    if (!each) return { sentence: null, problems: [] };
+    const read = readOthers(prompt.line, prompt.extras, each);
+    problems.push(...read.problems);
+    cells.push(read.others.length ? { ...each, others: read.others } : each);
+  }
+  return { sentence: { title: name.replace(/\s*排序$/, '').trim(), prompts: cells }, problems };
+}
+
+type KindProblem = PickReading['problems'][number];
+
+// ── 另一種排法（D-238、D-240、tasks/sentence-order-alternatives.md §1）：句子排序的題目底下的子項目，一行一種。 ──
+
+/** 認得的開頭：全形冒號緊接（和其他背面補充的名稱一樣，review/extras.ts）。 */
+const ALT_LABEL = '另一種排法：';
+/** 看起來是另一種排法的補充（冒號前有空白、半形冒號也算）：認不得的、放錯地方的都用它找出來提示（§1 第 5、6 點）。 */
+export const ALT_LIKE = /^另一種排法\s*[：:]/u;
+/** 題目第一格前面的字結尾是開頭的引號或括號（§1 第 5 點最後一項）：引號跟著第一格，換一種排法就跟錯詞塊。 */
+const OPENING = /(?:[\p{Ps}\p{Pi}]|(?:^|[\s\p{Script=Han}\u3000-\u303f\uff00-\uffef])["'])$/u;
+
+/** 一題底下的另一種排法（§1 第 1～7 點）：認得的照寫的順序放進 others；認不得的提示，照背面補充顯示（prompt.extras 不動）。 */
+function readOthers(line: number, extras: readonly string[], cells: SentenceCells): { others: SentenceAlt[]; problems: KindProblem[] } {
+  const others: SentenceAlt[] = [], problems: KindProblem[] = [];
+  const opening = OPENING.test(visibleText(cells.head).trimEnd());
+  for (const source of extras) {
+    if (!ALT_LIKE.test(source)) continue;
+    const read = readOther(source, cells, others, opening);
+    if (typeof read === 'string') problems.push({ line, level: 'hint', code: 'order-alt-invalid', message: `這一行另一種排法不認，照背面補充顯示：${read}` });
+    else others.push(read);
+  }
+  if (others.length && arrangements(cells.words) - 1 - others.length < 2) {
+    problems.push({ line, level: 'hint', code: 'order-alt-all-right', message: '詞塊的排法扣掉列出的對的順序，排錯的剩不到兩種，很容易猜對；換一句，或多挖一塊' });
+  }
+  return { others, problems };
+}
+
+/** 一行另一種排法：認得的回傳詞塊與格後面的字，認不得的回傳原因（給家長看的一句）。 */
+function readOther(source: string, cells: SentenceCells, before: readonly SentenceAlt[], opening: boolean): SentenceAlt | string {
+  if (source.includes('\n')) return '另一種排法寫在同一行，底下不再分子項目';
+  if (!source.startsWith(ALT_LABEL)) return '開頭寫成「另一種排法：」（全形冒號，前面不空格）';
+  if (opening) return '題目第一格前面的字結尾是開頭的引號或括號，每一種排法都會在句首帶著它；這一題只照題目那一行判';
+  const text = source.slice(ALT_LABEL.length);
+  const { blanks } = questionSyntax(text);
+  const blocks = readBlocks(text, blanks);
+  if (!blocks) return '要和題目一樣是兩格以上的填空，每一格是純文字的詞塊（不放連結、程式碼、底線，不能只有標點）';
+  const { words, tails } = blocks;
+  if (words.length !== cells.words.length) return `詞塊有 ${String(words.length)} 塊，題目那一行是 ${String(cells.words.length)} 塊；每一種排法用同樣的詞塊，只換順序`;
+  const extra = without(words, cells.words), missing = without(cells.words, words);
+  if (extra.length) return `詞塊和題目那一行不一樣（這一行有「${extra.join('」「')}」，題目那一行是「${missing.join('」「')}」）；每一種排法用同樣的詞塊，只換順序，句首那塊也寫小寫`;
+  const space = (part: string): string => part.replace(/\s+/g, ' ').trim();
+  const head = space(text.slice(0, blanks[0].start));
+  if (!space(cells.head).endsWith(head)) return `第一格前面的「${head}」不是題目第一格前面那段的結尾；可以不寫，要寫就照抄題目那段的結尾`;
+  const at = tails.findIndex((tail, i) => tail !== cells.tails[i] && /[\p{L}\p{N}]/u.test(tail + cells.tails[i]));
+  if (at >= 0) return `第 ${String(at + 1)} 格後面的字和題目那一行不同（「${tails[at]}」對「${cells.tails[at]}」）；空格外面的字每一種排法都要一樣，只有標點可以不同，會移動的字挖成詞塊`;
+  const same = (other: readonly string[]): boolean => other.every((word, i) => word === words[i]);
+  if (same(cells.words)) return '和題目那一行的順序相同';
+  if (before.some(other => same(other.words))) return '和前面另一行的順序相同';
+  return { words, tails, source };
+}
+
+/** a 有、b 沒有的詞塊（同一塊寫兩次算兩塊）。 */
+function without(a: readonly string[], b: readonly string[]): string[] {
+  const left = [...b];
+  return a.filter(word => {
+    const i = left.indexOf(word);
+    if (i < 0) return true;
+    left.splice(i, 1);
+    return false;
+  });
+}
+
+/** 詞塊有幾種不同的排法（相同文字的詞塊互換算同一種，§1 第 7 點）：n! 除以每一種重複次數的階乘，一塊一塊乘上去。 */
+function arrangements(words: readonly string[]): number {
+  const seen = new Map<string, number>();
+  let total = 1;
+  words.forEach((word, i) => {
+    const count = (seen.get(word) ?? 0) + 1;
+    seen.set(word, count);
+    total = total * (i + 1) / count;
+  });
+  return total;
 }

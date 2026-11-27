@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import { ALT_LIKE, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -346,9 +346,12 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     };
     const promptNotes = new Map<Prompt, string[]>();
     let notes: string[] | null = null;
+    /** 寫在目標底下、少縮一層的另一種排法（tasks/sentence-order-alternatives.md §1 第 6 點）：照現在的讀法當題目或共用補充，只提示。 */
+    const shallow: Item[] = [];
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
       if (fieldStart.test(child.text)) continue;
+      if (ALT_LIKE.test(child.text)) shallow.push(child);
       const syntax = questionSyntax(stripId(child.text).text);
       if (syntax.colon >= 0 || syntax.blanks.length) target.prompts.push(prompt(child));
       else target.shared.push(markdown(child));
@@ -368,6 +371,12 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;
     }
+    // 另一種排法寫在別的地方（§1 第 6 點）：句子排序的題目底下的在 readKind 讀了；其他卡型照背面補充顯示，新舊版一致。
+    const sentence = target.kind?.id === 'order' && target.kind.order.style === 'sentence';
+    for (const each of target.prompts) {
+      if (!sentence && each.extras.some(extra => ALT_LIKE.test(extra))) problems.push({ line: each.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法只有英文句子排序的題目底下認得，這裡照背面補充顯示' });
+    }
+    for (const node of shallow) addProblem(node, 'order-alt-invalid', '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充');
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
       seenIds.add(target.id);
