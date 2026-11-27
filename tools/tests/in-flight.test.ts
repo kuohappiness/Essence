@@ -72,7 +72,7 @@ async function fixture(t: test.TestContext) {
   git(work, ['add', '--', 'docs/decisions.md', 'AGENTS.md']);
   git(work, ['commit', '-q', '-m', 'base']);
   git(work, ['push', '-q', bare, 'main']);
-  // PR 7：改 AGENTS.md、加 D-003。PR 8：只改 tools/。
+  // PR 7：改 AGENTS.md、加 D-003。PR 8：只改 tools/（含中文檔名）。PR 9：和 main 沒有共同起點（像太淺的 clone），也加 D-003。
   git(work, ['checkout', '-q', '-b', 'seven']);
   await writeFile(join(work, 'AGENTS.md'), '規則\n多一行\n');
   await writeFile(join(work, 'docs/decisions.md'), '# 決定\n\n## D-001 甲\n\n## D-002 乙\n\n## D-003 丙\n');
@@ -83,9 +83,16 @@ async function fixture(t: test.TestContext) {
   git(work, ['checkout', '-q', '-b', 'eight']);
   await mkdir(join(work, 'tools'));
   await writeFile(join(work, 'tools/x.ts'), 'export {};\n');
-  git(work, ['add', '--', 'tools/x.ts']);
+  await writeFile(join(work, 'tools/評分說明.md'), '說明\n');
+  git(work, ['add', '--', 'tools/x.ts', 'tools/評分說明.md']);
   git(work, ['commit', '-q', '-m', 'eight']);
   git(work, ['push', '-q', bare, 'HEAD:refs/pull/8/head']);
+  git(work, ['checkout', '-q', 'main']);
+  git(work, ['checkout', '-q', '--orphan', 'nine']);
+  await writeFile(join(work, 'docs/decisions.md'), '# 決定\n\n## D-001 甲\n\n## D-002 乙\n\n## D-003 丁\n');
+  git(work, ['add', '--', 'docs/decisions.md']);
+  git(work, ['commit', '-q', '-m', 'nine']);
+  git(work, ['push', '-q', bare, 'HEAD:refs/pull/9/head']);
   git(work, ['checkout', '-q', 'main']);
   git(work, ['remote', 'add', 'origin', 'https://github.com/owner/name.git']);
   git(work, ['config', `url.${bare.replaceAll('\\', '/')}.insteadOf`, 'https://github.com/owner/name.git']);
@@ -107,19 +114,19 @@ async function fixture(t: test.TestContext) {
   }
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH';
   env[pathKey] = bin + delimiter + (env[pathKey] ?? '');
-  const search = JSON.stringify({
-    total_count: 2, incomplete_results: false,
-    items: [7, 8].map(number => ({ number, title: `PR ${number}`, updated_at: `2026-11-2${number - 6}T01:02:03Z`, pull_request: {} })),
+  const searchFor = (numbers: number[], total = numbers.length) => JSON.stringify({
+    total_count: total, incomplete_results: false,
+    items: numbers.map(number => ({ number, title: `PR ${number}`, updated_at: `2026-11-2${number - 6}T01:02:03Z`, pull_request: {} })),
   });
-  const tool = (args: string[], fake = search) => run(process.execPath, [TOOL, ...args], { cwd: work, env: { ...env, FAKE_GH: fake }, encoding: 'utf8' });
-  return { tool, ghArgs };
+  const tool = (args: string[], fake = searchFor([7, 8])) => run(process.execPath, [TOOL, ...args], { cwd: work, env: { ...env, FAKE_GH: fake }, encoding: 'utf8' });
+  return { tool, ghArgs, searchFor };
 }
 
 void test('D-242：列出每個開著的 PR 改到的資料夾與新增的決定，算出下一個可以用的編號；搜尋的是這個 repo 開著的 PR', async t => {
   const { tool, ghArgs } = await fixture(t);
   const { stdout } = await tool([]);
   assert.match(stdout, /^開著的 PR 2 個（和 origin\/main 的共同起點比）：$/m);
-  assert.match(stdout, /^#8 PR 8（更新 2026-11-22 01:02 UTC）\n {2}改到 1 個檔：tools\/ 1 個$/m);
+  assert.match(stdout, /^#8 PR 8（更新 2026-11-22 01:02 UTC）\n {2}改到 2 個檔：tools\/ 2 個$/m);
   assert.match(stdout, /^#7 PR 7（更新 2026-11-21 01:02 UTC）\n {2}改到 2 個檔：AGENTS\.md、docs\/ 1 個\n {2}新增決定：D-003$/m);
   assert.match(stdout, /^決定編號：main 最新是 D-002，開著的 PR 用了 D-003，下一個可以用 D-004。$/m);
   assert.equal(readFileSync(ghArgs, 'utf8').trim(), 'api search/issues?q=repo:owner/name+is:pr+is:open');
@@ -129,11 +136,32 @@ void test('D-242：給路徑時只列改到那些路徑（或新增決定）的 
   const { tool } = await fixture(t);
   const tools = (await tool(['tools/'])).stdout;
   assert.match(tools, /^開著的 PR 2 個，其中 2 個改到 tools 或新增決定/m);
-  assert.match(tools, /^#8 PR 8.*\n {2}改到你要看的：tools\/x\.ts$/m);
+  assert.match(tools, /^#8 PR 8.*\n {2}改到你要看的：tools\/x\.ts、tools\/評分說明\.md$/m, '中文檔名不被 git 加引號跳脫，才比得到');
   assert.match(tools, /^#7 PR 7.*\n {2}沒改到你要看的路徑\n {2}新增決定：D-003$/m, '新增決定的 PR 一定列出，取號才不會撞');
   const none = (await tool(['apps/Cards'], JSON.stringify({ total_count: 1, items: [{ number: 8, title: 'PR 8', updated_at: '2026-11-22T01:02:03Z', pull_request: {} }] }))).stdout;
   assert.match(none, /^開著的 PR 1 個，其中 0 個改到 apps\/Cards 或新增決定/m);
   assert.doesNotMatch(none, /#8/);
+});
+
+void test('D-242：有 PR 沒查完（找不到共同起點、搜尋結果不完整）時照樣列出查得到的，但不給下一個編號、exit 1，免得撞號', async t => {
+  const { tool, searchFor } = await fixture(t);
+  await assert.rejects(tool([], searchFor([7, 8, 9])), (error: unknown) => {
+    const { code, stdout } = error as { code: unknown; stdout: string };
+    assert.equal(code, 1);
+    assert.match(stdout, /^#9 PR 9.*\n {2}找不到和 main 的共同起點/m);
+    assert.match(stdout, /^#7 PR 7.*\n.*\n {2}新增決定：D-003$/m, '查得到的照樣列出');
+    assert.match(stdout, /^決定編號：main 最新是 D-002，開著的 PR 用了 D-003；1 個 PR 沒查完，.*現在不給下一個編號/m);
+    assert.doesNotMatch(stdout, /下一個可以用/);
+    return true;
+  });
+  await assert.rejects(tool([], searchFor([7, 8], 40)), (error: unknown) => {
+    const { code, stdout } = error as { code: unknown; stdout: string };
+    assert.equal(code, 1);
+    assert.match(stdout, /^開著的 PR 2 個（和 origin\/main 的共同起點比）；搜尋結果不完整，可能有漏：$/m);
+    assert.match(stdout, /^決定編號：.*；搜尋結果不完整，.*現在不給下一個編號/m);
+    assert.doesNotMatch(stdout, /下一個可以用/);
+    return true;
+  });
 });
 
 void test('D-242：gh 不能用時說清楚、exit 1，不當成沒有 PR', async t => {

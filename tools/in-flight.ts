@@ -3,8 +3,9 @@
 // - PR 清單用 gh 的搜尋（雲端的專案討論串也能用）。每個 PR 的內容用 git 抓 refs/pull/<編號>/head，和 origin/main 的共同起點比，
 //   只印檔名：用 GitHub 工具查一個 PR 改了哪些檔，會連整份修改內容一起回來（PR #78 一次 16.7 萬字）。
 // - 只讀：不改工作樹與分支，只更新 origin/main 與 FETCH_HEAD。
-// - gh 不能用、沒登入或抓不到時印原因、exit 1，改用 GitHub 的 PR 清單手動看。正在談、還沒開 PR 的事這裡看不到，
-//   專案討論串另外看正在跑的串（docs/agents/workflow.md〈開工前先看〉）。
+// - gh 不能用、沒登入或抓不到時印原因、exit 1，改用 GitHub 的 PR 清單手動看。有 PR 沒查完（clone 太淺、搜尋結果不完整）時
+//   照樣列出查得到的，但不給下一個編號、exit 1：漏算一個 PR 新增的決定就會撞號。
+// - 正在談、還沒開 PR 的事這裡看不到，專案討論串另外看正在跑的串（docs/agents/workflow.md〈開工前先看〉）。
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -66,7 +67,8 @@ function gh(args: string[]) {
 }
 
 export function main(args: string[]): number {
-  const git = (gitArgs: string[]) => execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }).trim();
+  const gitRaw = (gitArgs: string[]) => execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  const git = (gitArgs: string[]) => gitRaw(gitArgs).trim();
   const root = git(['rev-parse', '--show-toplevel']);
   const paths = args.map(arg => clean(relative(root, resolve(arg))) || '.');
   // 讀設定裡原本的網址（git remote get-url 會先套 insteadOf）。
@@ -105,19 +107,23 @@ export function main(args: string[]): number {
   const taken: number[] = [];
   const lines: string[] = [];
   let shown = 0;
+  let unfinished = 0;
   for (const pr of prs) {
     const head = heads.get(pr.number);
     const title = `#${pr.number} ${pr.title}${pr.draft ? '（草稿）' : ''}（更新 ${pr.updated.slice(0, 16).replace('T', ' ')} UTC）`;
     if (!head) {
+      unfinished++;
       lines.push(`${title}\n  抓不到這個 PR 的內容`);
       continue;
     }
     let base: string;
     try { base = git(['merge-base', 'refs/remotes/origin/main', head]); } catch {
-      lines.push(`${title}\n  找不到和 main 的共同起點（clone 太淺）：先跑 git fetch --deepen=200 origin main 再查`);
+      unfinished++;
+      lines.push(`${title}\n  找不到和 main 的共同起點（多半是 clone 太淺）：先跑 git fetch --deepen=200 origin main 再查`);
       continue;
     }
-    const files = git(['diff', '--name-only', '--no-renames', base, head]).split('\n').filter(Boolean);
+    // -z：檔名不加引號、不跳脫，中文檔名（例如評分說明）才比得到。
+    const files = gitRaw(['diff', '--name-only', '-z', '--no-renames', base, head]).split('\0').filter(Boolean);
     const added = files.includes(DECISIONS) ? addedDecisions(git(['diff', base, head, '--', DECISIONS])).filter(id => !known.has(id)) : [];
     taken.push(...added);
     const hits = overlapping(files, paths);
@@ -134,8 +140,13 @@ export function main(args: string[]): number {
   const scope = paths.length ? `，其中 ${shown} 個改到 ${paths.join('、')} 或新增決定` : '';
   console.log(`開著的 PR ${prs.length} 個${scope}（和 origin/main 的共同起點比）${complete ? '' : '；搜尋結果不完整，可能有漏'}：`);
   if (lines.length) console.log(lines.join('\n'));
-  const max = Math.max(0, ...onMain, ...taken);
-  console.log(`決定編號：main 最新是 ${onMain.length ? formatId(Math.max(...onMain)) : '（沒有）'}${taken.length ? `，開著的 PR 用了 ${[...new Set(taken)].sort((a, b) => a - b).map(formatId).join('、')}` : ''}，下一個可以用 ${formatId(max + 1)}。`);
+  const latest = `main 最新是 ${onMain.length ? formatId(Math.max(...onMain)) : '（沒有）'}${taken.length ? `，開著的 PR 用了 ${[...new Set(taken)].sort((a, b) => a - b).map(formatId).join('、')}` : ''}`;
+  if (unfinished || !complete) {
+    const why = [unfinished ? `${unfinished} 個 PR 沒查完` : '', complete ? '' : '搜尋結果不完整'].filter(Boolean).join('、');
+    console.log(`決定編號：${latest}；${why}，可能漏算別的 PR 新增的決定，現在不給下一個編號：照上面的說明補齊再跑，或到 GitHub 的 PR 清單看。`);
+    return 1;
+  }
+  console.log(`決定編號：${latest}，下一個可以用 ${formatId(Math.max(0, ...onMain, ...taken) + 1)}。`);
   return 0;
 }
 
