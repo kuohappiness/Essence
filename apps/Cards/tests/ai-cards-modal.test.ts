@@ -146,3 +146,20 @@ void test('L2 R2、R4 收到的回覆檢查擋住，按「改用複製貼上」�
   assert.equal(props['接法'], '複製貼上');
   assert.equal('收到的回覆' in props, false);
 });
+
+void test('L2 R3 收到的回覆沒有 <<<完>>>：有「重送（會再計費一次）」與「改用複製貼上」，提示寫直接製作的做法；勾了確定照樣存成 API 的快照', async t => {
+  const { made, openModal } = await open(t, [ok(reply.replace('\n<<<完>>>', ''))]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  assert.ok(button(modal.contentEl, '重送（會再計費一次）'), texts(modal.contentEl).join('|'));
+  assert.ok(button(modal.contentEl, '改用複製貼上'));
+  assert.ok(texts(modal.contentEl).some(each => each.includes('最後一行不是 <<<完>>>：AI 可能沒寫完')));
+  assert.ok(!texts(modal.contentEl).some(each => each.includes('回 AI 那邊看它寫完了沒')));
+  const confirm = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'checkbox');
+  assert.ok(confirm && texts(modal.contentEl).includes('我確定這一段是完整的'));
+  confirm.checked = true;
+  confirm.fire('change');
+  button(modal.contentEl, '存成草稿')?.click();
+  await sleep(150);
+  assert.equal(propsOf(made.memory).props['接法'], 'API');
+});

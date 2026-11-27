@@ -1,6 +1,6 @@
 import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
-import { directJob, freeName, groupHints, issueText, PURPOSES, sha256OfBytes } from '../core/ai/index.ts';
+import { directJob, freeName, groupHints, issueText, PURPOSES, sha256OfBytes, UNENDED_HINT } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
 import { materialType, usageLine } from '../core/connect/index.ts';
 import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
@@ -21,6 +21,9 @@ const TEXT = {
   copied: (chars: number) => `已複製提示，共 ${chars.toLocaleString('en-US')} 字。`,
   paste: '把 AI 的整段回覆貼在這裡',
   confirmEnd: '我確定整段都貼了',
+  /** 直接製作收到的回覆沒有 <<<完>>>（L2 第一輪 R3）：不是家長沒複製完，是 AI 沒寫完。 */
+  directUnended: '最後一行不是 <<<完>>>：AI 可能沒寫完（例如回答太長被截斷）。可以按下面的「重送（會再計費一次）」，或確定內容完整再勾選、存成草稿',
+  confirmReceived: '我確定這一段是完整的',
   blocked: '擋住了，改好再檢查（可以直接在上面改字）：',
   hints: '提示（可以存）：',
   saving: '正在存成草稿…',
@@ -488,9 +491,9 @@ class AiCardsModal extends Modal {
       if ('error' in inspection) { result.setText(inspection.error); return; }
       this.inspection = inspection;
       this.confirmed = false;
-      this.showResult(result, inspection, update);
-      // 收到的回覆檢查不過（§6）：和貼回一樣顯示結果，多「重送」；服務已經回了，重送會再計費。
-      if (again && inspection.errors.length) this.directButtons(again, message, true);
+      this.showResult(result, inspection, update, received);
+      // 收到的回覆檢查不過或沒有 <<<完>>>（§6）：和貼回一樣顯示結果，多「重送」；服務已經回了，重送會再計費。
+      if (again && (inspection.errors.length || !inspection.ended)) this.directButtons(again, message, true);
       update();
     };
     box.addEventListener('input', () => { pasted.set(job.id, box.value); this.inspection = null; this.confirmed = false; result.empty(); update(); });
@@ -510,7 +513,7 @@ class AiCardsModal extends Modal {
   }
 
   /** 檢查的結果（§4 最後一點）：可以存時每一篇一列，底下列出提示；有擋住的只有原因與行號。 */
-  private showResult(el: HTMLElement, inspection: Inspection, update: () => void): void {
+  private showResult(el: HTMLElement, inspection: Inspection, update: () => void, received = false): void {
     el.empty();
     if (inspection.errors.length) {
       el.createEl('p', { text: TEXT.blocked });
@@ -531,7 +534,8 @@ class AiCardsModal extends Modal {
     if (inspection.hints.length) {
       el.createEl('p', { text: TEXT.hints, cls: 'essence-cards-issue-note' });
       const hints = el.createEl('ul', { cls: 'essence-cards-issue-note' });
-      for (const group of groupHints(inspection.hints)) {
+      const shown = received ? inspection.hints.map(hint => hint.message === UNENDED_HINT ? { ...hint, message: TEXT.directUnended } : hint) : inspection.hints;
+      for (const group of groupHints(shown)) {
         const item = hints.createEl('li', { text: group.text });
         if (group.lines.length) { const lines = item.createEl('ul'); for (const line of group.lines) lines.createEl('li', { text: line }); }
       }
@@ -539,7 +543,7 @@ class AiCardsModal extends Modal {
     if (!inspection.ended) {
       const label = el.createEl('label', { cls: 'essence-cards-remind-off' });
       const box = label.createEl('input', { type: 'checkbox' });
-      label.createEl('span', { text: TEXT.confirmEnd });
+      label.createEl('span', { text: received ? TEXT.confirmReceived : TEXT.confirmEnd });
       box.addEventListener('change', () => { this.confirmed = box.checked; update(); });
     }
   }
