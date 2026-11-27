@@ -1,4 +1,4 @@
-import { Modal, Platform, PluginSettingTab, requireApiVersion, SecretComponent, Setting, setIcon } from 'obsidian';
+import { Modal, Notice, Platform, PluginSettingTab, requireApiVersion, SecretComponent, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
 import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from '../core/connect/index.ts';
@@ -54,8 +54,21 @@ const AI = {
   test: '測試連線',
   testNote: '讀一次這個服務的模型清單，確認金鑰能用；不產生內容、不花錢。',
   testing: '測試中…',
+  /** 成功打勾、換顏色，另跳一個提示：結果常常半秒就出來，同樣的結果再按一次字也不變，只有一行小字看起來像沒反應（合併前實機發現）。 */
+  ok: (text: string) => `✓ ${text}`,
+  notice: (text: string) => `Essence Cards：${text}`,
   failed: '測試連線沒有完成，請再按一次；一直這樣，請回報給開發者。',
   shared: (names: string) => `這把金鑰也設給了 ${names}；每一家的金鑰不能通用，請確認選對了。`,
+  keyFrom: (where: string, name: string, billed: boolean) => `金鑰到 ${where}申請${billed ? '，另外計費' : ''}，和 ${name} 的訂閱無關。`,
+};
+/**
+ * 金鑰到哪裡申請（D-244 第 5 點）：選單寫的是產品名稱，金鑰卻是廠商的 API，和訂閱分開；有訂閱的家長容易以為能直接用。
+ * 照代號找（代號不上畫面）；名稱照目錄的寫。OpenRouter 沒有訂閱，不寫。
+ */
+const KEY_FROM: Partial<Record<string, { where: string; billed: boolean }>> = {
+  openai: { where: 'OpenAI 的 API 網站', billed: true },
+  anthropic: { where: 'Anthropic 的 API 網站', billed: true },
+  google: { where: 'Google 的 AI Studio 網站', billed: false },
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -361,6 +374,8 @@ class EssenceSettingTab extends PluginSettingTab {
         this.aiResult = null;
         this.refresh();
       }));
+    const from = KEY_FROM[provider.id];
+    if (from) keyRow.descEl.createDiv({ text: AI.keyFrom(from.where, providerName(provider), from.billed) });
     const shared = sharedWith(connection).map(id => providers.find(item => item.id === id)).filter(item => item !== undefined).map(providerName);
     if (shared.length) keyRow.descEl.createDiv({ text: AI.shared(shared.join('、')), cls: 'essence-cards-backup-problem' });
     const models = modelChoices(provider);
@@ -383,7 +398,7 @@ class EssenceSettingTab extends PluginSettingTab {
     });
     const test = new Setting(containerEl).setName(AI.test).setDesc(AI.testNote);
     if (this.aiTest) test.descEl.createDiv({ text: AI.testing });
-    else if (this.aiResult) test.descEl.createDiv({ text: this.aiResult.text, cls: this.aiResult.ok ? undefined : 'essence-cards-backup-problem' });
+    else if (this.aiResult) test.descEl.createDiv({ text: this.aiResult.ok ? AI.ok(this.aiResult.text) : this.aiResult.text, cls: this.aiResult.ok ? 'essence-cards-ai-ok' : 'essence-cards-backup-problem' });
     test.addButton(button => button.setButtonText(AI.test).setDisabled(this.aiTest !== null).onClick(() => { void this.runTest(client); }));
   }
 
@@ -403,6 +418,7 @@ class EssenceSettingTab extends PluginSettingTab {
       if (this.aiTest !== controller) return;
       this.aiTest = null;
       this.aiResult = { ok: result.ok, text: result.text };
+      new Notice(AI.notice(result.text));
       this.refresh();
     } catch (error) {
       // 先讓按鈕回來，再交給錯誤紀錄（D-155）：記錄本身出錯也不會停在「測試中…」（L2 第二輪 S1）。已經被換掉或中止的這一次不畫。
@@ -410,6 +426,7 @@ class EssenceSettingTab extends PluginSettingTab {
       if (current) {
         this.aiTest = null;
         this.aiResult = { ok: false, text: AI.failed };
+        new Notice(AI.notice(AI.failed));
       }
       try {
         this.host.aiFailed(error);

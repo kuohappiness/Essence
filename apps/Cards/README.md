@@ -23,6 +23,7 @@ Essence Cards 是一個 Obsidian 外掛：把筆記變成閃卡，讓學生用�
 | 參考過哪些軟體 | [參考軟體研究](docs/research/software.md)、[舊外掛分析](docs/research/old-flashcard-plugin.md) |
 | 過去的討論與舊規劃 | [封存區](../../docs/archive/README.md) |
 | AI 協作者的工作規則 | [Cards 的 AGENTS.md](AGENTS.md)（全專案的在[最上層](../../AGENTS.md)） |
+| 寫程式、檢查、建置與安裝的做法 | [Cards 的程式品質設定](docs/quality.md)（全專案的在[最上層](../../docs/agents/quality.md)） |
 
 程式放在這個資料夾的 `src/`、`tests/`、`tools/`（[D-110](../../docs/decisions.md#d-110-v1-外掛的程式結構)）；三個外掛在同一個 repo 開發，每個外掛有自己的資料夾（[D-208](../../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾)）。
 

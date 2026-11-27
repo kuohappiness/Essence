@@ -15,10 +15,11 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 英文的學習地圖與預設 | 待實機 | 下一次 iPhone 實機測試看換行、句首大寫與朗讀 | 實機 | [英文預設](card-rules/english.md) |
 | 自家孩子的提早試用 | 實作中 | 用 AI 製卡做 Unit 4～6 的卡組；12 月 2 日起開始算數字 | 使用者、Claude | [計畫](plans/early-trial.md) |
 | 家長的手機也能製卡與啟用 | 實作中 | 第一步（手機製卡、存成草稿）L2 四輪審完（[報告](<Claude Codex Discussion/2026-11-24-phone-cards-l2.md>)），使用者同意第四輪的 P1 記成限制並合併；開關文字使用者 2026-11-25 同意（「在這台裝置製卡」）；iPhone 實機測試在提早試用之後；第二步（手機啟用）另開；格式查核已做（[回報](<Claude Codex Discussion/2026-11-24-phone-cards-format-review.md>)，第二步開工前再查一次 §3） | 使用者 | [任務說明](tasks/phone-cards.md) |
+| 驗證卡片評估機制（先確定 AI 評審判得出好卡片，才比規則） | 實作中 | 第 2 層沒過（§6-2），使用者決定要不要照 §6-3 一起改製卡規則與評分說明；11-30 Codex 週額度重置後補跑 Codex；§7 回饋模組在談第一題（開發階段的回饋頁要不要給標籤）；第 1 層等使用者貼段考考卷 | 使用者、Claude | [討論稿](<Claude Codex Discussion/2026-11-27-validate-evaluation.md>) |
 | 製卡規則重整的比較測試 | 實作中 | 使用者決定國小社會換不換（〈結果〉門檻 3）；外掛施工寫在[另一份任務說明](tasks/rule-restructure-plugin.md)；英文照 §7 維持現行，下一版照 §9 與[三層架構檢討](<Claude Codex Discussion/2026-11-25-three-layer-review.md>)測試 1 改，用[比較測試工具](tasks/rule-test-tool.md)跑 | 使用者 | [任務說明](tasks/rule-restructure-test.md) |
 | 使用說明書 | 討論中 | 使用者看〈自己寫卡組〉的內容；其他部分已定案，正文等 v1 的功能都合併才寫 | 使用者 | [規畫](plans/manual.md) |
 | 題型模組（每個學習目標掛上一種題型） | 實作中 | 第 A 步（PR #56，2026-11-26，`ff848530`）與[句子排序好幾種順序都算對](tasks/sentence-order-alternatives.md)（D-238，PR #73，2026-11-27，`8433d5f6`）已合併；照使用者同意的先後做[配對與單選](tasks/matching-single-choice.md)（使用者看任務說明）→ 第 C 步 → 第 B 步；§6 第 1、2、4 題使用者 2026-11-27 回了（第 1 題寫成 [D-243](../../../docs/decisions.md#d-243-好幾題的排序各科都用點的)），第 3 題等使用者選 | 使用者、Claude | [任務說明](tasks/question-type-modules.md) |
-| Cards 直接呼叫 AI 製卡（設定頁、直接製作、加深） | 實作中 | 第 1 批已合併（PR #78，2026-11-27）；第 2 批照 §4～§8 實作，§7 已照[格式查核](<Claude Codex Discussion/2026-11-27-ai-direct-format-review.md>)改定，`服務` 寫什麼等使用者選（先照建議的甲做） | Claude | [任務說明](tasks/ai-direct.md) |
+| Cards 直接呼叫 AI 製卡（設定頁、直接製作、加深） | 實作中 | 第 2 批已合併（PR #83，`main` 的 `8b54d7ec`，`服務` 照 [D-244](../../../docs/decisions.md#d-244-ai-服務的名稱只有一套)）；接著第 3 批：加深的直接製作（§9） | Claude | [任務說明](tasks/ai-direct.md) |
 
 正式使用的 vault 現在是 `0.6.0`（2026-11-20，見已完成，[清單](tasks/release-0.6.0.md)），換版時外掛做了備份；更新與相容的下一步見〈等觸發點〉。
 
