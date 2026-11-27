@@ -6,12 +6,14 @@
 //   狀態：<狀態值>｜下一步：<一句>｜等誰：<值>
 //   狀態：已合併｜完成：<一句>｜等誰：—        （結束：已合併、已結案、已結案 → <下一站>）
 // 狀態值：規劃中、討論中、實作中、待審、等觸發點、已合併、已結案、已結案 → <下一站>、暫停（<原因>）。
-// 進行中的進〈現在在哪裡〉；等觸發點的進〈等觸發點〉（觸發點取「下一步」）；結束的進〈已完成〉，日期取那份文件最後一次改動的 commit
-// （還沒 commit 的用今天）。三節整個重寫，roadmap 其他的節不動。不比對歷史、不認舊格式；合併時這三節衝突，解完重跑一次。
+// 進行中的進〈現在在哪裡〉；等觸發點的進〈等觸發點〉（觸發點取「下一步」）；結束的進〈已完成〉。〈已完成〉的日期是那一列
+// 第一次產生的那天（本機日期），之後重跑沿用 roadmap 裡已有的日期，所以 commit、squash、淺層 clone 都不會讓它變；不讀 git 歷史。
+// 狀態行裡的相對連結，改寫成從 docs/roadmap.md 出發的路徑。三節整個重寫，roadmap 其他的節不動；不認舊格式；
+// 合併時這三節衝突，解完重跑一次。
 // 只用 Node 內建的模組，Node 20 以上直接跑。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const ROADMAP = 'docs/roadmap.md';
@@ -49,6 +51,38 @@ export function parseEntry(text) {
 
 const cell = (text) => text.replaceAll('|', '\\|');
 
+/** 把從 docs/<fromDir>/ 出發的相對連結，改成從 docs/ 出發；網址、錨點、絕對路徑不動。 */
+export function rebaseLinks(text, fromDir) {
+  return text.replace(/\]\((<[^>]*>|[^()\s]+)(\s+"[^"]*")?\)/g, (whole, target, title = '') => {
+    const angled = target.startsWith('<');
+    const raw = angled ? target.slice(1, -1) : target;
+    if (!raw || /^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('#') || raw.startsWith('/')) return whole;
+    const hash = raw.indexOf('#');
+    const [path, anchor] = hash === -1 ? [raw, ''] : [raw.slice(0, hash), raw.slice(hash)];
+    const moved = posix.normalize(posix.join(fromDir, path)) + anchor;
+    return `](${angled ? `<${moved}>` : moved}${title})`;
+  });
+}
+
+const DONE_ROW = /^\| (\d{4}-\d{2}-\d{2}) \| .*\[入口\]\(([^()\s]+)\)） \|$/;
+
+/** roadmap〈已完成〉裡已有的列：入口路徑 → 日期。 */
+export function existingDates(roadmap) {
+  const dates = new Map();
+  let inside = false;
+  for (const line of roadmap.split('\n')) {
+    if (/^#{1,2} /.test(line)) inside = /^## +已完成\s*$/.test(line);
+    const match = inside ? DONE_ROW.exec(line) : null;
+    if (match) dates.set(match[2], match[1]);
+  }
+  return dates;
+}
+
+function localToday() {
+  const now = new Date();
+  return [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+}
+
 /** 三節的內容（不含標題）。entries：{ path（以 docs/ 為基準）、date（YYYY-MM-DD）、entry }，依路徑排序。 */
 export function render(entries) {
   const sorted = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -85,17 +119,11 @@ export function replaceSections(roadmap, sections) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n*$/, '\n');
 }
 
-function lastCommitDate(root, path) {
-  try {
-    return execFileSync('git', ['log', '-1', '--format=%cs', '--', path], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    return '';
-  }
-}
-
-export function main(args, root = process.cwd()) {
+/** root：repo 根目錄；today：〈已完成〉新的一列用的日期（測試可以指定）。 */
+export function main(args, root = process.cwd(), today = localToday()) {
   const check = args.includes('--check');
-  const today = new Date().toISOString().slice(0, 10);
+  const before = readFileSync(join(root, ROADMAP), 'utf8');
+  const dates = existingDates(before);
   const entries = [];
   const problems = [];
   for (const dir of SOURCES) {
@@ -104,15 +132,20 @@ export function main(args, root = process.cwd()) {
       if (!name.endsWith('.md') || name === 'README.md') continue;
       const file = `${dir}/${name}`;
       const entry = parseEntry(readFileSync(join(root, file), 'utf8'));
-      if (entry.error) problems.push(`${file}：${entry.error}`);
-      else entries.push({ path: file.slice('docs/'.length), date: lastCommitDate(root, file) || today, entry });
+      if (entry.error) {
+        problems.push(`${file}：${entry.error}`);
+        continue;
+      }
+      const path = file.slice('docs/'.length);
+      const fromDir = posix.dirname(path);
+      for (const key of ['title', 'status', 'next', 'done']) if (entry[key]) entry[key] = rebaseLinks(entry[key], fromDir);
+      entries.push({ path, date: dates.get(path) ?? today, entry });
     }
   }
   if (problems.length) {
     console.error(`狀態行有 ${problems.length} 個問題：\n${problems.join('\n')}`);
     return 1;
   }
-  const before = readFileSync(join(root, ROADMAP), 'utf8');
   let after;
   try {
     after = replaceSections(before, render(entries));

@@ -9,11 +9,11 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const TOOLS = fileURLToPath(new URL('../../templates/project-starter/growth/tools/', import.meta.url));
 
-/** 暫存的 git repo；put 寫檔，commit 時用固定的日期（狀態板的〈已完成〉日期取最後一次改動的 commit）。 */
+/** 暫存的 git repo；put 寫檔，commit 時用固定的日期。 */
 async function repo(t: test.TestContext) {
   const root = await mkdtemp(join(tmpdir(), 'starter-growth-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -51,37 +51,60 @@ void test('成長包 section.mjs：找得到標題時印那一節與行號；程
 
 const ROADMAP = '# 開發現況\n\n開工只讀〈現在在哪裡〉。\n\n## 現在在哪裡\n\n（舊的）\n\n## 等觸發點\n\n## 已完成\n\n| 日期 | 工作 |\n|---|---|\n\n## 更早的已完成\n\n手寫的舊列，工具不動。\n';
 
-void test('成長包 status-board.mjs：三種狀態各進對的一節，日期取最後一次改動的 commit；--check 對不上時失敗（驗收第 8 項）', async t => {
+const EXPECTED_TOP = [
+  '# 開發現況', '', '開工只讀〈現在在哪裡〉。', '',
+  '## 現在在哪裡', '', '| 工作 | 狀態 | 下一步 | 等誰 | 入口 |', '|---|---|---|---|---|', '| 登入畫面 | 實作中 | 寫測試 | AI | [入口](tasks/a-login.md) |', '',
+  '## 等觸發點', '', '| 工作 | 觸發點 | 入口 |', '|---|---|---|', '| 匯出 | 有人要匯出時 | [入口](tasks/b-export.md) |', '',
+  '## 已完成', '', '最新的在最上面，由 `node tools/status-board.mjs` 產生。', '', '| 日期 | 工作 |', '|---|---|',
+];
+const EXPECTED_BOTTOM = ['', '## 更早的已完成', '', '手寫的舊列，工具不動。', ''];
+const SETUP_ROW = '| 2026-01-10 | **初始設定**：三步設定做完（已合併，[入口](tasks/c-setup.md)） |';
+
+void test('成長包 status-board.mjs：三種狀態各進對的一節，相對連結改成從 roadmap 出發；〈已完成〉的日期第一次產生後沿用，跨日 commit、淺層 clone 都不變；--check 對不上時失敗（驗收第 8 項）', async t => {
   const { root, put, commit, tool } = await repo(t);
+  const { main } = await import(join(TOOLS, 'status-board.mjs')) as { main: (args: string[], root: string, today?: string) => number };
+  const errors = t.mock.method(console, 'error', () => {});
+  t.mock.method(console, 'log', () => {});
+  const roadmap = () => readFile(join(root, 'docs/roadmap.md'), 'utf8');
   await put('docs/roadmap.md', ROADMAP);
   await put('docs/tasks/a-login.md', '# 登入畫面\n\n狀態：實作中｜下一步：寫測試｜等誰：AI\n\n來自：x\n');
   await put('docs/tasks/b-export.md', '# 匯出\n\n狀態：等觸發點｜下一步：有人要匯出時｜等誰：—\n');
   await put('docs/tasks/c-setup.md', '# 初始設定\n\n狀態：已合併｜完成：三步設定做完｜等誰：—\n');
-  await put('docs/plans/d-pricing.md', '# 價格方案\n\n狀態：已結案 → [D-002](../decisions/D-002.md)｜完成：談成決定｜等誰：—\n');
+  await put('docs/plans/d-pricing.md', '# 價格方案\n\n狀態：討論中｜下一步：比較三種方案，見 [草稿](d-pricing-draft.md#比較)｜等誰：使用者\n');
   await put('docs/tasks/README.md', '# 任務\n\n沒有狀態行也不算。\n');
-  commit(['docs'], '2026-01-10');
-  await put('docs/plans/d-pricing.md', '# 價格方案\n\n狀態：已結案 → [D-002](../decisions/D-002.md)｜完成：談成決定，見 D-002｜等誰：—\n');
-  commit(['docs/plans/d-pricing.md'], '2026-01-20');
 
-  const stale = tool('status-board.mjs', '--check');
-  assert.equal(stale.status, 1, '還沒跑工具，--check 要失敗');
-  assert.match(stale.stderr, /對不上：跑 node tools\/status-board\.mjs/);
-  assert.equal(await readFile(join(root, 'docs/roadmap.md'), 'utf8'), ROADMAP, '--check 不寫檔');
-
-  const wrote = tool('status-board.mjs');
-  assert.equal(wrote.status, 0, wrote.stderr);
-  assert.equal(await readFile(join(root, 'docs/roadmap.md'), 'utf8'), [
-    '# 開發現況', '', '開工只讀〈現在在哪裡〉。', '',
-    '## 現在在哪裡', '', '| 工作 | 狀態 | 下一步 | 等誰 | 入口 |', '|---|---|---|---|---|', '| 登入畫面 | 實作中 | 寫測試 | AI | [入口](tasks/a-login.md) |', '',
-    '## 等觸發點', '', '| 工作 | 觸發點 | 入口 |', '|---|---|---|', '| 匯出 | 有人要匯出時 | [入口](tasks/b-export.md) |', '',
-    '## 已完成', '', '最新的在最上面，由 `node tools/status-board.mjs` 產生。', '', '| 日期 | 工作 |', '|---|---|',
-    '| 2026-01-20 | **價格方案**：談成決定，見 D-002（已結案 → [D-002](../decisions/D-002.md)，[入口](plans/d-pricing.md)） |',
-    '| 2026-01-10 | **初始設定**：三步設定做完（已合併，[入口](tasks/c-setup.md)） |', '',
-    '## 更早的已完成', '', '手寫的舊列，工具不動。', '',
+  assert.equal(main(['--check'], root, '2026-01-10'), 1, '還沒跑工具，--check 要失敗');
+  assert.match(String(errors.mock.calls.at(-1)?.arguments[0]), /對不上：跑 node tools\/status-board\.mjs/);
+  assert.equal(await roadmap(), ROADMAP, '--check 不寫檔');
+  assert.equal(main([], root, '2026-01-10'), 0);
+  assert.equal(await roadmap(), [
+    ...EXPECTED_TOP.slice(0, 8), '| 價格方案 | 討論中 | 比較三種方案，見 [草稿](plans/d-pricing-draft.md#比較) | 使用者 | [入口](plans/d-pricing.md) |',
+    '| 登入畫面 | 實作中 | 寫測試 | AI | [入口](tasks/a-login.md) |', '',
+    ...EXPECTED_TOP.slice(10), SETUP_ROW, ...EXPECTED_BOTTOM,
   ].join('\n'));
-  assert.equal(tool('status-board.mjs', '--check').status, 0, '跑過之後 --check 通過');
-  const again = tool('status-board.mjs');
-  assert.match(again.stdout, /已經是最新的/, '重跑不再改');
+  commit(['docs'], '2026-01-10');
+
+  // 跨日結案：1 月 20 日改狀態、重產，1 月 21 日才 commit，1 月 22 日再檢查。
+  await put('docs/plans/d-pricing.md', '# 價格方案\n\n狀態：已結案 → [D-002](../decisions/D-002.md)｜完成：談成決定，見 [D-002](../decisions/D-002.md)｜等誰：—\n');
+  assert.equal(main(['--check'], root, '2026-01-20'), 1, '狀態改了還沒重產，--check 要失敗');
+  assert.equal(main([], root, '2026-01-20'), 0);
+  const expected = [
+    ...EXPECTED_TOP,
+    '| 2026-01-20 | **價格方案**：談成決定，見 [D-002](decisions/D-002.md)（已結案 → [D-002](decisions/D-002.md)，[入口](plans/d-pricing.md)） |',
+    SETUP_ROW, ...EXPECTED_BOTTOM,
+  ].join('\n');
+  assert.equal(await roadmap(), expected, '舊的一列沿用 1 月 10 日，新結案的用產生那天');
+  commit(['docs'], '2026-01-21');
+  assert.equal(main(['--check'], root, '2026-01-22'), 0, 'commit 之後、隔天再檢查都通過');
+  assert.equal(main([], root, '2026-01-22'), 0);
+  assert.equal(await roadmap(), expected, '重跑不再改');
+
+  // 淺層 clone（CI 的 actions/checkout 預設深度 1）也通過，因為日期不從 git 歷史來。
+  const shallow = join(root, 'shallow');
+  execFileSync('git', ['clone', '-q', '--depth', '1', pathToFileURL(root).href, shallow], { stdio: 'ignore' });
+  const cloned = spawnSync(process.execPath, [join(TOOLS, 'status-board.mjs'), '--check'], { cwd: shallow, encoding: 'utf8' });
+  assert.equal(cloned.status, 0, cloned.stderr);
+  assert.equal(tool('status-board.mjs', '--check').status, 0, '從命令列跑也通過');
 });
 
 void test('成長包 status-board.mjs：狀態行格式不對時報出檔名與原因，不寫檔', async t => {

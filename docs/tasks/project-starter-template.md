@@ -245,9 +245,9 @@ Essence 這邊：
 
 - **做了什麼**：`growth/README.md`（〈5〉的表與怎麼拿、怎麼把 `--check` 接進提交前與 CI），七份做法（`tasks.md`、`plans.md`、`second-ai.md`、`long-docs.md`、`private-words.md`、`packages.md`、`sub-projects.md`；里程碑那一列只寫一句指到 `code-quality` 的 `milestone.md`），三支工具 `growth/tools/section.mjs`、`status-board.mjs`、`decisions-index.mjs`。測試 `tools/tests/project-starter-growth.test.ts`；驗收第 1 項的字詞掃描本來就包含 `growth/`。
 - **section.mjs**：照 Essence 的 `section.ts` 改成 `.mjs`，圍欄的判斷縮成一般的寫法（不處理引用框裡的圍欄）。它只讀不寫，所以沒有 `--check`：〈5〉寫「三支都有 `--check`」，對只讀的工具沒有可比對的東西，另外兩支有。
-- **status-board.mjs**：讀 `docs/tasks/`、`docs/plans/` 第一層的狀態行，整個重寫 roadmap 的三節，其他節不動。工作的名稱取一級標題；〈已完成〉的日期取那份最後一次改動的 commit，最新的在最上面。不認手寫的舊列：`growth/tasks.md` 寫了改用工具前，先把手寫的〈已完成〉列搬到另一節。
+- **status-board.mjs**：讀 `docs/tasks/`、`docs/plans/` 第一層的狀態行，整個重寫 roadmap 的三節，其他節不動。工作的名稱取一級標題；狀態行裡的相對連結改成從 roadmap 出發。〈已完成〉的日期是那一列第一次產生的那天，之後重跑沿用 roadmap 裡已有的日期，最新的在最上面；Codex 查出取 commit 日期會在跨日 commit、squash、淺層 clone 時對不上（PR #109），所以改成不讀 git 歷史。〈計畫〉這一條原本寫「取最後一次改動的 commit」，以這裡為準。不認手寫的舊列：`growth/tasks.md` 寫了改用工具前，先把手寫的〈已完成〉列搬到另一節。
 - **decisions-index.mjs**：讀 `docs/decisions/D-*.md` 的標題、狀態行與「一句話」，重寫 README 兩行記號之間的索引表。狀態欄由工具從別條決定的「修改」「取代」反推，起步包手寫索引時要手改的那一欄，改用工具後不用改。
-- **驗收第 8 項**：section 找得到、找不到標題，程式碼裡的 # 不算；status-board 三種狀態各進對的一節、日期取 commit、格式錯報檔名與原因（八種）、`--check` 對不上時失敗且不寫檔、重跑不改；decisions-index 重產後和手寫的一字不差、`--check` 對不上時失敗、格式錯與提到不存在的決定都報檔名。
+- **驗收第 8 項**：section 找得到、找不到標題，程式碼裡的 # 不算；status-board 三種狀態各進對的一節、相對連結改寫、日期沿用（跨日 commit 後隔天檢查、深度 1 的 clone 都通過）、格式錯報檔名與原因（八種）、`--check` 對不上時失敗且不寫檔、重跑不改；decisions-index 重產後和手寫的一字不差、`--check` 對不上時失敗、格式錯與提到不存在的決定都報檔名。
 - **分派**：測試檔開頭寫了三支工具的路徑全名，只改它們的 commit 也會跑這個測試。
 
 延後的測試：（收尾時填）

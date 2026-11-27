@@ -19,7 +19,7 @@
 2. 有小工具的，把 `growth/tools/` 裡那支複製到新專案的 `tools/`。三支都只用 Node 內建的模組，Node 20 以上直接跑，不用安裝套件。
 3. 會寫檔的兩支（`status-board.mjs`、`decisions-index.mjs`）有 `--check`：只比對、不寫檔，對不上時 exit 1。把它接進提交前與 CI，忘了重跑就會被擋：
    - `.githooks/pre-commit`：在 `exec node tools/check.mjs --staged` 之前加一行 `node tools/<那支>.mjs --check || exit 1`。
-   - `.github/workflows/check.yml`：`check` 這個 job 加一步 `- run: node tools/<那支>.mjs --check`。
+   - `.github/workflows/check.yml`：`check` 這個 job 加一步 `- run: node tools/<那支>.mjs --check`。兩支都不讀 git 歷史（狀態板〈已完成〉的日期記在 roadmap 裡，第一次產生後沿用），`actions/checkout` 預設的淺層 clone 就夠，不用改 `fetch-depth`。
 4. 在新專案的 `docs/workflow.md` 寫一句：這個條件到了、加了什麼、哪天加的。
 
 三支工具的測試在模板來源的 repo 裡，CI 每次跑；拿過去之後由新專案自己守。
