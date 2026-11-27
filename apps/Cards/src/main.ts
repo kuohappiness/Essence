@@ -17,6 +17,7 @@ import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.
 import type { RestoreFlow } from './obsidian/restore.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
+import { directHost, pdfPages } from './obsidian/ai-direct-host.ts';
 import { wireIntroButtons, type AddRequest } from './obsidian/intro-add.ts';
 import { createIntroRunner } from './obsidian/intro-run.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
@@ -238,8 +239,13 @@ export default class EssenceCardsPlugin extends Plugin {
       phone: !Platform.isDesktopApp,
       now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
       onError: error => { this.fail('ai', error); },
+      // 直接製作只在電腦（tasks/ai-direct.md §4：手機照舊複製提示）。送不成的記進錯誤紀錄（§8，多記服務、模型、狀態碼、請求編號、次數）；家長按取消的不記。
+      ...Platform.isDesktopApp ? { direct: directHost(app, ({ msg, ...ai }) => { console.error('Essence Cards', 'ai', msg); this.errors.record('ai', msg, { ai }); }) } : {},
     });
-    this.aiWiring = wireAiCards(this, { cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+    this.aiWiring = wireAiCards(this, {
+      cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now(),
+      ...Platform.isDesktopApp ? { pdfPages, openSettings: () => { this.openSettings(); } } : {},
+    });
     // 加深只在電腦（D-226 第 2 點：手機的第一批只有 AI 製卡建新檔）。
     if (Platform.isDesktopApp) {
       // 加深這一節（tasks/ai-cards-deepen.md）：寫入走開在編輯模式的分頁（同引言框的加入），否則走檔案。
@@ -356,6 +362,8 @@ export default class EssenceCardsPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
+    // 送出中的直接製作一起停掉（§6、平台事實表的停用時中止）：服務那邊可能已經開始做，畫面已經關了，不再等它。
+    this.ai?.cancel();
     this.store.close();
     // 外掛停用時一起關掉複習畫面與入口（什麼都不寫，D-074）。
     this.review?.close();
