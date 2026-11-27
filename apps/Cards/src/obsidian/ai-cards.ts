@@ -223,6 +223,9 @@ export function createAiCards(deps: AiCardsDeps) {
     return next;
   }
   const at = (): string => { const now = deps.now(); return stamp(now.ms, now.offset); };
+  async function recopy(job: CardJob): Promise<boolean> {
+    try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }
+  }
   /** 送出一次（§4 第 2～5 步）：成功交回整段與證據、存進工作（F2）；不成功交給錯誤紀錄（取消的不記，§8）。 */
   async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
     const direct = deps.direct!;
@@ -380,8 +383,18 @@ export function createAiCards(deps: AiCardsDeps) {
     /** 現在有沒有一個正在送出。 */
     sending: (): boolean => sending !== null,
     /** 再放一次剪貼簿：照存下的每一部分，不重組（§3）。 */
-    async recopy(job: CardJob): Promise<boolean> {
-      try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }
+    recopy,
+    /**
+     * 改用複製貼上（§6）：再放一次同一份提示；放進去了，這一份工作改回一般的待貼回（拿掉 `api`、忘掉記得的教材檔），
+     * 重開製卡之後也照複製貼上走，貼回別處的回覆不會配上這一次的證據（PR #83 的 GitHub 審查）。放不進剪貼簿時不改、交回 null。
+     */
+    async fallback(job: CardJob): Promise<CardJob | null> {
+      if (!await recopy(job)) return null;
+      const plain: CardJob = { ...current(job) ?? job };
+      delete plain.api;
+      kept.delete(plain.id);
+      try { put(plain); } catch (error) { deps.onError(error); }
+      return plain;
     },
     /** 第三步：檢查（§4），不寫檔。 */
     inspect(job: CardJob, reply: string): Inspection | { error: string } {

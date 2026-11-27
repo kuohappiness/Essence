@@ -392,9 +392,9 @@ class AiCardsModal extends Modal {
       this.resend();
     });
     buttons.createEl('button', { text: '改用複製貼上' }).addEventListener('click', () => {
-      void cards.recopy(job).then(ok => {
-        if (!ok) { message.setText('放不進剪貼簿；請再按一次'); return; }
-        this.job = job;
+      void cards.fallback(job).then(plain => {
+        if (!plain) { message.setText('放不進剪貼簿；請再按一次'); return; }
+        this.job = plain;
         this.showPaste(null, 'fallback');
       });
     });

@@ -257,6 +257,28 @@ void test('§7 收到後改了字：回覆原文是交出的那一段，多寫�
   for (const key of ['送出時間', '收到時間', '教材檔', '要求的模型', '推理等級', '輸入用量', '費用', '回應編號']) assert.equal(key in plain, false, key);
 });
 
+void test('§6 收到的回覆檢查不過、改用複製貼上：工作改回一般的待貼回，重開之後也照複製貼上存，快照沒有 API 欄', async t => {
+  const broken = `${reply}\n希望這些卡片有幫助`;
+  const first = await load(t, [ok(broken)]);
+  const outcome = await first.cards.direct(form, [lesson]);
+  assert.ok(outcome.kind === 'received');
+  const inspection = first.cards.inspect(outcome.job, outcome.reply);
+  assert.ok(!('error' in inspection) && inspection.errors.length > 0, '檢查會擋');
+  const plain = await first.cards.fallback(outcome.job);
+  assert.ok(plain);
+  assert.equal(first.clipboard.at(-1), outcome.job.parts.map(part => part.text).join('\n\n'), '同一份提示放進剪貼簿');
+  assert.equal(directJob(first.cards.jobs()[0]), null);
+  // 重開：存下的工作也沒有 api，清單照複製貼上的工作畫；家長貼的是別處的回覆。
+  const again = await load(t, [], { box: first.box, memory: first.memory, direct: false });
+  const [kept] = again.cards.jobs();
+  assert.equal(kept.id, outcome.job.id);
+  assert.equal('api' in kept, false);
+  assert.equal((await again.cards.save(kept, reply, 'Claude')).kind, 'done');
+  const props = propsOf(again.memory).props;
+  assert.deepEqual([props['接法'], props['服務']], ['複製貼上', 'Claude']);
+  for (const key of ['收到的回覆', '送出時間', '收到時間', '教材檔', '要求的模型', '輸入用量', '回應編號']) assert.equal(key in props, false, key);
+});
+
 void test('§7 OpenRouter：模型照回報的原樣（帶廠商前綴）、服務回報的費用 0 照寫、請求編號與回應編號各寫各的；推理照服務的預設寫「未指定」', async t => {
   const router: MockReply = {
     status: 200, headers: { 'content-type': 'application/json', 'x-request-id': '20261107' },
