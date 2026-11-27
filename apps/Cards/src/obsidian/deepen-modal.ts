@@ -78,8 +78,11 @@ class DeepenModal extends Modal {
   private ctx: DeepenContext | { error: string } | null = null;
   /** 回到第一步時要顯示的原因（直接製作在送出前就被擋下）。 */
   private notice = '';
-  /** 送出中的畫面；畫面換掉或關掉時停計時器。 */
-  private view: { ask: HTMLElement; stop(): void } | null = null;
+  /**
+   * 送出中的畫面與送出的那個流程；畫面換掉或關掉時停計時器。流程在送出時拿好（PR #99 的 GitHub 審查）：停用外掛時 host.deepen() 已經是 null，
+   * 關視窗照樣要中止得到。
+   */
+  private view: { ask: HTMLElement; stop: () => void; flow: Deepen } | null = null;
   /** 關掉視窗前問過要不要取消送出中的那一個（§6 最後一點）；停用外掛時不問。 */
   private forced = false;
   /** 拖進視窗的檔交給誰（§5）：只有畫著教材欄的畫面有。 */
@@ -112,11 +115,11 @@ class DeepenModal extends Modal {
   /** 送出中按關閉（Esc、右上角的 ×）：先問要不要取消（§6）；停用外掛時直接關。 */
   close(): void {
     const view = this.view;
-    if (!this.forced && view && this.host.deepen()?.sending()) { askCancel(view.ask, () => { this.forceClose(); }); return; }
+    if (!this.forced && view?.flow.sending()) { askCancel(view.ask, () => { this.forceClose(); }); return; }
     super.close();
   }
   /** 停用外掛、按關閉後選了「取消這一次」：取消送出中的那一個，不再問。 */
-  forceClose(): void { this.forced = true; if (this.view) this.host.deepen()?.abort(); this.close(); }
+  forceClose(): void { this.forced = true; this.view?.flow.abort(); this.close(); }
   private now(): number { return this.host.now?.() ?? Date.now(); }
   private stopView(): void { this.view?.stop(); this.view = null; }
   private reset(): HTMLElement {
@@ -221,7 +224,7 @@ class DeepenModal extends Modal {
     send?.addEventListener('click', () => {
       this.busy = true;
       refresh();
-      void this.sendNow(progress => deepen.direct(this.path, this.direction, this.material, this.pick ?? undefined, this.materials, progress)).then(blocked => {
+      void this.sendNow(deepen, progress => deepen.direct(this.path, this.direction, this.material, this.pick ?? undefined, this.materials, progress)).then(blocked => {
         if (blocked === null) return;
         this.busy = false;
         this.notice = blocked;
@@ -254,10 +257,10 @@ class DeepenModal extends Modal {
   /**
    * 送出中（§4 第 4 步）：work 送出並交回結果；送出前就擋下時回傳原因，其他情況由這裡畫下一步，回傳 null。
    */
-  private async sendNow(work: (progress: (event: ProgressEvent) => void) => Promise<DeepenDirectOutcome>): Promise<string | null> {
+  private async sendNow(flow: Deepen, work: (progress: (event: ProgressEvent) => void) => Promise<DeepenDirectOutcome>): Promise<string | null> {
     const el = this.reset();
-    const view = sendingView(el, nameOf(this.path), () => this.now(), () => { this.host.deepen()?.abort(); });
-    this.view = view;
+    const view = sendingView(el, nameOf(this.path), () => this.now(), () => { flow.abort(); });
+    this.view = { ...view, flow };
     const outcome = await work(event => { view.progress(event); });
     this.stopView();
     this.busy = false;
@@ -362,7 +365,7 @@ class DeepenModal extends Modal {
     send.addEventListener('click', () => {
       const materials = picked();
       this.busy = true;
-      void this.sendNow(progress => deepen.resend(job, progress, materials)).then(blocked => {
+      void this.sendNow(deepen, progress => deepen.resend(job, progress, materials)).then(blocked => {
         if (blocked === null) return;
         this.busy = false;
         this.showFailure({ kind: 'unknown', text: blocked, next: '', afterResponse: false, settings: false });

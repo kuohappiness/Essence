@@ -366,8 +366,9 @@ export default class EssenceCardsPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
-    // 送出中的直接製作一起停掉（§6、平台事實表的停用時中止）：服務那邊可能已經開始做，畫面已經關了，不再等它。
+    // 送出中的直接製作（製卡與加深）一起停掉（§6、§9、平台事實表的停用時中止）：服務那邊可能已經開始做，畫面已經關了，不再等它。
     this.ai?.cancel();
+    this.deepen?.abort();
     this.store.close();
     // 外掛停用時一起關掉複習畫面與入口（什麼都不寫，D-074）。
     this.review?.close();

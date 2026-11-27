@@ -28,16 +28,18 @@ async function open(t: TestContext, replies: MockReply[], options: Parameters<ty
   const made = await load(t, replies, options);
   const stub = createObsidianStub({ desktop: true });
   const unload: (() => void)[] = [];
+  // 停用外掛時主程式先設 unloaded、host.deepen() 之後是 null，再跑登記的清理（main.ts 的 onunload 的順序）。
+  let unloaded = false;
   const settings = { opened: 0 };
   const notes: string[] = [];
   const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, register(callback: () => void) { unload.push(callback); } };
   const { wireDeepen } = stub.load<{ wireDeepen: (plugin: unknown, host: unknown) => { open(path: string): void } }>(code);
   const wired = wireDeepen(plugin, {
-    deepen: () => made.deepen, read: () => Promise.resolve(made.memory.texts.get(DECK) ?? null), openNote() {}, notify: (text: string) => { notes.push(text); },
+    deepen: () => unloaded ? null : made.deepen, read: () => Promise.resolve(made.memory.texts.get(DECK) ?? null), openNote() {}, notify: (text: string) => { notes.push(text); },
     now: () => Date.now(), pdfPages: () => Promise.resolve(4), openSettings: () => { settings.opened++; },
   });
   const openModal = async (): Promise<Modal> => { wired.open(DECK); await sleep(20); return stub.modals.at(-1) as unknown as Modal; };
-  return { made, openModal, settings, notes, unload: () => { for (const each of unload) each(); } };
+  return { made, openModal, settings, notes, unload: () => { unloaded = true; for (const each of unload) each(); } };
 }
 /** 第一步選教材檔（選填）、按直接製作，等收完。 */
 async function sendFromForm(modal: Modal, files: File[] = [pdf()]): Promise<void> {
