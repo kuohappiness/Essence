@@ -132,7 +132,7 @@ Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件
 | 展開的主題細項規畫：一主題一份，從 backlog 引用，命名與維護見[該目錄 README](plans/README.md) | 跨軟體的在最上層 `docs/plans/`，其餘在軟體的 `docs/plans/` |
 | 參考軟體研究 | 軟體的 `docs/research/` |
 | 現在推薦的 AI 服務與模型；新模型推出時更新 | 最上層 `docs/ai-models.md` |
-| 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts` |
+| 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts`；只有某個軟體用得到的（建置、安裝、平台的做法、里程碑）在軟體的 `docs/quality.md`（使用者 2026-11-27 同意） |
 | 功能地圖 | 最上層 `docs/progress-map.md` |
 | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 | 最上層 `docs/archive/` |
 | 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態行（[寫法](agents/workflow.md#入口的狀態行)） | 跨軟體的在最上層 `docs/tasks/`，其餘在軟體的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
