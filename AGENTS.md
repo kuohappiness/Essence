@@ -28,6 +28,7 @@
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 - 判斷這件工作在本機還是雲端做；雲端做得了就提醒使用者改到雲端，分法見 `docs/agents/quality.md`〈本機或雲端〉（[D-212](docs/decisions.md#d-212-claude-直接呼叫本機-codex任務開始時分本機或雲端)）。
+- 開工改檔、取決定編號前，跑 `node tools/in-flight.ts` 看開著的 PR 改到哪些檔、用了哪些編號，也看正在跑的串；受影響的那段等那邊合併或談定再做，其餘照做（[工作流程規範〈開工前先看〉](docs/agents/workflow.md#開工前先看)，[D-242](docs/decisions.md#d-242-開工前先看有沒有人在改同一樣東西)）。
 - 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式、請 Codex 查核用 `code-quality`。
 
 ## 文件分工

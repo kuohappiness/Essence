@@ -33,11 +33,17 @@ export interface PickView {
   results: Readonly<Record<string, Rating>>;
   /** 結果階段有錯：只有「下一張」。 */
   committable: boolean;
+  /**
+   * 英文句子排序寫了另一種排法才有（tasks/sentence-order-alternatives.md §4）：還算數的那幾種對的順序，0 是題目那一行，照先後排。
+   * 作答時是全部，再選時是候選，結果是一種，預覽是 [0]。畫面照它決定顯示哪些標點（§5）。
+   */
+  orders?: readonly number[];
 }
 
 interface Cell {
   lt: string;
   v: string;
+  /** 這一格對的字。句子排序有另一種排法時，對答案與再選之後換成候選裡排第一的那一種的詞塊（§4）。 */
   answer: string;
   /** 目前這格填的字；對答案之後是最後一次選的字。 */
   filled: string | null;
@@ -69,6 +75,11 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
   /** 排序（全詩順序卡 D-187、D-204，句子排序）：放過的字鍵會變淡，點了是交換。 */
   const order = questionType(card) === 'order';
   const shown = options.revealed === true;
+  /** 句子排序每一種對的順序的詞塊（§4）：0 是題目那一行；沒有另一種排法時是 null，下面每一步都和以前一樣。 */
+  const others = card.group?.order?.others ?? [];
+  const orders: readonly (readonly string[])[] | null = others.length ? [cells.map(cell => cell.answer), ...others.map(other => other.words)] : null;
+  /** 還算數的那幾種，照先後：作答時是全部；對答案後是和排對的格不衝突的；再選時跟著縮小。 */
+  let alive: number[] = orders ? orders.map((_, i) => i) : [];
   let stage: PickView['stage'] = shown ? 'result' : 'answer';
   let cursor: number | null = shown ? null : 0;
   let lastKey = { key: '', at: -Infinity };
@@ -113,10 +124,43 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     if (value === cell.first) return false;
     cell.filled = value;
     cell.held = index === null ? null : retryIndex(cell, value, index);
-    cell.retry = value === cell.answer ? 'right' : 'wrong';
-    cell.status = value === cell.answer ? 'near' : 'miss';
+    const near = orders ? narrow(cursor, value) : value === cell.answer;
+    cell.retry = near ? 'right' : 'wrong';
+    cell.status = near ? 'near' : 'miss';
     nextRetry();
     return true;
+  }
+
+  /**
+   * 對答案時排出候選（§4）：和某一種完全一樣就是那一種；都不一樣時照「同位置對得最多格」排，一樣多時第一格和孩子排的相同的在前，
+   * 再照寫的順序。排第一的那一種決定哪幾格要再選；候選是和它排對的格都不衝突的那幾種（照同樣的先後）。
+   */
+  function rank(all: readonly (readonly string[])[]): void {
+    const picks = cells.map(cell => cell.skipped ? null : cell.filled);
+    const exact = all.findIndex(order => order.every((word, i) => word === picks[i]));
+    if (exact >= 0) alive = [exact];
+    else {
+      const score = (i: number): number => all[i].filter((word, at) => word === picks[at]).length;
+      const lead = (i: number): number => picks[0] !== null && all[i][0] === picks[0] ? 0 : 1;
+      const ranked = all.map((_, i) => i).sort((a, b) => score(b) - score(a) || lead(a) - lead(b) || a - b);
+      const top = all[ranked[0]];
+      alive = ranked.filter(i => top.every((word, at) => word !== picks[at] || all[i][at] === word));
+    }
+    answerAs(all);
+  }
+
+  /** 再選一格（§4）：選的字在某一種候選的這個位置是差一點，候選縮成那幾種；都不是是沒印象，候選不變。 */
+  function narrow(at: number, value: string): boolean {
+    if (!orders) return false;
+    const match = alive.filter(i => orders[i][at] === value);
+    if (match.length) alive = match;
+    answerAs(orders);
+    return match.length > 0;
+  }
+
+  /** 每一格的答案換成候選裡排第一的那一種的詞塊。 */
+  function answerAs(all: readonly (readonly string[])[]): void {
+    cells.forEach((cell, at) => { cell.answer = all[alive[0]][at]; });
   }
 
   /**
@@ -188,10 +232,9 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
     const open = cells.findIndex(empty);
     if (open >= 0) { cursor = open; return true; }
     if (options.now() - lastFill < AFTER_FILL) return false;
-    for (const cell of cells) {
-      cell.first = cell.filled;
-      cell.status = cell.skipped ? 'miss' : cell.filled === cell.answer ? 'right' : 'retry';
-    }
+    for (const cell of cells) cell.first = cell.filled;
+    if (orders) rank(orders);
+    for (const cell of cells) cell.status = cell.skipped ? 'miss' : cell.filled === cell.answer ? 'right' : 'retry';
     stage = 'retry';
     nextRetry();
     return true;
@@ -229,6 +272,7 @@ export function createPick(card: Card, options: { now: () => number; revealed?: 
       spent: stage === 'retry' && cursor !== null ? cells[cursor].first : null, used: usedOf(),
       filled: !cells.some(empty), results: resultsOf(),
       committable: stage === 'result' && !allRight(),
+      ...(orders ? { orders: shown ? [0] : stage === 'result' ? [alive[0]] : [...alive] } : {}),
     };
   }
 

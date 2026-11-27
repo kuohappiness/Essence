@@ -80,7 +80,13 @@ export interface Typing { style: 'grammar' | 'inflection'; hint: string | null; 
  * 每一題：第一格前面的字、每一格的詞塊（拿掉結尾的標點、句首改小寫，比對與字鍵都用它）、每一格後面接的字（含拿掉的標點）、哪幾格在句首。
  */
 export interface SentenceOrder { title: string; prompts: readonly SentenceCells[] }
-export interface SentenceCells { head: string; words: readonly string[]; tails: readonly string[]; starts: readonly boolean[] }
+/**
+ * others：這一題底下認得的「另一種排法：」（D-238、tasks/sentence-order-alternatives.md §2），照寫的順序；沒有時不帶這一欄。
+ * head、starts 只有一份，照題目那一行。
+ */
+export interface SentenceCells { head: string; words: readonly string[]; tails: readonly string[]; starts: readonly boolean[]; others?: readonly SentenceAlt[] }
+/** 一種另一種排法：詞塊（和題目那一行同一組，順序不同）、每一格後面的字，source 是那一行補充的原文（畫面照它跳過那一行，§5）。 */
+export interface SentenceAlt { words: readonly string[]; tails: readonly string[]; source: string }
 /**
  * 全詩順序卡：詩名（名稱拿掉最後的「排序」「全詩」）、每一格的文字（照填空的順序，相同的兩句兩格都留）、
  * 第一格前面的字、每一格後面接到下一格之前的字（多半是標點）。
@@ -160,7 +166,10 @@ export type ProblemCode =
   // field-children：hint，分行的資料裡忽略的子項目（§9-4）。
   | 'field-children'
   // 點選填空（tasks/question-type-seam.md §3）：pick-answer-invalid 是 error，答案是組裡別的字；另外兩個是 hint，照原題型。一個目標最多一種。
-  | 'pick-answer-invalid' | 'pick-mixed' | 'pick-not-recognized';
+  | 'pick-answer-invalid' | 'pick-mixed' | 'pick-not-recognized'
+  // 英文句子排序的另一種排法（tasks/sentence-order-alternatives.md §1 第 5～7 點）：都是 hint。order-alt-invalid 是那一行不認或寫錯地方，
+  // order-alt-all-right 是排錯的排法剩不到兩種。AI 的草稿兩個都算錯誤（§6）。
+  | 'order-alt-invalid' | 'order-alt-all-right';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
   random?: () => number;

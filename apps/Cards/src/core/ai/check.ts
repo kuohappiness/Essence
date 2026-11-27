@@ -209,6 +209,12 @@ function sameSentenceTwice(target: CheckedTarget, issue: Report): void {
   for (const q of slot) if ((answers.get(choiceStem(q.front))?.size ?? 0) > 1) issue(q.line, '錯誤', 'choice-ambiguous', AMBIGUOUS);
 }
 
+/**
+ * 另一種排法的兩個提示（tasks/sentence-order-alternatives.md §6）：解析器只提示、照樣出題，AI 的草稿算錯誤，退回重做；不分科
+ * （別科的題目底下寫了也是寫錯）。本文與候選框在 checkPick 升級，已有框在 parseBox。
+ */
+const ORDER_ALT: ReadonlySet<string> = new Set(['order-alt-invalid', 'order-alt-all-right']);
+
 function checkPick(text: string, deck: Deck, issue: Report, subject?: string): void {
   const lines = text.split(/\r?\n/);
   const targetAt = (line: number): DeckTarget | undefined => deck.targets.find(t => t.line === line || t.prompts.some(p => p.line === line));
@@ -219,7 +225,7 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
     // 多音字讀不成的提示由 checkChoice 報成 choice-invalid（tasks/polyphone-pick.md §5）。
     const owner = targetAt(p.line);
     if ((p.code === 'pick-not-recognized' || p.code === 'pick-mixed') && owner && choiceProblems(owner).length) continue;
-    if (p.code === 'pick-answer-invalid') issue(line, '錯誤', p.code, p.message);
+    if (p.code === 'pick-answer-invalid' || ORDER_ALT.has(p.code)) issue(line, '錯誤', p.code, p.message);
     else if (p.code === 'pick-not-recognized') { issue(line, '錯誤', p.code, p.message); unrecognized.add(targetAt(p.line)); }
     else if (p.code === 'pick-mixed') issue(line, PICK_ENDING.test(targetAt(p.line)?.name ?? '') ? '錯誤' : '提醒', p.code, p.message);
   }
@@ -471,10 +477,13 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
 
   // 最上層的區塊依序走一遍，順便檢查順序：備註 → 學習目標 → 加進已有 → 候選。
   const blocks = blocksOf(all.slice(start));
-  /** 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行（行號已換回 text 的行）。本文的直接看 deck.problems。 */
+  /**
+   * 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行與另一種排法的提示（行號已換回 text 的行）。本文的直接看 deck.problems。
+   * 同一行已經報過錯誤的不重複（最後一段），所以候選框的另一種排法在 checkPick 報過就不再報。
+   */
   const boxProblems: { line: number; code: string; message: string }[] = [];
   const parseBox = (inner: readonly Line[]): void => {
-    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject }).problems) if (p.level === 'error') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
+    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject }).problems) if (p.level === 'error' || ORDER_ALT.has(p.code)) boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
   };
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
@@ -496,6 +505,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
       } else if (title === '加進已有的學習目標') {
         order.push({ kind: 'existing', line: block.line });
         parseBox(inner);
+        // 已有框加的題目也會出題：英文的規則一樣擋（tasks/sentence-order-alternatives.md §6、Fable S6），行號換回 text 的行。
+        if (subject === '英文') checkEnglish(parseDeck(inner.map(l => l.raw).join('\n'), { subject }), (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); });
         for (const node of roots) {
           const target = analyzeTarget(node, 'existing');
           existing.push(target);
