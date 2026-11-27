@@ -77,6 +77,11 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   // L2 第二輪（中途）：字元參照的名稱大小寫不同也算（HTML 認 `&QUOT;`）。
   invalid('她說她累了：&QUOT;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
   invalid('她說她累了：&#X22;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
+  // L2 第二輪 F1：破折號後面的直引號、不可斷行空白後面的直引號、認不得的字元參照結尾（看不出是不是引號）也不認。
+  invalid('改寫引句—"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
+  invalid('她說她累了：&nbsp;"==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
+  invalid('她說她累了：&OpenCurlyDoubleQuote;==I\'m tired==, ==she== ==said==.', ['另一種排法：==she== ==said==, ==I\'m tired==.'], /引號/);
+  invalid('他說 \'==I\'m tired==,\' ==she== ==said==.', ['另一種排法：==she== ==said==, \'==I\'m tired==.\''], /引號/);
 
   const twice = one(BECAUSE, [ALT, ALT]);
   assert.deepEqual(codes(twice), [[4, 'order-alt-invalid']], '第二行和前面一行相同');
@@ -96,10 +101,16 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   assert.equal(field.targets[0].fields.paused, true, '欄位照樣讀');
 });
 
-void test('結束的引號（L2 第一輪 R1）：逗號、句點後面的直引號不是開頭，照樣認', () => {
-  const deck = one('"I\'m tired," ==she== ==said== ==quietly==.', ['另一種排法："I\'m tired," ==she== ==quietly== ==said==.'], '說話的人 排序');
-  assert.deepEqual(codes(deck), []);
-  assert.deepEqual(othersOf(deck)?.map(other => other.words), [['she', 'quietly', 'said']]);
+void test('結束的引號（L2 第一輪 R1、第二輪 F3）：直引號照成對數，第一格前面的引號都成對時是結束的引號，照樣認；所有格的 \' 不算', () => {
+  const accepted = (question: string, alt: string, words: readonly string[]): void => {
+    const deck = one(question, [`另一種排法：${alt}`], '說話的人 排序');
+    assert.deepEqual(codes(deck), [], question);
+    assert.deepEqual(othersOf(deck)?.map(other => other.words), [words], question);
+  };
+  accepted('"I\'m tired," ==she== ==said== ==quietly==.', '"I\'m tired," ==she== ==quietly== ==said==.', ['she', 'quietly', 'said']);
+  accepted('她說：＂I’m tired，＂ ==she== ==said== ==quietly==.', '她說：＂I’m tired，＂ ==she== ==quietly== ==said==.', ['she', 'quietly', 'said']);
+  accepted('他說：&quot;好&quot; ==she== ==said== ==quietly==.', '==she== ==quietly== ==said==.', ['she', 'quietly', 'said']);
+  accepted('I found the boys\' ==bags== ==under== ==the table==.', '==the table== ==under== ==bags==.', ['the table', 'under', 'bags']);
 });
 
 void test('第一格前面的字（§1 第 3 點）：不寫、寫題目那段的結尾、整行照抄都認；空白連續算一個', () => {

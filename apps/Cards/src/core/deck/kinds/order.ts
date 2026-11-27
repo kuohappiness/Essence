@@ -155,23 +155,45 @@ type KindProblem = PickReading['problems'][number];
 const ALT_LABEL = '另一種排法：';
 /** 看起來是另一種排法的補充（冒號前有空白、半形冒號也算）：認不得的、放錯地方的都用它找出來提示（§1 第 5、6 點）。 */
 export const ALT_LIKE = /^另一種排法\s*[：:]/u;
-/**
- * 題目第一格前面的字結尾是開頭的引號或括號（§1 第 5 點最後一項）：引號跟著第一格，換一種排法就跟錯詞塊。
- * 直引號（半形、全形）前面是開頭、空白、冒號、開頭的括號、中文或全形標點時算開頭（L2 第一輪 R1）；逗號、句點、字母後面的是結束的引號。
- */
-const OPENING = /(?:[\p{Ps}\p{Pi}]|(?:^|[\s:\p{Ps}\p{Pi}\p{Script=Han}\u3000-\u303f\uff00-\uffef])["'＂＇])$/u;
-/** 字元參照寫的引號、括號（`&quot;`、`&#34;`）也看得出來（R1）：解開數字的參照與幾個引號、括號的名稱（大小寫都算，HTML 也認 `&QUOT;`，L2 第二輪），其他照原文。 */
-const NAMED: Readonly<Record<string, string>> = { quot: '"', apos: "'", ldquo: '“', lsquo: '‘', laquo: '«', lsaquo: '‹', lpar: '(', lsqb: '[', lcub: '{' };
-const decoded = (text: string): string => text.replace(/&(?:#[xX]([0-9a-fA-F]+)|#(\d+)|([a-zA-Z]+));/g, (match, hex?: string, decimal?: string, name?: string) => {
+/** 字元參照寫的引號、括號、空白（`&quot;`、`&#34;`、`&nbsp;`）也看得出來（R1）：解開數字的參照與這些名稱（大小寫都算，HTML 也認 `&QUOT;`，L2 第二輪），其他照原文。 */
+const NAMED: Readonly<Record<string, string>> = {
+  quot: '"', apos: "'", ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›',
+  opencurlydoublequote: '“', closecurlydoublequote: '”', opencurlyquote: '‘', closecurlyquote: '’',
+  lpar: '(', rpar: ')', lsqb: '[', rsqb: ']', lbrack: '[', rbrack: ']', lcub: '{', rcub: '}', lbrace: '{', rbrace: '}',
+  nbsp: ' ', ensp: ' ', emsp: ' ', thinsp: ' ',
+};
+const decoded = (text: string): string => text.replace(/&(?:#[xX]([0-9a-fA-F]+)|#(\d+)|([a-zA-Z][a-zA-Z0-9]*));/g, (match, hex?: string, decimal?: string, name?: string) => {
   if (name !== undefined) return Object.hasOwn(NAMED, name.toLowerCase()) ? NAMED[name.toLowerCase()] : match;
   const point = hex !== undefined ? parseInt(hex, 16) : parseInt(decimal ?? '', 10);
   return point <= 0x10ffff ? String.fromCodePoint(point) : match;
 });
 
+/**
+ * 題目第一格前面的字結尾是開頭的引號或括號嗎（§1 第 5 點最後一項）：引號跟著第一格，換一種排法就跟錯詞塊。看解開字元參照後看得到的字（L2 第二輪 F1、F3）：
+ * - 開頭的括號、引號（`(`、`“`、`「`…）是；
+ * - 直引號（半形、全形當同一種）照成對數：到這裡是單數個，最後一個就是開頭的（`—"`、`:"` 是，`"I'm tired," ` 不是）；
+ * - 單引號一樣照成對數，前一個字是字母或數字的是所有格（`boys' `），不是；夾在兩個字母中間的（`I'm`）不算進成對數；
+ * - 最後是認不得的字元參照：看不出是不是引號，當成是（這一題只照題目那一行判）。
+ */
+function opensFirstBlock(head: string): boolean {
+  const visible = decoded(visibleText(head)).replace(/\s+$/u, '');
+  if (/&#?[a-zA-Z0-9]+;$/.test(visible)) return true;
+  const chars = [...visible];
+  const last = chars.at(-1) ?? '';
+  if (/[\p{Ps}\p{Pi}]/u.test(last)) return true;
+  const word = (char: string | undefined): boolean => char !== undefined && /[\p{L}\p{N}]/u.test(char);
+  if (last === '"' || last === '＂') return chars.filter(char => char === '"' || char === '＂').length % 2 === 1;
+  if (last === "'" || last === '＇') {
+    if (word(chars.at(-2))) return false;
+    return chars.filter((char, at) => (char === "'" || char === '＇') && !(word(chars[at - 1]) && word(chars[at + 1]))).length % 2 === 1;
+  }
+  return false;
+}
+
 /** 一題底下的另一種排法（§1 第 1～7 點）：認得的照寫的順序放進 others；認不得的提示，照背面補充顯示（prompt.extras 不動）。 */
 function readOthers(line: number, extras: readonly string[], cells: SentenceCells): { others: SentenceAlt[]; problems: KindProblem[] } {
   const others: SentenceAlt[] = [], problems: KindProblem[] = [];
-  const opening = OPENING.test(decoded(visibleText(cells.head)).trimEnd());
+  const opening = opensFirstBlock(cells.head);
   for (const source of extras) {
     if (!ALT_LIKE.test(source)) continue;
     const read = readOther(source, cells, others, opening);
