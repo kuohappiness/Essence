@@ -13,7 +13,7 @@ export type InputKind = 'text' | 'image' | 'pdf';
 export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: string; data: Uint8Array }
-  /** 現在只收 PDF（mediaType 'application/pdf'）。pages 是選填的頁數，只用來檢查頁數上限。 */
+  /** 現在只收 PDF（mediaType 'application/pdf'）。pages 是選填的頁數：送出時檢查頁數上限；送出前估費用（estimate）沒給 pdfPages 時照它算，兩個都沒有就丟錯。 */
   | { type: 'file'; mediaType: string; data: Uint8Array; name?: string; pages?: number };
 
 export interface Message {
