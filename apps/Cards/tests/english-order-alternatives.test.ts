@@ -159,6 +159,16 @@ void test('字鍵避開每一種對的順序，相鄰兩次不同；排錯的只
   for (let times = 0; times <= 20; times++) assert.deepEqual(keysAt(five, times), [A, C, B], `第 ${String(times)} 次`);
 });
 
+void test('字鍵：相同文字的詞塊只列舉不同的排法（GitHub 上 Codex 的 P2）：9 個 very 加 good、10 種都列時不會卡住', () => {
+  const blocks = (at: number): string => Array.from({ length: 10 }, (_, i) => i === at ? '==good==' : '==very==').join(' ') + '.';
+  const deck = one(`好好好。It is ${blocks(9)}`, Array.from({ length: 9 }, (_, at) => `另一種排法：${blocks(at)}`), '加強語氣 排序');
+  assert.equal(othersOf(deck)?.length, 9);
+  const started = performance.now();
+  const keys = keysAt(deck, 3);
+  assert.ok(performance.now() - started < 1000, `組卡花了 ${String(Math.round(performance.now() - started))} 毫秒`);
+  assert.deepEqual([...keys].sort(), [...Array(9).fill('very') as string[], 'good'].sort());
+});
+
 void test('字鍵：兩塊、兩種都對的照舊打亂；組卡帶上另一種排法，沒有的不帶', () => {
   const two = one('我們明天中午見。See you ==tomorrow== ==at noon==.', ['另一種排法：See you ==at noon== ==tomorrow==.'], '時間的位置 排序');
   for (let times = 0; times <= 5; times++) assert.deepEqual([...keysAt(two, times)].sort(), ['at noon', 'tomorrow']);

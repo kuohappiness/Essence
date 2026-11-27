@@ -264,19 +264,25 @@ function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly
   return wrong ?? keys;
 }
 
-/** keys 的每一種排列，照位置的字典順序（第一個是 keys 自己）；一個一個產生，找到就停。 */
+/**
+ * keys 的每一種不同的排列（相同文字的詞塊互換算同一種，GitHub 上 Codex 的 P2：照位置列舉要 n! 次）；一個一個產生，找到就停。
+ * 每一種字照在 keys 第一次出現的先後編號，從 keys 自己開始照字典順序往後，到最後一種再從頭，回到 keys 為止。
+ */
 function* arrangementsOf(keys: readonly string[]): Generator<string[]> {
-  const index = keys.map((_, i) => i);
-  for (;;) {
-    yield index.map(i => keys[i]);
-    let i = index.length - 2;
-    while (i >= 0 && index[i] > index[i + 1]) i--;
-    if (i < 0) return;
-    let j = index.length - 1;
-    while (index[j] < index[i]) j--;
-    [index[i], index[j]] = [index[j], index[i]];
-    index.splice(i + 1, Infinity, ...index.slice(i + 1).reverse());
-  }
+  const distinct = [...new Set(keys)];
+  const start = keys.map(key => distinct.indexOf(key));
+  const rank = [...start];
+  do {
+    yield rank.map(i => distinct[i]);
+    let i = rank.length - 2;
+    while (i >= 0 && rank[i] >= rank[i + 1]) i--;
+    if (i >= 0) {
+      let j = rank.length - 1;
+      while (rank[j] <= rank[i]) j--;
+      [rank[i], rank[j]] = [rank[j], rank[i]];
+    }
+    rank.splice(i + 1, Infinity, ...rank.slice(i + 1).reverse());
+  } while (rank.some((each, at) => each !== start[at]));
 }
 
 /**
