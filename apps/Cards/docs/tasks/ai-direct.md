@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI：設定頁、直接製作與加深（AI 連線第三步，給 Claude，本機執行）
 
-狀態：規劃中｜下一步：第 0 批探針在使用者電腦的 Windows 版 Obsidian 測試 vault 跑；§7 的格式查核等 Codex 額度（11-30 重置）｜等誰：Claude
+狀態：規劃中｜下一步：第 0 批的探針跑完（〈結果〉）；使用者同意 API 直連改用 `fetch`（改 D-148 第 1 點）後寫成決定，再開第 1 批；§7 的格式查核等 Codex 額度（11-30 重置）｜等誰：使用者
 
 來自：[AI 連線模組的任務說明](../../../../docs/tasks/ai-client.md)〈2〉第三步、〈8〉第三步、〈11〉（2026-11-27，使用者：「刪除並合併然後下一步」）
 
@@ -47,13 +47,13 @@
 
 | 編號 | 假設 | 探針 | 結果 |
 |---|---|---|---|
-| P1 | Obsidian 電腦版的 `fetch` 呼叫四家（OpenAI、Anthropic 加 `anthropic-dangerous-direct-browser-access: true`、Google、OpenRouter）不會被 CORS 擋 | 開發命令用假金鑰各打一次 `check`：拿到 401／400 並分類成 `auth` 算通過（CORS 擋住時 `fetch` 直接丟 `TypeError`，分類成 `network`） | 待驗 |
-| P2 | 回應本文在 Obsidian 裡是串流的（文字一段一段到，不是收完才交） | 第 1 批做完後用家長貼的真金鑰跑一次，記第一段文字與最後一段的時間 | 待驗（要真金鑰） |
-| P3 | `app.secretStorage` 在 1.15 電腦版可用；存的金鑰不寫進 vault 資料夾、重開 Obsidian 還在、換 vault 讀不到 | 開發命令存一個假值、重開、在 vault 資料夾搜這個值、換測試 vault 讀 | 待驗 |
-| P4 | `loadPdfJs()` 載得到內建的 PDF 元件；記下版本、能不能把幾頁另存成新 PDF、能不能把一頁畫成圖片 | 開發命令用自編的三頁 PDF 試切第 2 頁、畫第 2 頁 | 待驗 |
-| P5 | 製卡視窗裡的 `<input type="file">` 拿得到檔案內容（`arrayBuffer()`），PDF 與照片都可以 | 開發命令開一個選檔框，選自編的 PDF 與 PNG | 待驗（要有人點選檔框） |
-| P6 | Obsidian 縮到最小或切到別的視窗 3 分鐘，進行中的請求照樣收完、計時器照常到 | 用本機的慢速 SSE 伺服器（3 分鐘才回標頭），開發命令送出後縮小視窗 | 待驗 |
-| P7 | 外掛停用或關掉 Obsidian 時，進行中的請求會中止（`signal`），不留著沒停的讀取 | 開發命令送到本機的慢速伺服器，停用外掛，看伺服器那邊連線斷了 | 待驗 |
+| P1 | Obsidian 電腦版的 `fetch` 呼叫四家（OpenAI、Anthropic 加 `anthropic-dangerous-direct-browser-access: true`、Google、OpenRouter）不會被 CORS 擋 | 開發命令用假金鑰各打一次 `check`：拿到 401／400 並分類成 `auth` 算通過（CORS 擋住時 `fetch` 直接丟 `TypeError`，分類成 `network`） | 通過（2026-11-27，見〈結果〉）：四家都讀得到 401／400；Anthropic 沒加那個標頭就被 CORS 擋 |
+| P2 | 回應本文在 Obsidian 裡是串流的（文字一段一段到，不是收完才交） | 第 1 批做完後用家長貼的真金鑰跑一次，記第一段文字與最後一段的時間 | 待驗（要真金鑰，第 2 批的實機） |
+| P3 | `app.secretStorage` 在 1.15 電腦版可用；存的金鑰不寫進 vault 資料夾、重開 Obsidian 還在、換 vault 讀不到 | 開發命令存一個假值、重開、在 vault 資料夾搜這個值、換測試 vault 讀 | 大部分通過（2026-11-27）：存得進去、重開還在、vault 的設定資料夾沒有；「換 vault 讀不到」沒驗（只有一個測試 vault）；沒有刪除的方法，清掉只能存空字串 |
+| P4 | `loadPdfJs()` 載得到內建的 PDF 元件；記下版本、能不能把幾頁另存成新 PDF、能不能把一頁畫成圖片 | 開發命令用自編的三頁 PDF 試切第 2 頁、畫第 2 頁 | 內建的不能切（2026-11-27）：pdf.js 5.3.34，有讀字、畫圖，沒有 `extractPages`；照〈使用者的決定〉加 `pdf-lib` |
+| P5 | 製卡視窗裡的 `<input type="file">` 拿得到檔案內容（`arrayBuffer()`），PDF 與照片都可以 | 開發命令開一個選檔框，選自編的 PDF 與 PNG | 待驗（要有人點選檔框，併進第 2 批的實機） |
+| P6 | Obsidian 縮到最小或切到別的視窗 3 分鐘，進行中的請求照樣收完、計時器照常到 | 用本機的慢速 SSE 伺服器（3 分鐘才回標頭），開發命令送出後縮小視窗 | 移到第 2 批的實機（§10）：要真的直接製作才有意義 |
+| P7 | 外掛停用或關掉 Obsidian 時，進行中的請求會中止（`signal`），不留著沒停的讀取 | 開發命令送到本機的慢速伺服器，停用外掛，看伺服器那邊連線斷了 | 改成第 1、2 批的驗收（§2、§10）：中止是 Cards 的接線，不是平台事實 |
 
 P1 有一家不通時，那一家改用 `requestUrl` 包成的傳輸層（不串流，`responseTimeoutMs: null`，畫面只顯示經過的時間），並寫一條修改 D-148 第 1 點的決定（先問使用者）。四家都通時一樣要寫：D-148 第 1 點的「API 直連用 `requestUrl`」改成「用 `fetch`，`requestUrl` 是備援」。
 
@@ -81,6 +81,8 @@ P1 有一家不通時，那一家改用 `requestUrl` 包成的傳輸層（不串
 - **驗收**：
   - 金鑰的值不出現在 `data.json`、`saveLocalStorage` 的任何一筆、錯誤紀錄、快照、待貼回的工作、`console`：測試在每一處寫入的地方掃假金鑰的字串。
   - 沒設金鑰時，製卡畫面的「直接製作」不能按，旁邊寫「先到設定頁的 AI 連線貼上金鑰」並附連結。
+  - 家長清掉金鑰時存空字串（`secretStorage` 沒有刪除的方法，探針 P3），空字串當成沒有金鑰。
+  - 停用外掛或關掉設定頁時，進行中的測試連線中止（原 P7）。
 
 ## §3 費用估計（第 1 批，套件）
 
@@ -170,7 +172,7 @@ D-231 要「送出前顯示估計的費用」；最上層 backlog〈AI 連線套
 
 - **AI 測**：
   - 單元測試用套件的 `mockFetch`：每一種錯誤的畫面文字與下一步、取消、重送用同一份提示、中斷後接手、收到的回覆和貼上的回覆存出相同的卡組與快照本文、金鑰不出現在任何寫入（§2 驗收）、估計費用的數字（照目錄的假價格算出已知的值）。
-  - Windows 版 Obsidian 的開發命令：第 0 批的 P1、P3～P7；第 1 批的設定頁存讀與測試連線（假金鑰看錯誤文字）；第 2 批用本機的假 AI 伺服器（回最小版測試裡的回覆範例）跑一次完整的直接製作到存成草稿。
+  - Windows 版 Obsidian 的開發命令：第 0 批的 P1、P3、P4（已做，〈結果〉）；第 2 批另驗 P6（送到本機 3 分鐘才回標頭的慢速假伺服器，送出後把 Obsidian 縮到最小，要收得完）與停用外掛時中止（原 P7）；第 1 批的設定頁存讀與測試連線（假金鑰看錯誤文字）；第 2 批用本機的假 AI 伺服器（回最小版測試裡的回覆範例）跑一次完整的直接製作到存成草稿。
 - **要使用者做一次**（AI 不能替家長貼金鑰，也不該讓金鑰經過對話）：在設定頁貼一把真的金鑰、按測試連線、用一課真的教材按「直接製作」，到存成草稿為止。同一次記 P2。費用約幾美分。
 - **iPhone**：設定頁沒有「AI 連線」、製卡畫面只有「複製提示」；併進下一次 iPhone 實機測試。
 - 延後的測試照 [quality.md〈測試分兩類〉](../../../../docs/agents/quality.md#測試分兩類)記進技術債表。
@@ -189,4 +191,9 @@ D-231 要「送出前顯示估計的費用」；最上層 backlog〈AI 連線套
 
 ## 結果
 
-（實作後寫）
+第 0 批（2026-11-27，使用者的 Windows 電腦，Obsidian 1.15.1、Electron 34.3.0，只用測試 vault 與假金鑰；開發命令 `ai-probe`，分支 `claude/project-thread-q0jv5f` 的 `328998b3`）：
+
+- P1（`do=cors`，`origin` 是 `app://obsidian.md`）：OpenAI 401 `invalid_api_key`；Anthropic 加 `anthropic-dangerous-direct-browser-access: true` 時 401 `authentication_error`、帶 `request_id`，不加時 `TypeError: Failed to fetch`；Google 400 `API_KEY_INVALID`（`content-type` 是 `text/event-stream`）；OpenRouter 401「Missing Authentication header」。同一個 OpenRouter 請求用 Node 直接送也回這一句，完全不帶認證標頭時回的是另一句「No cookie auth credentials found」，所以標頭有送到，這是它對假金鑰的回法。四家都讀得到回應，`fetch` 可以用；Anthropic 一定要那個標頭，轉接檔在電腦上一律加。
+- P3（`do=secret`、重開 Obsidian 後 `do=secret-read`、`do=secret-clear`）：`secretStorage` 存得進去、讀得回來、列得出名稱；vault 的設定資料夾 1,105 個檔都沒有這個值；完全關掉再開還讀得到。在 `%APPDATA%\obsidian` 底下用字串搜尋找不到這個值（UTF-8、UTF-16 都查了；壓縮過的 leveldb 檔查不到，存法不確定）。沒有刪除的方法：清掉是存空字串，名稱還在清單裡，所以 Cards 把空字串當成沒有金鑰。
+- P4（`do=pdf`）：內建的 pdf.js 是 5.3.34；三頁的自編 PDF 讀得出第 2 頁的字（「Page two: water」），畫成 612×792 的圖片也成功；文件物件有 `saveDocument`（存整份），沒有 `extractPages`，不能切頁。所以照〈使用者的決定〉的甲加 `pdf-lib`：1.17.1（MIT），只用到載入、複製頁、存檔時，用 Cards 的建置設定（esbuild 壓縮）打包約 432 KB（gzip 約 180 KB），沒超過 0.5 MB 的回報線；現在的 `main.js` 約 1.87 MB。手機也會載入同一個 `main.js`，第 2 批量一次外掛載入時間（`onloadMs`）前後的差別。`pdf-lib` 從 2021 年後沒有新版，第 2 批開工時再比一次有人維護的分支（例如 `@cantoo/pdf-lib`）。
+- 開發版裝在測試 vault（`0.6.0+328998b3`），正式 vault 沒碰。
