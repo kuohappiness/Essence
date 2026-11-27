@@ -163,3 +163,17 @@ void test('L2 R3 收到的回覆沒有 <<<完>>>：有「重送（會再計費�
   await sleep(150);
   assert.equal(propsOf(made.memory).props['接法'], 'API');
 });
+
+void test('實機第 3 點 送出中按關閉、在「要取消這一次嗎？」按「取消這一次」：視窗關掉，工作留在清單（可以重送）', async t => {
+  const { made, openModal } = await open(t, [{ ...ok(reply), headersDelayMs: 5_000 }]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  modal.close();
+  assert.ok(modal.isOpen, '送出中先問，不直接關');
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('要取消這一次嗎')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '取消這一次')?.click();
+  await sleep(60);
+  assert.equal(modal.isOpen, false, '家長本來就是要關視窗');
+  assert.equal(made.cards.sending(), false);
+  assert.equal(directJob(made.cards.jobs()[0])?.kind, 'cancelled');
+});

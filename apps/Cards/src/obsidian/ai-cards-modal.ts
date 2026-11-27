@@ -127,7 +127,7 @@ class AiCardsModal extends Modal {
     if (!this.forced && this.timer !== null && cards?.sending()) { this.askCancel(); return; }
     super.close();
   }
-  /** 停用外掛、手機關掉製卡：取消送出中的那一個，不問。 */
+  /** 停用外掛、手機關掉製卡、按關閉後選了「取消這一次」：取消送出中的那一個，不再問。 */
   forceClose(): void { this.forced = true; this.host.cards()?.cancel(); this.close(); }
   private stopTimer(): void { if (this.timer !== null) { window.clearInterval(this.timer); this.timer = null; } }
 
@@ -365,7 +365,8 @@ class AiCardsModal extends Modal {
     el.empty();
     el.createEl('p', { text: TEXT.askCancel });
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
-    buttons.createEl('button', { text: '取消這一次', cls: 'mod-warning' }).addEventListener('click', () => { this.host.cards()?.cancel(); });
+    // 這一列只在按關閉時出現：家長本來就是要關視窗，取消之後一起關（Windows 實機第 2 批第 3 點）。
+    buttons.createEl('button', { text: '取消這一次', cls: 'mod-warning' }).addEventListener('click', () => { this.forceClose(); });
     buttons.createEl('button', { text: '繼續等' }).addEventListener('click', () => { el.empty(); });
   }
 
