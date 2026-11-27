@@ -42,7 +42,7 @@ void test('§4 驗收：直接製作收回的整段和貼回的一樣存成草�
 
 void test('§2、§4 送出前擋下（不建工作、不送出）：沒有金鑰、沒選教材、超過頁數、沒填單元；預覽寫出原因或會送出什麼', async t => {
   const none = await load(t, [ok(reply)], { key: { ok: false, why: 'unset' } });
-  assert.deepEqual(none.cards.directPreview(form, [lesson]), { ok: false, reason: '先到設定頁的「AI 連線」選好這個服務的金鑰，才能直接製作。' });
+  assert.deepEqual(none.cards.directPreview(form, [lesson]), { ok: false, reason: '先到設定頁的「AI 連線」選好這個服務的金鑰，才能直接製作。', settings: true });
   assert.deepEqual(await none.cards.direct(form, [lesson]), { kind: 'blocked', message: '先到設定頁的「AI 連線」選好這個服務的金鑰，才能直接製作。' });
   const made = await load(t, [ok(reply)]);
   assert.deepEqual(made.cards.directPreview(form, []), { ok: false, reason: '先選這一課的教材檔（PDF 或照片）。' });

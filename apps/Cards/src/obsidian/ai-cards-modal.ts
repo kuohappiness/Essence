@@ -78,6 +78,8 @@ export interface AiCardsModalHost {
   now: () => number;
   /** PDF 的總頁數（Obsidian 內建的 PDF 元件，tasks/ai-direct.md §5）；讀不出來是 null。只在電腦（直接製作）用。 */
   pdfPages?: (data: Uint8Array) => Promise<number | null>;
+  /** 打開設定頁的 Essence Cards 分頁（金鑰、模型要到那裡改，§2）。 */
+  openSettings?: () => void;
 }
 
 /** 貼到一半的回覆：關掉視窗也留著，下次接著貼回（只在這次開著 Obsidian 的期間）。直接製作收回的整段也放這裡。 */
@@ -223,6 +225,7 @@ class AiCardsModal extends Modal {
     const send = direct ? buttons.createEl('button', { text: '直接製作' }) : null;
     const copy = buttons.createEl('button', { text: '複製提示', cls: 'mod-cta' });
     const preview = direct ? el.createEl('p', { cls: 'essence-cards-issue-note' }) : null;
+    const settings = direct ? this.settingsButton(buttons) : null;
     const refresh = (): void => {
       files?.();
       rules.setText('規則：' + cards.rulesLine(form.subject));
@@ -239,6 +242,7 @@ class AiCardsModal extends Modal {
         send.toggleClass('mod-cta', ok);
         copy.toggleClass('mod-cta', !ok);
         preview.setText(ready === null ? '' : ready.ok ? ready.line : ready.reason);
+        if (ready && !ready.ok && ready.settings) settings?.show(); else settings?.hide();
       }
     };
     subject.addEventListener('change', () => {
@@ -370,6 +374,14 @@ class AiCardsModal extends Modal {
     buttons.createEl('button', { text: '繼續等' }).addEventListener('click', () => { el.empty(); });
   }
 
+  /** 「打開設定頁」（§2 驗收，L2 第一輪 R10）：關掉製卡視窗再開設定頁，工作留在清單；主程式沒給開法時不畫。 */
+  private settingsButton(buttons: HTMLElement): HTMLElement | null {
+    const open = this.host.openSettings;
+    if (!open) return null;
+    const button = buttons.createEl('button', { text: '打開設定頁' });
+    button.addEventListener('click', () => { this.close(); open(); });
+    return button;
+  }
   /** 送不成（§6 的表）：一句話、下一步；可以重送（同一份提示與教材）、改用複製貼上（複製同一份提示，教材自己附）或放棄。 */
   private showFailure(failure: DirectFailure): void {
     const cards = this.host.cards(), job = this.job;
@@ -380,6 +392,7 @@ class AiCardsModal extends Modal {
     const message = el.createEl('p', { cls: 'essence-cards-issue-note' });
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
     this.directButtons(buttons, message, failure.afterResponse);
+    if (failure.settings) this.settingsButton(buttons);
     buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { void this.abandon(); });
     buttons.createEl('button', { text: '關閉' }).addEventListener('click', () => { this.close(); });
   }

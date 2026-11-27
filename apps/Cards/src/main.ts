@@ -244,7 +244,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     this.aiWiring = wireAiCards(this, {
       cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now(),
-      ...Platform.isDesktopApp ? { pdfPages } : {},
+      ...Platform.isDesktopApp ? { pdfPages, openSettings: () => { this.openSettings(); } } : {},
     });
     // 加深只在電腦（D-226 第 2 點：手機的第一批只有 AI 製卡建新檔）。
     if (Platform.isDesktopApp) {

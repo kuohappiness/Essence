@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 import type { MockReply } from '../../../packages/ai-client/src/testing.ts';
 import { directJob } from '../src/core/ai/index.ts';
 import { createObsidianStub, FakeEl } from './helpers/obsidian.ts';
-import { form, lesson, load, ok, propsOf, reply } from './helpers/ai-direct.ts';
+import { form, lesson, load, ok, propsOf, reply, unauthorized } from './helpers/ai-direct.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({
@@ -60,11 +60,12 @@ async function open(t: TestContext, replies: MockReply[], options: Parameters<ty
   const made = await load(t, replies, options);
   const stub = createObsidianStub({ desktop: true });
   let ribbon: () => void = () => {};
+  const settings = { opened: 0 };
   const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, register() {}, addRibbonIcon(_icon: string, _title: string, callback: () => void) { ribbon = callback; return { toggle() {} }; } };
   const { wireAiCards } = stub.load<{ wireAiCards: (plugin: unknown, host: unknown) => unknown }>(code);
-  wireAiCards(plugin, { cards: () => made.cards, openNote() {}, notify() {}, now: () => Date.now(), pdfPages: () => Promise.resolve(12) });
+  wireAiCards(plugin, { cards: () => made.cards, openNote() {}, notify() {}, now: () => Date.now(), pdfPages: () => Promise.resolve(12), openSettings: () => { settings.opened++; } });
   const openModal = (): Modal => { ribbon(); return stub.modals.at(-1) as unknown as Modal; };
-  return { made, openModal };
+  return { made, openModal, settings };
 }
 /** 第一步填單元、選教材檔、按直接製作，等收完。 */
 async function sendFromForm(modal: Modal): Promise<void> {
@@ -188,4 +189,40 @@ void test('L2 R12 製卡視窗開著時再按圖示：不開第二個；關掉�
   const next = openModal();
   assert.notEqual(next, first);
   assert.ok(next.isOpen);
+});
+
+void test('L2 R10 金鑰沒設：第一步有「打開設定頁」，按了關掉視窗、打開設定頁；金鑰設好了就沒有這一顆', async t => {
+  const { openModal, settings } = await open(t, [], { key: { ok: false, why: 'unset' } });
+  const modal = openModal();
+  const unit = all(modal.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
+  assert.ok(unit);
+  unit.value = form.unit;
+  unit.fire('input');
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('先到設定頁的「AI 連線」')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '打開設定頁')?.click();
+  assert.equal(modal.isOpen, false);
+  assert.equal(settings.opened, 1);
+  const ready = await open(t, []);
+  const other = ready.openModal();
+  const field = all(other.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
+  assert.ok(field);
+  field.value = form.unit;
+  field.fire('input');
+  assert.equal(button(other.contentEl, '打開設定頁'), undefined);
+});
+
+void test('L2 R10 送不成是金鑰不對：失敗的畫面有「打開設定頁」；教材太大之類的沒有', async t => {
+  const { openModal, settings, made } = await open(t, [unauthorized]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('金鑰不對')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '打開設定頁')?.click();
+  assert.equal(modal.isOpen, false);
+  assert.equal(settings.opened, 1);
+  assert.equal(made.cards.jobs().length, 1, '工作留在清單');
+  const big = await open(t, [{ status: 413, headers: { 'content-type': 'application/json' }, chunks: ['{"error":{"code":413,"status":"INVALID_ARGUMENT","message":"too large"}}'] }]);
+  const again = big.openModal();
+  await sendFromForm(again);
+  assert.ok(texts(again.contentEl).some(each => each.includes('這份教材太大')), texts(again.contentEl).join('|'));
+  assert.equal(button(again.contentEl, '打開設定頁'), undefined);
 });

@@ -310,14 +310,15 @@ export function createAiCards(deps: AiCardsDeps) {
      * 直接製作能不能按、按了會送出什麼（§2、§4〈送出前〉）：不能按時是原因。組一次提示算字數與費用，不存、不送。
      * 每次表單或教材改了就問一次；沒有直接製作的裝置是 null。
      */
-    directPreview(form: CardForm, materials: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string } | null {
+    directPreview(form: CardForm, materials: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string; settings?: boolean } | null {
       const direct = deps.direct;
       if (!direct) return null;
       if (!form.unit.trim()) return { ok: false, reason: '先填單元。' };
       const target = endpoint(direct);
-      if ('error' in target) return { ok: false, reason: target.error };
+      // 要到設定頁改的（沒選服務、模型或金鑰）標 settings：畫面多一個「打開設定頁」（§2 驗收，L2 第一輪 R10）。
+      if ('error' in target) return { ok: false, reason: target.error, settings: true };
       const key = direct.key();
-      if (!key.ok) return { ok: false, reason: NO_KEY[key.why] };
+      if (!key.ok) return { ok: false, reason: NO_KEY[key.why], settings: true };
       const problem = materialProblem(materials);
       if (problem) return { ok: false, reason: problem };
       const made = compose(form);
