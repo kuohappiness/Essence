@@ -72,14 +72,26 @@ export function parseStream(stdout: string): ClaudeRun {
   return run;
 }
 
+/** 一行的開頭：目標（`- `）、縮排兩格以上的題或補充（`    - `）、標記（`<<<`）、標題（`#`）。一句中間的 ` - ` 只有一格空白，不算。 */
+const LINE_START = /^(?:- |(?: {2,}|\t+)- |<<<|#)/;
+
 /**
  * 整份回覆：沒有用工具、文字多於一則時（碰到輸出上限，CLI 接著要），照順序直接接起來；其他照 result。
- * 有工具的（評審讀檔）不接：讀檔前說的話不是回覆。`continued` 是接了幾則。
+ * 切在一行最後時，接著寫的那一則從新的一行開始卻沒帶換行（規則循環第一輪 §7，乙-1 的目標標題被併進上一行）：
+ * 前一則沒以換行結尾、下一則從一行的開頭寫起，就補一個換行；切在一句中間的照原樣接。
+ * 有工具的（評審讀檔）不接：讀檔前說的話不是回覆。`continued` 是接了幾則，`newlines` 是補了幾個換行。
  */
-export function fullReply(run: ClaudeRun): { text: string; continued: number } {
+export function fullReply(run: ClaudeRun): { text: string; continued: number; newlines: number } {
   const last = run.result?.text ?? '';
-  if (run.toolUses.length || run.texts.length < 2) return { text: last, continued: 0 };
-  return { text: run.texts.join(''), continued: run.texts.length - 1 };
+  if (run.toolUses.length || run.texts.length < 2) return { text: last, continued: 0, newlines: 0 };
+  let text = run.texts[0];
+  let newlines = 0;
+  for (const next of run.texts.slice(1)) {
+    const seam = !text.endsWith('\n') && LINE_START.test(next);
+    if (seam) newlines++;
+    text += (seam ? '\n' : '') + next;
+  }
+  return { text, continued: run.texts.length - 1, newlines };
 }
 
 /** stream-json 輸入的一則使用者訊息（`--input-format stream-json`）：文字，或 PDF 附件加文字。 */

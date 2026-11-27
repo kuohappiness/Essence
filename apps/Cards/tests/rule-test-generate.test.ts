@@ -297,12 +297,20 @@ process.stdin.on('end', () => {
     say({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Output token limit hit. Resume directly.' }] } });
     reply('m2', [{ type: 'thinking', thinking: '再想' }, { type: 'text', text: '間\\n<<<卡組>>>\\n後半\\n<<<完>>>' }]);
   }
+  // 切在一行的最後：接著寫的那一則從新的一行（目標、縮排的題）開始，卻沒帶換行（規則循環第一輪 §7，乙-1）。
+  if (mode === 'seam') {
+    reply('m1', [{ type: 'text', text: '<<<卡組>>>\\n- subject 中翻英\\n    - 記憶錨點：sub·ject' }]);
+    say({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Output token limit hit. Resume directly.' }] } });
+    reply('m2', [{ type: 'text', text: '- hear 英翻中\\n    - hear :: v. 聽見' }]);
+    say({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Output token limit hit. Resume directly.' }] } });
+    reply('m3', [{ type: 'text', text: '        - 例句：I can hear you.\\n<<<完>>>' }]);
+  }
   if (mode === 'one') reply('m1', [{ type: 'thinking', thinking: '想' }, { type: 'text', text: '整份' }]);
   if (mode === 'read') {
     reply('m1', [{ type: 'text', text: '先讀教材' }, { type: 'tool_use', name: 'Read', input: { file_path: '教材.pdf' } }]);
     reply('m2', [{ type: 'text', text: '評好了' }]);
   }
-  const last = { continued: '間\\n<<<卡組>>>\\n後半\\n<<<完>>>', one: '整份', read: '評好了' }[mode];
+  const last = { continued: '間\\n<<<卡組>>>\\n後半\\n<<<完>>>', seam: '        - 例句：I can hear you.\\n<<<完>>>', one: '整份', read: '評好了' }[mode];
   const text = mode === 'login' ? 'Not logged in · Please run /login' : last ?? JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) });
   say({ type: 'result', subtype: 'success', is_error: mode === 'login' || mode === 'quota', result: text, session_id: 'sess-1', duration_ms: 7, modelUsage: { 'claude-opus-5-5': {} }, ...schema ? { structured_output: { rows: [] } } : {} });
 });
@@ -341,6 +349,11 @@ void test('claude 轉接器：碰到輸出上限、CLI 接著寫時，同一次�
   assert.ok(continued.kind === 'ok', JSON.stringify(continued));
   assert.equal(continued.reply, '<<<全貌>>>\n前半，切在一句的中間\n<<<卡組>>>\n後半\n<<<完>>>');
   assert.deepEqual(continued.warnings, ['回覆碰到輸出上限，CLI 接著寫了 1 次；2 則照順序接成一份']);
+  // 前一則沒以換行結尾、下一則從新的一行開始（目標或縮排的題）時補一個換行；切在一句中間的照原樣接（上面）。
+  const seam = await claudeAdapter(() => fakeCli('seam'))(request());
+  assert.ok(seam.kind === 'ok', JSON.stringify(seam));
+  assert.equal(seam.reply, '<<<卡組>>>\n- subject 中翻英\n    - 記憶錨點：sub·ject\n- hear 英翻中\n    - hear :: v. 聽見\n        - 例句：I can hear you.\n<<<完>>>');
+  assert.deepEqual(seam.warnings, ['回覆碰到輸出上限，CLI 接著寫了 2 次；3 則照順序接成一份，接縫補了 2 個換行']);
   const one = await claudeAdapter(() => fakeCli('one'))(request());
   assert.ok(one.kind === 'ok' && one.reply === '整份' && one.warnings.length === 0, JSON.stringify(one));
   // 評審讀檔前說的話不是回覆：有工具的不接。

@@ -73,7 +73,7 @@ export function claudeAdapter(find: () => Cli = findClaude): Adapter {
     const reply = fullReply(run);
     const warnings = [
       ...run.result.models.length && !run.result.models.some(model => model.startsWith(request.model)) ? [`用的模型是 ${run.result.models.join('、')}，不是 ${request.model}`] : [],
-      ...reply.continued ? [`回覆碰到輸出上限，CLI 接著寫了 ${String(reply.continued)} 次；${String(reply.continued + 1)} 則照順序接成一份`] : [],
+      ...reply.continued ? [`回覆碰到輸出上限，CLI 接著寫了 ${String(reply.continued)} 次；${String(reply.continued + 1)} 則照順序接成一份${reply.newlines ? `，接縫補了 ${String(reply.newlines)} 個換行` : ''}`] : [],
     ];
     return { kind: 'ok', reply: reply.text, session: run.result.sessionId ?? null, warnings, ms: run.result.durationMs ?? result.ms, costUsd: run.result.costUsd, usage: run.result.usage, models: run.result.models, ...request.jsonSchema ? { structured: run.result.structured } : {} };
   };
