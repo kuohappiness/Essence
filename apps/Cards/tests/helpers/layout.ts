@@ -2,6 +2,7 @@
 // 搬家前 Cards 在根目錄，搬家後在 plugins/cards/；規則檔照舊在 repo 的根（tools/build.mjs 的 RULES_FROM_ROOT）。
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { cp } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULES_FROM_ROOT } from '../../tools/build.mjs';
@@ -23,6 +24,19 @@ export function cardsIn(repo: string): string {
   const at = resolve(repo, CARDS_DIR);
   if (resolve(at, RULES_FROM_ROOT) !== resolve(repo)) throw Error(`版面不一致：Cards 在 ${CARDS_DIR}，規則檔的基準是 Cards 往上 ${RULES_FROM_ROOT}`);
   return at;
+}
+
+/**
+ * Cards 打包進 main.js 的套件（AI 連線套件，docs/tasks/ai-client.md〈8〉第三步；表在 tools/dispatch.ts 的 PACKAGE_USERS，
+ * Cards 不 import 最上層的程式，這裡照抄）：轉接檔用相對路徑指到 repo 裡的套件，暫存 repo 也要照版面放一份程式與目錄。
+ */
+const BUNDLED_PACKAGES = ['packages/ai-client'];
+
+/** 把 Cards 打包進去的套件複製到暫存 repo（第一個參數是 repo 的根，不是 Cards 的根）。 */
+export async function copyPackages(repo: string): Promise<void> {
+  for (const dir of BUNDLED_PACKAGES) {
+    for (const name of ['src', 'catalog.json']) await cp(resolve(top, dir, name), resolve(repo, dir, name), { recursive: true });
+  }
 }
 
 /** Cards 裡的路徑寫成 repo 相對（對照表的 sources、locate 的回傳；第二步 L2 R5）。 */

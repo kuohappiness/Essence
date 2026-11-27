@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { hashBytes } from '../src/core/backup/index.ts';
 import { installVault, registerTestVault, releaseProblems } from '../tools/install.ts';
 import { RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
-import { cardsIgnore, cardsIn } from './helpers/layout.ts';
+import { cardsIgnore, cardsIn, copyPackages } from './helpers/layout.ts';
 import type { InstallOptions } from '../tools/install.ts';
 import { makeVault, tempFolder } from './helpers/vault.ts';
 
@@ -43,7 +43,8 @@ async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   await mkdir(join(dir, 'tools'), { recursive: true });
   await cp(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
-  // 建置要讀 AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）。
+  // 建置要讀 AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）與打包進去的套件。
+  await copyPackages(top);
   for (const path of ruleFiles()) {
     await mkdir(dirname(join(top, path)), { recursive: true });
     await cp(join(root, RULES_FROM_ROOT, path), join(top, path));

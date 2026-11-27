@@ -4,14 +4,15 @@ import { BUILTIN_CATALOG, endpointProblem, isLocalUrl, mergeCatalog, validateCat
 import { DIALECTS } from './dialects/index.ts';
 import type { Dialect, NormalizedMessage, Output, ParsedError } from './dialects/types.ts';
 import { AiError, asError, describeThrown, withSecrets, type AiErrorKind } from './errors.ts';
+import { EstimateInputError, estimateCost } from './estimate.ts';
 import { costOf } from './pricing.ts';
 import { MIN_SECRET_LENGTH, redactDeep, redactText, StreamRedactor } from './redact.ts';
 import { SseDecoder, type SseEvent } from './sse.ts';
 import { bodyChunks, defaultFetch, readText, type FetchLike } from './transport.ts';
 import {
   REASONING_LEVELS,
-  type AttemptTrace, type AuthSpec, type ContentPart, type EndpointRef, type GenerateRequest, type GenerateResult, type InputKind,
-  type ModelInfo, type ModelSpec, type ProgressEvent, type ProviderOptions, type ProviderSpec, type ReasoningLevel, type ReasoningSpec,
+  type AttemptTrace, type AuthSpec, type ContentPart, type EndpointRef, type Estimate, type EstimateOptions, type GenerateRequest,
+  type GenerateResult, type InputKind, type MediaTokens, type ModelInfo, type ModelSpec, type ProgressEvent, type ProviderOptions, type ProviderSpec, type ReasoningLevel, type ReasoningSpec,
 } from './types.ts';
 
 const DEFAULT_TIMEOUT_MS = 30 * 60_000;
@@ -67,6 +68,11 @@ export interface AiClient {
   generate(request: GenerateRequest): Promise<GenerateResult>;
   /** 測試連線：讀模型清單（或目錄的 checkPath）確認金鑰，不產生內容、不花錢。 */
   check(request: CheckRequest): Promise<CheckResult>;
+  /**
+   * 送出前估費用：照目錄的牌價與每頁、每張的 token 範圍算最少與最多，不呼叫服務。目錄沒有這個模型的價格（含自訂服務）回 null。
+   * 請求的欄位壞了、PDF 沒有頁數又沒給 pdfPages，丟 invalid_request。
+   */
+  estimate(request: GenerateRequest, options: EstimateOptions): Estimate | null;
   /** 目錄裡的廠商與模型（設定頁的選單用）。整份是凍結的，改了會丟例外；要加或改廠商用 createAiClient 的 catalog。 */
   providers(): readonly ProviderSpec[];
   /** 目錄裡被跳過的資料。 */
@@ -81,6 +87,8 @@ interface Resolved {
   headers: Record<string, string>;
   options: ProviderOptions;
   limits: NonNullable<ProviderSpec['limits']>;
+  /** 那一家的每頁、每張 token 範圍（估費用用）。 */
+  media: MediaTokens | undefined;
   model: ModelSpec | undefined;
   /** 這一家目錄裡的模型：服務回報別的模型時拿來估價（L2 第二輪 R13）。 */
   models: readonly ModelSpec[];
@@ -137,7 +145,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       return {
         providerId: 'custom', dialect, baseUrl: custom.baseUrl.replace(/\/+$/, ''),
         auth: custom.auth === undefined ? dialect.defaultAuth : custom.auth,
-        headers: custom.headers ?? {}, options: custom.options ?? {}, limits: {},
+        headers: custom.headers ?? {}, options: custom.options ?? {}, limits: {}, media: undefined,
         model: undefined, models: [], inputs: undefined, reasoning: undefined, maxOutputTokens: undefined,
       };
     }
@@ -147,7 +155,7 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const model = modelId === null ? undefined : provider.models.find(m => m.id === modelId);
     return {
       providerId: provider.id, dialect, baseUrl: provider.baseUrl.replace(/\/+$/, ''), auth: provider.auth,
-      headers: provider.headers ?? {}, options: provider.options ?? {}, limits: provider.limits ?? {}, model, models: provider.models,
+      headers: provider.headers ?? {}, options: provider.options ?? {}, limits: provider.limits ?? {}, media: provider.mediaTokens, model, models: provider.models,
       inputs: model?.inputs ?? provider.defaults?.inputs,
       reasoning: model?.reasoning ?? provider.defaults?.reasoning,
       maxOutputTokens: model?.maxOutputTokens ?? provider.defaults?.maxOutputTokens,
@@ -525,7 +533,19 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     }
   }
 
-  return { generate, check, providers: () => catalog.providers, catalogProblems: problems };
+  function estimate(request: GenerateRequest, estimateOptions: EstimateOptions): Estimate | null {
+    const secrets = typeof request.apiKey === 'string' && request.apiKey ? [request.apiKey] : [];
+    try {
+      const r = resolve(request.endpoint, typeof request.model === 'string' ? request.model : null);
+      return estimateCost(request, estimateOptions, r.model, r.media, dayOf(clock.now()));
+    } catch (caught) {
+      if (isOwn(caught)) throw withSecrets(caught, secrets);
+      if (caught instanceof EstimateInputError) throw fail('invalid_request', caught.message, { secrets });
+      throw fail('unknown', describeThrown(caught), { secrets, cause: caught });
+    }
+  }
+
+  return { generate, check, estimate, providers: () => catalog.providers, catalogProblems: problems };
 }
 
 /**

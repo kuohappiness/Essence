@@ -7,7 +7,7 @@ export type { CatalogOverrides, CatalogProblem } from './catalog.ts';
 export type { FetchInit, FetchLike } from './transport.ts';
 export { REASONING_LEVELS } from './types.ts';
 export type {
-  AttemptTrace, AuthSpec, Catalog, ContentPart, Cost, CustomEndpoint, EndpointRef, GenerateRequest, GenerateResult, InputKind,
-  Message, ModelInfo, ModelSpec, PriceSpec, ProgressEvent, ProviderOptions, ProviderSpec, ReasoningLevel, ReasoningSpec, StopReason,
-  Trace, Usage,
+  AttemptTrace, AuthSpec, Catalog, ContentPart, Cost, CustomEndpoint, EndpointRef, Estimate, EstimateOptions, GenerateRequest,
+  GenerateResult, InputKind, MediaTokens, Message, ModelInfo, ModelSpec, PriceSpec, ProgressEvent, ProviderOptions, ProviderSpec,
+  ReasoningLevel, ReasoningSpec, StopReason, TokenRange, Trace, Usage,
 } from './types.ts';

@@ -37,9 +37,10 @@ const EXCEPTED = new Set(EXCEPTIONS.map(e => e.file));
 const USER = ['-c', 'user.name=HookTest', '-c', 'user.email=test@example.invalid'];
 
 // 外掛的資料夾裡有 flag.txt 時連內容一起記，內容是 bad 就失敗：看得出檢查讀的是暫存區還是工作樹（§10）。
+// 第二個參數可以指定別的記號檔（Cards 讀套件裡的，像 Cards 的程式透過轉接檔 import 套件）。
 const MARK = `import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-const [name] = process.argv.slice(2);
-const flag = existsSync('flag.txt') ? ':' + readFileSync('flag.txt', 'utf8').trim() : '';
+const [name, file = 'flag.txt'] = process.argv.slice(2);
+const flag = existsSync(file) ? ':' + readFileSync(file, 'utf8').trim() : '';
 appendFileSync(String(process.env.ESSENCE_MARKS), name + flag + '\\n');
 if (process.env.ESSENCE_FAIL === name || flag === ':bad') {
   console.error(name + ' 的替身照設定失敗');
@@ -348,4 +349,38 @@ void test('§3 乾淨 clone 的 hook：子資料夾、git commit <路徑>、-a�
   assert.equal(r.ok, false);
   assert.match(r.out, /先在 tools\/ 執行 npm ci/);
   assert.deepEqual(r.marks, []);
+});
+
+void test('§1 改到套件時 Cards 也跑完整檢查（docs/tasks/ai-client.md〈8〉第三步）：暫存的套件修改讓 Cards 壞掉、工作樹是好的，擋下', async t => {
+  const c = await clone(t);
+  const { repo, git, commit, put } = c;
+  const flag = `${PACKAGES['ai-client']}/flag.txt`;
+  // Cards 的檢查替身讀套件裡的記號檔；Cards 要跑，放一個空的 node_modules 當作裝過。
+  const pkg = JSON.parse(await readFile(join(repo, C, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+  pkg.scripts.check = `node ${UP}mark.mjs cards ${UP}${flag}`;
+  await put(`${C}package.json`, JSON.stringify(pkg, null, 2) + '\n');
+  await mkdir(join(repo, C, 'node_modules'));
+  await git(repo, 'add', '--', `${C}package.json`);
+  let r = await commit(['-m', 'cards reads the package']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['cards']);
+
+  // 暫存的套件修改是壞的、工作樹是好的：Cards 的檢查讀到暫存的那份，擋下，commit 不會進去。
+  const head = await git(repo, 'rev-parse', 'HEAD');
+  await put(flag, 'bad\n');
+  await git(repo, 'add', '--', flag);
+  await put(flag, 'good\n');
+  r = await commit(['-m', 'package breaks cards']);
+  assert.equal(r.ok, false, r.out);
+  assert.deepEqual(r.marks, ['cards:bad']);
+  assert.equal(await git(repo, 'rev-parse', 'HEAD'), head);
+
+  // 反過來：暫存的是好的、工作樹是壞的，照暫存的過；Cards 與套件都跑完整檢查。
+  await put(flag, 'good\n');
+  await git(repo, 'add', '--', flag);
+  await put(flag, 'bad\n');
+  r = await commit(['-m', 'package keeps cards working']);
+  assert.ok(r.ok, r.out);
+  assert.deepEqual(r.marks, ['ai-client:good', 'cards:good']);
+  assert.match(lastLine(r.out), /Cards：完整檢查（改到 packages\/ai-client\/flag\.txt）通過；.*AI 連線套件：完整檢查（改到 packages\/ai-client\/flag\.txt）通過$/);
 });

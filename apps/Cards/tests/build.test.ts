@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
 import { desktopViolations, RULES_FROM_ROOT, ruleFiles } from '../tools/build.mjs';
-import { cardsIn, repoPath } from './helpers/layout.ts';
+import { cardsIn, copyPackages, repoPath } from './helpers/layout.ts';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 import { onPlatform } from './helpers/platform.ts';
 
@@ -37,6 +37,7 @@ async function project(t: TestContext, files: Record<string, string>): Promise<s
   await copyFile(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
   await copyFile(join(root, 'manifest.json'), join(dir, 'manifest.json'));
   await cp(join(root, 'src/core'), join(dir, 'src/core'), { recursive: true });
+  await copyPackages(repo);
   for (const path of ruleFiles()) {
     await mkdir(dirname(join(repo, path)), { recursive: true });
     await copyFile(join(root, RULES_FROM_ROOT, path), join(repo, path));
