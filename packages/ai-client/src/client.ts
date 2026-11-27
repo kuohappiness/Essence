@@ -42,7 +42,8 @@ export interface AiClientOptions {
   /** 和標準 fetch 同形狀的函式；不給就用執行環境的 fetch。 */
   fetch?: FetchLike;
   /**
-   * 送出後多久沒拿到回應標頭就停下，丟 timeout、不自動重送（服務可能已經在做，L2 R7）。預設 120 秒加每 100 KB 本文 1 秒。
+   * 送出後多久沒拿到回應標頭就停下，丟 timeout、不自動重送（服務可能已經在做，L2 R7）。預設 120 秒加每 100 KB 本文 1 秒；
+   * 想完才送標頭的方言（Gemini）預設不限，只照整體期限。
    * 傳輸層要等整段本文收完才交出 Response 的（例如 Obsidian 的 requestUrl）要設 null。
    */
   responseTimeoutMs?: number | null;
@@ -231,9 +232,10 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
     const timeoutMs = givenTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     // 期限從開始算一次、照計時器上限：每一次重送都用剩下的，不重新給滿（L2 第三輪 延續 R6）。
     const deadline = startedAt + Math.min(timeoutMs, MAX_TIMER_MS);
-    const responseTimeoutMs = options.responseTimeoutMs === undefined
-      ? RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000
-      : options.responseTimeoutMs;
+    // 等標頭的時限（〈7〉第 4 點）：想完才送標頭的服務預設不另外限時，只照整體期限。
+    const responseTimeoutMs = options.responseTimeoutMs !== undefined ? options.responseTimeoutMs
+      : r.dialect.headersAfterThinking ? null
+        : RESPONSE_TIMEOUT_BASE_MS + Math.ceil(bytes.length / UPLOAD_BYTES_PER_SECOND) * 1000;
     // 共最多 3 次（〈7〉第 5 點，L2 R6）：呼叫端只能調少，不能調多。
     const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Math.max(1, Math.floor(givenMaxAttempts ?? DEFAULT_MAX_ATTEMPTS)));
     const attempts: AttemptTrace[] = [];

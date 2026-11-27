@@ -47,6 +47,7 @@ export const openaiChat: Dialect = {
   id: 'openai-chat',
   defaultAuth: { header: 'Authorization', scheme: 'Bearer' },
   requestIdHeader: 'x-request-id',
+  headersAfterThinking: false,
 
   buildGenerate(ctx: BuildContext): HttpCall {
     const messages: Json[] = [];

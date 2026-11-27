@@ -65,6 +65,11 @@ export interface Dialect {
   readonly defaultAuth: AuthSpec | null;
   /** 請求編號在哪個回應標頭。 */
   readonly requestIdHeader: string | null;
+  /**
+   * 服務想完才送回應標頭（Gemini：思考不串流，標頭和第一段文字一起到，冒煙測試 2026-11-27 等過 3 分鐘）。
+   * 是的話預設不另外限時等標頭，只照整體期限；呼叫端給了 responseTimeoutMs 照給的。
+   */
+  readonly headersAfterThinking: boolean;
   buildGenerate(ctx: BuildContext): HttpCall;
   /** 服務沒照要求串流、直接回 JSON 時的回應本文（已 JSON.parse）。 */
   parseResponse(json: unknown): Output | { error: ParsedError };
