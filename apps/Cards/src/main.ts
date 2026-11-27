@@ -224,6 +224,8 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // AI 製卡：電腦一直有，手機在設定頁打開才有（D-226 第 1 點）。待貼回的工作在建立 state 之前就讀好：state 第一次配號時，未完成工作的預留一定已經載入（§5〈ID 的預留〉）。
     const app = this.app;
+    // 直接製作只在電腦（tasks/ai-direct.md §4：手機照舊複製提示）：製卡與加深共用同一份連線。送不成的記進錯誤紀錄（§8，多記服務、模型、狀態碼、請求編號、次數）；家長按取消的不記。
+    const direct = Platform.isDesktopApp ? directHost(app, ({ msg, ...ai }) => { console.error('Essence Cards', 'ai', msg); this.errors.record('ai', msg, { ai }); }) : null;
     this.ai = createAiCards({
       rules: JSON.parse(CARD_RULES) as EmbeddedRules,
       state: () => this.state,
@@ -239,8 +241,7 @@ export default class EssenceCardsPlugin extends Plugin {
       phone: !Platform.isDesktopApp,
       now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
       onError: error => { this.fail('ai', error); },
-      // 直接製作只在電腦（tasks/ai-direct.md §4：手機照舊複製提示）。送不成的記進錯誤紀錄（§8，多記服務、模型、狀態碼、請求編號、次數）；家長按取消的不記。
-      ...Platform.isDesktopApp ? { direct: directHost(app, ({ msg, ...ai }) => { console.error('Essence Cards', 'ai', msg); this.errors.record('ai', msg, { ai }); }) } : {},
+      ...direct ? { direct } : {},
     });
     this.aiWiring = wireAiCards(this, {
       cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now(),
@@ -275,6 +276,8 @@ export default class EssenceCardsPlugin extends Plugin {
         clipboard: text => navigator.clipboard.writeText(text),
         now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
         onError: error => { this.fail('ai', error); },
+        // 加深的直接製作（tasks/ai-direct.md §9）：和製卡同一份連線與錯誤紀錄。
+        ...direct ? { direct } : {},
       });
       this.openDeepen = wireDeepen(this, {
         deepen: () => this.unloaded ? null : this.deepen,
@@ -286,6 +289,7 @@ export default class EssenceCardsPlugin extends Plugin {
         },
         openNote: path => { this.openNote(path); },
         notify: message => { new Notice(message); },
+        now: () => Date.now(), pdfPages, openSettings: () => { this.openSettings(); },
       }).open;
       // 提醒一區的加深列（§4）：算好、有變才更新狀態列與入口。改名、搬移、刪除時「這次不用」跟著走（§5-1）。
       this.deepen.onRows(() => { this.updateReminders(); this.entry?.refresh(); });

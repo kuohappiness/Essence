@@ -1,5 +1,5 @@
 // 製卡視窗的直接製作（tasks/ai-direct.md §4～§6、src/obsidian/ai-cards-modal.ts）：用共用的 obsidian 替身開真的視窗，接真的製卡流程與假的 fetch。
-// 替身不是 Obsidian 實機：FakeEl 在這個檔補上視窗用到的 DOM 方法（每個測試檔是自己的 Node 程序，補的只活在這裡）。畫面的樣子在 Windows 實機看。
+// 替身不是 Obsidian 實機：視窗用到的 DOM 方法由 helpers/modal-dom.ts 補上。畫面的樣子在 Windows 實機看。
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import type { MockReply } from '../../../packages/ai-client/src/testing.ts';
 import { directJob } from '../src/core/ai/index.ts';
-import { createObsidianStub, FakeEl } from './helpers/obsidian.ts';
+import { createObsidianStub } from './helpers/obsidian.ts';
+import { all, button, sleep, textarea, texts } from './helpers/modal-dom.ts';
+import type { El } from './helpers/modal-dom.ts';
 import { form, lesson, load, ok, propsOf, reply, unauthorized } from './helpers/ai-direct.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -16,42 +18,6 @@ const code = (await build({
   bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false, external: ['obsidian'],
 })).outputFiles[0].text;
 
-interface El extends FakeEl {
-  cls: string; type?: string; placeholder?: string; value: string; checked?: boolean; files?: File[];
-  listeners?: Map<string, ((event: unknown) => void)[]>;
-  fire(type: string, event?: unknown): void;
-}
-const proto = FakeEl.prototype as unknown as Record<string, unknown>;
-proto.createEl = function (this: El, tag: string, options?: { text?: string; cls?: string; type?: string; placeholder?: string; attr?: Record<string, string> }): El {
-  const el = new FakeEl(tag, options) as El;
-  el.cls = options?.cls ?? '';
-  el.type = options?.type;
-  el.placeholder = options?.placeholder ?? options?.attr?.placeholder;
-  el.value = '';
-  this.children.push(el);
-  return el;
-};
-proto.addEventListener = function (this: El, type: string, callback: (event: unknown) => void) { (this.listeners ??= new Map()).set(type, [...this.listeners.get(type) ?? [], callback]); };
-proto.fire = function (this: El, type: string, event: unknown = {}) { for (const callback of this.listeners?.get(type) ?? []) callback(event); };
-proto.click = function (this: El) { if (!this.disabled) this.fire('click'); };
-proto.hide = function (this: El) { this.hidden = true; };
-proto.show = function (this: El) { this.hidden = false; };
-proto.toggleClass = function () {};
-proto.querySelector = function (this: El, selector: string): El | null {
-  const want = selector.replace(/^\./, '');
-  for (const child of this.children as El[]) {
-    if (child.cls.split(' ').includes(want)) return child;
-    const found = (child as unknown as { querySelector(selector: string): El | null }).querySelector(selector);
-    if (found) return found;
-  }
-  return null;
-};
-
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-const all = (el: FakeEl): El[] => [el as El, ...el.children.flatMap(all)];
-const texts = (el: FakeEl): string[] => all(el).map(each => each.text).filter(Boolean);
-const button = (el: FakeEl, label: string): El | undefined => all(el).find(each => each.tag === 'button' && !each.hidden && each.text === label);
-const textarea = (el: FakeEl): El | undefined => all(el).find(each => each.tag === 'textarea');
 const pdf = (name = '英文 L3.pdf'): File => new File([new Uint8Array(lesson.data)], name);
 
 interface Modal { contentEl: El; close(): void; isOpen: boolean }
