@@ -63,6 +63,10 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   invalid(BECAUSE, ['另一種排法：because I was tired, I went to bed early.'], /兩格以上/);
   invalid(BECAUSE, ['另一種排法：==because== ==[I was tired](a.md)==, ==I went to bed early==.'], /兩格以上/);
   invalid('她說她累了。"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
+  // L2 第一輪 R1：全形直引號、半形冒號後面的直引號、字元參照寫的引號也是開頭的引號。
+  invalid('她說她累了：＂==I\'m tired==,＂ ==she== ==said==.', ['另一種排法：==she== ==said==, ＂==I\'m tired==.＂'], /引號/);
+  invalid('重排引句:"==I\'m tired==," ==she== ==said==.', ['另一種排法：==she== ==said==, "==I\'m tired==."'], /引號/);
+  invalid('她說她累了：&quot;==I\'m tired==,&quot; ==she== ==said==.', ['另一種排法：==she== ==said==, &quot;==I\'m tired==.&quot;'], /引號/);
 
   const twice = one(BECAUSE, [ALT, ALT]);
   assert.deepEqual(codes(twice), [[4, 'order-alt-invalid']], '第二行和前面一行相同');
@@ -73,6 +77,12 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   assert.deepEqual(codes(nested), [[4, 'order-alt-invalid']], '底下又有子項目');
   assert.match(nested.problems[0].message, /同一行/);
   assert.equal(othersOf(nested), undefined);
+});
+
+void test('結束的引號（L2 第一輪 R1）：逗號、句點後面的直引號不是開頭，照樣認', () => {
+  const deck = one('"I\'m tired," ==she== ==said== ==quietly==.', ['另一種排法："I\'m tired," ==she== ==quietly== ==said==.'], '說話的人 排序');
+  assert.deepEqual(codes(deck), []);
+  assert.deepEqual(othersOf(deck)?.map(other => other.words), [['she', 'quietly', 'said']]);
 });
 
 void test('第一格前面的字（§1 第 3 點）：不寫、寫題目那段的結尾、整行照抄都認；空白連續算一個', () => {
