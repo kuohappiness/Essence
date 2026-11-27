@@ -1,13 +1,16 @@
-import { Modal, Platform, PluginSettingTab, Setting, setIcon } from 'obsidian';
+import { Modal, Platform, PluginSettingTab, requireApiVersion, SecretComponent, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
+import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, readConnection, REASONING_CHOICES, testConnection, withSecret } from '../core/connect/index.ts';
+import type { Connection } from '../core/connect/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
-import { deepenRemindOff, phoneCards, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
+import { aiConnection, deepenRemindOff, phoneCards, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
 // 「複習」的上限、保持率、倒數與「學期」存在設定檔 `Essence Cards/設定.json`、跟著同步（tasks/settings-page.md、tasks/settings-vault-file.md）；預覽與小考的開關只存在這台裝置（D-161、D-163 第 6 點）；「備份」見 tasks/plugin-backup.md §1-5；AI 製卡之後的任務再加。
+// 「AI 連線」只在電腦（apps/Cards/docs/tasks/ai-direct.md §2）：服務、模型、推理等級存在這台裝置，金鑰存在 Obsidian 的 SecretStorage，只記它的名稱。
 
 const REVIEW = {
   section: '複習',
@@ -36,6 +39,21 @@ const CARDS = {
   confirm: '打開後，這台手機可以用 AI 製卡，存成草稿卡組。孩子複習用的手機或平板不要打開，免得不小心改到卡組。只影響這台裝置，其他裝置不會跟著打開；隨時可以回到這裡關掉。',
   yes: '打開',
   no: '取消',
+};
+/** 「AI 連線」（ai-direct.md §2）：Obsidian 1.11.4 起才有 SecretStorage，舊版只寫一句、不退回別的存法。 */
+const AI = {
+  section: 'AI 連線',
+  update: '要直接製作，請先把 Obsidian 更新到 1.11.4 以上。',
+  provider: '服務',
+  key: '金鑰',
+  keyNote: '金鑰只存在這台電腦，不會同步到手機；其他外掛也讀得到 Obsidian 存的金鑰。',
+  model: '模型',
+  modelFree: '照 OpenRouter 網站上的模型名稱填。',
+  modelExample: 'google/gemini-3.8-flash',
+  reasoning: '推理等級',
+  test: '測試連線',
+  testNote: '讀一次這個服務的模型清單，確認金鑰能用；不產生內容、不花錢。',
+  testing: '測試中…',
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -174,9 +192,26 @@ class EssenceSettingTab extends PluginSettingTab {
   private typing = false;
   /** 打開備份資料夾失敗的原因。 */
   private opening: string | null = null;
+  /** 測試連線：進行中的可以中止（關掉設定頁、停用外掛），結果留到換服務或金鑰、關掉設定頁為止。 */
+  private aiClient: ReturnType<typeof cardsClient> | null = null;
+  private aiTest: AbortController | null = null;
+  private aiResult: { ok: boolean; text: string } | null = null;
   constructor(app: App, host: SettingsHost) {
     super(app, host.plugin);
     this.host = host;
+    host.plugin.register(() => { this.stopTest(); });
+  }
+
+  /** 關掉設定頁：進行中的測試連線中止，結果不留。 */
+  hide(): void {
+    this.stopTest();
+    this.aiResult = null;
+    super.hide();
+  }
+
+  private stopTest(): void {
+    this.aiTest?.abort();
+    this.aiTest = null;
   }
 
   /** Obsidian 打開這個分頁時呼叫：先用手上的值畫，同時重讀，值不同才重畫（§5）。 */
@@ -194,6 +229,7 @@ class EssenceSettingTab extends PluginSettingTab {
     this.review(containerEl);
     this.term(containerEl);
     if (!Platform.isDesktopApp) this.cards(containerEl);
+    else this.ai(containerEl);
     new Setting(containerEl).setName(TEXTS.section).setHeading();
     if (!Platform.isDesktopApp) {
       new Setting(containerEl).setDesc(TEXTS.phone);
@@ -285,6 +321,79 @@ class EssenceSettingTab extends PluginSettingTab {
         this.host.phoneCardsChanged?.();
       }).open();
     }));
+  }
+
+  /**
+   * 電腦的「AI 連線」一區（ai-direct.md §2）：服務、金鑰（Obsidian 的 SecretComponent，只存名稱）、模型、推理等級、測試連線。
+   * 每次改都從這台裝置重讀再存，不用畫的時候的舊值；換服務或金鑰時結果清掉。
+   */
+  private ai(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(AI.section).setHeading();
+    if (!requireApiVersion('1.11.4')) {
+      new Setting(containerEl).setDesc(AI.update);
+      return;
+    }
+    const client = this.aiClient ??= cardsClient();
+    const providers = client.providers();
+    const current = (): Connection => readConnection(aiConnection.get(this.app), providers);
+    const update = (change: (connection: Connection) => Connection): void => { aiConnection.set(this.app, change(current())); };
+    const connection = current();
+    const provider = providers.find(item => item.id === connection.provider);
+    if (!provider) return;
+    new Setting(containerEl).setName(AI.provider).addDropdown(dropdown => {
+      for (const choice of providerChoices(providers)) dropdown.addOption(choice.id, choice.label);
+      dropdown.setValue(provider.id).onChange(id => {
+        update(saved => ({ ...saved, provider: id }));
+        this.stopTest();
+        this.aiResult = null;
+        this.draw();
+      });
+    });
+    new Setting(containerEl).setName(AI.key).setDesc(AI.keyNote).addComponent(el => new SecretComponent(this.app, el)
+      .setValue(connection.secrets[provider.id] ?? '')
+      .onChange(id => {
+        update(saved => withSecret(saved, provider.id, id));
+        this.stopTest();
+        this.aiResult = null;
+        this.refresh();
+      }));
+    const models = modelChoices(provider);
+    const model = new Setting(containerEl).setName(AI.model);
+    const saveModel = (id: string): void => { update(saved => ({ ...saved, models: { ...saved.models, [provider.id]: id.trim() } })); };
+    if (models.length) {
+      model.addDropdown(dropdown => {
+        for (const choice of models) dropdown.addOption(choice.id, choice.label);
+        dropdown.setValue(modelOf(connection, provider)).onChange(saveModel);
+      });
+    } else {
+      model.setDesc(AI.modelFree).addText(text => text.setPlaceholder(AI.modelExample).setValue(modelOf(connection, provider)).onChange(saveModel));
+    }
+    new Setting(containerEl).setName(AI.reasoning).addDropdown(dropdown => {
+      for (const choice of REASONING_CHOICES) dropdown.addOption(choice.value, choice.label);
+      dropdown.setValue(connection.reasoning).onChange(value => {
+        const reasoning = REASONING_CHOICES.find(choice => choice.value === value)?.value ?? 'default';
+        update(saved => ({ ...saved, reasoning }));
+      });
+    });
+    const test = new Setting(containerEl).setName(AI.test).setDesc(AI.testNote);
+    if (this.aiTest) test.descEl.createDiv({ text: AI.testing });
+    else if (this.aiResult) test.descEl.createDiv({ text: this.aiResult.text, cls: this.aiResult.ok ? undefined : 'essence-cards-backup-problem' });
+    test.addButton(button => button.setButtonText(AI.test).setDisabled(this.aiTest !== null).onClick(() => { void this.runTest(client); }));
+  }
+
+  /** 按「測試連線」：金鑰這時才向 SecretStorage 拿，交給套件後不留；中止了（關掉設定頁、停用外掛、換服務）就不畫結果。 */
+  private async runTest(client: ReturnType<typeof cardsClient>): Promise<void> {
+    this.stopTest();
+    const controller = this.aiTest = new AbortController();
+    const connection = readConnection(aiConnection.get(this.app), client.providers());
+    const key = requireApiVersion('1.11.4') ? keyOf(connection, id => this.app.secretStorage.getSecret(id)) : null;
+    this.aiResult = null;
+    this.refresh();
+    const result = await testConnection(client, { provider: connection.provider, key, signal: controller.signal });
+    if (this.aiTest !== controller) return;
+    this.aiTest = null;
+    this.aiResult = { ok: result.ok, text: result.text };
+    this.refresh();
   }
 
   private term(containerEl: HTMLElement): void {

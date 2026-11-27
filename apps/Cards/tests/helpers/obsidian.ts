@@ -59,14 +59,32 @@ class FakeToggle {
   onChange(callback: (value: boolean) => unknown) { this.changed = callback; return this; }
   choose(value: boolean) { this.value = value; this.changed(value); }
 }
+/** 文字欄位：type() 照使用者打字的樣子呼叫 onChange。 */
+class FakeText {
+  value = ''; placeholder = '';
+  private changed: (value: string) => unknown = () => {};
+  setPlaceholder(placeholder: string) { this.placeholder = placeholder; return this; }
+  setValue(value: string) { this.value = value; return this; }
+  getValue() { return this.value; }
+  onChange(callback: (value: string) => unknown) { this.changed = callback; return this; }
+  type(value: string) { this.value = value; this.changed(value); }
+}
+/** Obsidian 的 SecretComponent（1.11.4）：值是金鑰在 SecretStorage 的名稱；choose() 照使用者選了或建立一把金鑰的樣子呼叫 onChange。 */
+export class FakeSecret {
+  value = '';
+  private changed: (value: string | null) => unknown = () => {};
+  setValue(value: string) { this.value = value; return this; }
+  onChange(callback: (value: string | null) => unknown) { this.changed = callback; return this; }
+  choose(value: string | null) { this.value = value ?? ''; this.changed(value); }
+}
 class FakeButton {
-  text = ''; icon = ''; tooltip = '';
+  text = ''; icon = ''; tooltip = ''; disabled = false;
   private clicked: () => unknown = () => {};
   setButtonText(text: string) { this.text = text; return this; }
   setIcon(icon: string) { this.icon = icon; return this; }
   setTooltip(tooltip: string) { this.tooltip = tooltip; return this; }
   setCta() { return this; }
-  setDisabled() { return this; }
+  setDisabled(disabled: boolean) { this.disabled = disabled; return this; }
   onClick(callback: () => unknown) { this.clicked = callback; return this; }
   click() { this.clicked(); }
 }
@@ -75,6 +93,8 @@ export class FakeSetting {
   settingEl = new FakeEl(); nameEl = new FakeEl(); descEl = new FakeEl();
   dropdown: FakeDropdown | null = null;
   toggle: FakeToggle | null = null;
+  text: FakeText | null = null;
+  secret: FakeSecret | null = null;
   readonly extras: FakeButton[] = [];
   readonly buttons: FakeButton[] = [];
   constructor(container: FakeEl) { container.rows.push(this); }
@@ -85,7 +105,8 @@ export class FakeSetting {
   addToggle(build: (toggle: FakeToggle) => unknown) { build(this.toggle = new FakeToggle()); return this; }
   addExtraButton(build: (button: FakeButton) => unknown) { const button = new FakeButton(); this.extras.push(button); build(button); return this; }
   addButton(build: (button: FakeButton) => unknown) { const button = new FakeButton(); this.buttons.push(button); build(button); return this; }
-  addText(build: (text: { setPlaceholder(): unknown; onChange(): unknown }) => unknown) { const text = { setPlaceholder: () => text, onChange: () => text }; build(text); return this; }
+  addText(build: (text: FakeText) => unknown) { build(this.text = new FakeText()); return this; }
+  addComponent(build: (el: FakeEl) => unknown) { const made = build(new FakeEl()); if (made instanceof FakeSecret) this.secret = made; return this; }
 }
 
 const EMPTY = { empty: true };
@@ -115,6 +136,12 @@ export interface StubOptions {
   data?: unknown;
   /** saveData 寫不進去：照 Obsidian 1.15 吞掉錯誤、照常完成。 */
   failSave?: boolean;
+  /** requireApiVersion 看的 Obsidian 版本；預設 1.15.1（SecretStorage 從 1.11.4 起才有）。 */
+  apiVersion?: string;
+  /** SecretStorage 一開始的金鑰（名稱 → 值）。 */
+  secrets?: Record<string, string>;
+  /** 外掛程式裡的 fetch；沒給的時候一律失敗（替身不連網）。 */
+  fetch?: (url: string, init?: unknown) => Promise<unknown>;
 }
 
 interface Leaf { view: unknown; getViewState(): { state?: { file?: string } }; setViewState?(state: unknown): Promise<void>; setEphemeralState?(state: unknown): void; history?: unknown[] }
@@ -287,6 +314,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     offref: (ref: unknown) => { vaultHandlers.delete(ref as { name: string; callback: (...args: unknown[]) => void }); },
   };
   const storage = new Map(Object.entries(options.localStorage ?? {}));
+  const secrets = new Map(Object.entries(options.secrets ?? {}));
   const layout: (() => void)[] = [];
   const handlers = new Map<string, ((...args: unknown[]) => void)[]>();
   const intervals: (() => void)[] = [];
@@ -307,6 +335,12 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     metadataCache: { getFileCache: () => null, getFirstLinkpathDest: () => null, on: (name: string) => name },
     loadLocalStorage: (key: string) => storage.get(key) ?? null,
     saveLocalStorage: (key: string, value: unknown) => { if (value === null) storage.delete(key); else storage.set(key, value); },
+    // SecretStorage（1.11.4）：沒有刪除的方法，清掉只能存空字串（探針 P3）。
+    secretStorage: {
+      getSecret: (id: string) => secrets.get(id) ?? null,
+      setSecret: (id: string, secret: string) => { secrets.set(id, secret); },
+      listSecrets: () => [...secrets.keys()],
+    },
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const window = Object.assign(new EventTarget(), {
@@ -376,18 +410,27 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   class PluginSettingTab {
     app: unknown; plugin: unknown; containerEl = new FakeEl();
     constructor(app: unknown, plugin: unknown) { this.app = app; this.plugin = plugin; }
+    /** Obsidian 關掉設定頁時呼叫。 */
+    hide() { this.containerEl.shown = false; }
   }
+  const version = (text: string) => text.split('.').map(Number);
+  const atLeast = (have: string, want: string) => {
+    const [a, b] = [version(have), version(want)];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+    return true;
+  };
   const obsidian = {
     Plugin, Notice, Component, Modal, SuggestModal, PluginSettingTab, Setting: FakeSetting, FileSystemAdapter, TFile, TFolder, TAbstractFile,
     MarkdownView: FakeMarkdownView,
     MarkdownRenderer: { render: (_app: unknown, markdown: string, el: { textContent: string }) => { el.textContent = markdown; return Promise.resolve(); } },
-    setIcon: () => {}, editorInfoField: {}, apiVersion: 'test',
+    setIcon: () => {}, editorInfoField: {}, apiVersion: options.apiVersion ?? '1.15.1',
+    requireApiVersion: (want: string) => atLeast(options.apiVersion ?? '1.15.1', want), SecretComponent: FakeSecret,
     Platform: { isWin: true, isDesktop: !!options.desktop, isDesktopApp: !!options.desktop, isMobileApp: !options.desktop, isIosApp: !!options.ios, isAndroidApp: false },
   };
   function load<T>(code: string): T {
     const module = { exports: {} as T };
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const run = new Function('require', 'module', 'exports', 'document', 'window', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown, window: unknown) => void;
+    const run = new Function('require', 'module', 'exports', 'document', 'window', 'fetch', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown, window: unknown, fetch: unknown) => void;
     run((name: string) => {
       required.push(name);
       if (name === '@codemirror/state') return codemirrorState;
@@ -396,7 +439,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       if (options.desktop && options.vaultPath && name.startsWith('node:')) return nodeRequire(name);
       if (name !== 'obsidian') throw Error('只能 require obsidian 與 CodeMirror：' + name);
       return obsidian;
-    }, module, module.exports, document, window);
+    }, module, module.exports, document, window, options.fetch ?? (() => Promise.reject(new TypeError('替身不連網：要測連線就給 fetch'))));
     return module.exports;
   }
   const leaf = (path: string | null): Leaf => {
