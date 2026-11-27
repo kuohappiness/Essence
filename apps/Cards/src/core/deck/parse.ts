@@ -3,9 +3,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './sources.ts';
 import type { TracedPiece } from './sources.ts';
-import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
+import { expandTabs, linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import { ALT_LIKE, altMentions, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
@@ -301,12 +301,30 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     }
     // 補充或多行答案裡的資料也屬於整個目標。
     for (const child of root.children) collectFields(child);
+    /** 一項連同底下的子項目的原文；資料欄位不放（collectFields 讀了）。 */
     function markdown(node: Item, base = node.indent, nested = false): string {
       if (fieldStart.test(node.text)) return '';
       const prefix = nested ? ' '.repeat(node.indent - base) + lines[node.line].raw.trimStart().match(/^(?:[-*+]|\d+[.)])\s*/)?.[0] : '';
       const body = (prefix ?? '') + node.text;
       return [body, ...node.children.map(child => markdown(child, base, true)).filter(Boolean)].join('\n');
     }
+    /**
+     * 題目的一項補充。另一種排法照它在原文的範圍放（L2 第一輪 R2、第二輪 F4、第三輪 F9、第四輪 F11）：底下的資料欄位、子項目，清單不建項目的圍欄程式碼與引言都在，
+     * 有就多出一行、不認（order.ts 的 readOther）；欄位照樣屬於整個目標。
+     */
+    const extraOf = (child: Item): string => {
+      if (!ALT_LIKE.test(child.text)) return markdown(child);
+      // 整段照原文（L2 第三輪 F9）：接續行、子項目、後面的段落照原本的順序，不只取最後一條接續行之後的。
+      // 照項目內容的起始欄去掉外層的縮排、留下裡面的相對縮排（第四輪 F11），空一行後的段落不會多出四欄變成程式碼區塊。
+      const rest = lines.slice(child.line + 1, child.end).map(({ raw }) =>
+        raw.trim() ? ' '.repeat(Math.max(0, /^ */.exec(expandTabs(raw))![0].length - child.contentColumn)) + raw.trim() : '');
+      return [lines[child.line].raw.slice(child.starts[0].column).trimEnd(), ...rest].join('\n');
+    };
+    /** 寫在題目的下一層、當成那一題補充的另一種排法：句子排序在 readKind 讀，其他卡型下面提示；其他位置的由 misplaced 提示。 */
+    const placed = new Set<Item>();
+    const placeAlternatives = (children: readonly Item[]): void => {
+      for (const child of children) if (ALT_LIKE.test(child.text)) placed.add(child);
+    };
     function prompt(node: Item): Prompt {
       const body = stripId(node.text).text;
       const { colon, blanks } = questionSyntax(body);
@@ -317,6 +335,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
         const multiline = !answer;
         if (multiline) answer = children.map(child => markdown(child)).filter(Boolean).join('\n');
         const extras = multiline ? [] : children.map(child => markdown(child));
+        if (!multiline) placeAlternatives(children);
         if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
         let typed: readonly string[] | null = null;
@@ -330,7 +349,8 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       }
       if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
       else if (typing) addProblem(node, 'cloze-not-typed', '文法與變化的填空題照一般翻面，不要求打字；要打字改成問答題');
-      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+      const cloze: Prompt = { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(extraOf), fingerprint: fingerprint(body, '') };
+      placeAlternatives(children);
       const own = anchorNotes(children);
       if (own) promptNotes.set(cloze, own);
       return cloze;
@@ -368,6 +388,27 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;
     }
+    // 另一種排法寫在別的地方（§1 第 6 點）：句子排序的題目底下的在 readKind 讀了；其他卡型照背面補充顯示，新舊版一致。
+    const sentence = target.kind?.id === 'order' && target.kind.order.style === 'sentence';
+    for (const each of target.prompts) {
+      if (!sentence && each.extras.some(extra => ALT_LIKE.test(extra))) problems.push({ line: each.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法只有英文句子排序的題目底下認得，這裡不算對的順序，照這種卡原本的樣子顯示（翻面卡在背面補充，全詩排序的畫面不顯示）' });
+    }
+    // 寫在題目的下一層以外的地方（§1 第 6 點、L2 第一輪 R3）：照現在的讀法（另一題、共用補充、補充或答案的一部分），只提示。
+    const misplaced = (node: Item, depth: number): void => {
+      const mentions = altMentions(node.text);
+      // 寫成接續行（前面沒有清單符號，L2 第二輪）：照現在是這一項的文字。
+      for (const at of mentions) {
+        if (at === 0) continue;
+        problems.push({ line: node.starts[at]?.line ?? node.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法要另起一行、前面加「- 」，當那一題的子項目；沒有清單符號時會接在上一項後面，當成同一項的文字' });
+      }
+      if (mentions.includes(0) && !placed.has(node)) {
+        addProblem(node, 'order-alt-invalid', depth === 0 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在最上層會被當成另一個學習目標'
+          : depth === 1 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充'
+          : '另一種排法要直接寫在那一題的下一層；寫在補充、答案或別的子項目底下，照原本的讀法顯示，不算對的順序');
+      }
+      for (const child of node.children) misplaced(child, depth + 1);
+    };
+    misplaced(root, 0);
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
       seenIds.add(target.id);

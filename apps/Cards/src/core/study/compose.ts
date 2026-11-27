@@ -209,18 +209,22 @@ function sentenceCardOf(fields: Omit<Card, 'typed' | 'blanks'>, sentence: Senten
   const cells = sentence.prompts.at(index >= 0 ? index : target.prompts.findIndex(each => each.fingerprint === prompt.fingerprint));
   if (!cells) throw TypeError('排序卡找不到這一題：' + target.name);
   const blanks = cells.words.map((answer, cell): Blank => ({ lt, target, prompt, answer, cell }));
+  // 字鍵避開每一種對的順序（tasks/sentence-order-alternatives.md §3）；沒有另一種排法時和以前一樣只避開題目那一行。
+  const avoid = [cells.words, ...(cells.others ?? []).map(other => other.words)];
   let keys: string[] = [];
-  for (let at = 0; at <= times; at++) keys = orderKeys(cells.words, prompt.fingerprint + ' ' + String(at), keys);
-  return { ...fields, typed: false, blanks, group: { title: sentence.title, members: cells.words, keys, rows: [], order: { head: cells.head, tails: cells.tails, starts: cells.starts } } };
+  for (let at = 0; at <= times; at++) keys = orderKeys(cells.words, prompt.fingerprint + ' ' + String(at), keys, avoid);
+  const order = { head: cells.head, tails: cells.tails, starts: cells.starts, ...(cells.others ? { others: cells.others } : {}) };
+  return { ...fields, typed: false, blanks, group: { title: sentence.title, members: cells.words, keys, rows: [], order } };
 }
 
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, i) => item === b[i]);
 
 /**
- * 全詩順序卡一次的字鍵：打亂；照詩的順序就把第一個移到最後。和上一次（before）一樣時，換掉兩句的位置，取第一個不照詩的順序的。
- * 兩句的詩、句子都相同時沒有別的排法，照舊。
+ * 排序卡一次的字鍵：打亂；照詩的順序就把第一個移到最後。和上一次（before）一樣時，換掉兩句的位置，取第一個不照詩的順序的。
+ * 兩句的詩、句子都相同時沒有別的排法，照舊。avoid 是要避開的對的順序，沒給時是 lines 自己（全詩、沒有另一種排法的句子）。
  */
-function orderKeys(lines: readonly string[], seed: string, before: readonly string[]): string[] {
+function orderKeys(lines: readonly string[], seed: string, before: readonly string[], avoid: readonly (readonly string[])[] = [lines]): string[] {
+  if (avoid.length > 1) return avoidingKeys(shuffled(lines, seeded(seed)), before, avoid) ?? orderKeys(lines, seed, before);
   const keys = shuffled(lines, seeded(seed));
   if (sameOrder(keys, lines)) keys.push(keys.shift() as string);
   if (!sameOrder(keys, before)) return keys;
@@ -233,6 +237,53 @@ function orderKeys(lines: readonly string[], seed: string, before: readonly stri
     }
   }
   return keys;
+}
+
+/**
+ * 有另一種排法的句子（§3）：先避開每一種對的順序，再求和上一次不同。照上面的方法（移一個、再找兩個交換）都撞到時，
+ * 照固定的順序列舉打亂結果的排列，取第一個兩樣都符合的；沒有就取第一個不是對的順序的；連這個都沒有（每一種都對）是 null，
+ * 照沒有另一種排法的規則打亂（L2 第一輪 R6）。
+ */
+function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly (readonly string[])[]): string[] | null {
+  const right = (order: readonly string[]): boolean => avoid.some(each => sameOrder(order, each));
+  const fresh = (order: readonly string[]): boolean => !right(order) && !sameOrder(order, before);
+  if (right(keys)) keys.push(keys.shift() as string);
+  if (fresh(keys)) return keys;
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      if (keys[i] === keys[j]) continue;
+      const swapped = [...keys];
+      [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+      if (fresh(swapped)) return swapped;
+    }
+  }
+  let wrong: string[] | null = null;
+  for (const order of arrangementsOf(keys)) {
+    if (fresh(order)) return order;
+    if (!wrong && !right(order)) wrong = order;
+  }
+  return wrong;
+}
+
+/**
+ * keys 的每一種不同的排列（相同文字的詞塊互換算同一種，GitHub 上 Codex 的 P2：照位置列舉要 n! 次）；一個一個產生，找到就停。
+ * 每一種字照在 keys 第一次出現的先後編號，從 keys 自己開始照字典順序往後，到最後一種再從頭，回到 keys 為止。
+ */
+function* arrangementsOf(keys: readonly string[]): Generator<string[]> {
+  const distinct = [...new Set(keys)];
+  const start = keys.map(key => distinct.indexOf(key));
+  const rank = [...start];
+  do {
+    yield rank.map(i => distinct[i]);
+    let i = rank.length - 2;
+    while (i >= 0 && rank[i] >= rank[i + 1]) i--;
+    if (i >= 0) {
+      let j = rank.length - 1;
+      while (rank[j] <= rank[i]) j--;
+      [rank[i], rank[j]] = [rank[j], rank[i]];
+    }
+    rank.splice(i + 1, Infinity, ...rank.slice(i + 1).reverse());
+  } while (rank.some((each, at) => each !== start[at]));
 }
 
 /**
