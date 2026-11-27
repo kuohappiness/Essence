@@ -64,6 +64,18 @@ void test('§1 欄位與順序：render、read（第 10 次）、report 的那�
   assert.equal(written.length, 4);
 });
 
+void test('§1 直接製作送不成（tasks/ai-direct.md §8）：ai 那一行多 service、model、status、requestId、attempts，排在 path 之後；沒有的不寫', async () => {
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  log.record('ai', 'overloaded: The model is overloaded.', { ai: { service: 'google', model: 'gemini-3.8-flash', status: 503, requestId: null, attempts: 3 } });
+  log.record('ai', 'network: fetch failed', { ai: { service: 'openai', model: 'gpt-5.6-terra', status: null, requestId: 'req_123', attempts: 1 } });
+  await wait(10);
+  assert.deepEqual(lines(memory.texts.get(FILE)), [
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"ai","msg":"overloaded: The model is overloaded.","service":"google","model":"gemini-3.8-flash","status":503,"attempts":3}',
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"ai","msg":"network: fetch failed","service":"openai","model":"gpt-5.6-terra","requestId":"req_123","attempts":1}',
+  ]);
+});
+
 void test('§1 截斷：msg 一萬字加長 path 加長 stack，那一行 ≤ 2,000 bytes、還是合法 JSON，中文字不會切成半個', async () => {
   const memory = createMemoryFiles();
   const { log } = setup(memory.files);

@@ -239,8 +239,8 @@ export default class EssenceCardsPlugin extends Plugin {
       phone: !Platform.isDesktopApp,
       now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
       onError: error => { this.fail('ai', error); },
-      // 直接製作只在電腦（tasks/ai-direct.md §4：手機照舊複製提示）。送不成的記進錯誤紀錄（§8）；家長按取消的不記。
-      ...Platform.isDesktopApp ? { direct: directHost(app, (_failure, error) => { this.fail('ai', error); }) } : {},
+      // 直接製作只在電腦（tasks/ai-direct.md §4：手機照舊複製提示）。送不成的記進錯誤紀錄（§8，多記服務、模型、狀態碼、請求編號、次數）；家長按取消的不記。
+      ...Platform.isDesktopApp ? { direct: directHost(app, ({ msg, ...ai }) => { console.error('Essence Cards', 'ai', msg); this.errors.record('ai', msg, { ai }); }) } : {},
     });
     this.aiWiring = wireAiCards(this, {
       cards: () => this.unloaded || !this.cardsHere() ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now(),

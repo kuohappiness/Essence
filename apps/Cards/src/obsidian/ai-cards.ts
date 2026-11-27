@@ -1,8 +1,8 @@
 import { abandonJob, beginSave, buildPrompt, directJob, inspectReply, NEWER_SAVE, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, DirectEvidence, DirectJob, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck, SentFile } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
-import { directRequest, evidenceOf, materialProblem, modelOf, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
-import type { AiClient, Connection, DirectFailure, GenerateResult, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
+import { directRequest, evidenceOf, failureLog, materialProblem, modelOf, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
+import type { AiClient, Connection, DirectFailure, DirectLog, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
 // AI 製卡的流程（tasks/ai-cards-mvp.md §2、§3、§5）：複製提示、貼回檢查、存草稿與繼續。畫面在 ai-cards-modal.ts；這裡不碰 Obsidian，測試直接用。
@@ -34,9 +34,9 @@ export interface AiCardsDeps {
   onError: (error: unknown) => void;
   /**
    * 直接製作（tasks/ai-direct.md §4）：只在電腦，沒有這一欄就只有複製提示。connection 是設定頁「AI 連線」存的設定，
-   * key 每次送出前才向 SecretStorage 拿（用完不留）；onFailure 是送不成時給錯誤紀錄的（§8，家長取消的不記）。
+   * key 每次送出前才向 SecretStorage 拿（用完不留）；onFailure 是送不成時給錯誤紀錄的一行（§8，家長取消的不記；金鑰已經遮過）。
    */
-  direct?: { client: AiClient; connection: () => Connection; key: () => KeyLookup; onFailure?: (failure: DirectFailure, error: unknown, result: GenerateResult | null) => void };
+  direct?: { client: AiClient; connection: () => Connection; key: () => KeyLookup; onFailure?: (log: DirectLog, failure: DirectFailure) => void };
 }
 
 /** 直接製作送出之前就擋下（沒有建工作、沒有送出）的原因，或送出之後的結果（§4、§6）。 */
@@ -230,7 +230,8 @@ export function createAiCards(deps: AiCardsDeps) {
     const files: SentFile[] = sentFiles(materials);
     sending = controller;
     try {
-      const sent = await sendDirect(direct.client, directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} }));
+      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} });
+      const sent = await sendDirect(direct.client, request);
       if (sent.ok) {
         const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
         const evidence = evidenceOf(sent.result, files, reasoning, deps.now());
@@ -238,7 +239,7 @@ export function createAiCards(deps: AiCardsDeps) {
         return { kind: 'received', job: saved, reply: evidence.text, evidence };
       }
       if (sent.failure.kind !== 'cancelled') {
-        try { direct.onFailure?.(sent.failure, sent.error, sent.result); } catch (error) { deps.onError(error); }
+        try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request), sent.failure); } catch (error) { deps.onError(error); }
       }
       const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null });
       return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };

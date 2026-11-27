@@ -232,3 +232,30 @@ export async function sendDirect(client: AiClient, request: GenerateRequest): Pr
   const failure = stopFailure(result);
   return failure ? { ok: false, failure, error: null, result, partial: result.text || null } : { ok: true, result };
 }
+
+/** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務代號、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */
+export interface DirectLog { msg: string; service: string; model: string; status: number | null; requestId: string | null; attempts: number }
+
+/** 錯誤紀錄裡服務給的字串最多幾個字（模型名稱、請求編號）：一行有 2,000 bytes 的上限，太長的整行會被丟掉。 */
+const LOG_CHARS = 200;
+const short = (text: string): string => Array.from(text).slice(0, LOG_CHARS).join('');
+
+/**
+ * 送不成時寫進錯誤紀錄的一行（§8）：msg 是種類加套件的訊息（停止原因的寫停止原因）。套件的訊息已經遮過金鑰，這裡再遮一次；
+ * 不寫提示、教材的內容與檔名（檔名可能帶孩子的名字，格式查核 F16）。
+ */
+export function failureLog(failure: DirectFailure, error: unknown, result: GenerateResult | null, request: Pick<GenerateRequest, 'endpoint' | 'model' | 'apiKey'>): DirectLog {
+  const ai = isAiError(error) ? error : null;
+  const detail = ai ? ai.message : result ? `stop ${result.stopReason}` : error instanceof Error ? error.message : String(error);
+  const key = request.apiKey ?? '';
+  const msg = `${failure.kind}: ${key.length >= 8 ? detail.split(key).join('[金鑰]') : detail}`;
+  const service = 'provider' in request.endpoint ? request.endpoint.provider : 'custom';
+  const last = result?.trace.attempts.at(-1);
+  const requestId = ai?.requestId ?? result?.trace.requestId ?? null;
+  return {
+    msg, service, model: short(request.model),
+    status: ai ? ai.status : last?.status ?? null,
+    requestId: requestId === null ? null : short(requestId),
+    attempts: ai ? ai.attempts : result?.trace.attempts.length ?? 1,
+  };
+}

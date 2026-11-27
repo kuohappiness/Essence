@@ -1,7 +1,7 @@
 import { loadPdfJs, requireApiVersion } from 'obsidian';
 import type { App } from 'obsidian';
 import { cardsClient, keyOf, readConnection } from '../core/connect/index.ts';
-import type { DirectFailure, GenerateResult, KeyLookup } from '../core/connect/index.ts';
+import type { DirectLog, KeyLookup } from '../core/connect/index.ts';
 import { aiConnection } from '../ui/prefs.ts';
 import type { AiCardsDeps } from './ai-cards.ts';
 
@@ -11,7 +11,7 @@ import type { AiCardsDeps } from './ai-cards.ts';
 const PDF_WAIT = 30_000;
 
 /** 製卡流程用的連線：每次按下都重讀設定頁的值與金鑰（家長可能剛改過）。金鑰的值只交給套件，不留在這裡。 */
-export function directHost(app: App, onFailure: (failure: DirectFailure, error: unknown, result: GenerateResult | null) => void): NonNullable<AiCardsDeps['direct']> {
+export function directHost(app: App, onFailure: (log: DirectLog) => void): NonNullable<AiCardsDeps['direct']> {
   const client = cardsClient();
   const connection = () => readConnection(aiConnection.get(app), client.providers());
   const key = (): KeyLookup => requireApiVersion('1.11.4') ? keyOf(connection(), id => app.secretStorage.getSecret(id)) : { ok: false, why: 'unset' };

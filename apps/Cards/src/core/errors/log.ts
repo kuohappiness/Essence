@@ -15,8 +15,11 @@ export type ReportKind = 'content' | 'display' | 'stuck' | 'audio' | 'other';
 /** 學生回報的那張卡：卡組、學習目標 ID 與題目指紋（D-160 第 2 點）。 */
 interface Report { kind: ReportKind; path: string; lt: string; v: string }
 
+/** 直接製作送不成時多記的欄（tasks/ai-direct.md §8）：服務代號、要求的模型、HTTP 狀態碼、請求編號、送了幾次。不記金鑰、提示、教材與檔名。 */
+interface AiContext { service: string; model: string; status: number | null; requestId: string | null; attempts: number }
+
 export interface ErrorLog {
-  record(where: ErrorWhere, error: unknown, context?: { path?: string }): void;
+  record(where: ErrorWhere, error: unknown, context?: { path?: string; ai?: AiContext }): void;
   report(report: Report): void;
 }
 
@@ -128,7 +131,7 @@ export function maybeOwn(error: unknown, nameStacks = false): boolean {
 
 interface Line {
   t: string; build: string; obsidian: string; where: ErrorWhere | 'report' | 'limit';
-  kind?: ReportKind; msg?: string; path?: string; lt?: string; v?: string; stack?: string; n?: number;
+  kind?: ReportKind; msg?: string; path?: string; service?: string; model?: string; status?: number; requestId?: string; attempts?: number; lt?: string; v?: string; stack?: string; n?: number;
 }
 type Body = Omit<Line, 't' | 'build' | 'obsidian'>;
 
@@ -140,7 +143,10 @@ const fits = (line: Line): boolean => encoder.encode(JSON.stringify(line)).lengt
  * 截過的結尾加「…」），截到放得下。三個都截完還放不下時是 null。
  */
 function encode(line: Line): string | null {
-  const ordered: Line = { t: line.t, build: line.build, obsidian: line.obsidian, where: line.where, kind: line.kind, msg: line.msg, path: line.path, lt: line.lt, v: line.v, stack: line.stack, n: line.n };
+  const ordered: Line = {
+    t: line.t, build: line.build, obsidian: line.obsidian, where: line.where, kind: line.kind, msg: line.msg, path: line.path,
+    service: line.service, model: line.model, status: line.status, requestId: line.requestId, attempts: line.attempts, lt: line.lt, v: line.v, stack: line.stack, n: line.n,
+  };
   for (const key of ['stack', 'path', 'msg'] as const) {
     if (fits(ordered)) break;
     const value = ordered[key];
@@ -230,7 +236,9 @@ export function createErrorLog(options: ErrorLogOptions): ErrorLog {
         const path = context?.path;
         // 去重：有自己的位置就用第一層的位置，沒有 stack 就用訊息；只有名稱時好幾個錯誤的第一層都可能是匿名的 `@`，連訊息一起比（D-173）。
         const key = own[0] ?? (frames.length ? [msg, frames[0]] : msg);
-        write(JSON.stringify([where, path ?? null, key]), { where, msg, path, stack: frames.length ? frames.join('\n') : undefined });
+        const ai = context?.ai;
+        const extra = ai ? { service: ai.service, model: ai.model, status: ai.status ?? undefined, requestId: ai.requestId ?? undefined, attempts: ai.attempts } : {};
+        write(JSON.stringify([where, path ?? null, key]), { where, msg, path, ...extra, stack: frames.length ? frames.join('\n') : undefined });
       } catch {
         // 記錄器永遠不拋錯（D-155 第 4 點）：例如時區不合法時 formatTime 拋錯，這一行就不記。
       }

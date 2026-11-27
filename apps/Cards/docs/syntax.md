@@ -960,10 +960,11 @@ Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點�
 | `t` | 時間，寫法同 [§5](#5-複習紀錄) 的 `t` |
 | `build` | 建置版本 `BUILD` 原樣（同 [§5-1](#5-1-版本行) 的 `val`） |
 | `obsidian` | Obsidian 的版本 |
-| `where` | 哪個環節：`read` 讀卡組或紀錄、`write` 寫複習紀錄、`listener` 狀態的監聽者、`init` 初始化（含電腦上載入備份功能）、`backup` 電腦上的備份失敗（[D-150](../../../docs/decisions.md#d-150-備份與還原)，`msg` 是那一步的原因）、`restore` 電腦上的還原失敗（[tasks/plugin-restore.md](tasks/plugin-restore.md) §6，`msg` 是步驟與原因）、`render` 卡片顯示、`ui` 複習畫面、`fill` 離開筆記時補 ID、`close` 停用時關閉、`event` 外掛事件的監聽者、`ai` AI 製卡（寫不進去、剪貼簿、存草稿到一半的錯）、`folder` 系統資料夾被搬走後搬回失敗（tasks/system-folder-guard.md §1-4）、`uncaught` 其他沒接住的錯、`edit` 編輯畫面寫回出處前的核對不成立（[tasks/edit-markup.md §4-3](tasks/edit-markup.md#4-3-寫回筆記要格式查核) 第 6 點；`msg` 是固定的失敗代碼、動作、目標行號與第幾段，不寫筆記的內容）；`report` 是學生回報（[D-160](../../../docs/decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)），`limit` 是這個月到上限了。新的環節可以隨版本增加 |
+| `where` | 哪個環節：`read` 讀卡組或紀錄、`write` 寫複習紀錄、`listener` 狀態的監聽者、`init` 初始化（含電腦上載入備份功能）、`backup` 電腦上的備份失敗（[D-150](../../../docs/decisions.md#d-150-備份與還原)，`msg` 是那一步的原因）、`restore` 電腦上的還原失敗（[tasks/plugin-restore.md](tasks/plugin-restore.md) §6，`msg` 是步驟與原因）、`render` 卡片顯示、`ui` 複習畫面、`fill` 離開筆記時補 ID、`close` 停用時關閉、`event` 外掛事件的監聽者、`ai` AI 製卡（寫不進去、剪貼簿、存草稿到一半的錯，與直接製作送不成）、`folder` 系統資料夾被搬走後搬回失敗（tasks/system-folder-guard.md §1-4）、`uncaught` 其他沒接住的錯、`edit` 編輯畫面寫回出處前的核對不成立（[tasks/edit-markup.md §4-3](tasks/edit-markup.md#4-3-寫回筆記要格式查核) 第 6 點；`msg` 是固定的失敗代碼、動作、目標行號與第幾段，不寫筆記的內容）；`report` 是學生回報（[D-160](../../../docs/decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)），`limit` 是這個月到上限了。新的環節可以隨版本增加 |
 | `kind` | 只在 `report`，學生選的那一項：`content` 內容有錯、`display` 顯示不完整或空白、`stuck` 沒反應或卡住、`audio` 聲音、`other` 其他。新的值可以隨版本增加 |
 | `msg` | 錯誤訊息；不是 `Error` 的值（字串、`null`、物件）轉成文字。`report` 沒有這一欄 |
 | `path` | 選填，知道是哪個檔時才寫；`report` 是那張卡的卡組 |
+| `service`、`model`、`status`、`requestId`、`attempts` | 只在 `ai` 的直接製作送不成（[tasks/ai-direct.md](tasks/ai-direct.md) §8）：服務代號、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次；沒有的不寫。`msg` 是錯誤的種類加連線套件的訊息（例如 `overloaded: …`）。不寫金鑰、提示、教材的內容與檔名；家長按取消的不記 |
 | `lt`、`v` | 只在 `report`：那張卡的學習目標 ID 與題目指紋，同 [§5](#5-複習紀錄)；正在回看上一張時是那一張 |
 | `stack` | 選填，只留這個外掛自己的程式位置（`plugin:essence-cards:` 開頭的那幾層）；iPhone 上沒有自己的位置、至少一層只有名稱（`kq@`）時，整段留下，一層一行，有別人位置的那幾層也留（[D-173](../../../docs/decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)），`where: "uncaught"` 時可能是別的外掛的錯 |
 | `n` | 選填，同一次載入裡這個錯誤到第幾次 |

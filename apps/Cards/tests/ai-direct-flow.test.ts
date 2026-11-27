@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { directJob, rawPath, readJobs, readSnapshot, sha256Hex, sha256OfBytes } from '../src/core/ai/index.ts';
 import type { CardForm, CardJob, EmbeddedRules } from '../src/core/ai/index.ts';
 import { cardsClient, readConnection } from '../src/core/connect/index.ts';
-import type { DirectFailure, KeyLookup, Material } from '../src/core/connect/index.ts';
+import type { DirectFailure, DirectLog, KeyLookup, Material } from '../src/core/connect/index.ts';
 import { createState } from '../src/state/index.ts';
 import { createAiCards } from '../src/obsidian/ai-cards.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
@@ -69,6 +69,7 @@ async function load(t: TestContext, replies: MockReply[] | ((index: number) => M
   const clipboard: string[] = [];
   const errors: unknown[] = [];
   const failures: DirectFailure[] = [];
+  const logs: DirectLog[] = [];
   const fetch = mockFetch(Array.isArray(replies) ? replies : (_request, index) => replies(index));
   const client = cardsClient(fetch);
   const provider = options.provider ?? 'google';
@@ -83,12 +84,12 @@ async function load(t: TestContext, replies: MockReply[] | ((index: number) => M
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
     now: () => ({ ms: now(), offset: 480 }),
     onError: error => { errors.push(error); },
-    ...options.direct === false ? {} : { direct: { client, connection: () => connection, key: () => options.key ?? { ok: true, key: FAKE_KEY }, onFailure: failure => { failures.push(failure); } } },
+    ...options.direct === false ? {} : { direct: { client, connection: () => connection, key: () => options.key ?? { ok: true, key: FAKE_KEY }, onFailure: (log, failure) => { failures.push(failure); logs.push(log); } } },
   });
   state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, random, reserved: () => cards.reserved(), now: () => Date.parse('2026-11-07T10:02:11+08:00'), offset: () => 480, onError() {} });
   t.after(() => state.close());
   await state.ready();
-  return { cards, memory, box, clipboard, errors, failures, fetch };
+  return { cards, memory, box, clipboard, errors, failures, logs, fetch };
 }
 
 void test('§4 驗收：直接製作收回的整段和貼回的一樣存成草稿；送出的提示和複製的一字不差，教材當附件、不帶檔名；先存工作再送', async t => {
@@ -340,4 +341,21 @@ void test('§7 讀壞的 api：工作的 api 讀不懂就當成複製貼上的�
   assert.deepEqual(await reopened.cards.resume(stuck), { kind: 'stop', message: '這份草稿是較新的版本存的，請更新外掛' });
   assert.equal(reopened.memory.texts.has(SNAPSHOT), false);
   assert.equal(reopened.cards.jobs().length, 1);
+});
+
+void test('§8 送不成的錯誤紀錄：種類與套件的訊息、服務、要求的模型、狀態碼、請求編號、送了幾次；不寫金鑰、提示與檔名', async t => {
+  const busy: MockReply = { status: 503, headers: { 'content-type': 'application/json', 'retry-after': '0' }, chunks: [JSON.stringify({ error: { code: 503, message: 'The model is overloaded.', status: 'UNAVAILABLE' } })] };
+  const made = await load(t, [unauthorized, busy, busy, busy]);
+  const secretName: Material = { ...lesson, name: '小明的英文 L3.pdf' };
+  assert.equal((await made.cards.direct(form, [secretName])).kind, 'failed');
+  const [job] = made.cards.jobs();
+  assert.equal((await made.cards.resend(job)).kind, 'failed');
+  assert.equal(made.logs.length, 2);
+  const [auth, overloaded] = made.logs;
+  assert.match(auth.msg, /^auth: /);
+  assert.deepEqual({ ...auth, msg: '' }, { msg: '', service: 'google', model: 'gemini-3.8-flash', status: 400, requestId: null, attempts: 1 });
+  assert.match(overloaded.msg, /^overloaded: /);
+  assert.deepEqual([overloaded.status, overloaded.attempts], [503, 3]);
+  const text = JSON.stringify(made.logs);
+  for (const secret of [FAKE_KEY, '小明', 'L3.pdf', '任務段']) assert.equal(text.includes(secret), false, secret);
 });
