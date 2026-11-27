@@ -1,0 +1,60 @@
+# 句子排序多種排法的 L2 審查（Codex 回報）
+
+狀態：實作中｜下一步：修完第一輪的 7 項與答對時閃一下，送第二輪、在使用者電腦再看一次 Windows 畫面｜等誰：Claude
+
+待審 commit：分支 `claude/project-thread-vpoerm` 的 `1b6b6868`（PR #73，範圍 `23d084ee`..`1b6b6868`；任務說明：[sentence-order-alternatives.md](../tasks/sentence-order-alternatives.md)）。審查請求只放在使用者電腦的暫存資料夾，沒有進 repo。
+
+## 送審前的實測（使用者電腦）
+
+### 正式 vault 比較（§8）
+
+`compare-versions` 比 `origin/main` 的 `23d084ee` 與 `1b6b6868`（兩邊都是 0.6.0，版本後面接 commit）。兩個 vault 都是零差異，新舊兩邊的讀取閘門都是「沒有」或「否」。`1b6b6868` 之前也用 `b37a9199` 跑過一次，同樣零差異。
+
+| vault | 差異 | 今天的份 | 句子排序目標 |
+|---|---|---|---|
+| 甲 | 0 | 246 張＋再複習 37 | 7 個，今天排進 6 個 |
+| 乙 | 0 | 46 張＋再複習 76 | 沒有 |
+
+### Windows 畫面（§9）
+
+環境：Windows 版 Obsidian 1.15.1、獨立的設定檔、暫存 vault、開發版 `0.6.0+1b6b6868`；卡組用 §1 的例子，加一行詳解。
+
+- **作答時**：第 2 格後面只有空白，沒有逗號。
+- **because / I was tired / I went to bed early**：判全對，顯示 "Because I was tired, I went to bed early."；背面有「另一種排法：I went to bed early because I was tired.」和詳解，評分鈕是記住了／太簡單。
+- **I was tired / I went to bed early / because**：三格都畫刪除線、要再選，按鈕寫「再選一次」；依序再選 because → I was tired → I went to bed early，三格都是差一點，整句與背面同上，按鈕寫「下一張」。
+- **閃動**：答對按「對答案」時，有一個畫面（約 16 ms）三格全空、那一行只剩「 , .」，補充與評分鈕也還沒出來；再選時按第一個詞塊（because）也空白 1～2 個畫面。答錯按「對答案」時沒有空白。原因（讀程式判斷）：格後面的字改變時 `OrderCard.tsx` 傳給 Markdown 的文字跟著變，整句重新渲染，格子之後才放回去；main 的格後文字在作答中不會變，所以是這個 PR 才有的。
+- 照 §5 的設計，再選時先選 because，第 2 格後面的逗號就會先出現（"Because ~~I went to bed early~~, ~~because~~."）。
+
+## 第一輪
+
+**待修，無 P1。** PR #73 第一輪查核 `1b6b686861e459def88076daddd8d3509af486b1`，基準 `23d084ee`，共 22 個檔案。主要作答與再選流程、紀錄格式，以及 v0.6.0 的讀取與重播均通過獨立探針。合併前應修正會讓錯誤寫法通過草稿檢查、或在答對時顯示錯誤句子的情況。
+
+### 發現
+
+1. **R1｜P2｜開頭引號漏判，答對時會顯示多出的引號。** 已重現。題目寫 `她說她累了：&quot;==I'm tired==,&quot; ==she== ==said==.`，另一種排法寫 `==she== ==said==, "==I'm tired==."`。解析器與草稿檢查都沒提示。用 Review 畫面替身排出後得到 `✓`，題目顯示 `她說她累了：&quot;She said, "I'm tired."`。半形冒號緊接直引號的 `重排引句:"` 也會漏判。家長貼上引句或混用中英文標點就可能遇到，整體機率偏低，符合條件時必現。建議把全形直引號及緊接句讀的半形開引號納入判斷，補上回歸例。 [order.ts](../../src/core/deck/kinds/order.ts#L151) · [OrderCard.tsx](../../src/ui/OrderCard.tsx#L34) · [任務說明 §1](../tasks/sentence-order-alternatives.md)
+
+2. **R2｜P2｜另一種排法底下的資料欄位可繞過禁止子項目的檢查。** 已重現。在合法的 `另一種排法：` 下再縮一層寫 `- 狀態：暫停`，解析器仍收下這種排法、把整個目標標成暫停，而且沒有提示。製卡入口 `inspectReply` 也回傳零錯誤。原因是解析器先收集資料欄位，再從交給另一種排法的文字中排除欄位子項目，最後只靠文字中有沒有換行判斷。這要求家長或 AI 把欄位多縮一層，機率偏低，符合條件時必現。建議直接用原始清單節點檢查有無子項目，維持既有欄位的解讀方式。 [parse.ts](../../src/core/deck/parse.ts#L302) · [order.ts](../../src/core/deck/kinds/order.ts#L170) · [任務說明 §1](../tasks/sentence-order-alternatives.md)
+
+3. **R3｜P2｜寫錯層級的排法可能進入草稿，甚至變成一般問答的答案。** 已重現。把 `另一種排法：==today==, ==we== ==learn==.` 放在 `詳解：` 底下，或放在 `How often? ::` 底下當多行答案，`parseDeck` 都不回報 `order-alt-invalid`，製卡入口也給零錯誤。後一例會把整行當成答案。放到最上層的同一行則會被手寫筆記解析成獨立填空，製卡入口會用通用縮排錯誤擋下。這些都是手動編輯或 AI 產生縮排錯誤時可走到的路徑，每種需特定縮排，符合條件時必現。建議在原始清單樹上統一檢查標籤位置，沿用目前各位置的解析結果，只補提示和草稿阻擋。 [parse.ts 多行答案](../../src/core/deck/parse.ts#L310) · [parse.ts 位置檢查](../../src/core/deck/parse.ts#L374) · [AI 草稿檢查](../../src/core/ai/check.ts#L216)
+
+4. **R4｜P2｜可變的格後標點能組成 Obsidian 語法，讓答案格移位。** 解析已重現，實際渲染待驗證。主排法 `==we== ==learn== ==today==.` 搭配 `另一種排法：==today== %%==we==%% ==learn==.` 會通過解析和草稿檢查。該排法的前兩段格後文字是 ` %%` 和 `%% `。當結果採用該排法，兩段會在傳給 Obsidian 的 Markdown 裡包住第 2 格。專案已驗過 Obsidian 會隱藏 `%%…%%`，而畫面找不到格子記號時會把格子補到句尾。另一個已重現的邊界是 `==today== :: ==we== ==learn==.` 也會被收下，雖然一般題目會把 `::` 讀成問答分隔符。這類寫法在普通英文句子少見，但家長用 Obsidian 隱藏提示或混用兩種題型寫法時可能遇到。建議限定可變部分能使用的字面標點，並在真正的 Obsidian 渲染器補一個驗收例。 [order.ts](../../src/core/deck/kinds/order.ts#L174) · [Markdown.tsx](../../src/ui/Markdown.tsx#L77) · [rendered.ts](../../src/ui/rendered.ts#L68) · [Obsidian 渲染紀錄](../../../../docs/agents/quality.md)
+
+5. **R5｜P3｜全詩卡保留錯放的排法，但背面沒有依驗收表顯示。** 已重現。把 `另一種排法：==little star==, ==Twinkle, twinkle==.` 放在全詩排序題下，解析器保留原文並發出 `order-alt-invalid`。在 Review 畫面替身答完，只看到兩個詩句和原有錨點 `星星`。任務驗收表要求這一行照補充顯示，D-238 同時要求全詩順序卡畫面維持既有行為。只有把新語法用到全詩才會遇到，機率低，符合條件時必現。建議先確認全詩應沿用現行畫面，或新增這類錯放行的顯示，再把驗收表與語法說明對齊。 [OrderCard.tsx 全詩結果](../../src/ui/OrderCard.tsx#L90) · [任務驗收表](../tasks/sentence-order-alternatives.md)
+
+6. **R6｜P3｜每種排法都對時，字鍵沒有走回既有打亂規則。** 已重現。用驗收裡的 `tomorrow`、`at noon` 兩塊，舊規則在第 0～9 次都給 `at noon / tomorrow`。列出兩個答案後，新規則有 5 次給 `tomorrow / at noon`，直接照題目那一行。原因是多解分支在找不到可避開的順序時，回傳自己旋轉後的字鍵。這只影響已觸發 `order-alt-all-right` 的手寫卡，AI 草稿會擋，整體機率低。建議無錯序可選時直接沿用既有打亂規則，測試比對每次的字鍵順序。 [compose.ts](../../src/core/study/compose.ts#L226) · [任務說明 §3](../tasks/sentence-order-alternatives.md)
+
+7. **R7｜P3｜語法文件對 `order-alt-all-right` 和舊版的說明不一致。** 靜態核對。§2-10 把 `order-alt-all-right` 和 `order-alt-invalid` 一起寫成「照背面補充顯示」，但 §2-3 與實測都顯示 `order-alt-all-right` 的排法仍算答對。§2-3 也先寫「舊版照填空翻面出」，後面才寫「舊版只認題目那一行」，容易讓讀者把 v0.6.0 誤認為翻面卡。影響限於查語法或比較版本的人。建議分開說明兩個提示，並寫出 v0.6.0 的實際行為。 [syntax.md 舊版說明](../syntax.md) · [syntax.md 排法認定](../syntax.md) · [syntax.md 提示表](../syntax.md)
+
+### 驗證結果
+
+- **本輪相關測試 41 項通過。** 暫存複本跑過解析、組卡、AI 草稿、英文規則及 v0.6.0 相容共 39 項。兩項 Review 畫面替身測試在原工作樹重跑通過，暫存複本的 esbuild 受 Windows 目錄權限限制。另跑三個畫面探針，確認再選縮小候選後逗號會恢復、重複且不認的第二行保留原文，並重現 R1、R5。
+- **獨立作答探針通過。** 核對 13,651 種首次作答、44,779 條再選路徑和 2,088 次字鍵組合，含重複詞塊、平手及跳過。候選只在有符合的答案時縮小，最後會結束，顯示與評分一致。有至少兩種錯序時相鄰字鍵不同，只剩一種錯序時每次都選它。50 塊、50 種都列的樣本組卡 20 次約 123 毫秒。另比對無另一種排法的固定樣本，第 0～20 次與 v0.6.0 相同。
+- **AI 三處都通過基本阻擋矩陣。** 本文、候選框、加進已有的學習目標，各驗 `order-alt-invalid`、`order-alt-all-right` 與別科誤用，共 9 例皆報錯。R2、R3 是提示產生前的漏判。
+- **v0.6.0 相容通過。** 用實際標籤複本 `037b359f` 讀規格範例，仍出句子排序，指紋是 `99057b9d`，另一種排法保留在補充。舊版存檔後原文逐字相同，並能讀取新版含 `cell`、`pick`、`also`、`retry`、`r` 的全對與再選紀錄，兩版重播結果相同。舊版會把另一種順序判錯，這次評分會照常進排程。依 D-238，在所有裝置更新並重開後才開始用新規則製卡的前提下，維持不加 `需要版本` 的做法有實測依據。
+- **檢查與建置。** 文件檢查、`git diff --check`、本機型別檢查、ESLint、knip 和開發版建置均通過。本機完整測試未完成，原工作樹遇到 Git `dubious ownership`，系統暫存複本排除了 Git 問題，但 esbuild 遇到目錄拒絕存取，基準 `23d084ee` 也重現。兩次完整測試都卡在 Windows 子行程逾時測試後收尾。GitHub Linux CI 對 `1b6b6868` 合入 `23d084ee` 的測試合併提交 `9b869b7d` 跑完，Cards 共 3,124 項，3,120 通過、4 跳過、0 失敗，正式建置通過。 [GitHub Actions Cards job](https://github.com/kuohappiness/Essence/actions/runs/45922057030/job/140254865315)
+
+**待驗證。** Windows 版 Obsidian 實際渲染、標點切換時是否閃動，以及 R4 的格子移位。iPhone 依任務併入 0.7.0 實機驗收。兩個正式 vault 的備份未取得，§8 的正式 `compare-versions` 待驗。已用自編備份跑同一工具，`23d084ee` 對 `1b6b6868` 為零差異。追蹤檔案無修改，本輪建立的暫存目錄已刪除。
+
+## Claude 核對（第一輪）
+
+（修正中，修完補上。）
