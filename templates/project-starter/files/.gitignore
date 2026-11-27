@@ -1,0 +1,15 @@
+# 相依套件
+node_modules/
+
+# 金鑰與本機設定：不進 repo
+.env*
+!.env.example
+.claude/settings.local.json
+
+# 只放在使用者電腦上的紀錄與清單
+.local/
+
+# 作業系統的雜檔
+.DS_Store
+Thumbs.db
+desktop.ini
