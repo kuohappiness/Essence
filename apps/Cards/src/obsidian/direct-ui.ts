@@ -8,6 +8,8 @@ export const DIRECT_TEXT = {
   files: '選擇檔案',
   notMaterial: (name: string) => `「${name}」不是 PDF、JPG 或 PNG，沒有加進來。`,
   unreadable: (name: string) => `讀不到「${name}」，沒有加進來；請再選一次。`,
+  /** 同一個檔（內容相同，檔名不同也算）只送一次，免得多算一次錢（加深第 3 批實機第 4 點）。 */
+  duplicate: (name: string) => `「${name}」已經加過了，沒有再加一次。`,
   thinking: (time: string) => `AI 正在想（已經 ${time}）`,
   receiving: (chars: number, time: string) => `已收到 ${chars.toLocaleString('en-US')} 字（已經 ${time}）`,
   slowStart: '有些 AI 要想 2～3 分鐘才開始回答。',
@@ -63,9 +65,12 @@ export function materialField(cell: HTMLElement, materials: Material[], note: st
       if (!type) { notes.push(DIRECT_TEXT.notMaterial(file.name)); continue; }
       let data: Uint8Array;
       try { data = new Uint8Array(await file.arrayBuffer()); } catch { notes.push(DIRECT_TEXT.unreadable(file.name)); continue; }
+      const sha256 = sha256OfBytes(data);
       // pdf.js 可能把交給它的緩衝區移到背景執行緒，給它一份複本，送出的那一份才不會變成空的。
       const pages = type === 'application/pdf' ? await (pdfPages?.(data.slice()) ?? Promise.resolve(null)) : null;
-      materials.push({ name: file.name, mediaType: type, data, pages, sha256: sha256OfBytes(data) });
+      // 讀頁數之後才比：同時加進來的兩批（選檔與拖進來）也只留一份。
+      if (materials.some(material => material.sha256 === sha256)) { notes.push(DIRECT_TEXT.duplicate(file.name)); continue; }
+      materials.push({ name: file.name, mediaType: type, data, pages, sha256 });
     }
     problems.setText(notes.join(' '));
     changed();

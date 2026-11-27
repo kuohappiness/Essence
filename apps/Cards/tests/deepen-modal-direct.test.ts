@@ -241,6 +241,23 @@ void test('§9 上一次沒有附教材檔、送不成按「重送」：重送�
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
 });
 
+void test('§5 同一個檔選兩次（檔名不同也算）：只加一次、寫一句說明，送出前那一行只算一次（實機第 4 點）', async t => {
+  const { openModal } = await open(t, []);
+  const modal = await openModal();
+  const file = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'file');
+  assert.ok(file);
+  file.files = [pdf()];
+  file.fire('change');
+  await sleep(20);
+  const once = line(modal);
+  file.files = [pdf('自然 2-1 補充 (1).pdf')];
+  file.fire('change');
+  await sleep(20);
+  assert.equal(all(modal.contentEl).filter(each => each.tag === 'li').length, 1);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('已經加過了')), texts(modal.contentEl).join('|'));
+  assert.equal(line(modal), once);
+});
+
 void test('§9 送不成按「改用複製貼上」：同一份提示進剪貼簿，框是空的、說明換成自己附教材；貼回存成複製貼上的快照', async t => {
   const { made, openModal } = await open(t, [unauthorized]);
   const modal = await openModal();
