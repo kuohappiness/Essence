@@ -209,18 +209,22 @@ function sentenceCardOf(fields: Omit<Card, 'typed' | 'blanks'>, sentence: Senten
   const cells = sentence.prompts.at(index >= 0 ? index : target.prompts.findIndex(each => each.fingerprint === prompt.fingerprint));
   if (!cells) throw TypeError('排序卡找不到這一題：' + target.name);
   const blanks = cells.words.map((answer, cell): Blank => ({ lt, target, prompt, answer, cell }));
+  // 字鍵避開每一種對的順序（tasks/sentence-order-alternatives.md §3）；沒有另一種排法時和以前一樣只避開題目那一行。
+  const avoid = [cells.words, ...(cells.others ?? []).map(other => other.words)];
   let keys: string[] = [];
-  for (let at = 0; at <= times; at++) keys = orderKeys(cells.words, prompt.fingerprint + ' ' + String(at), keys);
-  return { ...fields, typed: false, blanks, group: { title: sentence.title, members: cells.words, keys, rows: [], order: { head: cells.head, tails: cells.tails, starts: cells.starts } } };
+  for (let at = 0; at <= times; at++) keys = orderKeys(cells.words, prompt.fingerprint + ' ' + String(at), keys, avoid);
+  const order = { head: cells.head, tails: cells.tails, starts: cells.starts, ...(cells.others ? { others: cells.others } : {}) };
+  return { ...fields, typed: false, blanks, group: { title: sentence.title, members: cells.words, keys, rows: [], order } };
 }
 
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, i) => item === b[i]);
 
 /**
- * 全詩順序卡一次的字鍵：打亂；照詩的順序就把第一個移到最後。和上一次（before）一樣時，換掉兩句的位置，取第一個不照詩的順序的。
- * 兩句的詩、句子都相同時沒有別的排法，照舊。
+ * 排序卡一次的字鍵：打亂；照詩的順序就把第一個移到最後。和上一次（before）一樣時，換掉兩句的位置，取第一個不照詩的順序的。
+ * 兩句的詩、句子都相同時沒有別的排法，照舊。avoid 是要避開的對的順序，沒給時是 lines 自己（全詩、沒有另一種排法的句子）。
  */
-function orderKeys(lines: readonly string[], seed: string, before: readonly string[]): string[] {
+function orderKeys(lines: readonly string[], seed: string, before: readonly string[], avoid: readonly (readonly string[])[] = [lines]): string[] {
+  if (avoid.length > 1) return avoidingKeys(shuffled(lines, seeded(seed)), before, avoid);
   const keys = shuffled(lines, seeded(seed));
   if (sameOrder(keys, lines)) keys.push(keys.shift() as string);
   if (!sameOrder(keys, before)) return keys;
@@ -233,6 +237,46 @@ function orderKeys(lines: readonly string[], seed: string, before: readonly stri
     }
   }
   return keys;
+}
+
+/**
+ * 有另一種排法的句子（§3）：先避開每一種對的順序，再求和上一次不同。照上面的方法（移一個、再找兩個交換）都撞到時，
+ * 照固定的順序列舉打亂結果的排列，取第一個兩樣都符合的；沒有就取第一個不是對的順序的；連這個都沒有（每一種都對）照打亂的結果。
+ */
+function avoidingKeys(keys: string[], before: readonly string[], avoid: readonly (readonly string[])[]): string[] {
+  const right = (order: readonly string[]): boolean => avoid.some(each => sameOrder(order, each));
+  const fresh = (order: readonly string[]): boolean => !right(order) && !sameOrder(order, before);
+  if (right(keys)) keys.push(keys.shift() as string);
+  if (fresh(keys)) return keys;
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      if (keys[i] === keys[j]) continue;
+      const swapped = [...keys];
+      [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+      if (fresh(swapped)) return swapped;
+    }
+  }
+  let wrong: string[] | null = null;
+  for (const order of arrangementsOf(keys)) {
+    if (fresh(order)) return order;
+    if (!wrong && !right(order)) wrong = order;
+  }
+  return wrong ?? keys;
+}
+
+/** keys 的每一種排列，照位置的字典順序（第一個是 keys 自己）；一個一個產生，找到就停。 */
+function* arrangementsOf(keys: readonly string[]): Generator<string[]> {
+  const index = keys.map((_, i) => i);
+  for (;;) {
+    yield index.map(i => keys[i]);
+    let i = index.length - 2;
+    while (i >= 0 && index[i] > index[i + 1]) i--;
+    if (i < 0) return;
+    let j = index.length - 1;
+    while (index[j] < index[i]) j--;
+    [index[i], index[j]] = [index[j], index[i]];
+    index.splice(i + 1, Infinity, ...index.slice(i + 1).reverse());
+  }
 }
 
 /**

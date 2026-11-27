@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { gitEnv, pluginRoot } from '../tools/git.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import type { Deck } from '../src/core/deck/index.ts';
+import { cardOf } from '../src/core/study/index.ts';
 import { kindPoem, kindSentence } from './helpers/kinds.ts';
 import { tempFolder } from './helpers/vault.ts';
 
@@ -128,6 +129,37 @@ void test('少縮一層、寫在目標底下（§1 第 6 點）：認法照現�
   assert.deepEqual(codes(shared), [[5, 'order-alt-invalid']], '沒有 == 是共用補充');
   assert.deepEqual(shared.targets[0].shared, ['另一種排法：because I was tired, I went to bed early.']);
   assert.deepEqual(codes(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n    - 另一種排法:because I was tired.\n`)), [[5, 'order-alt-invalid']], '半形冒號也提示');
+});
+
+// 字鍵（§3）：直接用 cardOf 算出第 0～20 次。甲＝I went to bed early、乙＝because、丙＝I was tired。
+const keysAt = (deck: Deck, times: number): readonly string[] => {
+  const target = deck.targets[0];
+  return cardOf({ lt: 'lt', deck: 'Essence Cards/英文/L1.md', target, prompt: target.prompts[0], isNew: false, early: false }, times).group?.keys ?? [];
+};
+const [A, B, C] = ['I went to bed early', 'because', 'I was tired'];
+
+void test('字鍵避開每一種對的順序，相鄰兩次不同；排錯的只剩一種時每一次都是它', () => {
+  const deck = one(BECAUSE, [ALT]);
+  let before: readonly string[] | null = null;
+  for (let times = 0; times <= 20; times++) {
+    const keys = keysAt(deck, times);
+    assert.deepEqual([...keys].sort(), [A, B, C].sort());
+    assert.notDeepEqual(keys, [A, B, C], `第 ${String(times)} 次照題目那一行`);
+    assert.notDeepEqual(keys, [B, C, A], `第 ${String(times)} 次照另一種排法`);
+    if (before) assert.notDeepEqual(keys, before, `第 ${String(times)} 次和上一次一樣`);
+    before = keys;
+  }
+  const five = one(BECAUSE, ['==because== ==I was tired== ==I went to bed early==.', '==I was tired== ==I went to bed early== ==because==.', '==I was tired== ==because== ==I went to bed early==.', '==because== ==I went to bed early== ==I was tired==.'].map(order => `另一種排法：${order}`));
+  for (let times = 0; times <= 20; times++) assert.deepEqual(keysAt(five, times), [A, C, B], `第 ${String(times)} 次`);
+});
+
+void test('字鍵：兩塊、兩種都對的照舊打亂；組卡帶上另一種排法，沒有的不帶', () => {
+  const two = one('我們明天中午見。See you ==tomorrow== ==at noon==.', ['另一種排法：See you ==at noon== ==tomorrow==.'], '時間的位置 排序');
+  for (let times = 0; times <= 5; times++) assert.deepEqual([...keysAt(two, times)].sort(), ['at noon', 'tomorrow']);
+  const card = cardOf({ lt: 'lt', deck: 'Essence Cards/英文/L1.md', target: one(BECAUSE, [ALT]).targets[0], prompt: one(BECAUSE, [ALT]).targets[0].prompts[0], isNew: false, early: false });
+  assert.deepEqual(card.group?.order, { head: 'I was tired. I went to bed early.（用 because 合成一句）', tails: [' ', ' ', '.'], starts: [true, false, false], others: [{ words: [B, C, A], tails: [' ', ', ', '.'], source: ALT }] });
+  const plain = one(BECAUSE, []).targets[0];
+  assert.equal('others' in (cardOf({ lt: 'lt', deck: 'x', target: plain, prompt: plain.prompts[0], isNew: false, early: false }).group?.order ?? {}), false);
 });
 
 // 舊版讀另一種排法（§7）：用真的 v0.6.0 標籤的程式，不是用現在的程式假裝舊版。
