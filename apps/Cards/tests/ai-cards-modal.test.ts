@@ -10,7 +10,7 @@ import { directJob } from '../src/core/ai/index.ts';
 import { createObsidianStub } from './helpers/obsidian.ts';
 import { all, button, sleep, textarea, texts } from './helpers/modal-dom.ts';
 import type { El } from './helpers/modal-dom.ts';
-import { form, lesson, load, ok, propsOf, reply, unauthorized } from './helpers/ai-direct.ts';
+import { form, lesson, load, ok, propsOf, reply, sent, unauthorized } from './helpers/ai-direct.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({
@@ -104,6 +104,27 @@ for (const [label, value] of [['整個清空', ''], ['只剩空格', '   '], ['�
     assert.equal(textarea(again.contentEl)?.value, reply);
   });
 }
+
+void test('加深第 3 批實機第 4 點（第二輪 S3）製卡視窗同一個檔選兩次（檔名不同也算）：只加一次、寫一句說明，送出的請求只帶一份', async t => {
+  const { made, openModal } = await open(t, [ok(reply)]);
+  const modal = openModal();
+  const unit = all(modal.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
+  assert.ok(unit);
+  unit.value = form.unit;
+  unit.fire('input');
+  const file = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'file');
+  assert.ok(file);
+  file.files = [pdf(), pdf('英文 L3 (1).pdf')];
+  file.fire('change');
+  await sleep(20);
+  assert.equal(all(modal.contentEl).filter(each => each.tag === 'li').length, 1);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('已經加過了')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '直接製作')?.click();
+  await sleep(60);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+  assert.equal(made.fetch.requests.length, 1);
+  assert.deepEqual(sent(made.fetch.requests[0].body).files, ['application/pdf'], '請求只帶一份 PDF');
+});
 
 void test('L2 R2、R4 收到的回覆檢查擋住，按「改用複製貼上」：框是空的；關掉重開是「接著貼回」，貼別處的回覆存成複製貼上的快照', async t => {
   const bad = `${reply}\n多出來的一行`;

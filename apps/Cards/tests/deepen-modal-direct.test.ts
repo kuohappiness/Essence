@@ -260,6 +260,46 @@ void test('§5 同一個檔選兩次（檔名不同也算）：只加一次、�
   assert.equal(line(modal), once);
 });
 
+void test('§9 按下直接製作、還在讀這一篇時（L2 第一輪 R2，第二輪 S3）：按「取消」讀完回表單、不送出；按關閉先問，「取消這一次」關掉、不送出；停用外掛也不送出', async t => {
+  // 按「取消」：讀完才回表單（第二輪 S1 記成已知的限制），寫已取消。
+  const first = await open(t, [ok(REPLY)]);
+  const modal = await first.openModal();
+  let hold = first.made.memory.holdRead(DECK);
+  button(modal.contentEl, '直接製作')?.click();
+  await hold.started;
+  button(modal.contentEl, '取消')?.click();
+  hold.release();
+  await sleep(40);
+  assert.ok(texts(modal.contentEl).includes('已取消，這次沒有送出'), texts(modal.contentEl).join('|'));
+  assert.equal(first.made.fetch.requests.length, 0);
+  assert.equal(first.made.deepen.jobOf(DECK), null);
+  // 按關閉：先問；選「取消這一次」視窗關掉，讀完也不送出。
+  hold = first.made.memory.holdRead(DECK);
+  button(modal.contentEl, '直接製作')?.click();
+  await hold.started;
+  modal.close();
+  assert.equal(modal.isOpen, true);
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('要取消這一次嗎？')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '取消這一次')?.click();
+  assert.equal(modal.isOpen, false);
+  hold.release();
+  await sleep(40);
+  assert.equal(first.made.fetch.requests.length, 0);
+  assert.equal(first.made.deepen.jobOf(DECK), null);
+  // 停用外掛：不問、不送出。
+  const second = await open(t, [ok(REPLY)]);
+  const other = await second.openModal();
+  hold = second.made.memory.holdRead(DECK);
+  button(other.contentEl, '直接製作')?.click();
+  await hold.started;
+  second.unload();
+  assert.equal(other.isOpen, false);
+  hold.release();
+  await sleep(40);
+  assert.equal(second.made.fetch.requests.length, 0);
+  assert.equal(second.made.deepen.jobOf(DECK), null);
+});
+
 void test('§9 送不成按「改用複製貼上」：同一份提示進剪貼簿，框是空的、說明換成自己附教材；貼回存成複製貼上的快照', async t => {
   const { made, openModal } = await open(t, [unauthorized]);
   const modal = await openModal();
