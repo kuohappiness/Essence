@@ -393,8 +393,9 @@ class DeepenModal extends Modal {
     if (evidence) el.createEl('p', { text: usageLine(evidence), cls: 'essence-cards-issue-note' });
     else this.buttons(el).createEl('button', { text: '再複製一次提示' }).addEventListener('click', () => { void deepen.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
     const box = el.createEl('textarea', { cls: 'essence-cards-ai-paste', attr: { placeholder: TEXT.paste, rows: '12' } });
-    // 重開 Obsidian 之後，收到的整段從工作裡拿回來（§7，F2）。
-    box.value = pasted.get(job.id) ?? evidence?.text ?? '';
+    // 重開 Obsidian 之後，收到的整段從工作裡拿回來（§7，F2）；框被清空過也一樣（加深第 3 批 L2 R7）。
+    const kept = pasted.get(job.id);
+    box.value = kept ? kept : evidence?.text ?? '';
     // 直接製作收到的：哪一家、哪個模型由程式記（§7），不問家長。
     if (!received) {
       const service = el.createDiv({ cls: 'essence-cards-ai-form' });

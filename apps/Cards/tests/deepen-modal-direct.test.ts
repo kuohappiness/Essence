@@ -209,6 +209,20 @@ void test('§9 表單打開時讀不到這一篇：直接製作按不了、寫�
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
 });
 
+void test('§9 收到的回覆把框整個清空、關掉再開：框裡是收到的那一段，不是空的（L2 第一輪 R7）', async t => {
+  const { openModal } = await open(t, [ok(REPLY)]);
+  const modal = await openModal();
+  await sendFromForm(modal, []);
+  const box = textarea(modal.contentEl);
+  assert.ok(box);
+  box.value = '';
+  box.fire('input');
+  modal.close();
+  const again = await openModal();
+  assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
+  assert.equal(textarea(again.contentEl)?.value, REPLY);
+});
+
 void test('§9 送不成按「改用複製貼上」：同一份提示進剪貼簿，框是空的、說明換成自己附教材；貼回存成複製貼上的快照', async t => {
   const { made, openModal } = await open(t, [unauthorized]);
   const modal = await openModal();
