@@ -59,6 +59,7 @@ const check = await ai.check({ endpoint: { provider: 'openai' }, apiKey });   //
 ## 加一家、加一種方言
 
 - **講四種方言之一的服務**：在 `catalog.json` 加一筆廠商（或呼叫端用 `createAiClient({ catalog: { providers: [...] } })` 加），寫方言、網址、認證標頭、上限與模型。各家相容服務的差異寫在 `options`（`maxTokensField`、`streamUsage`、`systemRole`、`checkPath`，見 `src/types.ts`）。
+- **金鑰掃描認得新的一家**：在 Essence repo 裡，新廠商的金鑰樣式要讓 commit 與 CI 的金鑰掃描擋得到：`tools/tests/secretlint.test.ts` 先加一筆假金鑰（會失敗），掃描的規則（最上層 `.secretlintrc.json`）沒認得就加一條樣式。
 - **新方言**：在 `src/dialects/` 加一個實作 `Dialect` 的檔、登記到 `src/dialects/index.ts`，再加 `fixtures/<方言>/`（`case.json` 與幾段 SSE 原文）。`tests/conformance.test.ts` 的情境表自動套上；登記了卻沒有範例，測試會失敗。
 
 ## 拿到別的 repo
