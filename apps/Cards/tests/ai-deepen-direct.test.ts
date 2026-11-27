@@ -253,3 +253,20 @@ void test('§9 恢復資料裡的證據讀不懂（較新的版本存的，F12�
   assert.deepEqual(result, { kind: 'stop', why: 'newer' });
   assert.deepEqual(writes, []);
 });
+
+void test('§9 按下直接製作、還在讀這一篇時取消（PR #99 的 GitHub 審查）：不送出、不建工作；讀的期間算「正在送出」，關視窗會先問', async t => {
+  const made = await load(t, [ok(REPLY)]);
+  const hold = made.memory.holdRead(DECK);
+  const pending = made.deepen.direct(DECK, '', '', undefined, []);
+  await hold.started;
+  assert.equal(made.deepen.sending(), true);
+  made.deepen.abort();
+  hold.release();
+  const outcome = await pending;
+  assert.equal(outcome.kind, 'blocked');
+  assert.equal(made.fetch.requests.length, 0);
+  assert.equal(made.deepen.jobOf(DECK), null);
+  assert.equal(made.deepen.sending(), false);
+  // 之後照常送得出去。
+  assert.equal((await made.deepen.direct(DECK, '', '', undefined, [])).kind, 'received');
+});

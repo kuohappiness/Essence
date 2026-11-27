@@ -374,9 +374,11 @@ export function createDeepen(deps: DeepenDeps) {
     try { put(next); } catch (error) { deps.onError(error); }
     return next;
   }
-  /** 送出一次（同製卡）：成功交回整段與證據、存進工作；不成功交給錯誤紀錄（取消的不記，§8）。 */
-  async function send(direct: DirectDeps, job: DeepenJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DeepenDirectOutcome> {
-    const controller = new AbortController();
+  /**
+   * 送出一次（同製卡）：成功交回整段與證據、存進工作；不成功交給錯誤紀錄（取消的不記，§8）。
+   * controller 是直接製作在讀這一篇之前就佔好的那一個（讀的期間取消也算數）；重送沒有讀，這裡新建。
+   */
+  async function send(direct: DirectDeps, job: DeepenJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void, controller = new AbortController()): Promise<DeepenDirectOutcome> {
     const files: SentFile[] = sentFiles(materials);
     sending = controller;
     try {
@@ -493,19 +495,26 @@ export function createDeepen(deps: DeepenDeps) {
       if (problem) return { kind: 'blocked', message: problem };
       const held = heldDirect(path);
       if (held) return { kind: 'blocked', message: held };
-      const ctx = await context(path);
-      if ('error' in ctx) return { kind: 'blocked', message: ctx.error };
-      const made = ctx.build(direction, material, pick);
-      if ('error' in made) return { kind: 'blocked', message: made.error };
-      const limit = providerProblem(target.provider, target.model, materials, made.prompt.length);
-      if (limit) return { kind: 'blocked', message: limit };
-      if (sending) return { kind: 'blocked', message: '另一篇正在送出，等它好了再按' };
-      // 先存再送：送到一半被關掉，重開看得到「上一次沒有收到回覆」（§6）。
-      const job: DeepenJob = { ...made.job, api: { state: 'sending', kind: null, at: made.job.copiedAt, files: sentFiles(materials), received: null } };
-      try { put(job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
-      deps.store.savePick(made.key, job.form.pick === true);
-      sentMaterials.set(job.id, [...materials]);
-      return send(direct, job, made.prompt, materials, target, key.key, onProgress);
+      // 讀這一篇之前就佔住「正在送出」（PR #99 的 GitHub 審查）：畫面已經是送出中，讀的期間按取消或關視窗也要擋得住，不在讀完之後才送出。
+      const controller = new AbortController();
+      sending = controller;
+      try {
+        const ctx = await context(path);
+        if (controller.signal.aborted) return { kind: 'blocked', message: '已取消，這次沒有送出' };
+        if ('error' in ctx) return { kind: 'blocked', message: ctx.error };
+        const made = ctx.build(direction, material, pick);
+        if ('error' in made) return { kind: 'blocked', message: made.error };
+        const limit = providerProblem(target.provider, target.model, materials, made.prompt.length);
+        if (limit) return { kind: 'blocked', message: limit };
+        // 先存再送：送到一半被關掉，重開看得到「上一次沒有收到回覆」（§6）。
+        const job: DeepenJob = { ...made.job, api: { state: 'sending', kind: null, at: made.job.copiedAt, files: sentFiles(materials), received: null } };
+        try { put(job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+        deps.store.savePick(made.key, job.form.pick === true);
+        sentMaterials.set(job.id, [...materials]);
+        return await send(direct, job, made.prompt, materials, target, key.key, onProgress, controller);
+      } finally {
+        if (sending === controller) sending = null;
+      }
     },
     /** 這次開著 Obsidian 的期間記得這一份的教材檔，或上一次沒附教材（重送不用重選，§6）。 */
     keeps: (job: DeepenJob): boolean => sentMaterials.has(job.id) || directJob(job)?.files.length === 0,
