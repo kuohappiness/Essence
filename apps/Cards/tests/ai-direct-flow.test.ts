@@ -50,7 +50,7 @@ void test('§2、§4 送出前擋下（不建工作、不送出）：沒有金�
   assert.equal((await made.cards.direct(form, [{ ...lesson, pages: 31 }])).kind, 'blocked');
   const preview = made.cards.directPreview(form, [lesson]);
   assert.ok(preview?.ok);
-  assert.match(preview.line, /^會送出：英文 L3\.pdf（12 頁）、規則與任務段約 [\d,]+ 字；Gemini 3\.8 Flash，約 US\$/);
+  assert.match(preview.line, /^會送出：英文 L3\.pdf（12 頁）、規則與任務段約 [\d,]+ 字；送到 Gemini（Gemini 3\.8 Flash），約 US\$/);
   for (const each of [none, made]) {
     assert.deepEqual(each.cards.jobs(), []);
     assert.equal(each.fetch.requests.length, 0);

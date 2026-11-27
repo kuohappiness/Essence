@@ -48,6 +48,7 @@ const TEXT = {
   resumeNoReply: (label: string, ago: string) => `上一次沒有收到回覆，可能已經送出並計費（${label}，${ago}送出）`,
   resumeFailed: (label: string, ago: string) => `上一次直接製作沒有成功（${label}，${ago}）`,
   reselect: '教材檔不會存下來，重開過 Obsidian 之後要重新選一次，才能用同一份提示重送。',
+  resendKept: '用上一次選的教材檔、同一份提示重送；照設定頁現在的服務與模型送出。',
   differs: '和上一次送的檔不同；快照會記這次送的檔。',
   same: '和上一次送的檔相同。',
 };
@@ -403,10 +404,10 @@ class AiCardsModal extends Modal {
   private directButtons(buttons: HTMLElement, message: HTMLElement, charged: boolean, of?: CardJob): void {
     const cards = this.host.cards(), job = of ?? this.job;
     if (!cards || !job) return;
+    // 一律先到重送的畫面（L2 第一輪 R9）：寫出照現在的設定會送到哪一家、哪個模型、約多少錢，再按一次才送。
     buttons.createEl('button', { text: charged ? '重送（會再計費一次）' : '重送', cls: 'mod-cta' }).addEventListener('click', () => {
       this.job = job;
-      if (!cards.keeps(job)) { this.showReselect(charged); return; }
-      this.resend();
+      this.showResend(charged);
     });
     buttons.createEl('button', { text: '改用複製貼上' }).addEventListener('click', () => {
       void cards.fallback(job).then(plain => {
@@ -429,28 +430,41 @@ class AiCardsModal extends Modal {
       this.showFailure({ kind: 'unknown', text: blocked, next: '', afterResponse: false, settings: false });
     });
   }
-  /** 重開過 Obsidian 之後的重送（F15）：重選教材檔，和上一次送的比雜湊，不同就提醒一句；快照記這次送的。 */
-  private showReselect(charged: boolean): void {
+  /**
+   * 重送的畫面（§6，L2 第一輪 R9）：送出前那一行照現在的設定寫（會送到哪一家、哪個模型、約多少錢），和第一步一樣。
+   * 這次開著 Obsidian 的期間記得教材檔的直接用；重開過的先重選（F15），和上一次送的比雜湊，不同就提醒一句；快照記這次送的。
+   */
+  private showResend(charged: boolean): void {
     const cards = this.host.cards(), job = this.job;
     if (!cards || !job) { this.close(); return; }
+    const kept = cards.keeps(job);
     const before = directJob(job)?.files.map(file => file.sha256) ?? [];
     this.materials = [];
     const el = this.reset();
-    el.createEl('p', { text: `${labelOf(job)}：${TEXT.reselect}` });
-    const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
-    grid.createEl('label', { text: '教材檔' });
+    el.createEl('p', { text: `${labelOf(job)}：${kept ? TEXT.resendKept : TEXT.reselect}` });
+    let draw = (): void => {};
+    if (!kept) {
+      const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
+      grid.createEl('label', { text: '教材檔' });
+      draw = this.materialField(grid.createDiv(), () => { refresh(); });
+    }
     const compare = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const line = el.createEl('p', { cls: 'essence-cards-issue-note' });
     const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
     const send = buttons.createEl('button', { text: charged ? '重送（會再計費一次）' : '重送', cls: 'mod-cta' });
+    const settings = this.settingsButton(buttons);
     buttons.createEl('button', { text: '回上一步' }).addEventListener('click', () => { this.start(); });
-    const draw = this.materialField(grid.createDiv(), () => { refresh(); });
+    const picked = (): Material[] | undefined => kept ? undefined : [...this.materials];
     const refresh = (): void => {
       draw();
       const now = this.materials.map(material => material.sha256);
-      compare.setText(!now.length ? '' : now.length === before.length && now.every((sha, i) => sha === before[i]) ? TEXT.same : TEXT.differs);
-      send.disabled = this.busy || !now.length;
+      compare.setText(kept || !now.length ? '' : now.length === before.length && now.every((sha, i) => sha === before[i]) ? TEXT.same : TEXT.differs);
+      const ready = kept || now.length ? cards.resendPreview(job, picked()) : null;
+      line.setText(ready === null ? '' : ready.ok ? ready.line : ready.reason);
+      if (ready && !ready.ok && ready.settings) settings?.show(); else settings?.hide();
+      send.disabled = this.busy || ready?.ok !== true;
     };
-    send.addEventListener('click', () => { this.resend([...this.materials]); });
+    send.addEventListener('click', () => { this.resend(picked()); });
     refresh();
   }
 

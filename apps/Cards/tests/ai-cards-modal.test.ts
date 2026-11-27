@@ -242,3 +242,41 @@ void test('實機第 1 點 拿到回應之後才失敗（回答太長被截斷�
   assert.ok(button(again.contentEl, '重送'), texts(again.contentEl).join('|'));
   assert.equal(button(again.contentEl, '重送（會再計費一次）'), undefined);
 });
+
+void test('L2 R9 送不成按「重送」：先到重送的畫面，寫出照現在的設定會送到哪一家、哪個模型、約多少錢，再按一次才送', async t => {
+  const { made, openModal } = await open(t, [unauthorized, ok(reply)]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  button(modal.contentEl, '重送')?.click();
+  await sleep(10);
+  assert.equal(made.fetch.requests.length, 1, '還沒送');
+  assert.ok(texts(modal.contentEl).some(each => /^會送出：英文 L3\.pdf（12 頁）、規則與任務段約 [\d,]+ 字；送到 Gemini（Gemini 3\.8 Flash），約 US\$/.test(each)), texts(modal.contentEl).join('|'));
+  assert.ok(texts(modal.contentEl).some(each => each.includes('照設定頁現在的服務與模型送出')));
+  button(modal.contentEl, '重送')?.click();
+  await sleep(80);
+  assert.equal(made.fetch.requests.length, 2);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+});
+
+void test('L2 R9 重開過 Obsidian 再重送：同一個畫面先重選教材，選了才寫會送出什麼；換成不同的檔有提醒', async t => {
+  const first = await load(t, [unauthorized]);
+  assert.equal((await first.cards.direct(form, [lesson])).kind, 'failed');
+  const { made, openModal } = await open(t, [ok(reply)], { box: first.box, memory: first.memory });
+  const modal = openModal();
+  button(modal.contentEl, '重送')?.click();
+  await sleep(10);
+  const send = button(modal.contentEl, '重送');
+  assert.ok(send?.disabled, '還沒選教材不能送');
+  assert.ok(!texts(modal.contentEl).some(each => each.startsWith('會送出：')));
+  const file = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'file');
+  assert.ok(file);
+  file.files = [new File([new Uint8Array([1, 2, 3])], '別的.pdf')];
+  file.fire('change');
+  await sleep(20);
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('會送出：別的.pdf')), texts(modal.contentEl).join('|'));
+  assert.ok(texts(modal.contentEl).some(each => each.includes('不同')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '重送')?.click();
+  await sleep(80);
+  assert.equal(made.fetch.requests.length, 1);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+});

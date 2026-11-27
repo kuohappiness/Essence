@@ -228,6 +228,25 @@ export function createAiCards(deps: AiCardsDeps) {
   async function recopy(job: CardJob): Promise<boolean> {
     try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }
   }
+  /** 重送與重送前的那一行共用的檢查（§6）：工作還在、教材在、設定與金鑰、上限；要到設定頁改的標 settings（L2 第一輪 R10）。 */
+  function resendTarget(job: CardJob, picked?: readonly Material[]): { error: string; settings?: boolean } | { client: AiClient; latest: CardJob; materials: Material[]; target: { connection: Connection; provider: ProviderSpec; model: string }; key: string; prompt: string; chars: number } {
+    const direct = deps.direct;
+    if (!direct) return { error: '這台裝置不能直接製作，請用複製提示' };
+    const latest = current(job);
+    if (!latest || latest.save) return { error: '這次製卡已經結束或開始存了，不能重送' };
+    const materials = picked ? [...picked] : sentMaterials.get(latest.id);
+    if (!materials) return { error: '上次選的教材檔已經不在了（重開過 Obsidian），請重新選一次，或改用複製貼上' };
+    const problem = materialProblem(materials);
+    if (problem) return { error: problem };
+    const target = endpoint(direct);
+    if ('error' in target) return { error: target.error, settings: true };
+    const key = direct.key();
+    if (!key.ok) return { error: NO_KEY[key.why], settings: true };
+    const chars = latest.parts.reduce((sum, part) => sum + part.text.length, 0);
+    const limit = providerProblem(target.provider, target.model, materials, chars);
+    if (limit) return { error: limit };
+    return { client: direct.client, latest, materials, target, key: key.key, prompt: latest.parts.map(part => part.text).join('\n\n'), chars };
+  }
   /** 送出一次（§4 第 2～5 步）：成功交回整段與證據、存進工作（F2）；不成功交給錯誤紀錄（取消的不記，§8）。 */
   async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
     const direct = deps.direct!;
@@ -358,29 +377,29 @@ export function createAiCards(deps: AiCardsDeps) {
     /** 這次開著 Obsidian 的期間記得這一份的教材檔（重送不用重選，§6）。 */
     keeps: (job: CardJob): boolean => sentMaterials.has(job.id),
     /**
+     * 重送前的那一行（§6，L2 第一輪 R9）：照現在的設定會送到哪一家、哪個模型、約多少錢；和 resend 用同一套檢查，不能送時是原因。
+     * picked 是重開過 Obsidian 之後重選的教材檔，沒給就用這次記得的。不存、不送。
+     */
+    resendPreview(job: CardJob, picked?: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string; settings?: boolean } {
+      const ready = resendTarget(job, picked);
+      if ('error' in ready) return { ok: false, reason: ready.error, ...ready.settings ? { settings: true } : {} };
+      const request = directRequest({ connection: ready.target.connection, provider: ready.target.provider, apiKey: ready.key, prompt: ready.prompt, materials: ready.materials });
+      return { ok: true, line: sendingLine(ready.client, ready.target.provider, request, ready.materials, ready.chars) };
+    },
+    /**
      * 重送（§6）：同一份提示，不重組；教材用這次記得的，重開過 Obsidian 的由家長重選後交進來（picked，格式查核 F15）。
      * 工作已經結束、開始存了，或教材不在了是 blocked。
      */
     async resend(job: CardJob, onProgress?: (event: ProgressEvent) => void, picked?: readonly Material[]): Promise<DirectOutcome> {
-      const direct = deps.direct;
-      if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
+      if (!deps.direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
-      const latest = current(job);
-      if (!latest || latest.save) return { kind: 'blocked', message: '這次製卡已經結束或開始存了，不能重送' };
-      const materials = picked ? [...picked] : sentMaterials.get(latest.id);
-      if (!materials) return { kind: 'blocked', message: '上次選的教材檔已經不在了（重開過 Obsidian），請重新選一次，或改用複製貼上' };
-      const problem = materialProblem(materials);
-      if (problem) return { kind: 'blocked', message: problem };
-      const target = endpoint(direct);
-      if ('error' in target) return { kind: 'blocked', message: target.error };
-      const key = direct.key();
-      if (!key.ok) return { kind: 'blocked', message: NO_KEY[key.why] };
-      const limit = providerProblem(target.provider, target.model, materials, latest.parts.reduce((sum, part) => sum + part.text.length, 0));
-      if (limit) return { kind: 'blocked', message: limit };
+      const ready = resendTarget(job, picked);
+      if ('error' in ready) return { kind: 'blocked', message: ready.error };
+      const { latest, materials, target, key, prompt } = ready;
       const sendingNow: CardJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: null } };
       try { put(sendingNow); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
       sentMaterials.set(latest.id, materials);
-      return send(sendingNow, latest.parts.map(part => part.text).join('\n\n'), materials, target, key.key, onProgress);
+      return send(sendingNow, prompt, materials, target, key, onProgress);
     },
     /** 取消送出中的那一個（§6）：關掉製卡視窗之前問過、停用外掛時。 */
     cancel(): void { sending?.abort(); },

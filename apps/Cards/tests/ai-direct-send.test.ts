@@ -77,13 +77,13 @@ void test('§4 送出前的一行：教材、字數、模型與估計的費用�
   const prompt = '字'.repeat(20_000);
   const request = directRequest({ connection: google, provider: provider('google'), apiKey: FAKE_KEY, prompt, materials: [pdf(12)] });
   const line = sendingLine(client, provider('google'), request, [pdf(12)], prompt.length);
-  assert.match(line, /^會送出：英文 L3\.pdf（12 頁）、規則與任務段約 2 萬字；Gemini 3\.8 Flash，約 US\$[\d.]+～[\d.]+（照牌價估計，不含免費額度）$/);
+  assert.match(line, /^會送出：英文 L3\.pdf（12 頁）、規則與任務段約 2 萬字；送到 Gemini（Gemini 3\.8 Flash），約 US\$[\d.]+～[\d.]+（照牌價估計，不含免費額度）$/);
   const [low, high] = /US\$([\d.]+)～([\d.]+)/.exec(line)!.slice(1).map(Number);
   assert.ok(low > 0 && low < high, line);
   const photos = [photo('a.jpg'), photo('b.jpg')];
   const router = readConnection({ provider: 'openrouter', models: { openrouter: 'some/model' } }, providers);
   const unpriced = directRequest({ connection: router, provider: provider('openrouter'), apiKey: FAKE_KEY, prompt: '短', materials: photos });
-  assert.equal(sendingLine(client, provider('openrouter'), unpriced, photos, 1_240), '會送出：照片 2 張、規則與任務段約 1,240 字；some/model，不知道這個模型的價格');
+  assert.equal(sendingLine(client, provider('openrouter'), unpriced, photos, 1_240), '會送出：照片 2 張、規則與任務段約 1,240 字；送到 OpenRouter（some/model），不知道這個模型的價格');
 });
 
 void test('§4 收完的一行：用量寫成萬、千，費用分照牌價估計與服務回報；服務沒回報用量時照實寫', () => {

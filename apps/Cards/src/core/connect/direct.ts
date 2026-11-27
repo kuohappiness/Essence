@@ -4,7 +4,7 @@ import { sha256Hex, stamp } from '../ai/index.ts';
 import type { DirectEvidence, SentFile } from '../ai/index.ts';
 import { describeAiError, isAiError } from './client.ts';
 import type { AiClient, AiErrorKind, GenerateRequest, GenerateResult, InputKind, ProgressEvent, ProviderSpec } from './client.ts';
-import { modelOf } from './connection.ts';
+import { modelOf, providerName } from './connection.ts';
 import type { Connection } from './connection.ts';
 
 /** 家長選的一個教材檔（§5）：照原樣送出，不切頁、不轉檔，內容不存。 */
@@ -94,7 +94,7 @@ export function directRequest(input: {
   };
 }
 
-/** 送出前寫在按鈕旁邊的一行（§4〈送出前〉）：會送出什麼、哪個模型、約多少錢。 */
+/** 送出前寫在按鈕旁邊的一行（§4〈送出前〉）：會送出什麼、送到哪一家的哪個模型、約多少錢。重送前也寫（照現在的設定，L2 第一輪 R9）。 */
 export function sendingLine(client: AiClient, provider: ProviderSpec, request: GenerateRequest, materials: readonly Material[], promptChars: number): string {
   const model = provider.models.find(each => each.id === request.model);
   const what = [...materials.filter(isPdf).map(material => `${material.name}（${String(material.pages ?? 0)} 頁）`), ...photos(materials), `規則與任務段${characters(promptChars)}`];
@@ -105,7 +105,7 @@ export function sendingLine(client: AiClient, provider: ProviderSpec, request: G
   } catch {
     cost = '估不出費用';
   }
-  return `會送出：${what.join('、')}；${model?.label ?? request.model}，${cost}`;
+  return `會送出：${what.join('、')}；送到 ${providerName(provider)}（${model?.label ?? request.model}），${cost}`;
 }
 function photos(materials: readonly Material[]): string[] {
   const images = materials.filter(material => !isPdf(material));
