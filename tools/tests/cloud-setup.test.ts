@@ -104,7 +104,10 @@ function runCopied(command: string, projectDir: string, stdin: string): Promise<
   });
 }
 
-void test('第 1 步 setup script：repo 的 Claude hook 抄進使用者設定，專案資料夾不是 repo 也跑得到、是 repo 時不跑兩次', async t => {
+// setup script 只在雲端（Linux）跑；Windows 的路徑有反斜線，抄的那段本來就不做，也不一定有 sh。
+const linuxOnly = { skip: process.platform === 'win32' ? 'setup script 只在雲端（Linux）跑' : false };
+
+void test('第 1 步 setup script：repo 的 Claude hook 抄進使用者設定，專案資料夾不是 repo 也跑得到、是 repo 時不跑兩次', linuxOnly, async t => {
   const base = await mkdtemp(join(tmpdir(), 'essence-cloud-setup-user-'));
   t.after(() => rm(base, { recursive: true, force: true }));
   // repo 放在上一層資料夾底下，和專案討論串一樣：專案資料夾是 base，repo 是 base/Essence。
