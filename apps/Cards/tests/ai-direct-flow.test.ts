@@ -109,7 +109,7 @@ const rich = (text: string): MockReply => ({
 const COMMON = ['日期', '時間', '識別碼', '工作', '對象', '規則版本', '送出', '提示雜湊', '回覆原文', '已有目標', '記穩目標'];
 const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
 
-void test('§7 直接製作的快照：接法 API、服務代號、要求與回報的模型、推理、五個用量、費用、編號、教材檔，照查核定的順序', async t => {
+void test('§7 直接製作的快照：接法 API、服務名稱、要求與回報的模型、推理、五個用量、費用、編號、教材檔，照查核定的順序', async t => {
   const pasted = await load(t, [ok(reply)], { direct: false });
   const copied = await pasted.cards.copy(form);
   assert.ok('job' in copied);
@@ -132,7 +132,7 @@ void test('§7 直接製作的快照：接法 API、服務代號、要求與回�
   assert.deepEqual(props['教材檔'], [`${LESSON_SHA} 12頁 英文 L3.pdf`, `${PHOTO_SHA} 圖 p41 照片.jpg`]);
   assert.deepEqual(
     [props['接法'], props['服務'], props['要求的模型'], props['模型'], props['推理等級'], props['推理參數'], props['輸入用量'], props['快取讀取用量'], props['輸出用量'], props['推理用量'], props['費用來源'], props['回應編號']],
-    ['API', 'google', 'gemini-3.8-flash', 'gemini-3.8-flash-001', 'high', 'high', 18_000, 2_000, 5_500, 1_500, '照牌價估計', 'gem-7'],
+    ['API', 'Gemini', 'gemini-3.8-flash', 'gemini-3.8-flash-001', 'high', 'high', 18_000, 2_000, 5_500, 1_500, '照牌價估計', 'gem-7'],
   );
   // 費用與牌價日期照目錄（會隨牌價更新）：寫的是數字、讀得回同一個值。
   assert.equal(props['費用'], outcome.evidence.cost?.amount);
@@ -202,7 +202,7 @@ void test('§7 OpenRouter：模型照回報的原樣（帶廠商前綴）、服�
   const { props, text } = propsOf(made.memory);
   assert.deepEqual(
     [props['服務'], props['要求的模型'], props['模型'], props['推理等級'], props['輸入用量'], props['輸出用量'], props['費用'], props['費用來源'], props['請求編號'], props['回應編號']],
-    ['openrouter', 'openai/gpt-5.6-terra', 'openai/gpt-5.6-terra', '未指定', 900, 300, 0, '服務回報', '20261107', 'gen-9'],
+    ['OpenRouter', 'openai/gpt-5.6-terra', 'openai/gpt-5.6-terra', '未指定', 900, 300, 0, '服務回報', '20261107', 'gen-9'],
   );
   for (const key of ['推理參數', '牌價日期', '快取讀取用量', '推理用量']) assert.equal(key in props, false, key);
   // 全是數字的請求編號照字串寫（YAML 加引號），讀回仍是字串。
@@ -286,7 +286,7 @@ void test('§8 送不成的錯誤紀錄：種類與套件的訊息、服務、�
   assert.equal(made.logs.length, 2);
   const [auth, overloaded] = made.logs;
   assert.match(auth.msg, /^auth: /);
-  assert.deepEqual({ ...auth, msg: '' }, { msg: '', service: 'google', model: 'gemini-3.8-flash', status: 400, requestId: null, attempts: 1 });
+  assert.deepEqual({ ...auth, msg: '' }, { msg: '', service: 'Gemini', model: 'gemini-3.8-flash', status: 400, requestId: null, attempts: 1 });
   assert.match(overloaded.msg, /^overloaded: /);
   assert.deepEqual([overloaded.status, overloaded.attempts], [503, 3]);
   const text = JSON.stringify(made.logs);

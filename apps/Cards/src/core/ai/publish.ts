@@ -91,7 +91,7 @@ function apiFields(job: CardJob, save: SaveState, api: DirectEvidence): { early:
   if (api.files.length) files['教材檔'] = api.files.map(file => `${file.sha256} ${file.pages === null ? '圖' : `${String(file.pages)}頁`} ${oneLine(file.name)}`);
   const late: Record<string, unknown> = {
     接法: 'API',
-    服務: api.provider,
+    服務: api.service,
     要求的模型: oneLine(api.requestedModel),
     模型: api.model === null ? '未回報' : oneLine(api.model),
     推理等級: api.reasoning ?? LEVEL_UNSET,

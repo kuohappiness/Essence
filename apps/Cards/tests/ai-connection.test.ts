@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mockFetch } from '../../../packages/ai-client/src/testing.ts';
+import { SERVICES } from '../src/obsidian/ai-cards.ts';
 import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from '../src/core/connect/index.ts';
 
 const FAKE_KEY = 'sk-cards-settings-test-1111';
@@ -10,16 +11,17 @@ const client = cardsClient();
 const providers = client.providers();
 const provider = (id: string) => { const found = providers.find(p => p.id === id); assert.ok(found, id); return found; };
 
-void test('服務的選單：OpenAI（推薦）、Google（免費）排最上面，其他照目錄；模型的推薦放最上面，OpenRouter 沒有選單', () => {
-  assert.deepEqual(providerChoices(providers).map(choice => choice.label), ['OpenAI（推薦）', 'Google Gemini（免費）', 'Anthropic Claude', 'OpenRouter']);
+void test('服務的選單：ChatGPT（推薦）、Gemini（免費）排最上面，其他照目錄；模型的推薦放最上面，OpenRouter 沒有選單', () => {
+  assert.deepEqual(providerChoices(providers).map(choice => choice.label), ['ChatGPT（推薦）', 'Gemini（免費）', 'Claude', 'OpenRouter']);
   assert.deepEqual(modelChoices(provider('openai')).map(choice => choice.label), ['GPT-5.6 Terra（推薦）']);
   assert.deepEqual(modelChoices(provider('google')).map(choice => choice.id), ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
   assert.equal(modelChoices(provider('google'))[0].label, 'Gemini 3.8 Flash（推薦）');
   assert.deepEqual(modelChoices(provider('anthropic')).map(choice => choice.label), ['Claude Opus 5.5', 'Claude Sonnet 5.5', 'Claude Haiku 5.5', 'Claude Fable 5.2']);
   assert.deepEqual(modelChoices(provider('openrouter')), []);
   assert.deepEqual(REASONING_CHOICES.map(choice => choice.label), ['照服務的預設', '低', '中', '高']);
-  // 選單上的名稱照 docs/ai-models.md〈外掛的預設選單〉（L2 第一輪 R11 第 5 項）；表上沒有的照目錄。
-  assert.deepEqual(providers.map(providerName), ['OpenAI', 'Anthropic Claude', 'Google Gemini', 'OpenRouter']);
+  // 服務的名稱只有一套（D-242）：選單、畫面、快照與錯誤紀錄都是這幾個，和複製貼上選的服務同一套。
+  assert.deepEqual(providers.map(providerName), ['ChatGPT', 'Claude', 'Gemini', 'OpenRouter']);
+  for (const id of ['openai', 'anthropic', 'google']) assert.ok((SERVICES as readonly string[]).includes(providerName(provider(id))), id);
 });
 
 void test('這台電腦存的設定：讀不懂的欄位用預設，金鑰的名稱只收 SecretStorage 的格式，換服務再換回來模型還在', () => {

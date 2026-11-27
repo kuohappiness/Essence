@@ -144,14 +144,14 @@ function tokens(n: number): string {
 const tokenCount = (value: number | null): number | null => value !== null && Number.isSafeInteger(value) && value >= 0 ? value : null;
 
 /**
- * 成功那一次的證據（§7）：files 是這一次送出的教材檔，reasoning 是設定頁的推理等級（照服務的預設是 null），now 是收到的當下（取時區）。
+ * 成功那一次的證據（§7）：service 是服務的名稱（providerName，D-242），files 是這一次送出的教材檔，reasoning 是設定頁的推理等級（照服務的預設是 null），now 是收到的當下（取時區）。
  * 收到的時刻用套件的 trace.finishedAt；讀不出來才用 now。收到的整段用 result.text（套件遮過金鑰的整段，不自己累加串流的片段）。
  */
-export function evidenceOf(result: GenerateResult, files: readonly SentFile[], reasoning: string | null, now: { ms: number; offset: number }): DirectEvidence {
+export function evidenceOf(result: GenerateResult, service: string, files: readonly SentFile[], reasoning: string | null, now: { ms: number; offset: number }): DirectEvidence {
   const { trace, usage, cost } = result;
   const finished = Date.parse(trace.finishedAt);
   return {
-    provider: trace.provider, requestedModel: trace.requestedModel, model: trace.resolvedModel, reasoning, reasoningSent: trace.reasoningSent,
+    service, requestedModel: trace.requestedModel, model: trace.resolvedModel, reasoning, reasoningSent: trace.reasoningSent,
     receivedAt: stamp(Number.isFinite(finished) ? finished : now.ms, now.offset),
     usage: { input: tokenCount(usage.inputTokens), cacheRead: tokenCount(usage.cachedInputTokens), cacheWrite: tokenCount(usage.cacheWriteInputTokens), output: tokenCount(usage.outputTokens), reasoning: tokenCount(usage.reasoningTokens) },
     cost: cost && Number.isFinite(cost.amount) && cost.amount >= 0 ? { amount: cost.amount, estimated: cost.estimated, asOf: cost.estimated ? cost.pricesAsOf : null } : null,
@@ -234,7 +234,7 @@ export async function sendDirect(client: AiClient, request: GenerateRequest): Pr
   return failure ? { ok: false, failure, error: null, result, partial: result.text || null } : { ok: true, result };
 }
 
-/** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務代號、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */
+/** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務名稱（D-242）、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */
 export interface DirectLog { msg: string; service: string; model: string; status: number | null; requestId: string | null; attempts: number }
 
 /** 錯誤紀錄裡服務給的字串最多幾個字（模型名稱、請求編號）：一行有 2,000 bytes 的上限，太長的整行會被丟掉。 */
@@ -245,12 +245,11 @@ const short = (text: string): string => Array.from(text).slice(0, LOG_CHARS).joi
  * 送不成時寫進錯誤紀錄的一行（§8）：msg 是種類加套件的訊息（停止原因的寫停止原因）。套件的訊息已經遮過金鑰，這裡再遮一次；
  * 不寫提示、教材的內容與檔名（檔名可能帶孩子的名字，格式查核 F16）。
  */
-export function failureLog(failure: DirectFailure, error: unknown, result: GenerateResult | null, request: Pick<GenerateRequest, 'endpoint' | 'model' | 'apiKey'>): DirectLog {
+export function failureLog(failure: DirectFailure, error: unknown, result: GenerateResult | null, request: Pick<GenerateRequest, 'model' | 'apiKey'>, service: string): DirectLog {
   const ai = isAiError(error) ? error : null;
   const detail = ai ? ai.message : result ? `stop ${result.stopReason}` : error instanceof Error ? error.message : String(error);
   const key = request.apiKey ?? '';
   const msg = `${failure.kind}: ${key.length >= 8 ? detail.split(key).join('[金鑰]') : detail}`;
-  const service = 'provider' in request.endpoint ? request.endpoint.provider : 'custom';
   const last = result?.trace.attempts.at(-1);
   const requestId = ai?.requestId ?? result?.trace.requestId ?? null;
   return {

@@ -353,7 +353,7 @@ void test('AI 連線：舊版 Obsidian（沒有 SecretStorage）只寫一句要�
 
 void test('AI 連線：選單與預設；換服務時模型跟著換、OpenRouter 自己填；每次改都存在這台裝置，換回來模型還在', async t => {
   const { row, storage } = await open(t, { desktop: true });
-  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['OpenAI（推薦）', 'Google Gemini（免費）', 'Anthropic Claude', 'OpenRouter']);
+  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['ChatGPT（推薦）', 'Gemini（免費）', 'Claude', 'OpenRouter']);
   assert.equal(row(PROVIDER).dropdown?.value, 'openai');
   assert.equal(row(MODEL).dropdown?.value, 'gpt-5.6-terra');
   assert.equal(row(REASONING).dropdown?.value, 'default');
@@ -487,9 +487,9 @@ void test('AI 連線：同一個金鑰名稱設給了另一家，金鑰那一列
   assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));
   h.row(PROVIDER).dropdown?.choose('google');
   h.row(KEY).secret?.choose('family-openai');
-  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 OpenAI；每一家的金鑰不能通用，請確認選對了。'));
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 ChatGPT；每一家的金鑰不能通用，請確認選對了。'));
   h.row(PROVIDER).dropdown?.choose('openai');
-  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 Google Gemini；每一家的金鑰不能通用，請確認選對了。'));
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 Gemini；每一家的金鑰不能通用，請確認選對了。'));
   h.row(PROVIDER).dropdown?.choose('google');
   h.row(KEY).secret?.choose('family-gemini');
   assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));

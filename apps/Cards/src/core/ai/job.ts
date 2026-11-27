@@ -41,9 +41,10 @@ export interface SentFile { sha256: string; pages: number | null; name: string }
 /** 服務回報的 token 數（套件的 Usage）：拿不到的是 null，快照不寫（F6、F17）。輸入含快取讀取與寫入，輸出含推理。 */
 interface DirectUsage { input: number | null; cacheRead: number | null; cacheWrite: number | null; output: number | null; reasoning: number | null }
 
-/** 成功那一次的證據（§7）：服務代號、要求與回報的模型、推理等級與實際送出的參數、收到的時刻、用量、費用、編號、送出的教材檔、收到的整段。 */
+/** 成功那一次的證據（§7）：服務名稱、要求與回報的模型、推理等級與實際送出的參數、收到的時刻、用量、費用、編號、送出的教材檔、收到的整段。 */
 export interface DirectEvidence {
-  provider: string;
+  /** 服務名稱（ChatGPT、Claude、Gemini、OpenRouter）：名稱只有一套，快照的 `服務` 照寫（D-242）。 */
+  service: string;
   requestedModel: string;
   /** 服務回報的模型原樣；沒回報是 null（快照寫「未回報」）。 */
   model: string | null;
@@ -107,7 +108,7 @@ function isFile(value: unknown): value is SentFile {
 export function directEvidence(value: unknown): DirectEvidence | null {
   if (!isObject(value)) return null;
   const usage = value.usage, cost = value.cost;
-  const ok = isString(value.provider) && isString(value.requestedModel) && optString(value.model) && optString(value.reasoning)
+  const ok = isString(value.service) && isString(value.requestedModel) && optString(value.model) && optString(value.reasoning)
     && (value.reasoningSent === null || isString(value.reasoningSent) || (typeof value.reasoningSent === 'number' && Number.isFinite(value.reasoningSent)))
     && isString(value.receivedAt) && isObject(usage) && count(usage.input) && count(usage.cacheRead) && count(usage.cacheWrite) && count(usage.output) && count(usage.reasoning)
     && (cost === null || (isObject(cost) && typeof cost.amount === 'number' && Number.isFinite(cost.amount) && cost.amount >= 0 && typeof cost.estimated === 'boolean' && optString(cost.asOf)))

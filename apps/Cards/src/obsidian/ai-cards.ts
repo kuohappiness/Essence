@@ -1,7 +1,7 @@
 import { abandonJob, beginSave, buildPrompt, directJob, inspectReply, NEWER_SAVE, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, DirectEvidence, DirectJob, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck, SentFile } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
-import { directRequest, evidenceOf, failureLog, materialProblem, modelOf, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
+import { directRequest, evidenceOf, failureLog, materialProblem, modelOf, providerName, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
 import type { AiClient, Connection, DirectFailure, DirectLog, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
@@ -239,12 +239,12 @@ export function createAiCards(deps: AiCardsDeps) {
       const sent = await sendDirect(direct.client, request);
       if (sent.ok) {
         const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
-        const evidence = evidenceOf(sent.result, files, reasoning, deps.now());
+        const evidence = evidenceOf(sent.result, providerName(target.provider), files, reasoning, deps.now());
         const saved = mark(current(job) ?? job, { state: 'received', kind: null, at: at(), files, received: evidence });
         return { kind: 'received', job: saved, reply: evidence.text, evidence };
       }
       if (sent.failure.kind !== 'cancelled') {
-        try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request), sent.failure); } catch (error) { deps.onError(error); }
+        try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request, providerName(target.provider)), sent.failure); } catch (error) { deps.onError(error); }
       }
       const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null });
       return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };
