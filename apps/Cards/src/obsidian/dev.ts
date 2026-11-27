@@ -2,6 +2,7 @@ import { entryCheck, entryUnread, type EntryDevHost } from './dev-entry.ts';
 import { examDev } from './dev-exam.ts';
 import { practiceDev } from './dev-practice.ts';
 import { aiCardsDev } from './dev-ai.ts';
+import { aiProbe } from './dev-ai-probe.ts';
 import { quizDev, quizProbe } from './dev-quiz.ts';
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
@@ -106,6 +107,8 @@ const commands: Record<string, DevCommand> = {
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   // AI 製卡（tasks/ai-cards-mvp.md §8 第 1 點）：填表 → 複製 → 接著貼回 → 檢查 → 存成草稿 → 預覽 → 啟用，截圖寫在 Essence W6/結果/AI 製卡 …/。
   'ai-cards': { name: 'Essence 開發：AI 製卡（截圖）', run: host => aiCardsDev(host, `${W6_ROOT}/結果/AI 製卡 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  // 直接呼叫 AI 的第 0 批探針（tasks/ai-direct.md〈平台事實表〉P1、P3、P4）：URI 帶 do=cors、pdf、secret、secret-read、secret-clear。
+  'ai-probe': { name: 'Essence 開發：直接呼叫 AI 的探針', run: (host, _ids, params) => aiProbe(host.app, params.do), desktop: true, root: W6_ROOT },
   'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
   // D-145 的 iPhone 實測：iPhone 也能用。
