@@ -45,6 +45,13 @@ void test('份數讓收益永遠不會明顯就警告：k＝3、每組 3 份，�
   assert.deepEqual(unreachable(readConfig(YAML.replace('份數: 5', '份數: 3'))), ['生成器「claude」每組 3 份、收益 3 項（每項門檻 1.67%）：最好的情況 p＝5%，收益永遠不會明顯']);
 });
 
+void test('init 的範本：收益照 §12 第 3 題的 3 項、校正後到得了；沒講為什麼（§17）沒列在收益，也自動在不能變差裡', () => {
+  const config = readConfig(readFileSync(join(import.meta.dirname, '..', 'tools', 'rule-test', 'templates', '測試.yaml'), 'utf8'));
+  assert.deepEqual(config.gates.benefits.map(each => each.metric), ['傷到學習', '每個必備平均幾題', '加深機會漏掉']);
+  assert.deepEqual(config.gates.noWorse.沒講為什麼, { percent: 0, floor: 0.5 });
+  assert.deepEqual(unreachable(config), []);
+});
+
 void test('--confirmed 在事件裡記下〈評估規格〉的雜湊（使用者看過的就是這一份）；不屬於哪一份工作，不影響工作的狀態', () => {
   const root = mkdtempSync(join(tmpdir(), 'rule-test-spec-'));
   mkdirSync(join(root, '凍結'));

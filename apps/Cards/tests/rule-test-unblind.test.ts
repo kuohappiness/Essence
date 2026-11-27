@@ -148,6 +148,15 @@ void test('沒講為什麼（rule-test-d236.md §17）：兩位在同一題記�
   checkFolder(folder, () => {});
   const deck = unblindFolder(folder, { log: () => {} }).decks.find(each => each.code === second)!;
   assert.deepEqual([deck.whyMissing, deck.harm.total, deck.minor, deck.qualityTotal, deck.majorTotal], [2, 0, 0, 0, 0]);
+  // 摘要的學習面表與明細的逐份表都有這一欄：照表頭找欄，乙那一列是 2。
+  const cell = (file: string, start: string, first: string): string => {
+    const lines = readFileSync(join(folder.root, '結果', file), 'utf8').split('\n');
+    const head = lines.findIndex(line => line.startsWith(start) && line.includes('| 沒講為什麼 |'));
+    const column = lines[head].split('|').map(each => each.trim()).indexOf('沒講為什麼');
+    const row = lines.slice(head).find(line => line.split('|').map(each => each.trim()).includes(first))!;
+    return row.split('|').map(each => each.trim())[column];
+  };
+  assert.deepEqual([cell('摘要.md', '| 組 |', '乙'), cell('明細.md', '| 批 |', second)], ['2.0', '2']);
 });
 
 void test('結果：摘要沒有評分表、卡組與教材的原文；使用紀錄加一行；再跑不重算、不重記', async () => {

@@ -13,7 +13,8 @@ import { encodeEntry } from '../src/core/study/index.ts';
 import type { StepRequest } from '../tools/rule-test/adapters.ts';
 import { blindFolder } from '../tools/rule-test/blind.ts';
 import { planCopy, readPlan, runDeepen } from '../tools/rule-test/deepen.ts';
-import { mergeDeepen, sameIssue, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
+import { deepenSchema, mergeDeepen, sameIssue, validateDeepen, type DeepenResult } from '../tools/rule-test/deepen-judge.ts';
+import { learningValue } from '../tools/rule-test/gates.ts';
 import { resultFile, runJudges } from '../tools/rule-test/judge.ts';
 import { checkFolder } from '../tools/rule-test/check.ts';
 import { runDisputes } from '../tools/rule-test/disputes.ts';
@@ -321,6 +322,9 @@ void test('合併加深（§6-3）：項兩位都對是對、都錯是錯、不�
     [at('沒講為什麼', '1-1', [20]), at('沒講為什麼', '1-1', [21]), true],
   ];
   for (const [x, y, expected] of cases) assert.equal(sameIssue(x, y), expected, JSON.stringify([x, y]));
+  // 加深的評審也收得下沒講為什麼（§17）：種類只靠 schema 的 enum 擋。
+  const kinds = (deepenSchema(['S1']) as { properties: { issues: { items: { properties: { kind: { enum: string[] } } } } } }).properties.issues.items.properties.kind.enum;
+  assert.ok(kinds.includes('沒講為什麼'));
 });
 
 void test('加深評分：每個有加深的區組、每位評審另開一個對話；提示列加深機會與每一份的項；結果檔 -加深、鎖定表列進去', async () => {
@@ -376,10 +380,13 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   const fable = fakeJudge({ shapeDeepen: (result, codes) => {
     mark(result, '1-2', '接錯目標'); noD2(result); result.unsure = '1-3 是換句話問，還是往下一層，兩種讀法都說得通';
     result.issues.push({ deck: [...codes.keys()][0], kind: '判錯', item: '1-1', lines: [items[0].line], note: '答案只收一種說法' });
+    result.issues.push({ deck: [...codes.keys()][0], kind: '沒講為什麼', item: '1-3', lines: [items[2].line], note: '' });
   } });
   const codex = fakeJudge({ shapeDeepen: (result, codes) => {
     mark(result, '1-2', '接錯目標'); mark(result, '1-3', '沒有加深'); noD2(result);
     result.issues.push({ deck: [...codes.keys()][0], kind: '重大錯誤', item: '1-1', lines: [items[0].line], note: 'lend 的方向教反了' });
+    // 兩位都在第 3 項記沒講為什麼（§17）：算一筆，不算傷到學習。
+    result.issues.push({ deck: [...codes.keys()][0], kind: '沒講為什麼', item: '1-3', lines: [items[2].line], note: '' });
   } });
   await runJudges(folder, { adapters: { codex: codex.adapter, claude: fable.adapter }, log: () => {} });
   const seen: string[] = [];
@@ -395,11 +402,13 @@ void test('加深的指標（§6-3、§2-1）：加深機會漏掉、確定接�
   checkFolder(folder, () => {});
   const report = unblindFolder(folder, { log: () => {} });
   const byGroup = Object.fromEntries(report.decks.map(deck => [deck.group, deck]));
-  assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1, whyMissing: 0 });
+  assert.deepEqual(byGroup.甲.deepen, { pieces: 1, abandoned: 0, unsavable: 0, items: 3, undeepened: false, missed: 1, wrong: 1, disputed: 1, major: 0, harm: 1, whyMissing: 1 });
+  // 學習面的沒講為什麼＝卡組的 0＋加深的 1。
+  assert.deepEqual([byGroup.甲.whyMissing, learningValue(byGroup.甲, '沒講為什麼')], [0, 1]);
   assert.deepEqual(byGroup.乙.deepen, { pieces: 0, abandoned: 0, unsavable: 0, items: 0, undeepened: true, missed: 2, wrong: null, disputed: 0, major: 0, harm: 0, whyMissing: 0 });
   const summary = readFileSync(join(folder.root, '結果', '摘要.md'), 'utf8'), detail = readFileSync(join(folder.root, '結果', '明細.md'), 'utf8');
   // 學習面的表：甲的傷到學習是加深裁定改記的判錯 1；乙存不了，加深機會全漏 2、確定接錯不算（—）。只報告的表：甲接對率 1／3。
-  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 2.0 | 0.0 | 0.0 | — | — | 1.0 | 1.0 | 1.0 |'));
+  assert.ok(summary.includes('| 甲 | 1 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 2.0 | 0.0 | 1.0 | — | — | 1.0 | 1.0 | 1.0 |'));
   assert.ok(summary.includes('| 乙 | 1 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 | 0.0 | 0.0 | 0.0 | 0.0 | 2.0 | — | 0.0 |'));
   assert.ok(summary.includes('| 甲 | 0.0 | 1.0 | 1.0 | 0.0 | 2.0 | 2.0 | 0／1 | 1.0（0） | 3.0 | 33% | 0.0 |'));
   assert.ok(!summary.includes('兩種讀法'));

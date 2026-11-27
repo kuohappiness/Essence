@@ -60,6 +60,9 @@ void test('評審的 schema：全部必填、不用動態鍵；卡組代號是 e
   assert.deepEqual(schema.required, ['pages', 'rows', 'issues', 'unsure']);
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.properties.issues.items.properties.deck.enum, ['S1', 'S2']);
+  // 種類只靠 schema 的 enum 擋（驗結果時不驗種類），所以直接看 enum：§17 的新種類要在裡面。
+  const kinds = (judgeSchema(['S1']) as { properties: { issues: { items: { properties: { kind: { enum: string[] } } } } } }).properties.issues.items.properties.kind.enum;
+  assert.ok(kinds.includes('沒講為什麼'));
 });
 
 const DECKS = new Map([['S1', ['- borrow 英翻中', '    - borrow :: 借入', '', '- lend 英翻中', '    - lend :: 借出', '']], ['S2', ['- borrow 英翻中', '    - borrow :: 借入', '']]]);
