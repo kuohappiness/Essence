@@ -459,3 +459,16 @@ void test('AI 連線：關掉設定頁、停用外掛時，進行中的測試連
   await settle();
   assert.deepEqual(aborted, ['api.openai.com', 'api.openai.com', 'api.openai.com']);
 });
+
+void test('AI 連線：拿金鑰時丟錯，按鈕回來、寫一句，錯誤進錯誤紀錄；不停在「測試中…」（L2 第一輪 R6）', async t => {
+  const h = await open(t, { desktop: true, secrets: { 'family-openai': AI_KEY }, localStorage: { [AI_PREFS]: { provider: 'openai', secrets: { openai: 'family-openai' } } } });
+  const storage = (h.app as unknown as { secretStorage: { getSecret: (id: string) => string | null } }).secretStorage;
+  storage.getSecret = () => { throw new Error('keychain locked'); };
+  h.row(TEST).buttons[0].click();
+  await settle();
+  assert.deepEqual(lines(h.row(TEST).descEl), ['測試連線沒有完成，請再按一次；一直這樣，請回報給開發者。']);
+  assert.equal(h.row(TEST).buttons[0].disabled, false);
+  const logged = [...h.texts.entries()].filter(([path]) => path.startsWith('Essence Cards/紀錄/錯誤/')).map(([, text]) => text).join('\n');
+  assert.match(logged, /"where":"ai"/);
+  assert.match(logged, /keychain locked/);
+});

@@ -54,6 +54,7 @@ const AI = {
   test: '測試連線',
   testNote: '讀一次這個服務的模型清單，確認金鑰能用；不產生內容、不花錢。',
   testing: '測試中…',
+  failed: '測試連線沒有完成，請再按一次；一直這樣，請回報給開發者。',
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -135,6 +136,8 @@ export interface SettingsHost {
   openRestore: () => void;
   /** 這次沒有存下：提示並記下（tasks/settings-page.md §2-6）。 */
   saveFailed: (result: Exclude<SaveResult, 'saved'>) => void;
+  /** 測試連線在拿金鑰、畫結果時丟出的錯（ai-direct.md §2，L2 第一輪 R6）：交給錯誤紀錄。 */
+  aiFailed: (error: unknown) => void;
 }
 
 /** ⓘ 點開或收起 details；重畫時由呼叫端保留開著沒。 */
@@ -381,19 +384,31 @@ class EssenceSettingTab extends PluginSettingTab {
     test.addButton(button => button.setButtonText(AI.test).setDisabled(this.aiTest !== null).onClick(() => { void this.runTest(client); }));
   }
 
-  /** 按「測試連線」：金鑰這時才向 SecretStorage 拿，交給套件後不留；中止了（關掉設定頁、停用外掛、換服務）就不畫結果。 */
+  /**
+   * 按「測試連線」：金鑰這時才向 SecretStorage 拿，交給套件後不留；中止了（關掉設定頁、停用外掛、換服務）就不畫結果。
+   * 拿金鑰或重畫丟出錯時（L2 第一輪 R6），按鈕回來、寫一句，錯誤交給錯誤紀錄；不讓它停在「測試中…」。
+   */
   private async runTest(client: ReturnType<typeof cardsClient>): Promise<void> {
     this.stopTest();
     const controller = this.aiTest = new AbortController();
-    const connection = readConnection(aiConnection.get(this.app), client.providers());
-    const key = requireApiVersion('1.11.4') ? keyOf(connection, id => this.app.secretStorage.getSecret(id)) : null;
-    this.aiResult = null;
-    this.refresh();
-    const result = await testConnection(client, { provider: connection.provider, key, signal: controller.signal });
-    if (this.aiTest !== controller) return;
-    this.aiTest = null;
-    this.aiResult = { ok: result.ok, text: result.text };
-    this.refresh();
+    try {
+      const connection = readConnection(aiConnection.get(this.app), client.providers());
+      const key = requireApiVersion('1.11.4') ? keyOf(connection, id => this.app.secretStorage.getSecret(id)) : null;
+      this.aiResult = null;
+      this.refresh();
+      const result = await testConnection(client, { provider: connection.provider, key, signal: controller.signal });
+      if (this.aiTest !== controller) return;
+      this.aiTest = null;
+      this.aiResult = { ok: result.ok, text: result.text };
+      this.refresh();
+    } catch (error) {
+      // 交給錯誤紀錄（D-155）；已經被換掉或中止的這一次不畫。
+      this.host.aiFailed(error);
+      if (this.aiTest !== controller) return;
+      this.aiTest = null;
+      this.aiResult = { ok: false, text: AI.failed };
+      this.refresh();
+    }
   }
 
   private term(containerEl: HTMLElement): void {
