@@ -56,6 +56,16 @@ const AI = {
   testing: '測試中…',
   failed: '測試連線沒有完成，請再按一次；一直這樣，請回報給開發者。',
   shared: (names: string) => `這把金鑰也設給了 ${names}；每一家的金鑰不能通用，請確認選對了。`,
+  keyFrom: (where: string, name: string, billed: boolean) => `金鑰到 ${where}申請${billed ? '，另外計費' : ''}，和 ${name} 的訂閱無關。`,
+};
+/**
+ * 金鑰到哪裡申請（D-244 第 5 點）：選單寫的是產品名稱，金鑰卻是廠商的 API，和訂閱分開；有訂閱的家長容易以為能直接用。
+ * 照代號找（代號不上畫面）；名稱照目錄的寫。OpenRouter 沒有訂閱，不寫。
+ */
+const KEY_FROM: Partial<Record<string, { where: string; billed: boolean }>> = {
+  openai: { where: 'OpenAI 的 API 網站', billed: true },
+  anthropic: { where: 'Anthropic 的 API 網站', billed: true },
+  google: { where: 'Google 的 AI Studio 網站', billed: false },
 };
 /** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
 const MISSING = {
@@ -361,6 +371,8 @@ class EssenceSettingTab extends PluginSettingTab {
         this.aiResult = null;
         this.refresh();
       }));
+    const from = KEY_FROM[provider.id];
+    if (from) keyRow.descEl.createDiv({ text: AI.keyFrom(from.where, providerName(provider), from.billed) });
     const shared = sharedWith(connection).map(id => providers.find(item => item.id === id)).filter(item => item !== undefined).map(providerName);
     if (shared.length) keyRow.descEl.createDiv({ text: AI.shared(shared.join('、')), cls: 'essence-cards-backup-problem' });
     const models = modelChoices(provider);

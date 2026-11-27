@@ -360,14 +360,18 @@ void test('AI 連線：選單與預設；換服務時模型跟著換、OpenRoute
   assert.deepEqual(row(REASONING).dropdown?.options.map(option => option.label), ['照服務的預設', '低', '中', '高']);
   assert.equal(row(KEY).secret?.value, '');
   assert.match(row(KEY).desc, /金鑰只存在這台電腦，不會同步到手機；其他外掛也讀得到 Obsidian 存的金鑰/);
+  // 金鑰到哪裡申請、和訂閱無關（D-244 第 5 點）。
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 OpenAI 的 API 網站申請，另外計費，和 ChatGPT 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   assert.equal(storage(AI_PREFS), null);
 
   row(PROVIDER).dropdown?.choose('google');
   assert.deepEqual(row(MODEL).dropdown?.options.map(option => option.value), ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 Google 的 AI Studio 網站申請，和 Gemini 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   row(MODEL).dropdown?.choose('gemini-3.5-flash-lite');
   row(REASONING).dropdown?.choose('low');
   row(PROVIDER).dropdown?.choose('openrouter');
   assert.equal(row(MODEL).dropdown, null);
+  assert.ok(!lines(row(KEY).descEl).some(line => line.startsWith('金鑰到')), 'OpenRouter 沒有訂閱，不寫');
   assert.equal(row(MODEL).text?.placeholder, 'google/gemini-3.8-flash');
   row(MODEL).text?.type(' google/gemini-3.8-flash ');
   row(PROVIDER).dropdown?.choose('google');
