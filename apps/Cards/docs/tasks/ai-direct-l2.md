@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI 第 1 批（L2 審查請求）
 
-狀態：待審｜下一步：兩輪都通過（[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)），合併前等使用者回 R2 與過目 S3 列的文字｜等誰：使用者
+狀態：待審｜下一步：兩輪都通過（[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)），R2 已補；合併前等使用者過目 S3 列的文字、同意合併｜等誰：使用者
 
 遵守 repo 根目錄的 `AGENTS.md` 與 `apps/Cards/AGENTS.md`。建議推理等級：**高**。每一輪都**新開一個對話**；只審查、不改產品程式，可以在隔離環境重現。重現只用假金鑰與假的 `fetch`，不連真的 AI 服務。
 

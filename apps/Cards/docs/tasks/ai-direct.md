@@ -1,6 +1,6 @@
 # Cards 直接呼叫 AI：設定頁、直接製作與加深（AI 連線第三步，給 Claude，本機執行）
 
-狀態：待審｜下一步：第 1 批（§1～§3）寫完、Windows 實機做完、L2 兩輪通過（[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)）；合併前等使用者：`apps/Cards/AGENTS.md` 的轉接檔例外（L2 R2）、過目 L2 加的畫面文字（S3）、同意合併 PR #78；第 2 批開工前 §7 的格式查核等 Codex 額度（11-30 重置）｜等誰：使用者
+狀態：待審｜下一步：第 1 批（§1～§3）寫完、Windows 實機做完、L2 兩輪通過（[審查紀錄](<../Claude Codex Discussion/2026-11-27-ai-direct-batch1-l2.md>)）；合併前等使用者：過目 L2 加的畫面文字（S3）、同意合併 PR #78；第 2 批開工前 §7 的格式查核等 Codex 額度（11-30 重置）｜等誰：使用者
 
 來自：[AI 連線模組的任務說明](../../../../docs/tasks/ai-client.md)〈2〉第三步、〈8〉第三步、〈11〉（2026-11-27，使用者：「刪除並合併然後下一步」）
 
@@ -76,7 +76,7 @@ P1 有一家不通時，那一家改用 `requestUrl` 包成的傳輸層（不串
 - `tools/check-app-imports.ts` 放行「軟體的程式指到表上套件的入口檔」，其他跨出資料夾的照舊擋；Cards 的 ESLint 邊界、knip、`tools/build.mjs` 跟著放行。
 - 分派表加一張明列的表：改到 `packages/ai-client/` 時 Cards 也跑完整檢查；另加一條檢查確認表和實際的 import 一致。
 - `tools/tests/hooks.test.ts`：暫存一個會讓 Cards 測試失敗的套件修改、工作樹是好的，pre-commit 要失敗。
-- `apps/Cards/AGENTS.md`〈程式〉補上轉接檔的例外，和放行規則同一個 commit（改 AGENTS.md 先問使用者，照它最後一節的五關；這一條是 D-232 第 5 點已同意的內容）。
+- `apps/Cards/AGENTS.md`〈程式〉補上轉接檔的例外，和放行規則同一個 commit（改 AGENTS.md 先問使用者，照它最後一節的五關；這一條是 D-232 第 5 點已同意的內容）。使用者 2026-11-27 同意；實際在 L2 之後另一個 commit 補上（L2 R2）。
 - 建置後的 `main.js` 照舊只 require `obsidian` 與 CodeMirror；套件被打包進去，不另外載入。
 
 ## §2 設定頁「AI 連線」（第 1 批）
