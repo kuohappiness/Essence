@@ -37,7 +37,8 @@ function lessonPart(folder: Folder, lesson: LessonConfig, pages: number | null, 
   return ['## 這一課', '', `- 科目、年級學期、單元：${form.subject}、${form.term}、${form.unit}`, ...form.material ? [`- 教材說明：${form.material}`] : [],
     `- 教材：${attached ? '附件（資料夾裡也有一份 教材.pdf）' : '資料夾裡的 教材.pdf'}${pages === null ? '' : `，共 ${String(pages)} 頁`}`].join('\n');
 }
-const template = (name: string): string => readFileSync(join(import.meta.dirname, 'templates', name), 'utf8').trim();
+/** 評分表的寫法與核對照凍結的那一份（D-236 §11：全部範本進鎖）。 */
+const template = (folder: Folder, name: string): string => readFileSync(join(folder.root, '凍結', '範本', name), 'utf8').trim();
 
 export interface RubricOptions { adapters?: Partial<Record<'claude' | 'codex', Adapter>>; log?: (line: string) => void; temp?: string }
 
@@ -75,7 +76,7 @@ export async function runRubric(folder: Folder, code: string, options: RubricOpt
     if (!existsSync(file('1-寫.md'))) {
       prepare(writerCwd, null);
       log(`評分表 ${code}：寫（${writer.name} ${writer.model}）`);
-      const outcome = await ask('寫', writer, `${template('評分表寫法.md')}\n\n${lessonPart(folder, lesson, pages, writer.kind === 'claude')}`, writerCwd,
+      const outcome = await ask('寫', writer, `${template(folder, '評分表寫法.md')}\n\n${lessonPart(folder, lesson, pages, writer.kind === 'claude')}`, writerCwd,
         value => tableProblems(tableOf(value as string), known), (value, session) => { writeOnce(file('寫的對話.json'), JSON.stringify({ session, cwd: writerCwd }) + '\n'); writeOnce(file('1-寫.md'), value); });
       if (outcome !== 'done') { log(`寫：${outcome}`); return; }
     }
@@ -84,7 +85,7 @@ export async function runRubric(folder: Folder, code: string, options: RubricOpt
       prepare(cwd, tableOf(readFileSync(file('1-寫.md'), 'utf8')));
       log(`評分表 ${code}：核對（${checker.name} ${checker.model}）`);
       try {
-        const outcome = await ask('核對', checker, `${template('評分表核對.md')}\n\n${lessonPart(folder, lesson, pages, checker.kind === 'claude')}`, cwd,
+        const outcome = await ask('核對', checker, `${template(folder, '評分表核對.md')}\n\n${lessonPart(folder, lesson, pages, checker.kind === 'claude')}`, cwd,
           value => (value as string).trim() ? [] : ['回覆是空的'], value => { writeOnce(file('2-核對.md'), value); });
         if (outcome !== 'done') { log(`核對：${outcome}`); return; }
       } finally { rmSync(cwd, { recursive: true, force: true }); }

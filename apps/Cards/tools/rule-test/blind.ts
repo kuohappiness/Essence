@@ -1,35 +1,46 @@
 // 比較測試工具：blind（任務說明 tasks/rule-test-tool.md §5-6）。切出卡組段、掃洩漏字樣、每課各自打亂代號、分區組，
 // 建給評審的資料夾；對照表寫進 封存/，那一批鎖定前不讀。一批一次：已經在前一批的工作不再放進來。
 import { randomInt } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliPath } from '../cli-path.ts';
 import { cutDeck } from './deck-cut.ts';
-import { materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
+import { anonymousMap, cutMap, handsInMap, joinMaps, type MapCut } from './map.ts';
+import { batchFile, batchNumbers, blindedJobs, materialOf, openFolder, rubricOf, sha256File, sha256Text, writeOnce, type Folder } from './folder.ts';
 import { git, readFrozenSnapshot, readFrozenSteps, verifyLock } from './freeze.ts';
 import { rawName } from './generate.ts';
+import { deepenOf, deepenUnfinished, type DeepenSheet } from './deepen.ts';
 import { jobState, planJobs, readEvents, type Job } from './jobs.ts';
 import { checkRubricFile } from './rubric.ts';
 
 export interface BlindEntry {
   lesson: string; code: string; job: string; group: string; generator: string; copy: number; replacement: boolean;
   raws: string[]; rawSha256: string[]; deckSha256: string; chars: number; blocks: string[];
+  /** 地圖（rule-test-d236.md §5-1）：這一組不交、應交沒交（why 是原因）、或有（雜湊是給評審的那一份）。 */
+  map: { kind: 'none' } | { kind: 'missing'; why: string } | { kind: 'ok'; sha256: string };
+  /**
+   * 加深（rule-test-d236.md §6-2）：沒跑、卡組存不了（不能模擬），或有（雜湊是給評審的那一份；篇數、放棄幾篇、加深存不了幾篇、項數）。
+   */
+  deepen: { kind: 'none' } | { kind: 'unsavable'; why: string[] } | { kind: 'ok'; sha256: string; pieces: number; abandoned: number; unsavable: number; items: number };
 }
-export interface Block { name: string; lesson: string; generator: string; codes: string[] }
+/** maps：區組裡有地圖的代號（地圖評分只給這幾份，§5-3）；deepens：有加深要評的代號（§6-3）。 */
+export interface Block { name: string; lesson: string; generator: string; codes: string[]; maps: string[]; deepens: string[] }
 export interface Batch { batch: number; commit: string; time: string; entries: BlindEntry[]; blocks: Block[] }
 
 /** 一個區組最多幾份（§5-6，F11）。 */
 const BLOCK_SIZE = 4;
 const MODEL_WORDS = ['claude', 'opus', 'sonnet', 'haiku', 'fable', 'chatgpt', 'gpt', 'codex', 'gemini'];
 
-const batchFile = (folder: Folder, n: number): string => join(folder.root, '封存', `對照表-批${String(n)}.json`);
-export function batchNumbers(folder: Folder): number[] {
-  const dir = join(folder.root, '封存');
-  return existsSync(dir) ? readdirSync(dir).flatMap(name => /^對照表-批(\d+)\.json$/.exec(name)?.[1] ?? []).map(Number).sort((a, b) => a - b) : [];
-}
-/** 對照表只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。 */
+/** 代號和組別的對應只在這裡讀：blind 編下一批的號碼，與 unblind 在那一批鎖定、裁定之後（§5-6「那一批鎖定前不讀」）。`blindedJobs`（folder.ts）只取工作名稱。 */
 const readBatch = (folder: Folder, n: number): Batch => JSON.parse(readFileSync(batchFile(folder, n), 'utf8')) as Batch;
 export const batchDir = (folder: Folder, n: number): string => join(folder.root, '評分', `批${String(n)}`);
+/** 地圖評分的區組資料夾（rule-test-d236.md §5-3）。 */
+export const mapBlockDir = (folder: Folder, n: number, block: string): string => join(batchDir(folder, n), '地圖區組', block);
+/** 加深評分的區組資料夾（rule-test-d236.md §6-3）。 */
+export const deepenBlockDir = (folder: Folder, n: number, block: string): string => join(batchDir(folder, n), '加深區組', block);
+/** 一份給評審的加深的項與篇（不是祕密：只有代號）。 */
+export const readDeepenItems = (folder: Folder, n: number, lesson: string, code: string): Pick<DeepenSheet, 'items' | 'pieces'> =>
+  JSON.parse(readFileSync(join(batchDir(folder, n), '加深', lesson, `${code}.json`), 'utf8')) as Pick<DeepenSheet, 'items' | 'pieces'>;
 /** 一批的區組（只有代號，沒有組別）：評分、狀態用這個，不讀對照表。 */
 export const readBlocks = (folder: Folder, n: number): Block[] => JSON.parse(readFileSync(join(batchDir(folder, n), '區組.json'), 'utf8')) as Block[];
 
@@ -61,17 +72,33 @@ function anonymousDeck(folder: Folder, job: Job): { deck: string } | { why: stri
   return { deck: parts.join('\n') };
 }
 
+/** 給評審的地圖（§5-1、§5-2）：不交地圖的組是 null；多步的照順序接；標記行換成標題。 */
+function anonymousMapOf(folder: Folder, job: Job): MapCut | null {
+  if (!handsInMap(job.steps)) return null;
+  const cuts = job.steps.filter(step => step.deck).map(step => ({ step: step.step, cut: cutMap(readFileSync(join(folder.root, '生成', '原稿', rawName(job, step)), 'utf8')) }));
+  const joined = joinMaps(cuts);
+  return joined.ok ? { ok: true, map: anonymousMap(joined.map) } : joined;
+}
+
 /**
  * 外掛規定的引言框標題（syntax.md §2-9，認法同外掛 check.ts 的 calloutHead）：標題字是格式，不是組名洩漏。
  * 2026-11-25 使用者電腦：組名叫「候選」時，每一份的 `> [!note]- 候選卡片` 都被當成洩漏。
  */
 const FORMAT_TITLE = /^\s{0,3}>\s?\[![^\]]+\][-+]?\s*(?:候選卡片|加進已有的學習目標)\s*$/;
 
-/** 洩漏字樣（§5-6）：組名、生成器與模型的名稱、`<<<` 標記。回傳每一處（給人看）。 */
+/** 洩漏字樣（§5-6，rule-test-d236.md §5-2）：組名、生成器與模型的名稱、規則檔名、`<<<` 標記。回傳每一處（給人看）。 */
 function leaks(folder: Folder, deck: string): string[] {
   const { config } = folder;
-  const words = [...new Set([...config.groups.map(each => each.name), ...config.generators.flatMap(each => [each.name, each.model, ...each.service ? [each.service] : []]), ...MODEL_WORDS, '<<<'])].filter(Boolean);
+  const ruleFiles = config.groups.flatMap(group => [...group.steps.flatMap(step => step.rules.kind === 'files' ? step.rules.files : step.rules.kind === 'own' ? Object.values(step.rules.files) : []), ...group.deepenRules?.files ?? []]).map(path => path.split('/').at(-1)!);
+  const words = [...new Set([...config.groups.map(each => each.name), ...config.generators.flatMap(each => [each.name, each.model, ...each.service ? [each.service] : []]), ...MODEL_WORDS, ...ruleFiles, '<<<'])].filter(Boolean);
   return deck.split('\n').flatMap((line, i) => FORMAT_TITLE.test(line) ? [] : words.filter(word => line.toLowerCase().includes(word.toLowerCase())).map(word => `第 ${String(i + 1)} 行有「${word}」`));
+}
+
+/** 對照表記的加深（§6-2）。 */
+function deepenEntry(deepen: ReturnType<typeof deepenOf>): BlindEntry['deepen'] {
+  if (deepen === null) return { kind: 'none' };
+  if ('why' in deepen) return { kind: 'unsavable', why: deepen.why };
+  return { kind: 'ok', sha256: sha256Text(deepen.text), pieces: deepen.pieces.length, abandoned: deepen.pieces.filter(each => each.abandoned).length, unsavable: deepen.unsavable, items: deepen.items.length };
 }
 
 const numbered = (deck: string): string => deck.split('\n').map((line, i) => line === '' && i === deck.split('\n').length - 1 ? '' : `${String(i + 1)}\t${line}`).join('\n');
@@ -97,7 +124,10 @@ export function makeBlocks(folder: Folder, entries: readonly BlindEntry[], start
           next.set(lesson, n + 1);
           const name = `${lesson}-B${String(n).padStart(2, '0')}`;
           for (const member of members) member.blocks.push(name);
-          blocks.push({ name, lesson, generator, codes: members.map(each => each.code) });
+          blocks.push({
+            name, lesson, generator, codes: members.map(each => each.code), maps: members.filter(each => each.map.kind === 'ok').map(each => each.code),
+            deepens: members.filter(each => each.deepen.kind === 'ok' && each.deepen.pieces > each.deepen.abandoned).map(each => each.code),
+          });
         }
       }
     }
@@ -124,16 +154,27 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
   const unfinished = jobs.filter(job => !['done', 'invalid'].includes(jobState(events, job.key).status));
   if (unfinished.length) throw Error(`還有 ${String(unfinished.length)} 份沒生成完（一批一次，等都完成再匿名）：${unfinished.map(job => `${job.key}（${jobState(events, job.key).status}）`).join('、')}`);
   const previous = batchNumbers(folder).map(n => readBatch(folder, n));
-  const seen = new Set(previous.flatMap(batch => batch.entries.map(entry => entry.job)));
+  const seen = blindedJobs(folder);
   const fresh = jobs.filter(job => jobState(events, job.key).status === 'done' && !seen.has(job.key));
   if (!fresh.length) throw Error('沒有新的有效原稿可以匿名');
+  // 這一批每一份的加深都完成或放棄才匿名（rule-test-d236.md §6-2）：匿名之後那一份的卡組、地圖、加深都固定。
+  const deepening = deepenUnfinished(folder, fresh);
+  if (deepening.length) throw Error(`還有 ${String(deepening.length)} 篇加深沒做完（等都完成或放棄再匿名）：${deepening.join('、')}`);
 
-  const decks = new Map<string, string>(), problems: string[] = [];
+  const decks = new Map<string, string>(), maps = new Map<string, MapCut | null>(), deepens = new Map<string, ReturnType<typeof deepenOf>>(), problems: string[] = [];
   for (const job of fresh) {
     const cut = anonymousDeck(folder, job);
     if ('why' in cut) { problems.push(cut.why); continue; }
     decks.set(job.key, cut.deck);
-    if (!options.acceptLeaks) problems.push(...leaks(folder, cut.deck).map(hit => `${job.key} ${hit}`));
+    const map = anonymousMapOf(folder, job);
+    maps.set(job.key, map);
+    const deepen = deepenOf(folder, job);
+    deepens.set(job.key, deepen);
+    if (!options.acceptLeaks) {
+      problems.push(...leaks(folder, cut.deck).map(hit => `${job.key} ${hit}`));
+      if (map?.ok) problems.push(...leaks(folder, map.map).map(hit => `${job.key} 的地圖${hit}`));
+      if (deepen && 'text' in deepen) problems.push(...leaks(folder, deepen.text).map(hit => `${job.key} 的加深${hit}`));
+    }
   }
   if (problems.length) throw Error(`停下給人看（看過確定沒問題再加 --accept-leaks；切不出卡組段的要先處理）：\n${problems.join('\n')}`);
 
@@ -144,20 +185,34 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
     const used = previous.flatMap(each => each.entries).filter(entry => entry.lesson === lesson.code).map(entry => Number(entry.code.slice(1)));
     let n = Math.max(0, ...used);
     for (const job of mine) {
-      const deck = decks.get(job.key)!;
+      const deck = decks.get(job.key)!, map = maps.get(job.key) ?? null;
       const raws = job.steps.map(step => rawName(job, step));
       entries.push({
         lesson: lesson.code, code: `S${String(++n)}`, job: job.key, group: job.group, generator: job.generator, copy: job.copy, replacement: job.replacement,
         raws, rawSha256: raws.map(raw => sha256File(join(folder.root, '生成', '原稿', raw))), deckSha256: sha256Text(deck), chars: deck.length, blocks: [],
+        map: map === null ? { kind: 'none' } : map.ok ? { kind: 'ok', sha256: sha256Text(map.map) } : { kind: 'missing', why: map.why },
+        deepen: deepenEntry(deepens.get(job.key) ?? null),
       });
     }
   }
   const usedBlocks = previous.flatMap(each => each.blocks);
   // 區組裡的順序也打亂（§5-6）：評審的提示照 codes 列卡組，不打亂的話基準組永遠在第一個。
-  const blocks = makeBlocks(folder, entries, lesson => 1 + usedBlocks.filter(block => block.lesson === lesson).length).map(block => ({ ...block, codes: shuffle(block.codes, random) }));
+  const blocks = makeBlocks(folder, entries, lesson => 1 + usedBlocks.filter(block => block.lesson === lesson).length).map(block => {
+    const codes = shuffle(block.codes, random);
+    return { ...block, codes, maps: codes.filter(code => block.maps.includes(code)), deepens: codes.filter(code => block.deepens.includes(code)) };
+  });
 
   const dir = batchDir(folder, batch);
-  for (const entry of entries) writeOnce(join(dir, '卡組', entry.lesson, `${entry.code}.md`), decks.get(entry.job)!);
+  const mapText = (job: string): string => (maps.get(job) as { map: string }).map;
+  const sheetOf = (job: string): DeepenSheet => deepens.get(job) as DeepenSheet;
+  for (const entry of entries) {
+    writeOnce(join(dir, '卡組', entry.lesson, `${entry.code}.md`), decks.get(entry.job)!);
+    if (entry.map.kind === 'ok') writeOnce(join(dir, '地圖', entry.lesson, `${entry.code}.md`), mapText(entry.job));
+    if (entry.deepen.kind !== 'ok') continue;
+    const sheet = sheetOf(entry.job);
+    writeOnce(join(dir, '加深', entry.lesson, `${entry.code}.md`), sheet.text);
+    writeOnce(join(dir, '加深', entry.lesson, `${entry.code}.json`), JSON.stringify({ items: sheet.items, pieces: sheet.pieces }, null, 2) + '\n');
+  }
   for (const block of blocks) {
     const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
     const at = join(dir, '區組', block.name);
@@ -166,11 +221,34 @@ export function blindFolder(folder: Folder, options: BlindOptions = {}): Batch {
     copyFileSync(materialOf(folder, lesson), join(at, '教材.pdf'));
     writeOnce(join(at, '已有目標.json'), JSON.stringify(readFrozenSnapshot(folder, lesson.code)?.pool ?? [], null, 2) + '\n');
     for (const code of block.codes) writeOnce(join(at, '卡組', `${code}.md`), numbered(decks.get(entries.find(each => each.lesson === block.lesson && each.code === code)!.job)!));
+    // 地圖另一個資料夾、另一個評分對話（§5-3）：只放有地圖的那幾份。
+    if (!block.maps.length) continue;
+    const mapAt = mapBlockDir(folder, batch, block.name);
+    mkdirSync(join(mapAt, '地圖'), { recursive: true });
+    copyFileSync(rubricOf(folder, lesson), join(mapAt, '評分表.md'));
+    copyFileSync(materialOf(folder, lesson), join(mapAt, '教材.pdf'));
+    writeOnce(join(mapAt, '已有目標.json'), JSON.stringify(readFrozenSnapshot(folder, lesson.code)?.pool ?? [], null, 2) + '\n');
+    for (const code of block.maps) writeOnce(join(mapAt, '地圖', `${code}.md`), numbered(mapText(entries.find(each => each.lesson === block.lesson && each.code === code)!.job)));
+  }
+  // 加深另一個資料夾、另一個評分對話（rule-test-d236.md §6-3）：有加深要評的那幾份，各附地圖（有的話）。
+  for (const block of blocks.filter(each => each.deepens.length)) {
+    const lesson = folder.config.lessons.find(each => each.code === block.lesson)!;
+    const at = deepenBlockDir(folder, batch, block.name);
+    mkdirSync(join(at, '加深'), { recursive: true });
+    copyFileSync(rubricOf(folder, lesson), join(at, '評分表.md'));
+    copyFileSync(materialOf(folder, lesson), join(at, '教材.pdf'));
+    writeOnce(join(at, '已有目標.json'), JSON.stringify(readFrozenSnapshot(folder, lesson.code)?.pool ?? [], null, 2) + '\n');
+    for (const code of block.deepens) {
+      const entry = entries.find(each => each.lesson === block.lesson && each.code === code)!;
+      writeOnce(join(at, '加深', `${code}.md`), numbered(sheetOf(entry.job).text));
+      if (entry.map.kind === 'ok') writeOnce(join(at, '地圖', `${code}.md`), numbered(mapText(entry.job)));
+    }
   }
   writeOnce(join(dir, '區組.json'), JSON.stringify(blocks, null, 2) + '\n');
   const result: Batch = { batch, commit: git(['rev-parse', 'HEAD']), time: new Date().toISOString(), entries, blocks };
   writeOnce(batchFile(folder, batch), JSON.stringify(result, null, 2) + '\n');
-  log(`批 ${String(batch)}：${String(entries.length)} 份、${String(blocks.length)} 個區組（${blocks.map(block => `${block.name} ${String(block.codes.length)} 份`).join('、')}）。對照表在 封存/，鎖定前不讀。`);
+  const missing = entries.filter(entry => entry.map.kind === 'missing').length;
+  log(`批 ${String(batch)}：${String(entries.length)} 份、${String(blocks.length)} 個區組（${blocks.map(block => `${block.name} ${String(block.codes.length)} 份${block.maps.length ? `、地圖 ${String(block.maps.length)} 份` : ''}`).join('、')}）${missing ? `；應交地圖沒交 ${String(missing)} 份` : ''}。對照表在 封存/，鎖定前不讀。`);
   return result;
 }
 

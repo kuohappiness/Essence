@@ -11,7 +11,7 @@ import { blindFolder } from '../tools/rule-test/blind.ts';
 import { cutDeck, validity } from '../tools/rule-test/deck-cut.ts';
 import { openFolder, type Folder } from '../tools/rule-test/folder.ts';
 import { freezeFolder, readFrozenSteps } from '../tools/rule-test/freeze.ts';
-import { acquireLock, runQueue, savePasted, writeManual } from '../tools/rule-test/generate.ts';
+import { acquireLock, runQueue, savePasted, startable, writeManual } from '../tools/rule-test/generate.ts';
 import { appendEvent, jobState, planJobs, readEvents, reopenFailed } from '../tools/rule-test/jobs.ts';
 import { RUBRIC } from './helpers/rule-test.ts';
 
@@ -69,7 +69,7 @@ ${groups}
 生成:
 ${generators}
 評審: [{ 評審: codex, 模型: a }, { 評審: claude, 模型: b }]
-門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 規則字數, 至少: 1% }] }
+門檻: { 基準: 甲, 候選: [乙], 生成器: [claude], 收益: [{ 指標: 判錯, 至少: 1% }] }
 `);
   await freezeFolder(openFolder(root), { log: () => {} });
   return openFolder(root);
@@ -115,6 +115,8 @@ void test('多步：同一個對話接著說（resume、不再附 PDF），{{A.1
   assert.equal(second.pdf, null);
   assert.deepEqual(readdirSync(join(folder.root, '生成', '原稿')).sort(), ['乙-L3-claude-1-1.md', '乙-L3-claude-1-2.md', '甲-L3-claude-1.md']);
   assert.equal(jobState(readEvents(folder), '乙-L3-claude-1').status, 'done');
+  // 實送字數（rule-test-d236.md §9）：含代入的前一步回覆，送出時記進事件。
+  assert.equal(readEvents(folder).find(event => event.job === '乙-L3-claude-1' && event.type === 'step' && event.step === 2)?.detail?.sent, '組二第二步：前一步是「第一步的清單」'.length);
 });
 
 void test('多步的後一步失敗：那一步開新的對話時，重跑從那一步接著做（沿用前一步的回覆、記下沿用哪一次）；接著同一個對話的從頭來', async () => {
@@ -242,6 +244,13 @@ void test('行程鎖：另一個還在跑就停下；上一次的行程已經不
   const state = jobState(readEvents(folder), '甲-L3-claude-1');
   assert.equal(state.status, 'retry');
   assert.equal(state.last?.type, 'interrupted');
+});
+
+void test('停在跑中（上一次的行程被砍掉）：沒有行程拿著鎖時，CLI 把它算進要跑的；有行程在跑、或手貼的，不算（L2 第 1 輪 E）', async () => {
+  const folder = await frozenFolder(TWO_GROUPS, '  - { 生成器: claude, 模型: claude-opus-5-5, 份數: 1 }');
+  assert.deepEqual([startable(folder)('running'), startable(folder)('running', true), startable(folder)('pending'), startable(folder)('done')], [true, false, true, false]);
+  const release = acquireLock(folder, 'generate');
+  try { assert.equal(startable(folder)('running'), false); } finally { release(); }
 });
 
 void test('手貼：說明寫清楚服務、模型、PDF 與順序；貼回一步一步存，後一步的提示等前一步貼回才產生', async () => {

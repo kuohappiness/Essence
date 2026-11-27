@@ -18,6 +18,7 @@
 | 補做：查詢工具的現行寫在只算有連結的引用：`node tools/decisions-index.ts D-xxx` 的「現行寫在」只比對字串 `D-xxx`，沒分辨是依據還是只是提到，可能多列和規則無關的出處；多列的人看了跳過，查無引用時照實印「沒有規範文件引用」 | 查詢時列出的出處有一半以上和規則無關 | 只算有連結的引用，或排除〈曾考慮的做法〉這類段落；測試加一份只提到、沒有連結的規範文件 | [工作流程上線〈技術債〉](tasks/workflow-impl.md#技術債) |
 | 〈已完成〉的核對只在本機的 hook：GitHub 上合併 PR、快轉、沒衝突的 cherry-pick、rebase 與 `git revert` 都不經過 pre-commit／pre-merge-commit；CI 的 `roadmap-sync --check` 是 HEAD 比自己，手寫或刪掉的〈已完成〉列可以進 `main`（狀態板和入口對不上，CI 照擋）。進去之後的後果：手寫的列在 `main` 刪不掉（是 HEAD 的舊列），比它早開的分支併 `main` 進來要刪、併回去又要加回來；繞過 hook 進了某個分支、格式對但日期不對的列，把那個分支用 `git merge` 併進來時留也擋、刪也擋 | 第一次在 GitHub 網頁上解〈已完成〉的衝突，或合併工作流程上線前開、帶手寫〈已完成〉列的分支 | CI 在分支 push 與 PR 時，拿和 `main` 的合併基點當比較對象跑完成列的核對（日期只查不晚於今天）；測試加一個分支手寫完成列、CI 擋下的案例 | [工作流程上線的 L2 第二輪](tasks/workflow-impl-review.md#第二輪的回報) N13；`git revert` 是[第三輪](tasks/workflow-impl-review.md#第三輪的回報)補的，進去之後的後果是[第五輪](tasks/workflow-impl-review.md#第五輪的回報) J2、J3 補的 |
 | 補測：雲端設定第 ① 件（PR #51 改的 `cloud-setup.mjs`，多裝 `packages/ai-client`）：新開的雲端 session 讀自己的開場訊息，hook 有沒有跑還沒看到；專案討論串開的 session 不載 repo 的 hook，驗不了。第 ② 件（乾淨 worktree 照雲端條件跑一次 hook）已過，所以 hook 本身會跑；沒驗的是雲端 session 開場時有沒有叫到它 | 下一次在 claude.ai/code 開 Essence 的雲端 session（不是專案討論串） | 那個 session 的開場訊息有「雲端環境設定：」那一段，`packages/ai-client` 一行是「npm ci 完成」或「鎖檔沒變，跳過」，`core.hooksPath` 是 `.githooks`，之後的指令用 Node 24；原文寫進[AI 連線模組〈結果〉](tasks/ai-client.md#結果) | [AI 連線模組〈結果〉](tasks/ai-client.md#結果)（使用者 2026-11-26 選合併後驗） |
+| 進度白板有時沒發布、沒人發現：`.github/workflows/progress-board.yml` 的 `deploy-pages` 那一步，2026-11-16～27 最近 100 次有 11 次失敗（另 3 次是新的取消舊的，正常）；查過的一次（run 45862894171）是剛上傳的產物抓不到中繼資料（GitHub 自己的暫時錯誤，訊息建議稍後重跑）。失敗後白板停在舊版，直到下一次改文件才更新：有四段各停了約 7.6、9.6、25.3、7.0 小時。開場提醒（`.claude/hooks/ci-status.mjs`）只看 `check.yml`，看不到這支 | 改 CI 或白板的工作（例如「優化 Essence 開發流程」第 3 步），或使用者發現白板沒更新 | 再看幾次失敗的紀錄確認是同一種暫時錯誤；是的話失敗時自動重試一次，並讓開場提醒也看這支 workflow 的最近一次結果；實測一次失敗後會重試或被提醒 | 「優化 Essence 開發流程」討論串 2026-11-27，Fable 5.2 xhigh 複核時查到，Claude 量了停留時間 |
 
 ### 已知的限制
 
@@ -54,6 +55,8 @@ L2 找到、發生機率極低、這次不修的問題（[D-202](decisions.md#d-
 - 💡 **先上傳檔案再引用（各家的 Files API）**：教材重複送時省流量與時間。觸發點：同一份教材一學期送超過三次的情況變常見。
 - 💡 **可快取區塊的標記**：「到這個區塊為止可快取」，規則放 `instructions` 時連做幾課省錢；不做自動快取（PDF 在最後，等於每次多付寫入）。觸發點：Cards 的直接製作上線後，連做幾課的費用明顯偏高。
 - 💡 **送出前估費用**：回範圍與假設（頁數、預期輸出量由呼叫端給），畫面寫「照牌價估計，不含免費額度」。觸發點：Cards 要在送出前顯示預估。
+  → 觸發點到了，併進 [Cards 直接呼叫 AI](../apps/Cards/docs/tasks/ai-direct.md) §3（2026-11-27）
+- 💡 **手機直接呼叫**：手機在背景會暫停 app，Gemini 要等 2～3 分鐘才回（冒煙測試 2026-11-27），中途切走就斷；手機照舊複製貼上（D-226）。觸發點：家長想在手機按一下就做，而且實測 iPhone 的 Obsidian 切到背景再回來，請求還收得完（或改成服務端代送）。
 - 💡 **`gemini-interactions` 方言**：送 `store: false`。觸發點：Google 宣布 generateContent 要停，或 Interactions 轉成正式版。
 - 💡 **區網的本機模型**（`http://192.168.x.x` 的 Ollama）：要一個呼叫端明確打開的開關。觸發點：有人要用家裡另一台電腦跑的模型。
 - 💡 **`node:https` 傳輸層**：給不開 CORS 的端點，要放 Cards 的 `src/desktop/`（D-148）。觸發點：第三步的 CORS 實測有一家不通，或要接本機網路上的模型。

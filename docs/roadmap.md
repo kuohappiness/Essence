@@ -18,7 +18,7 @@
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 入口網站與網頁版的 Cards | 討論中 | 請 Codex 回答第 7 節（D-215），雙方一致後把第 2 節談定的寫成 D-ID；同時和使用者談第 6 節 | Codex、使用者 | [入口網站討論稿](<../apps/Portal/docs/Claude Codex Discussion/2026-11-20-portal.md>) |
-| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 實作中 | 第二步冒煙測試做完（〈結果〉），Gemini 等回應標頭的修正在 PR #67，等使用者合併；接著第三步 Cards 接上，先另寫任務說明；雲端設定第 ① 件記成[補測](backlog.md#技術債) | 使用者 | [任務說明](tasks/ai-client.md) |
+| AI 連線模組（外掛直接呼叫 AI，可換廠商的共用套件） | 實作中 | 第一、二步做完（〈結果〉）；第三步照 [Cards 直接呼叫 AI](../apps/Cards/docs/tasks/ai-direct.md) 做（Cards 不切頁，切頁與轉錄放 Capture，使用者 2026-11-27），先跑探針；雲端設定第 ① 件記成[補測](backlog.md#技術債) | Claude | [任務說明](tasks/ai-client.md) |
 
 ## 等觸發點
 

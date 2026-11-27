@@ -18,7 +18,8 @@ export interface Job {
   steps: FrozenStep[];
 }
 
-type EventType = 'start' | 'step' | 'done' | 'invalid' | 'fail' | 'timeout' | 'quota' | 'interrupted' | 'stop' | 'reopen';
+/** confirmed：使用者同意用量（--confirmed），detail.spec 是當時〈評估規格〉的雜湊（rule-test-d236.md §11）；不屬於哪一份工作。 */
+type EventType = 'start' | 'step' | 'done' | 'invalid' | 'fail' | 'timeout' | 'quota' | 'interrupted' | 'stop' | 'reopen' | 'confirmed';
 export interface JobEvent { t: string; type: EventType; job?: string; attempt?: number; step?: number; detail?: Record<string, unknown> }
 
 /** 同一份工作最多試幾次（失敗、逾時、中斷都算一次）；之後停在 failed，由人決定（再試用 reopenFailed）。 */

@@ -46,6 +46,33 @@ function unitsOf(deck: string): (line: number) => Unit {
   };
 }
 
+/** 近義重複的兩行是不是兩道不同的題（rule-test-d236.md §4）：兩行都歸得到題（不是目標外的行、不是有好幾題的目標的名稱行），而且不是同一題。 */
+export function twoPrompts(deck: string, lines: readonly number[]): boolean {
+  if (lines.length !== 2) return false;
+  const unitOf = unitsOf(deck);
+  const [a, b] = lines.map(unitOf);
+  return a.target !== null && b.target !== null && a.prompt !== null && b.prompt !== null && !(a.target === b.target && a.prompt === b.prompt);
+}
+
+/** 沒講為什麼的一筆只指一題（rule-test-d236.md §17）：每一行都歸得到題（同上），而且是同一題，合併時才不會看評審的順序。 */
+export function onePrompt(deck: string, lines: readonly number[]): boolean {
+  const units = lines.map(unitsOf(deck));
+  return units.length > 0 && units.every(unit => unit.target !== null && unit.prompt !== null && unit.target === units[0].target && unit.prompt === units[0].prompt);
+}
+
+/**
+ * 近義重複併成組（§4）：共用一題的對併在一起；多餘的題＝每組（題數 − 1）加總。pairs 是每一對的兩個位置名稱（合併後的 at）。
+ */
+export function duplicateGroups(pairs: readonly (readonly string[])[]): { groups: number; extra: number } {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => { let root = x; while (parent.get(root) !== root) root = parent.get(root)!; parent.set(x, root); return root; };
+  for (const pair of pairs) for (const each of pair) if (!parent.has(each)) parent.set(each, each);
+  for (const [a, b] of pairs) if (a !== undefined && b !== undefined) parent.set(find(a), find(b));
+  const sizes = new Map<string, number>();
+  for (const each of parent.keys()) sizes.set(find(each), (sizes.get(find(each)) ?? 0) + 1);
+  return { groups: sizes.size, extra: [...sizes.values()].reduce((sum, size) => sum + size - 1, 0) };
+}
+
 /** 一筆問題指到哪裡：全部行在同一題就是那一題，在同一個目標就是那個目標，不然照第一行。 */
 function issueUnit(units: readonly Unit[]): Unit {
   const [first] = units;
@@ -62,6 +89,12 @@ function same(a: Unit, b: Unit): boolean {
 }
 
 const unitName = (unit: Unit): string => unit.target === null ? `第 ${String(unit.line)} 行` : `目標 ${String(unit.target + 1)}${unit.prompt === null ? '' : ` 第 ${String(unit.prompt + 1)} 題`}`;
+
+/**
+ * 兩筆問題算不算同一題（§3 去重），比合併定下的位置（unitName 的名稱）：就是 same，「目標 N」和「目標 N 第 M 題」算同一題。
+ * 裁定改記時用。不從行號重推，因為合併後的行號是兩位評審的聯集，推出來的位置可能比合併時看的寬（L2 第 3 輪 1）。
+ */
+export const sameAt = (a: string | undefined, b: string | undefined): boolean => a !== undefined && b !== undefined && (a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `));
 
 export interface MergedIssue { kind: Issue['kind']; at: string[]; lines: number[]; judges: string[]; rubric: string; notes: string[] }
 export interface MergedDeck {
@@ -122,21 +155,28 @@ function stemOf(prompt: Prompt): string {
   return text;
 }
 
+/** 答案在題幹裡：全是拉丁字母與數字的答案要是整個詞（前後不接字母或數字），免得 this 裡的 is、want 裡的 an 誤中；其他照字比（L2 §17 第 2 輪 P3-5）。 */
+function inStem(stem: string, answer: string): boolean {
+  if (!/^[a-z0-9][a-z0-9 '’-]*$/.test(answer)) return stem.includes(answer);
+  // 允許的字元在正規式裡都沒有特別意思，不用跳脫。
+  return new RegExp(`(?<![a-z0-9])${answer}(?![a-z0-9])`).test(stem);
+}
+
 /**
- * 程式找的洩漏候選（§5-8，照第一輪 cross.py）：同一個目標裡，一張卡的答案出現在另一張卡的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
- * 那張卡兩位評審都沒記洩漏的才算；一張卡算一筆。只比字面，換句話說的會漏；另列一個數，不進門檻。
+ * 程式找的洩漏候選（§5-8）：一題的答案原樣出現在自己的題幹（不分大小寫、兩個字以上才比，免得單字母亂中）。
+ * 只比同一題（rule-test-d236.md §18）：別一題的題幹寫到這個答案不算洩漏，第一輪 cross.py 比的是別一題，不再照它。
+ * 評審在那一題（或它的目標）記過洩漏的不列；一題算一筆。只比字面，換句話說的會漏；同一張卡同時顯示的好幾格之間也不比，交給評審。另列一個數，不進門檻。
  */
 export function leakCandidates(deck: string, issues: readonly MergedIssue[]): string[] {
-  const recorded = new Set(issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at));
-  const found = new Map<string, number[]>();
+  const recorded = issues.filter(issue => issue.kind === '洩漏').flatMap(issue => issue.at);
+  const found: string[] = [];
   targetsOf(deck).forEach(({ target }, t) => {
-    const answers = target.prompts.map(prompt => answersOf(prompt).map(each => each.toLowerCase()).filter(each => [...each].length >= 2));
-    target.prompts.forEach((prompt, to) => {
+    target.prompts.forEach((prompt, p) => {
       const stem = stemOf(prompt).toLowerCase();
-      const from = answers.flatMap((list, i) => i !== to && list.some(answer => stem.includes(answer)) ? [i + 1] : []);
-      const at = unitName({ target: t, prompt: to, line: prompt.line + 1 });
-      if (from.length && !recorded.has(at) && !recorded.has(unitName({ target: t, prompt: null, line: target.line + 1 }))) found.set(at, from);
+      const leaked = answersOf(prompt).some(answer => [...answer].length >= 2 && inStem(stem, answer.toLowerCase()));
+      const at = unitName({ target: t, prompt: p, line: prompt.line + 1 });
+      if (leaked && !recorded.some(each => sameAt(each, at))) found.push(at);
     });
   });
-  return [...found].map(([at, from]) => `${at}的題幹有第 ${from.join('、')} 題的答案`);
+  return found.map(at => `${at}的題幹有自己的答案`);
 }

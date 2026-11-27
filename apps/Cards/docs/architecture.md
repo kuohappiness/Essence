@@ -248,7 +248,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 - AI 在程式裡就是一次呼叫：送出「教材 ＋ 學生年級 ＋ 製卡規則」，收回用出題語法寫成的學習目標與題目，存成草稿，由家長修改後啟用。AI 負責三件事：從教材製卡、分析錯題、產生英文記憶錨點。
 - **直接呼叫只走 API 金鑰，尚未實作**（[D-231](../../../docs/decisions.md#d-231-外掛直接呼叫-ai-只走-api-金鑰取消訂閱接法)）：家長在設定頁選服務、貼上自己的金鑰，Cards 送出、收回、檢查並存草稿；用訂閱登入、背景啟動 Claude Code 或 Codex CLI 的接法已取消（原本 [D-126](../../../docs/decisions.md#d-126-訂閱優先的-ai-製卡與側欄修改) 第 1 點）。
   - 交給其他 AI／匯入結果：保留複製貼上與手動匯入的共通備援；匯入共用檢查、ID、快照與草稿流程。
-  - API 直連照 D-059、D-072、D-085、[D-232](../../../docs/decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)：連線用最上層的共用套件 `packages/ai-client/`，Cards 經自己的轉接檔、用相對路徑 import 套件的入口檔；做法見 [AI 連線模組的任務說明](../../../docs/tasks/ai-client.md)。Capture、Mindboard 開工時再評估接法。
+  - API 直連照 D-059、D-072、D-085、[D-232](../../../docs/decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)：連線用最上層的共用套件 `packages/ai-client/`，Cards 經自己的轉接檔、用相對路徑 import 套件的入口檔；連線用 `fetch`，回覆一段一段收、可以取消，某一家擋 CORS 時只有那一家改走 `requestUrl`（[D-241](../../../docs/decisions.md#d-241-外掛直接呼叫-ai-用-fetch-連線)）；做法見 [AI 連線模組的任務說明](../../../docs/tasks/ai-client.md)。Capture、Mindboard 開工時再評估接法。
 - **固定生成與自由修改分開**：製作、加深、錯題分析由 Cards 按鈕送出一次請求；個別修改在 Obsidian 筆記，可用 Claudian 側欄。Cards 不另做聊天或修改畫面，也不寫 Claudian 專用接點；只提供從 syntax.md 產生的寫法 skill、結構檢查及既有卡組指令。偵測到 Claudian 時提供設定開關，是否讀取 skill 與差異接受流程仍待驗證。家長已核對該次差異並接受，不再重複審核；側欄權限由家長設定，背景生成的「不開工具」不套用到自由對話（D-126）。
 - **ID 與進度**：筆記變動時檢查有紀錄的 ID 消失、同篇 ID 重複；只檢查結構，不判斷能力是否改變。已複習目標拆分／合併後，舊紀錄保留，新目標配新 ID 並從頭開始，只提示不要求家長選承接關係（D-126，規劃中）。
 - ✅ API 金鑰只存在電腦本機、vault／repo 以外：不經 iCloud 同步到手機或進 Git；不宣稱能與其他外掛隔離（[D-003](../../../docs/decisions.md#d-003-公開範圍)、D-126、D-231）。

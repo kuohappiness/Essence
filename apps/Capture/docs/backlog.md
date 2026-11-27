@@ -14,6 +14,7 @@ Capture 的定位見 [D-076](../../../docs/decisions.md#d-076-capture-是知識�
 |---|---|
 | PDF 與圖片忠實轉錄成教材庫 | v1 範圍（[D-076](../../../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；雛形是試作場的 `experiments/t4/`（D-076 補充 2026-10-13） |
 | Capture 開工前先找現成專案（使用者 2026-10-14 提出；2026-10-28 決定放 v1，[D-130](../../../docs/decisions.md#d-130-任務分成-v1-與第二階段) 補充） | Capture 照 D-111 開工時先做：到 GitHub 搜尋現成、可以參考的專案（例如 PDF、影片、網頁轉 Markdown 的工具或 Obsidian 外掛），評估它們的做法與缺點，再優化成最好的版本；不從零開始，也不直接照搬 |
+| 課本切頁送 AI 轉錄（使用者 2026-11-27：「切PDF轉錄是會放在capture裡面做」） | 來自 [Cards 直接呼叫 AI](../../Cards/docs/tasks/ai-direct.md#使用者的決定)〈使用者的決定〉第 2 點。教材怎麼送給 AI，使用者在那邊選過「切出那幾頁成一份小 PDF」：文字層和頁面圖都在，只付那幾頁的錢；轉錄時照這個做。Obsidian 1.15.1 內建的 pdf.js 5.3.34 不能切頁（沒有 `extractPages`），要加 `pdf-lib`（1.17.1，壓縮後約 432 KB）或有人維護的分支，量法與數字見那份的〈結果〉。呼叫 AI 用共用套件 `packages/ai-client`（[D-232](../../../docs/decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)） |
 | 在同一個 repo 的 `apps/Capture/` 開發（使用者 2026-11-17） | 寫第一行程式前照 [D-208](../../../docs/decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第 5 點建 `apps/Capture/`，這份規畫搬進 `apps/Capture/docs/`；第一個需要共同規格的任務把轉錄稿格式搬到最上層 `docs/`（第 6 點）；現有的 `Essence-Capture` repo 之後當公開 repo |
 
 ### 待決問題
