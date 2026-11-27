@@ -38,7 +38,7 @@ git log <整理時的 commit>.. -- AGENTS.md docs/agents/workflow.md docs/agents
 3. 確認 `.githooks/` 底下的檔在 git 裡是可執行的模式（`git ls-files -s .githooks` 每一行開頭是 `100755`）；不是就 `git update-index --chmod=+x .githooks/*`。
 4. 已經有內容的 repo：不覆蓋既有的檔，逐檔比對後併入。
 
-複製完，請新專案的第一個 Claude session 照 `SETUP.md` 做。
+複製完，請新專案的第一個 Claude session 照 `SETUP.md` 做：第一個 commit 怎麼推、八個問題、三步設定與核對都寫在那裡。AI 協作者的 hook 不准一次 stage 全部，第一個 commit 由 AI 做時逐一寫出路徑：`git add -- AGENTS.md CLAUDE.md SETUP.md docs tools .claude .githooks .github .gitignore .gitattributes`。
 
 ## 開專案時貼到 Claude 專案設定的文字
 

@@ -1,6 +1,6 @@
 # 新專案的初始架構：起步包與成長包（給 Claude，雲端執行）
 
-狀態：實作中｜下一步：第 1 批 PR 等使用者同意合併；接著做第 2 批（防線）｜等誰：使用者、Claude
+狀態：實作中｜下一步：第 2 批（防線）PR 等使用者同意合併；接著做第 3 批（成長包）｜等誰：使用者、Claude
 
 來自：[D-247](../decisions.md#d-247-新專案的初始架構分起步包與成長包防線第-0-天就帶)
 
@@ -228,5 +228,16 @@ Essence 這邊：
 - **〈9〉第 2 件（文件檢查會不會把模板的 roadmap、backlog 當成 Essence 的）**：不會。文件檢查、狀態板同步、進度白板認 roadmap、backlog、決策紀錄與狀態檔，都是從 repo 根目錄或 `apps/<軟體>/` 起算的固定路徑；模板的 Markdown 只查連結（實測放一個壞連結會被擋）。skill 一致性檢查只看根目錄的 `.claude/skills/`、`.agents/skills/`。都不用排除。lint、型別檢查與 knip 的範圍是 `tools/`，模板還沒有程式，第 2 批加 `.mjs` 時再確認。
 - **驗收**：第 1 項（掃字詞與決定編號，出處那一行是唯一例外）、第 7 項（授權全文和 Essence 那份一樣）由 `project-starter.test.ts` 守；第 9 項由分派表的測試（模板裡的 hook、CI、程式都不觸發任何軟體）與共用檢查守。
 - **分派的取捨**：commit 時「相關測試」只選寫到改動路徑全名的測試，模板的測試寫的是資料夾，所以只改模板的 commit 不跑它，CI 跑。要 commit 時也跑，得改分派的找法（任務說明說改分派邏輯要停下來做 L2），好處不大，沒做。
+
+### 第 2 批：防線（2026-11-27）
+
+- **做了什麼**：`files/` 加四支程式（`dot-claude/hooks/block-dangerous-git.mjs`、`dot-claude/hooks/cloud-setup.mjs`、`tools/check.mjs`、`tools/in-flight.mjs`）、`.githooks/pre-commit`（以 100755 進 repo）、`.github/workflows/check.yml`（只在 push 跑，最後一關 `gate`）、`.github/ruleset-main.json`、`dot-claude/settings.json`、`.gitignore`、`.gitattributes`、`SETUP.md`。測試 `tools/tests/project-starter-guards.test.ts`。
+- **block-dangerous-git**：規則一字不改，只換掉註解與訊息裡的決定編號；測試拿 24 個指令比兩支的結束碼，要一樣。
+- **cloud-setup**：拿掉找 Node 24、補 git tag、`npm ci` 三段；設 `core.hooksPath` 與 `--setup-script` 接 hook 照 Essence 那支。測試：本機不做事；雲端設好 hooksPath；接 hook 後重跑結果一樣、使用者設定的其他東西不動；抄過去的指令在 repo 的上一層會擋 force push，在 repo 裡直接結束；設定壞掉照樣結束在 0。
+- **check.mjs**：〈3-3〉的四件事。程式自己寫到的空格記號拆成兩段，才不會數到自己；金鑰的正規式本身不會被自己或 Essence 的 secretlint 認成金鑰（已跑過）。`--staged` 讀索引的內容，金鑰只掃這次改到的檔，空格、連結與 hook 權限看整個索引。
+- **in-flight.mjs**：決定編號改讀 `docs/decisions/D-<數字>.md`：`origin/main` 用 `git ls-tree`，PR 只算新增（`--diff-filter=A`）的檔，改到既有的決定不算。分組一律看到第二層。測試照 Essence 的假 GitHub（bare repo、insteadOf、gh 替身）跑：下一個編號、只看指定路徑、沒有共同起點時不給編號、gh 不能用。
+- **驗收第 2 項**：測試把 `files/` 複製進暫存資料夾、`dot-claude/` 改名、`git init`、全部 stage，`check.mjs` 通過；假金鑰（執行時才組出來）、`.env` 檔、壞連結、沒有執行權限的 hook、刪掉 `SETUP.md` 但留著空格，都被擋下，訊息有檔名與行號。另外設好 `core.hooksPath` 後真的 commit 一次壞連結，被 pre-commit 擋下。Node 22 手動跑過 `check.mjs` 與另外兩支的語法檢查（雲端沒有 Node 20）。
+- **分派**：測試檔開頭寫了這幾支程式的路徑全名，只改模板程式的 commit，pre-commit 也會跑它（照 Essence 的 block-dangerous-git 測試的做法），不必改分派的找法。
+- **第一個 commit 的 stage**：模板自己的 hook 擋一次 stage 全部，AI 做第一個 commit 時逐一寫出路徑；`SETUP.md` 與使用說明都寫了那一行。
 
 延後的測試：（收尾時填）
