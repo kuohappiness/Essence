@@ -1,7 +1,7 @@
-import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
-import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, directJob, inspectReply, NEWER_SAVE, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode, withCode } from '../core/ai/index.ts';
+import type { CardForm, CardJob, DeckStop, DirectEvidence, DirectJob, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck, SentFile } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
-import { directRequest, materialProblem, modelOf, providerProblem, sendDirect, sendingLine } from '../core/connect/index.ts';
+import { directRequest, evidenceOf, materialProblem, modelOf, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
 import type { AiClient, Connection, DirectFailure, GenerateResult, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
@@ -42,7 +42,7 @@ export interface AiCardsDeps {
 /** 直接製作送出之前就擋下（沒有建工作、沒有送出）的原因，或送出之後的結果（§4、§6）。 */
 export type DirectOutcome =
   | { kind: 'blocked'; message: string }
-  | { kind: 'received'; job: CardJob; reply: string; result: GenerateResult }
+  | { kind: 'received'; job: CardJob; reply: string; evidence: DirectEvidence }
   | { kind: 'failed'; job: CardJob; failure: DirectFailure; partial: string | null };
 /** 沒有可用的金鑰時「直接製作」不能按（§2，tasks/ai-direct.md）：照 keyOf 的原因說。 */
 const NO_KEY: Record<Exclude<KeyLookup, { ok: true }>['why'], string> = {
@@ -116,7 +116,7 @@ export function createAiCards(deps: AiCardsDeps) {
   function outcome(job: CardJob, result: PublishResult): Outcome {
     switch (result.kind) {
       case 'done': return result;
-      case 'blocked': return { kind: 'stop', message: BLOCKED[result.reason as keyof typeof BLOCKED] ?? '先不存；等一下再按「繼續」' };
+      case 'blocked': return { kind: 'stop', message: BLOCKED[result.reason as keyof typeof BLOCKED] ?? (result.reason === NEWER_SAVE ? NEWER_SAVE : '先不存；等一下再按「繼續」') };
       case 'name': return { kind: 'stop', message: `「${fileName(result.path)}」這個檔名一直被占用（可能正在同步），這次沒有建；等一下再按「繼續」` };
       case 'failed':
         deps.onError(result.error);
@@ -213,18 +213,35 @@ export function createAiCards(deps: AiCardsDeps) {
     if (!model) return { error: '設定頁「AI 連線」還沒填模型。' };
     return { connection, provider, model };
   }
-  /** 送出一次（§4 第 2～5 步）：成功交回整段；不成功交給錯誤紀錄（取消的不記，§8）。 */
+  /**
+   * 直接製作的狀態存進這一份工作（§7 `api`）：送出前、收到、失敗各存一次。存不進去交給錯誤紀錄、照樣往下（送出前的那一次除外，由呼叫端擋），
+   * 交回存好（或存不進去時在手上）的那一份。
+   */
+  function mark(job: CardJob, api: DirectJob): CardJob {
+    const next: CardJob = { ...job, api };
+    try { put(next); } catch (error) { deps.onError(error); }
+    return next;
+  }
+  const at = (): string => { const now = deps.now(); return stamp(now.ms, now.offset); };
+  /** 送出一次（§4 第 2～5 步）：成功交回整段與證據、存進工作（F2）；不成功交給錯誤紀錄（取消的不記，§8）。 */
   async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
     const direct = deps.direct!;
     const controller = new AbortController();
+    const files: SentFile[] = sentFiles(materials);
     sending = controller;
     try {
       const sent = await sendDirect(direct.client, directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} }));
-      if (sent.ok) return { kind: 'received', job, reply: sent.result.text, result: sent.result };
+      if (sent.ok) {
+        const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
+        const evidence = evidenceOf(sent.result, files, reasoning, deps.now());
+        const saved = mark(current(job) ?? job, { state: 'received', kind: null, at: at(), files, received: evidence });
+        return { kind: 'received', job: saved, reply: evidence.text, evidence };
+      }
       if (sent.failure.kind !== 'cancelled') {
         try { direct.onFailure?.(sent.failure, sent.error, sent.result); } catch (error) { deps.onError(error); }
       }
-      return { kind: 'failed', job, failure: sent.failure, partial: sent.partial };
+      const saved = mark(current(job) ?? job, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: null });
+      return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };
     } finally {
       if (sending === controller) sending = null;
     }
@@ -323,25 +340,39 @@ export function createAiCards(deps: AiCardsDeps) {
       if ('error' in made) return { kind: 'blocked', message: made.error };
       const limit = providerProblem(target.provider, target.model, materials, made.prompt.text.length);
       if (limit) return { kind: 'blocked', message: limit };
-      try { put(made.job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
-      remember(made.job);
-      kept.set(made.job.id, [...materials]);
-      return send(made.job, made.prompt.text, materials, target, key.key, onProgress);
+      // 先存再送（§4 第 1 步）：送到一半被關掉，重開看得到「上一次沒有收到回覆」（§6）。
+      const job: CardJob = { ...made.job, api: { state: 'sending', kind: null, at: made.job.copiedAt, files: sentFiles(materials), received: null } };
+      try { put(job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+      remember(job);
+      kept.set(job.id, [...materials]);
+      return send(job, made.prompt.text, materials, target, key.key, onProgress);
     },
-    /** 重送（§6）：同一份提示與教材，不重組；這次開著 Obsidian 的期間記得教材。工作已經結束或放棄、教材不在了是 blocked。 */
-    async resend(job: CardJob, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+    /** 這次開著 Obsidian 的期間記得這一份的教材檔（重送不用重選，§6）。 */
+    keeps: (job: CardJob): boolean => kept.has(job.id),
+    /**
+     * 重送（§6）：同一份提示，不重組；教材用這次記得的，重開過 Obsidian 的由家長重選後交進來（picked，格式查核 F15）。
+     * 工作已經結束、開始存了，或教材不在了是 blocked。
+     */
+    async resend(job: CardJob, onProgress?: (event: ProgressEvent) => void, picked?: readonly Material[]): Promise<DirectOutcome> {
       const direct = deps.direct;
       if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
       const latest = current(job);
       if (!latest || latest.save) return { kind: 'blocked', message: '這次製卡已經結束或開始存了，不能重送' };
-      const materials = kept.get(latest.id);
-      if (!materials) return { kind: 'blocked', message: '上次選的教材檔已經不在了（重開過 Obsidian），請改用複製貼上，或做新的一課' };
+      const materials = picked ? [...picked] : kept.get(latest.id);
+      if (!materials) return { kind: 'blocked', message: '上次選的教材檔已經不在了（重開過 Obsidian），請重新選一次，或改用複製貼上' };
+      const problem = materialProblem(materials);
+      if (problem) return { kind: 'blocked', message: problem };
       const target = endpoint(direct);
       if ('error' in target) return { kind: 'blocked', message: target.error };
       const key = direct.key();
       if (!key.ok) return { kind: 'blocked', message: NO_KEY[key.why] };
-      return send(latest, latest.parts.map(part => part.text).join('\n\n'), materials, target, key.key, onProgress);
+      const limit = providerProblem(target.provider, target.model, materials, latest.parts.reduce((sum, part) => sum + part.text.length, 0));
+      if (limit) return { kind: 'blocked', message: limit };
+      const sendingNow: CardJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: null } };
+      try { put(sendingNow); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+      kept.set(latest.id, materials);
+      return send(sendingNow, latest.parts.map(part => part.text).join('\n\n'), materials, target, key.key, onProgress);
     },
     /** 取消送出中的那一個（§6）：關掉製卡視窗之前問過、停用外掛時。 */
     cancel(): void { sending?.abort(); },
@@ -360,8 +391,9 @@ export function createAiCards(deps: AiCardsDeps) {
     /**
      * 存成草稿（§5 第 1、2 步之後接著做）。同一個工作已經用另一份回覆存過一部分就停下；用同一份就從停下的地方接著做。
      * shown：家長看到的檢查結果（inspectionKey）；還沒開始存、重新檢查的結果和它不同就不存（D-226 第 5 點）。畫面一定給；沒給（測試）時不比。
+     * received：框裡的是直接製作收到的（家長可能改過字）；那一次的證據凍結進恢復資料，快照寫 `接法: API`（tasks/ai-direct.md §7，F1）。改用複製貼上的不給。
      */
-    save: (job: CardJob, reply: string, service: string | null, shown?: string): Promise<Outcome> => exclusive(job.id, async () => {
+    save: (job: CardJob, reply: string, service: string | null, shown?: string, received = false): Promise<Outcome> => exclusive(job.id, async () => {
       const latest = current(job);
       if (!latest) return { kind: 'stop', message: '找不到這次複製的提示，可能已經結束了或放太久被清掉了；請重新複製一次' } satisfies Outcome;
       if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' } satisfies Outcome;
@@ -382,7 +414,8 @@ export function createAiCards(deps: AiCardsDeps) {
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
       const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10), deps.phone === true ? latest.id : null);
-      const saved = beginSave(latest, reply, service, planned, started);
+      const evidence = received ? directJob(latest)?.received ?? undefined : undefined;
+      const saved = beginSave(latest, reply, evidence ? null : service, planned, started, evidence);
       // 第 2 步：恢復資料先存進這台電腦，存不進去就不碰 vault。
       try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' } satisfies Outcome; }
       return run(saved);

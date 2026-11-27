@@ -1,5 +1,7 @@
 // 直接製作（apps/Cards/docs/tasks/ai-direct.md §4～§6）：教材的檢查、組請求、送出前寫給家長看的那一行、這一家的上限、送出，
 // 與每一種結果給家長看的一句話和下一步。不碰 Obsidian：選檔、讀 PDF 頁數、拿金鑰由呼叫端做好交進來。
+import { sha256Hex, stamp } from '../ai/index.ts';
+import type { DirectEvidence, SentFile } from '../ai/index.ts';
 import { describeAiError, isAiError } from './client.ts';
 import type { AiClient, AiErrorKind, GenerateRequest, GenerateResult, InputKind, ProgressEvent, ProviderSpec } from './client.ts';
 import { modelOf } from './connection.ts';
@@ -12,8 +14,15 @@ export interface Material {
   data: Uint8Array;
   /** PDF 的總頁數；讀不出來（加密、壞檔）是 null。照片不用。 */
   pages: number | null;
+  /** 這一份位元組的 SHA-256（快照的 `教材檔`，§7）：選檔時算一次。 */
+  sha256: string;
 }
 export type MaterialType = 'application/pdf' | 'image/jpeg' | 'image/png';
+
+/** 快照與工作記的教材檔（§7 `教材檔`）：照送出的順序，PDF 記頁數、照片記 null；檔名只寫進 vault，不送給服務（F16）。 */
+export function sentFiles(materials: readonly Material[]): SentFile[] {
+  return materials.map(material => ({ sha256: material.sha256, pages: material.mediaType === 'application/pdf' ? material.pages : null, name: material.name }));
+}
 
 /** 一次最多（§5）：一課通常 10～20 頁；也擋住整本送出。 */
 const MAX_PDF_PAGES = 30;
@@ -116,10 +125,10 @@ function dollars(amount: number): string {
   return amount >= 0.01 ? amount.toFixed(2) : amount.toPrecision(1);
 }
 
-/** 收完之後畫面最後一行（§4 第 6 步）：實際的用量與費用；服務回報的費用照它寫、不寫「估計」。 */
-export function usageLine(result: Pick<GenerateResult, 'usage' | 'cost'>): string {
-  const { inputTokens, outputTokens } = result.usage;
-  const used = [inputTokens === null ? null : `輸入 ${tokens(inputTokens)}`, outputTokens === null ? null : `輸出 ${tokens(outputTokens)}`].filter(each => each !== null);
+/** 收完之後畫面最後一行（§4 第 6 步）：實際的用量與費用；服務回報的費用照它寫、不寫「估計」。照存下的證據寫，重開 Obsidian 之後也一樣。 */
+export function usageLine(result: Pick<DirectEvidence, 'usage' | 'cost'>): string {
+  const { input, output } = result.usage;
+  const used = [input === null ? null : `輸入 ${tokens(input)}`, output === null ? null : `輸出 ${tokens(output)}`].filter(each => each !== null);
   const head = used.length ? `這次用了${used.join('、')} token` : '服務沒有回報用量';
   const cost = result.cost ? `，約 US$${result.cost.amount > 0 ? result.cost.amount.toPrecision(2) : '0'}（${result.cost.estimated ? '照牌價估計' : '服務回報'}）` : '';
   return `${head}${cost}`;
@@ -129,6 +138,26 @@ function tokens(n: number): string {
   if (n >= 10_000) return `${trim((n / 10_000).toFixed(1))} 萬`;
   if (n >= 1_000) return `${trim((n / 1_000).toFixed(1))} 千`;
   return String(n);
+}
+
+/** 套件回報的 token 數：不是非負整數的當成沒回報（存進工作之後要讀得回來，F12）。 */
+const tokenCount = (value: number | null): number | null => value !== null && Number.isSafeInteger(value) && value >= 0 ? value : null;
+
+/**
+ * 成功那一次的證據（§7）：files 是這一次送出的教材檔，reasoning 是設定頁的推理等級（照服務的預設是 null），now 是收到的當下（取時區）。
+ * 收到的時刻用套件的 trace.finishedAt；讀不出來才用 now。收到的整段用 result.text（套件遮過金鑰的整段，不自己累加串流的片段）。
+ */
+export function evidenceOf(result: GenerateResult, files: readonly SentFile[], reasoning: string | null, now: { ms: number; offset: number }): DirectEvidence {
+  const { trace, usage, cost } = result;
+  const finished = Date.parse(trace.finishedAt);
+  return {
+    provider: trace.provider, requestedModel: trace.requestedModel, model: trace.resolvedModel, reasoning, reasoningSent: trace.reasoningSent,
+    receivedAt: stamp(Number.isFinite(finished) ? finished : now.ms, now.offset),
+    usage: { input: tokenCount(usage.inputTokens), cacheRead: tokenCount(usage.cachedInputTokens), cacheWrite: tokenCount(usage.cacheWriteInputTokens), output: tokenCount(usage.outputTokens), reasoning: tokenCount(usage.reasoningTokens) },
+    cost: cost && Number.isFinite(cost.amount) && cost.amount >= 0 ? { amount: cost.amount, estimated: cost.estimated, asOf: cost.estimated ? cost.pricesAsOf : null } : null,
+    requestId: trace.requestId, responseId: trace.responseId,
+    files: files.map(file => ({ ...file })), text: result.text, sha256: sha256Hex(result.text),
+  };
 }
 
 /**

@@ -10,8 +10,8 @@ import type { Material, ProviderSpec } from '../src/core/connect/index.ts';
 const FAKE_KEY = 'AIzaSy-cards-direct-test-2222';
 const providers = cardsClient().providers();
 const provider = (id: string): ProviderSpec => { const found = providers.find(p => p.id === id); assert.ok(found, id); return found; };
-const pdf = (pages: number | null, name = '英文 L3.pdf', bytes = 10): Material => ({ name, mediaType: 'application/pdf', data: new Uint8Array(bytes).fill(1), pages });
-const photo = (name = 'p40.jpg', bytes = 10): Material => ({ name, mediaType: 'image/jpeg', data: new Uint8Array(bytes).fill(2), pages: null });
+const pdf = (pages: number | null, name = '英文 L3.pdf', bytes = 10): Material => ({ name, mediaType: 'application/pdf', data: new Uint8Array(bytes).fill(1), pages, sha256: 'a'.repeat(64) });
+const photo = (name = 'p40.jpg', bytes = 10): Material => ({ name, mediaType: 'image/jpeg', data: new Uint8Array(bytes).fill(2), pages: null, sha256: 'b'.repeat(64) });
 const google = readConnection({ provider: 'google', models: { google: 'gemini-3.8-flash' }, reasoning: 'default', secrets: { google: 'my-key' } }, providers);
 
 void test('§5 教材的種類：只收 PDF、JPG、PNG（副檔名不分大小寫），其他與沒有副檔名的不收', () => {
@@ -87,11 +87,11 @@ void test('§4 送出前的一行：教材、字數、模型與估計的費用�
 });
 
 void test('§4 收完的一行：用量寫成萬、千，費用分照牌價估計與服務回報；服務沒回報用量時照實寫', () => {
-  const usage = { inputTokens: 18_000, outputTokens: 4_000, cachedInputTokens: null, cacheWriteInputTokens: null, reasoningTokens: null };
-  assert.equal(usageLine({ usage, cost: { amount: 0.0121, currency: 'USD', estimated: true, pricesAsOf: '2026-11-20' } }), '這次用了輸入 1.8 萬、輸出 4 千 token，約 US$0.012（照牌價估計）');
-  assert.equal(usageLine({ usage: { ...usage, inputTokens: 850, outputTokens: 12_345 }, cost: { amount: 0.0019, currency: 'USD', estimated: false, pricesAsOf: null } }), '這次用了輸入 850、輸出 1.2 萬 token，約 US$0.0019（服務回報）');
-  assert.equal(usageLine({ usage: { ...usage, inputTokens: null, outputTokens: null }, cost: null }), '服務沒有回報用量');
-  assert.equal(usageLine({ usage: { ...usage, inputTokens: null }, cost: { amount: 0, currency: 'USD', estimated: false, pricesAsOf: null } }), '這次用了輸出 4 千 token，約 US$0（服務回報）');
+  const usage = { input: 18_000, output: 4_000, cacheRead: null, cacheWrite: null, reasoning: null };
+  assert.equal(usageLine({ usage, cost: { amount: 0.0121, estimated: true, asOf: '2026-11-20' } }), '這次用了輸入 1.8 萬、輸出 4 千 token，約 US$0.012（照牌價估計）');
+  assert.equal(usageLine({ usage: { ...usage, input: 850, output: 12_345 }, cost: { amount: 0.0019, estimated: false, asOf: null } }), '這次用了輸入 850、輸出 1.2 萬 token，約 US$0.0019（服務回報）');
+  assert.equal(usageLine({ usage: { ...usage, input: null, output: null }, cost: null }), '服務沒有回報用量');
+  assert.equal(usageLine({ usage: { ...usage, input: null }, cost: { amount: 0, estimated: false, asOf: null } }), '這次用了輸出 4 千 token，約 US$0（服務回報）');
 });
 
 const geminiEvents = (text: string, finishReason: string): MockReply => ({

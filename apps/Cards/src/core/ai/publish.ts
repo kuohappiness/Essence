@@ -2,7 +2,8 @@ import { stringify } from 'yaml';
 import { blockIds } from '../deck/index.ts';
 import { freeName, rawPath } from './draft.ts';
 import type { PlannedDraft } from './draft.ts';
-import type { CardJob, SavedDeck, SaveState } from './job.ts';
+import { directEvidence } from './job.ts';
+import type { CardJob, DirectEvidence, SavedDeck, SaveState } from './job.ts';
 import { sha256Hex, stamp } from './prompt.ts';
 
 // 存草稿與快照的順序（tasks/ai-cards-mvp.md §5）：先存恢復資料 → 原文 → 一篇一篇建卡組 → 準備發布 → 發布（快照寫成＝成功）→ 清理。
@@ -53,14 +54,59 @@ export type PublishResult =
   | { kind: 'name'; path: string }
   | DeckStop;
 
-/** 存草稿的第 2 步：恢復資料。reply 是輸入框交出的文字。 */
-export function beginSave(job: CardJob, reply: string, service: string | null, planned: PlannedDraft, startedAt: string): CardJob {
+/**
+ * 存草稿的第 2 步：恢復資料。reply 是輸入框交出的文字。
+ * api 是直接製作收到的那一次的證據（tasks/ai-direct.md §7，F1）：在這裡凍結，快照只看這一份；改用複製貼上貼回的不給。
+ */
+export function beginSave(job: CardJob, reply: string, service: string | null, planned: PlannedDraft, startedAt: string, api?: DirectEvidence): CardJob {
   const save: SaveState = {
     reply, replySha: sha256Hex(reply), service, startedAt,
     decks: planned.decks.map(deck => ({ path: deck.path, base: deck.base, text: deck.text, sha256: deck.sha256, ids: deck.ids, stage: 'pending', skipped: false })),
     snapshotPath: planned.snapshotPath, snapshotBase: planned.snapshotBase, snapshotBody: planned.snapshotBody, edits: planned.edits, published: null,
+    ...api ? { api } : {},
   };
   return { ...job, save };
+}
+
+/** 直接製作的證據讀不懂（較新的版本存的，F12）：不寫快照、工作留著。 */
+export const NEWER_SAVE = '這份草稿是較新的版本存的，請更新外掛';
+
+/** 寫進屬性區的外來字串（檔名、服務回傳的模型與編號，F11）：一律單行，換行與控制字元換成一個空白，最多 200 字。 */
+function oneLine(text: string): string {
+  return Array.from(text.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ')).slice(0, 200).join('');
+}
+/** 「未指定」「high」：推理等級照套件的寫法（F10）。 */
+const LEVEL_UNSET = '未指定';
+
+/**
+ * 直接製作的快照欄（§7，欄位順序照格式查核 F17）：程式知道的一律寫；服務給的拿不到就不寫，不寫 0 也不寫「不知道」；`模型` 例外寫「未回報」。
+ * 寫在 `回覆原文` 之後到 `程式改動` 之前；`教材說明` 由呼叫端照原本的位置放。
+ */
+function apiFields(job: CardJob, save: SaveState, api: DirectEvidence): { early: Record<string, unknown>; files: Record<string, unknown>; late: Record<string, unknown> } {
+  const early: Record<string, unknown> = {};
+  if (api.sha256 !== save.replySha) early['收到的回覆'] = api.sha256;
+  early['送出時間'] = job.copiedAt;
+  early['收到時間'] = api.receivedAt;
+  const files: Record<string, unknown> = {};
+  if (api.files.length) files['教材檔'] = api.files.map(file => `${file.sha256} ${file.pages === null ? '圖' : `${String(file.pages)}頁`} ${oneLine(file.name)}`);
+  const late: Record<string, unknown> = {
+    接法: 'API',
+    服務: api.provider,
+    要求的模型: oneLine(api.requestedModel),
+    模型: api.model === null ? '未回報' : oneLine(api.model),
+    推理等級: api.reasoning ?? LEVEL_UNSET,
+  };
+  if (api.reasoningSent !== null) late['推理參數'] = typeof api.reasoningSent === 'string' ? oneLine(api.reasoningSent) : api.reasoningSent;
+  const usage: [string, number | null][] = [['輸入用量', api.usage.input], ['快取讀取用量', api.usage.cacheRead], ['快取寫入用量', api.usage.cacheWrite], ['輸出用量', api.usage.output], ['推理用量', api.usage.reasoning]];
+  for (const [name, value] of usage) if (value !== null) late[name] = value;
+  if (api.cost) {
+    late['費用'] = api.cost.amount;
+    late['費用來源'] = api.cost.estimated ? '照牌價估計' : '服務回報';
+    if (api.cost.estimated && api.cost.asOf) late['牌價日期'] = oneLine(api.cost.asOf);
+  }
+  if (api.requestId !== null) late['請求編號'] = oneLine(api.requestId);
+  if (api.responseId !== null) late['回應編號'] = oneLine(api.responseId);
+  return { early, files, late };
 }
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
@@ -81,6 +127,9 @@ export async function publishedElsewhere(save: SaveState, io: Pick<PublishIo, 'r
 function snapshotText(job: CardJob, time: string): string {
   const save = job.save!;
   const rules = job.parts.slice(0, -1);
+  // 讀不懂的證據在 publish 一開始就擋下（NEWER_SAVE），走到這裡的不是 null 就是讀得懂的。
+  const api = save.api === undefined ? null : directEvidence(save.api);
+  const extra = api ? apiFields(job, save, api) : null;
   const fields: Record<string, unknown> = {
     日期: time.slice(0, 10),
     時間: time,
@@ -91,14 +140,17 @@ function snapshotText(job: CardJob, time: string): string {
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,
     回覆原文: save.replySha,
-    複製時間: job.copiedAt,
+    ...extra ? extra.early : { 複製時間: job.copiedAt },
     已有目標: job.existing.length,
     記穩目標: '無（初次製卡）',
   };
   if (job.form.material.trim()) fields['教材說明'] = job.form.material.trim();
-  fields['接法'] = '複製貼上';
-  if (save.service) fields['服務'] = save.service;
-  fields['模型'] = '未記錄';
+  if (extra) Object.assign(fields, extra.files, extra.late);
+  else {
+    fields['接法'] = '複製貼上';
+    if (save.service) fields['服務'] = save.service;
+    fields['模型'] = '未記錄';
+  }
   if (save.edits.length) fields['程式改動'] = save.edits;
   const body = save.snapshotBody.endsWith('\n') ? save.snapshotBody : save.snapshotBody + '\n';
   return '---\n' + stringify(fields, { lineWidth: 0 }) + '---\n\n' + body;
@@ -159,11 +211,15 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   };
   const early = await already();
   if (early) return early;
+  // 直接製作的證據讀不懂（F12）：快照會記錯，整份停下，工作留著，等外掛更新再接著存。
+  if (job.save?.api !== undefined && directEvidence(job.save.api) === null) return { kind: 'blocked', reason: NEWER_SAVE };
   /** 這一輪核對每一篇時讀到的全文（照 index）：快照寫入的當下要一字不差（末次核對，D-226 第 5 點）。 */
   const seenText = new Map<number, string>();
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。
-  for (const text of [...job.parts.map(part => part.text), save().reply]) {
+  // 直接製作收到的整段和輸入框交出的不同時（家長改了字），收到的那一段也存（tasks/ai-direct.md §7，F3）。
+  const received = save().api === undefined ? null : directEvidence(save().api);
+  for (const text of [...job.parts.map(part => part.text), save().reply, ...received && received.sha256 !== save().replySha ? [received.text] : []]) {
     const path = rawPath(sha256Hex(text));
     const found = await read(path);
     if ('kind' in found) return found;

@@ -1,6 +1,6 @@
 import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
-import { freeName, groupHints, issueText, PURPOSES } from '../core/ai/index.ts';
+import { directJob, freeName, groupHints, issueText, PURPOSES, sha256OfBytes } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
 import { materialType, usageLine } from '../core/connect/index.ts';
 import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
@@ -40,6 +40,13 @@ const TEXT = {
   received: 'AI 回好了，整段已經放進下面的框、檢查過；看過結果再存成草稿。',
   directPaste: (label: string) => `${label}：AI 的回覆在下面的框裡。`,
   fallback: '已複製同一份提示；到 ChatGPT、Gemini 或 Claude 開一個新對話，自己附上教材檔，貼上提示送出；AI 回完後，按回覆裡程式碼區塊右上角的「複製」，貼在下面。',
+  /** 重開製卡時的清單（tasks/ai-direct.md §6〈中斷後接手〉，格式查核 F15）。 */
+  resumeReceived: (label: string, ago: string) => `接著存上一次收到的回覆（${label}，${ago}收到）`,
+  resumeNoReply: (label: string, ago: string) => `上一次沒有收到回覆，可能已經送出並計費（${label}，${ago}送出）`,
+  resumeFailed: (label: string, ago: string) => `上一次直接製作沒有成功（${label}，${ago}）`,
+  reselect: '教材檔不會存下來，重開過 Obsidian 之後要重新選一次，才能用同一份提示重送。',
+  differs: '和上一次送的檔不同；快照會記這次送的檔。',
+  same: '和上一次送的檔相同。',
 };
 
 /** 「1 分 20 秒」「35 秒」。 */
@@ -72,8 +79,6 @@ export interface AiCardsModalHost {
 
 /** 貼到一半的回覆：關掉視窗也留著，下次接著貼回（只在這次開著 Obsidian 的期間）。直接製作收回的整段也放這裡。 */
 const pasted = new Map<string, string>();
-/** 直接製作收完的用量那一行（§4 第 6 步）：關掉視窗再打開也看得到（只在這次開著 Obsidian 的期間）。 */
-const usage = new Map<string, string>();
 
 class AiCardsModal extends Modal {
   private readonly host: AiCardsModalHost;
@@ -131,6 +136,15 @@ class AiCardsModal extends Modal {
         row.createEl('p', { text: TEXT.resumeSave(labelOf(job)) });
         const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
         buttons.createEl('button', { text: '繼續', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; void this.finish(cards.resume(job)); });
+        buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
+      } else if (directJob(job)) {
+        // 直接製作的（§6〈中斷後接手〉）：收到了就接著存；沒收到或沒成功就重送、改用複製貼上或放棄，不自動重送（可能已經計費）。
+        const api = directJob(job)!;
+        const when = ago(Date.parse(api.at) || job.copiedMs, this.host.now());
+        row.createEl('p', { text: api.received ? TEXT.resumeReceived(labelOf(job), when) : api.state === 'failed' ? TEXT.resumeFailed(labelOf(job), when) : TEXT.resumeNoReply(labelOf(job), when) });
+        const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
+        if (api.received) buttons.createEl('button', { text: '接著看', cls: 'mod-cta' }).addEventListener('click', () => { this.job = job; this.showPaste(null, 'received'); });
+        else this.directButtons(buttons, row.createEl('p', { cls: 'essence-cards-issue-note' }), api.state !== 'failed', job);
         buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { this.job = job; void this.abandon(); });
       } else {
         row.createEl('p', { text: TEXT.resumePaste(labelOf(job), ago(job.copiedMs, this.host.now())) });
@@ -285,7 +299,7 @@ class AiCardsModal extends Modal {
         try { data = new Uint8Array(await file.arrayBuffer()); } catch { notes.push(TEXT.unreadable(file.name)); continue; }
         // pdf.js 可能把交給它的緩衝區移到背景執行緒，給它一份複本，送出的那一份才不會變成空的。
         const pages = type === 'application/pdf' ? await (this.host.pdfPages?.(data.slice()) ?? Promise.resolve(null)) : null;
-        this.materials.push({ name: file.name, mediaType: type, data, pages });
+        this.materials.push({ name: file.name, mediaType: type, data, pages, sha256: sha256OfBytes(data) });
       }
       problems.setText(notes.join(' '));
       changed();
@@ -328,7 +342,6 @@ class AiCardsModal extends Modal {
     this.job = outcome.job;
     if (outcome.kind === 'received') {
       pasted.set(outcome.job.id, outcome.reply);
-      usage.set(outcome.job.id, usageLine(outcome.result));
       this.showPaste(null, 'received');
     } else this.showFailure(outcome.failure);
     return null;
@@ -358,25 +371,60 @@ class AiCardsModal extends Modal {
     buttons.createEl('button', { text: '放棄' }).addEventListener('click', () => { void this.abandon(); });
     buttons.createEl('button', { text: '關閉' }).addEventListener('click', () => { this.close(); });
   }
-  /** 「重送」與「改用複製貼上」（§6）：送不成的畫面與檢查不過的貼回畫面共用。charged：服務已經回了才斷，重送會再計費，按鈕寫出來。 */
-  private directButtons(buttons: HTMLElement, message: HTMLElement, charged: boolean): void {
-    const cards = this.host.cards(), job = this.job;
+  /**
+   * 「重送」與「改用複製貼上」（§6）：送不成的畫面、檢查不過的貼回畫面與重開時的清單共用。charged：服務可能已經回了或已經開始做，重送會再計費，按鈕寫出來。
+   * 教材檔不存：這次開著 Obsidian 的期間記得的直接重送，重開過的先請家長重選（格式查核 F15）。
+   */
+  private directButtons(buttons: HTMLElement, message: HTMLElement, charged: boolean, of?: CardJob): void {
+    const cards = this.host.cards(), job = of ?? this.job;
     if (!cards || !job) return;
     buttons.createEl('button', { text: charged ? '重送（會再計費一次）' : '重送', cls: 'mod-cta' }).addEventListener('click', () => {
-      this.busy = true;
-      void this.sendNow(labelOf(job), progress => cards.resend(job, progress)).then(blocked => {
-        if (blocked === null) return;
-        this.busy = false;
-        this.showFailure({ kind: 'unknown', text: blocked, next: '', afterResponse: false, settings: false });
-      });
+      this.job = job;
+      if (!cards.keeps(job)) { this.showReselect(charged); return; }
+      this.resend();
     });
     buttons.createEl('button', { text: '改用複製貼上' }).addEventListener('click', () => {
       void cards.recopy(job).then(ok => {
         if (!ok) { message.setText('放不進剪貼簿；請再按一次'); return; }
-        usage.delete(job.id);
+        this.job = job;
         this.showPaste(null, 'fallback');
       });
     });
+  }
+  /** 重送（§6）：同一份提示；materials 是重開之後重選的教材檔，沒給就用這次記得的。 */
+  private resend(materials?: readonly Material[]): void {
+    const cards = this.host.cards(), job = this.job;
+    if (!cards || !job) return;
+    this.busy = true;
+    void this.sendNow(labelOf(job), progress => cards.resend(job, progress, materials)).then(blocked => {
+      if (blocked === null) return;
+      this.busy = false;
+      this.showFailure({ kind: 'unknown', text: blocked, next: '', afterResponse: false, settings: false });
+    });
+  }
+  /** 重開過 Obsidian 之後的重送（F15）：重選教材檔，和上一次送的比雜湊，不同就提醒一句；快照記這次送的。 */
+  private showReselect(charged: boolean): void {
+    const cards = this.host.cards(), job = this.job;
+    if (!cards || !job) { this.close(); return; }
+    const before = directJob(job)?.files.map(file => file.sha256) ?? [];
+    this.materials = [];
+    const el = this.reset();
+    el.createEl('p', { text: `${labelOf(job)}：${TEXT.reselect}` });
+    const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
+    grid.createEl('label', { text: '教材檔' });
+    const compare = el.createEl('p', { cls: 'essence-cards-issue-note' });
+    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
+    const send = buttons.createEl('button', { text: charged ? '重送（會再計費一次）' : '重送', cls: 'mod-cta' });
+    buttons.createEl('button', { text: '回上一步' }).addEventListener('click', () => { this.start(); });
+    const draw = this.materialField(grid.createDiv(), () => { refresh(); });
+    const refresh = (): void => {
+      draw();
+      const now = this.materials.map(material => material.sha256);
+      compare.setText(!now.length ? '' : now.length === before.length && now.every((sha, i) => sha === before[i]) ? TEXT.same : TEXT.differs);
+      send.disabled = this.busy || !now.length;
+    };
+    send.addEventListener('click', () => { this.resend([...this.materials]); });
+    refresh();
   }
 
   /**
@@ -390,15 +438,16 @@ class AiCardsModal extends Modal {
     const received = mode === 'received';
     const el = this.reset();
     el.createEl('p', { text: received ? TEXT.directPaste(labelOf(job)) + TEXT.received : mode === 'fallback' ? TEXT.fallback : (chars === null ? `${labelOf(job)}：` : TEXT.copied(chars)) + TEXT.next });
-    const spent = usage.get(job.id);
-    if (received && spent) el.createEl('p', { text: spent, cls: 'essence-cards-issue-note' });
+    const evidence = received ? directJob(job)?.received ?? null : null;
+    if (evidence) el.createEl('p', { text: usageLine(evidence), cls: 'essence-cards-issue-note' });
     el.createEl('p', { text: TEXT.local(job.id), cls: 'essence-cards-issue-note' });
     if (!received) {
       const again = el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: chars === null ? '再複製一次提示' : '再複製一次' });
       again.addEventListener('click', () => { void cards.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
     }
     const box = el.createEl('textarea', { cls: 'essence-cards-ai-paste', attr: { placeholder: TEXT.paste, rows: '12' } });
-    box.value = pasted.get(job.id) ?? '';
+    // 重開 Obsidian 之後，收到的整段從工作裡拿回來（§7，F2）。
+    box.value = pasted.get(job.id) ?? evidence?.text ?? '';
     // 直接製作收到的：哪一家、哪個模型由程式記（§7），不問家長。
     if (!received) {
       const service = el.createDiv({ cls: 'essence-cards-ai-form' });
@@ -441,7 +490,7 @@ class AiCardsModal extends Modal {
       // 存的是檢查過的那一份、綁著看到的結果（D-226 第 5 點）：改過字的話 inspection 已經清掉，按不到這裡。
       const shown = this.inspection;
       if (!shown) return;
-      void this.finish(cards.save(job, box.value, received ? null : this.service, inspectionKey(shown)));
+      void this.finish(cards.save(job, box.value, received ? null : this.service, inspectionKey(shown), received));
     });
     this.inspection = null;
     this.confirmed = false;
