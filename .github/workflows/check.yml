@@ -1,11 +1,9 @@
 name: Check
 # 只在 push 跑（D-245 第 1 點）：PR 的檢查就是分支 head 那次 push 的結果，同一個 commit 不再跑兩次；
 # push 到其他分支時比的是和 origin/main 的合併基點，範圍和 PR 一樣。main 必過的是 gate（GitHub 的 ruleset）。
+# 被新的 push 取代的 run 照樣跑完、不取消：取消時 gate 會把它算成紅燈（被取消的證明不了是綠的），
+# 讓 gate 在取消時跳過又會讓手動取消的 run 算通過（D-245 第 1 點）。
 on: [push]
-# 同一個分支新 push 時取消還在跑的舊 run；main 每次都跑完（開場提醒看 main 最近一次跑完的結果，被取消的會被當成沒通過）。
-concurrency:
-  group: check-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 # 分派（D-208 第 5 點，tasks/one-repo-step-1.md §4；第二步 §A4 加共用工具；docs/tasks/ai-client.md〈8〉加套件）：plan 照分派表的 CI 跑法決定共用工具、哪幾個外掛與套件要跑；共用檢查每次都跑；
 # gate 確認每個 job 都照 plan（要跑的成功、不跑的跳過），合併條件看 gate。
 jobs:
