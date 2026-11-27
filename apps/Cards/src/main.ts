@@ -206,6 +206,7 @@ export default class EssenceCardsPlugin extends Plugin {
       recreateSettings: () => this.settingsFile ? this.settingsFile.recreate(this.store) : Promise.resolve('unreadable'),
       openRestore: () => { void this.openRestore(); },
       saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
+      aiFailed: error => { if (!this.unloaded) this.fail('ai', error); },
     });
     // 這裡只訂閱；設定要到 layout ready 才讀（T12），第一次由 start() 開始。
     this.store.onChange(value => { this.state?.applySettings(value); this.settingTab?.refresh(); });

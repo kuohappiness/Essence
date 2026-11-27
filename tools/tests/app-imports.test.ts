@@ -7,8 +7,9 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EXCEPTIONS, checkLayout, checkLink, checkPackage, checkPaths, checkSource, checkText } from '../check-app-imports.ts';
+import { EXCEPTIONS, checkLayout, checkLink, checkPackage, checkPaths, checkSource, checkText, checkUsers } from '../check-app-imports.ts';
 import { FOLDERS, PACKAGES } from '../apps.ts';
+import { PACKAGE_USERS } from '../dispatch.ts';
 
 const run = promisify(execFile);
 const CHECK = fileURLToPath(new URL('../check-app-imports.ts', import.meta.url));
@@ -122,6 +123,66 @@ void test('套件（docs/tasks/ai-client.md〈8〉）：程式、symlink、本�
   assert.equal(pkg('file:../other').length, 1);
   assert.equal(pkg('file:../../apps/Cards').length, 1);
   assert.deepEqual(pkg('^5.9.3'), []);
+});
+
+void test('套件的入口（docs/tasks/ai-client.md〈8〉第三步）：只有 PACKAGE_USERS 上的轉接檔能 import 主入口，軟體的測試另准 testing 入口', () => {
+  assert.deepEqual(PACKAGE_USERS, { 'ai-client': { cards: 'src/core/connect/client.ts' } });
+  const adapter = 'apps/Cards/src/core/connect/client.ts';
+  allowed(adapter, "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';");
+  allowed(adapter, "import type { AiClient } from '../../../../../packages/ai-client/src/index.ts';");
+  allowed('apps/Cards/tests/a.test.ts', "import { mockFetch } from '../../../packages/ai-client/src/testing.ts';");
+  allowed('apps/Cards/tests/helpers/ai.ts', "import { sse } from '../../../../packages/ai-client/src/testing.ts';");
+  const reason = (path: string, code: string) => {
+    const problems = checkSource(path, code);
+    assert.equal(problems.length, 1, `${path}: ${code}`);
+    return problems[0].reason;
+  };
+  const onlyAdapter = /只有轉接檔 apps\/Cards\/src\/core\/connect\/client\.ts 能 import packages\/ai-client\/src\/index\.ts；軟體的測試另准 import packages\/ai-client\/src\/testing\.ts/;
+  // 轉接檔以外的檔、轉接檔指到入口以外的檔、測試指到主入口、軟體的工具指到 testing 入口。
+  assert.match(reason('apps/Cards/src/core/ai/prompt.ts', "import { createAiClient } from '../../../../../packages/ai-client/src/index.ts';"), onlyAdapter);
+  assert.match(reason('apps/Cards/src/obsidian/settings.ts', "import type { AiClient } from '../../../../packages/ai-client/src/index.ts';"), onlyAdapter);
+  assert.match(reason(adapter, "import '../../../../../packages/ai-client/src/client.ts';"), onlyAdapter);
+  assert.match(reason(adapter, "import '../../../../../packages/ai-client/catalog.json';"), onlyAdapter);
+  assert.match(reason(adapter, "import { mockFetch } from '../../../../../packages/ai-client/src/testing.ts';"), onlyAdapter);
+  assert.match(reason('apps/Cards/tests/a.test.ts', "import { createAiClient } from '../../../packages/ai-client/src/index.ts';"), onlyAdapter);
+  assert.match(reason('apps/Cards/tools/x.ts', "import { mockFetch } from '../../../packages/ai-client/src/testing.ts';"), onlyAdapter);
+  // 不在表上的軟體：主入口、testing 入口都擋，說要先登記。
+  const notListed = /apps\/Mindboard 不在 tools\/dispatch\.ts 的 PACKAGE_USERS：要用 packages\/ai-client 先登記轉接檔/;
+  assert.match(reason('apps/Mindboard/src/a.ts', "import { createAiClient } from '../../../packages/ai-client/src/index.ts';"), notListed);
+  assert.match(reason('apps/Mindboard/tests/a.test.ts', "import { mockFetch } from '../../../packages/ai-client/src/testing.ts';"), notListed);
+  // 套件以外跑出去的照舊。
+  assert.match(reason(adapter, "import '../../../../Capture/src/a.ts';"), /跑出 apps\/Cards\//);
+});
+
+void test('套件的轉接檔和表一致（docs/tasks/ai-client.md〈8〉第三步）：表上的轉接檔不在、沒有 import 主入口都擋', () => {
+  const entry = 'packages/ai-client/src/index.ts';
+  const adapter = 'apps/Cards/src/core/connect/client.ts';
+  assert.deepEqual(checkUsers(new Map([[adapter, [entry, 'apps/Cards/src/core/connect/index.ts']]])), []);
+  const missing = checkUsers(new Map([['apps/Cards/src/core/ai/index.ts', ['apps/Cards/src/core/ai/prompt.ts']]]));
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].file, adapter);
+  assert.match(missing[0].reason, /tools\/dispatch\.ts 的 PACKAGE_USERS 寫 cards 用 ai-client、轉接檔是這個檔，但這個檔不在/);
+  const unused = checkUsers(new Map([[adapter, ['apps/Cards/src/core/ai/prompt.ts']]]));
+  assert.equal(unused.length, 1);
+  assert.match(unused[0].reason, /但這個檔沒有 import packages\/ai-client\/src\/index\.ts/);
+});
+
+void test('套件的轉接檔和表一致：有表的 repo 才查，轉接檔不在就擋、在而且 import 了主入口就過（工作樹與暫存區）', async t => {
+  const adapter = 'apps/Cards/src/core/connect/client.ts';
+  const r = await repo(t, { 'tools/dispatch.ts': 'export {};\n', 'apps/Cards/src/a.ts': 'export const a = 1;\n' });
+  for (const args of [[], ['--staged']]) {
+    await assert.rejects(r.check(...args), (error: { stderr?: string }) => {
+      assert.match(error.stderr ?? '', new RegExp(`${adapter.replaceAll('/', '\\/').replaceAll('.', '\\.')}:1  PACKAGE_USERS  .*這個檔不在`));
+      return true;
+    }, args.join(' '));
+  }
+  await mkdir(join(r.root, dirname(adapter)), { recursive: true });
+  await writeFile(join(r.root, adapter), "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';\n");
+  await r.git('add', '--', adapter);
+  for (const args of [[], ['--staged']]) await r.check(...args);
+  // 沒有表的 repo（其他測試的暫存 repo）不查。
+  const bare = await repo(t, { 'apps/Cards/src/a.ts': 'export const a = 1;\n' });
+  await bare.check();
 });
 
 void test('套件的資料夾：表外的、packages/ 底下直接放檔、Packages/、大小寫不符都擋；表上的放行', () => {

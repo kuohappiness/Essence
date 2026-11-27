@@ -62,6 +62,19 @@ export const SHARED_SPECS: Record<string, Partial<Record<App, Run>>> = {
   'docs/transcript.md': { cards: 'related', capture: 'full' },
 };
 
+/**
+ * 用到套件的軟體（docs/tasks/ai-client.md〈8〉第三步，D-232 第 5 點）：套件 → 軟體 → 轉接檔（軟體資料夾裡的路徑）。
+ * - 分派（第 4 條）：改到套件時，表上的軟體也跑完整檢查。套件打包進軟體的 main.js，會讓軟體壞掉的套件修改 commit 時就擋。
+ * - 邊界（tools/check-app-imports.ts）：軟體裡只有轉接檔能 import 套件的主入口，軟體的測試另准 import testing 入口；
+ *   不在表上的軟體 import 套件、表上的轉接檔不在或沒有 import 主入口，都擋，表才不會和實際的 import 分家。
+ * Cards 的 ESLint 設定與測試的暫存 repo（apps/Cards/tests/helpers/layout.ts）不 import 最上層的程式，照抄這張表。
+ */
+export const PACKAGE_USERS: Record<Package, Partial<Record<App, string>>> = {
+  'ai-client': { cards: 'src/core/connect/client.ts' },
+};
+/** 用到這個套件的軟體都跑完整檢查。 */
+const usersOf = (id: Package): Partial<Record<Target, Run>> => Object.fromEntries(Object.keys(PACKAGE_USERS[id]).map(app => [app, 'full']));
+
 export const RULES: Rule[] = [
   { id: 1, name: '子模組（gitlink）', matches: (_, c) => c.oldMode === '160000' || c.newMode === '160000', effect: () => 'blocked' },
   {
@@ -73,14 +86,14 @@ export const RULES: Rule[] = [
   { id: 3, name: 'Cards 資料夾裡其他的檔', matches: path => path.startsWith(prefix('cards')), effect: () => ({ cards: 'full' }) },
   {
     // 只有文件的軟體（現在是 Portal，D-218）只跑共用檢查；寫第一行程式時移進 FOLDERS、加自己的檢查。
-    // 套件（docs/tasks/ai-client.md〈8〉）和 Capture 一樣，改到什麼都跑它自己的完整檢查。
+    // 套件（docs/tasks/ai-client.md〈8〉）和 Capture 一樣，改到什麼都跑它自己的完整檢查；用到它的軟體（PACKAGE_USERS）也跑完整檢查。
     id: 4, name: 'Capture、Mindboard、套件與只有文件的軟體的資料夾',
     matches: under(prefix('capture'), prefix('mindboard'), ...PACKAGE_IDS.map(prefix), ...Object.values(DOCS_ONLY).map(dir => dir + '/')),
     effect: path => {
       if (path.startsWith(prefix('capture'))) return { capture: 'full' };
       if (path.startsWith(prefix('mindboard'))) return { mindboard: 'full' };
       const owner = PACKAGE_IDS.find(id => path.startsWith(prefix(id)));
-      return owner ? { [owner]: 'full' } : {};
+      return owner ? { [owner]: 'full', ...usersOf(owner) } : {};
     },
   },
   { id: 5, name: 'apps/、packages/ 底下不認得的路徑', matches: under(APPS_ROOT, PACKAGES_ROOT), effect: () => 'all' },

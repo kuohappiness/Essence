@@ -312,12 +312,13 @@ const CASES: Case[] = [
   { name: '新增 apps/Portal/docs/backlog.md', change: edit('apps/Portal/docs/backlog.md'), preCommit: {}, ci: {} },
   { name: '只改 apps/Capture/a.ts', change: edit('apps/Capture/a.ts'), preCommit: { capture: 'full' }, ci: { capture: 'full' } },
   { name: '新增 apps/a.ts', change: edit('apps/a.ts'), preCommit: ALL, ci: ALL },
-  // 套件（docs/tasks/ai-client.md〈8〉）：改到什麼都跑它自己的完整檢查；packages/ 底下不在表上的，全部跑。
-  { name: '新增 packages/ai-client/src/a.ts', change: edit('packages/ai-client/src/a.ts'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
-  { name: '改 packages/ai-client/docs/x.md', change: edit('packages/ai-client/docs/x.md'), preCommit: { 'ai-client': 'full' }, ci: { 'ai-client': 'full' } },
+  // 套件（docs/tasks/ai-client.md〈8〉）：改到什麼都跑它自己的完整檢查，用到它的軟體（PACKAGE_USERS，第三步）也跑完整檢查；
+  // packages/ 底下不在表上的，全部跑。
+  { name: '新增 packages/ai-client/src/a.ts', change: edit('packages/ai-client/src/a.ts'), preCommit: { 'ai-client': 'full', cards: 'full' }, ci: { 'ai-client': 'full', cards: 'full' } },
+  { name: '改 packages/ai-client/docs/x.md', change: edit('packages/ai-client/docs/x.md'), preCommit: { 'ai-client': 'full', cards: 'full' }, ci: { 'ai-client': 'full', cards: 'full' } },
   {
     name: 'git mv apps/Mindboard/a.ts packages/ai-client/a.ts', change: async e => { await e.git('mv', 'apps/Mindboard/a.ts', 'packages/ai-client/a.ts'); },
-    preCommit: { mindboard: 'full', 'ai-client': 'full' }, ci: { mindboard: 'full', 'ai-client': 'full' },
+    preCommit: { mindboard: 'full', 'ai-client': 'full', cards: 'full' }, ci: { mindboard: 'full', 'ai-client': 'full', cards: 'full' },
   },
   { name: '新增 packages/other/a.ts', change: edit('packages/other/a.ts'), preCommit: ALL, ci: ALL },
   { name: '新增 packages/a.md', change: edit('packages/a.md'), preCommit: ALL, ci: ALL },

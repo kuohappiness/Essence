@@ -59,9 +59,13 @@ const coreModule = /\/src\/core\/([^/]+)\//;
 // 題型模組（tasks/question-type-modules.md §1-3）：deck/kinds/ 的檔之間只 import shared.ts；polyphone、typing、order 另外可以 import group.ts。
 const kindFile = /\/src\/core\/deck\/kinds\/([^/]+)\.ts$/;
 const kindsOnGroup = ['polyphone', 'typing', 'order'];
+// AI 連線套件的轉接檔（docs/tasks/ai-client.md〈8〉第三步，D-232 第 5 點）：只有它能 import 套件的入口；
+// 表在 tools/dispatch.ts 的 PACKAGE_USERS（Cards 不 import 最上層的程式，這裡照抄；tools/check-app-imports.ts 也照表查）。
+const packageAdapter = { from: '/src/core/connect/client.ts', to: '/packages/ai-client/src/index.ts' };
 function crossModule(path, name, typeOnly) {
   if (!name.startsWith('.')) return undefined;
   const target = posix.normalize(posix.join(posix.dirname(path), name));
+  if (path.endsWith(packageAdapter.from) && target.endsWith(packageAdapter.to)) return undefined;
   if (!target.includes('/src/core/')) return '核心不能 import src 裡核心以外的檔案。';
   const fromKind = kindFile.exec(path)?.[1], toKind = kindFile.exec(target)?.[1];
   if (fromKind && toKind && toKind !== 'shared' && !(toKind === 'group' && kindsOnGroup.includes(fromKind))) {
@@ -119,11 +123,16 @@ const moduleBoundaries = {
      */
     const inBelowUi = /\/src\/(state|review)\//.test(path);
     const inUi = path.includes('/src/ui/');
+    // AI 連線（ai-direct.md §1，L2 第一輪 R5）：core/connect 會載入套件，只有 main.ts、src/obsidian/ 與它自己拿得到值；
+    // state、複習、core 的其他模組與發布前比較（tools/compare/）都不載入它，畫面要連 AI 的動作由 main.ts 交進來。型別照常可以拿。
+    const mayConnect = editorSide || path.includes('/src/core/connect/');
+    const guardConnect = inSrc || path.includes('/tools/compare/');
     function layerBoundary(name, typeOnly) {
       if (typeof name !== 'string' || !name.startsWith('.')) return undefined;
       const target = posix.normalize(posix.join(posix.dirname(path), name));
       if (inBelowUi && target.includes('/src/ui/')) return 'state 與 review 不能 import 畫面（ui）：依賴方向是 ui → review → state。';
       if (inUi && !typeOnly && /\/src\/core\/(backup|ai|settings)\//.test(target)) return 'ui 從 core 的 backup、ai、settings 只能 import 型別（import type）：執行期的動作由 main.ts 交進來。';
+      if (guardConnect && !mayConnect && !typeOnly && target.includes('/src/core/connect/')) return 'core/connect（AI 連線）只有 main.ts、src/obsidian/ 與 core/connect 自己能 import（型別除外）：它會載入 AI 連線套件，state、複習、其他核心模組與發布前比較都不載入它，畫面的動作由 main.ts 交進來（ai-direct.md §1）。';
       return undefined;
     }
     function check(node, source, dynamic) {
