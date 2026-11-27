@@ -369,6 +369,8 @@ void test('AI 連線：選單與預設；換服務時模型跟著換、OpenRoute
   assert.ok(lines(row(KEY).descEl).includes('金鑰到 Google 的 AI Studio 網站申請，和 Gemini 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   row(MODEL).dropdown?.choose('gemini-3.5-flash-lite');
   row(REASONING).dropdown?.choose('low');
+  row(PROVIDER).dropdown?.choose('anthropic');
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 Anthropic 的 API 網站申請，另外計費，和 Claude 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   row(PROVIDER).dropdown?.choose('openrouter');
   assert.equal(row(MODEL).dropdown, null);
   assert.ok(!lines(row(KEY).descEl).some(line => line.startsWith('金鑰到')), 'OpenRouter 沒有訂閱，不寫');

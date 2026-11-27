@@ -234,6 +234,9 @@ void test('L2 R12 製卡視窗開著時再按圖示：不開第二個；關掉�
 void test('L2 R10 金鑰沒設：第一步有「打開設定頁」，按了關掉視窗、打開設定頁；金鑰設好了就沒有這一顆', async t => {
   const { openModal, settings } = await open(t, [], { key: { ok: false, why: 'unset' } });
   const modal = openModal();
+  // 單元還空著就看得到：不用先填單元（L2 第二輪的小項）。
+  assert.ok(texts(modal.contentEl).some(each => each.startsWith('先到設定頁的「AI 連線」')), texts(modal.contentEl).join('|'));
+  assert.ok(button(modal.contentEl, '打開設定頁'));
   const unit = all(modal.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
   assert.ok(unit);
   unit.value = form.unit;
