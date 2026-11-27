@@ -1,4 +1,4 @@
-import type { Deck, Prompt, Target } from '../deck/index.ts';
+import type { Deck, Prompt, SentenceAlt, Target } from '../deck/index.ts';
 
 export type Rating = 'easy' | 'good' | 'near' | 'miss';
 
@@ -234,8 +234,9 @@ export interface CardGroup {
   /**
    * 排序卡才有（D-187、D-204）：第一格前面的字、每一格後面接的字。這時 title 是詩名、members 是每一格的句子、rows 是空的。
    * 英文的句子排序（tasks/english-typed-order.md §4）多一個 starts：哪幾格在句首，放進去的字第一個字母顯示成大寫；這時 members 是詞塊。
+   * 句子排序寫了另一種排法時多一個 others（tasks/sentence-order-alternatives.md §3）：每一種的詞塊、格後面的字與那一行的原文；沒寫時不帶。
    */
-  order?: { head: string; tails: readonly string[]; starts?: readonly boolean[] };
+  order?: { head: string; tails: readonly string[]; starts?: readonly boolean[]; others?: readonly SentenceAlt[] };
   /**
    * 多音字才有（tasks/polyphone-pick.md §4）：這時 title 是「讀音：長」、members 是括號裡的讀音、rows 是每個讀音一行的對照；
    * rest 是記憶錨點裡對不到讀音的行，照原本的順序接在對照後面。

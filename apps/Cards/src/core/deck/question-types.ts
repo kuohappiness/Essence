@@ -14,6 +14,7 @@ export { blanksIn, pickKey, unbold } from './kinds/shared.ts';
 export { pickWord } from './kinds/group.ts';
 export { choiceProblems, choiceStem } from './kinds/polyphone.ts';
 export { mentions, pairWordOf, readTyping } from './kinds/typing.ts';
+export { ALT_LIKE, altMentions, movingTails, otherSentences, shownTails } from './kinds/order.ts';
 
 /** 題目階段讀出的卡型與提示（比較卡、多音字的診斷；一個目標只有一種）。 */
 interface KindReading { kind: Kind | null; problems: PickReading['problems'] }
@@ -31,8 +32,9 @@ export function readKind(target: Target, notes: readonly string[], promptNotes: 
   if (choice.problems.length) return { kind: null, problems: choice.problems };
   const poem = readOrder(target, notes, english);
   if (poem) return { kind: { id: 'order', order: { style: 'poem', ...poem } }, problems: [] };
+  // 句子排序的提示是另一種排法的（tasks/sentence-order-alternatives.md §1 第 5、7 點），都是 hint，照樣認成句子排序。
   const sentence = english ? readSentence(target) : null;
-  if (sentence) return { kind: { id: 'order', order: { style: 'sentence', ...sentence } }, problems: [] };
+  if (sentence?.sentence) return { kind: { id: 'order', order: { style: 'sentence', ...sentence.sentence } }, problems: sentence.problems };
   const couplet = readCouplet(target, notes, promptNotes);
   return { kind: couplet ? { id: 'couplet', couplet } : null, problems: [] };
 }

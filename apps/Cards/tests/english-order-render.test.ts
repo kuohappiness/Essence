@@ -56,3 +56,65 @@ void test('題目裡會解成私用區字的字元參照先拿掉；畫面上同
 void test('中文是連結的顯示文字、英文全挖空：在第一格前面換行（L2 第二輪）', () => {
   assert.deepEqual(place(`<p><a href="notes.md">我累了。</a>${m(0)} ${m(1)} ${m(2)}.</p>`, 3, true), { text: '我累了。/[0] [1] [2].', breaks: 1, missing: false, slots: 3 });
 });
+
+void test('會變的格後面的字（另一種排法，L2 第一輪的閃動）：記號換成三段，前面的標點跟前一格、後面的開括號跟下一格包在一起；換字只改那三段', async () => {
+  const { fillTails, tailMark } = await import('../src/ui/rendered.ts');
+  const container = document.createElement('div');
+  container.innerHTML = `<p>${m(0)} ${m(1)}${tailMark(0)}${m(2)}.</p>`;
+  const { slots, tails } = postProcess(container, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1), m(2)], tailMarkers: [tailMark(0)] });
+  slots.forEach((slot, i) => { slot.textContent = `[${String(i)}]`; });
+  const paragraph = container.querySelector('p');
+  fillTails(tails, [' ']);
+  assert.equal(container.textContent, '[0] [1] [2].');
+  fillTails(tails, [', ']);
+  assert.equal(container.textContent, '[0] [1], [2].');
+  assert.equal(slots[1].parentElement?.className, 'ec-glue', '逗號和第 2 格包在一起');
+  assert.equal(slots[1].parentElement?.textContent, '[1],');
+  fillTails(tails, [' (']);
+  assert.equal(container.textContent, '[0] [1] ([2].');
+  assert.equal(slots[2].parentElement?.textContent, '([2].', '開括號和第 3 格包在一起');
+  assert.equal(slots[2].parentElement?.classList.contains('has-opening'), true);
+  fillTails(tails, [' ']);
+  assert.equal(slots[2].parentElement?.classList.contains('has-opening'), false);
+  assert.equal(container.querySelector('p'), paragraph, '同一個段落，沒有重畫');
+});
+
+void test('會變的格後面的字的記號找不到（在程式碼裡、出現兩次）：拿掉記號、那一段不放', async () => {
+  const { fillTails, tailMark } = await import('../src/ui/rendered.ts');
+  const container = document.createElement('div');
+  container.innerHTML = `<p>${m(0)} <code>${tailMark(0)}</code>${m(1)}${tailMark(1)}${tailMark(1)}.</p>`;
+  const { tails } = postProcess(container, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1)], tailMarkers: [tailMark(0), tailMark(1)] });
+  assert.deepEqual(tails, [null, null]);
+  fillTails(tails, [', ', ', ']);
+  assert.equal((container.textContent ?? '').includes(tailMark(0)) || (container.textContent ?? '').includes(tailMark(1)), false);
+});
+
+void test('記號在圖片的替代文字或標題裡（L2 第二輪 F5）：畫面的屬性裡不留記號，格放在句尾', async () => {
+  const { tailMark } = await import('../src/ui/rendered.ts');
+  const container = document.createElement('div');
+  container.innerHTML = `<p><img alt="Practice ${m(0)}${tailMark(0)}${m(1)} ${m(2)}." title="see ${m(1)}" src="missing.png"><a href="https://example.com" aria-label="go ${tailMark(0)}">link</a></p>`;
+  const { slots, slotMissing, tails } = postProcess(container, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1), m(2)], tailMarkers: [tailMark(0)] });
+  assert.equal(slotMissing, true);
+  assert.equal(slots.length, 3);
+  assert.deepEqual(tails, [null]);
+  assert.equal(container.querySelector('img')?.getAttribute('alt'), 'Practice  .');
+  assert.equal(container.querySelector('img')?.getAttribute('title'), 'see ');
+  assert.equal(container.querySelector('a')?.getAttribute('aria-label'), 'go ');
+  assert.equal(container.querySelector('a')?.getAttribute('href'), 'https://example.com');
+});
+
+void test('屬性裡只拿掉這一次放的記號（L2 第三輪 F10）：作者寫的私用區字、沒放記號的比較卡照原樣', async () => {
+  const { tailMark } = await import('../src/ui/rendered.ts');
+  const own = String.fromCharCode(0xe145);
+  const html = `<p>${m(0)} ${m(1)}.<a href="https://example.test/${own}/cue" title="see ${own}${tailMark(0)}">x</a></p>`;
+  const sentence = document.createElement('div');
+  sentence.innerHTML = html;
+  postProcess(sentence, { mode: 'pick', lines: 1, english: true, markers: [m(0), m(1)], tailMarkers: [tailMark(0)] });
+  assert.equal(sentence.querySelector('a')?.getAttribute('href'), `https://example.test/${own}/cue`);
+  assert.equal(sentence.querySelector('a')?.getAttribute('title'), `see ${own}`);
+  const pick = document.createElement('div');
+  pick.innerHTML = `<p>I ==borrow== it.<a href="https://example.test/${own}/cue" title="${own}">x</a></p>`.replace('==borrow==', '<mark>borrow</mark>');
+  postProcess(pick, { mode: 'pick', lines: 1, english: true });
+  assert.equal(pick.querySelector('a')?.getAttribute('href'), `https://example.test/${own}/cue`);
+  assert.equal(pick.querySelector('a')?.getAttribute('title'), own);
+});
