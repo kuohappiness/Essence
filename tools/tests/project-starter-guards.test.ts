@@ -95,6 +95,22 @@ void test('模板：假金鑰、壞連結、沒有執行權限的 git hook、刪
   }, /^AGENTS\.md:\d+ {2}還有沒填的空格/m);
 });
 
+void test('模板：連結目標裡成對的括號照 Markdown 的規則讀，不誤判成壞連結（GitHub 上 Codex 審查 PR #105 的 P2）', async t => {
+  const { root, git, check } = await project(t);
+  await writeFile(join(root, 'docs/guide(v1).md'), '# 說明\n');
+  await writeFile(join(root, 'docs/notes.md'), '[說明](guide(v1).md)、[一節](guide(v1).md#說明)、[壞](guide(v2).md)\n');
+  git('add', '--', 'docs/guide(v1).md', 'docs/notes.md');
+  const result = check('--staged');
+  assert.equal(result.status, 1);
+  assert.deepEqual(result.stderr.split('\n').filter(line => line.startsWith('docs/')), ['docs/notes.md:1  連結 guide(v2).md 找不到檔案。改成正確的相對路徑；目標是新檔的話，記得一起 git add']);
+});
+
+void test('模板：使用說明、SETUP.md 與 AGENTS.md 都寫了在使用者的電腦設 core.hooksPath（GitHub 上 Codex 審查 PR #105 的 P1）', async () => {
+  for (const file of ['../README.md', 'SETUP.md', 'AGENTS.md']) {
+    assert.match(await readFile(join(FILES, file), 'utf8'), /git config core\.hooksPath \.githooks/, file);
+  }
+});
+
 void test('模板：設好 core.hooksPath 後，有壞連結的 commit 被 pre-commit 擋下（驗收第 3 項的本機版）', async t => {
   const { root, git } = await project(t);
   git('config', 'core.hooksPath', '.githooks');

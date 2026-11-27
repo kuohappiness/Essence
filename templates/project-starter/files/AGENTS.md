@@ -23,6 +23,7 @@
 ## 開始工作前
 
 - 先讀 `docs/roadmap.md` 的〈現在在哪裡〉；其他文件看任務需要，照〈文件分工〉找。
+- 新的 clone 先跑一次 `git config core.hooksPath .githooks`，提交前的檢查才會跑（雲端開場會自動設）。
 - 開工改檔、取決定編號前，跑 `node tools/in-flight.mjs`，看開著的 PR 改到哪些檔、用了哪些編號，也看正在跑的討論串；受影響的那段等那邊合併或談定再做，其餘照做（做法見 [docs/workflow.md〈開工前先看〉](docs/workflow.md#開工前先看)）。
 - 判斷這件工作在使用者的電腦還是雲端做，分法見 [docs/agents/quality.md〈本機或雲端〉](docs/agents/quality.md#本機或雲端)。
 - 先載入對應的 skill：設計討論用 `discuss`、寫決定用 `decision`、寫或審程式用 `code-quality`。

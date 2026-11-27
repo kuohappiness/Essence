@@ -29,6 +29,8 @@
 
 空的 repo：模板的檔案是第一個 commit，在保護規則設好之前直接推上 `main`，讓 CI 先跑過一次、`gate` 這個檢查名稱出現在 GitHub 上（第 2 步要選它）。之後從第二個改動開始都走 PR。
 
+先跑 `git config core.hooksPath .githooks`，提交前的檢查才會跑：git 預設讀 `.git/hooks`，不會自己用 repo 裡的 `.githooks/`；雲端由 `.claude/hooks/cloud-setup.mjs` 設，使用者的電腦與其他新的 clone 要自己跑這一行（跑一次就好），跑完 `git config core.hooksPath` 會印 `.githooks`。
+
 擋危險 git 指令的 hook 不准一次 stage 全部，逐一寫出路徑：`git add -- AGENTS.md CLAUDE.md SETUP.md docs tools .claude .githooks .github .gitignore .gitattributes`。推之前確認 `.githooks/pre-commit` 在 git 裡是可執行的模式：`git ls-files -s .githooks` 每一行開頭是 `100755`；不是就跑 `git update-index --chmod=+x -- .githooks/pre-commit`。
 
 ### 第 1 步：建這個專案自己的雲端環境

@@ -93,10 +93,10 @@ function stripCode(text) {
   });
 }
 
-/** 一行裡的連結目標：[文字](目標)、![圖](目標)、[文字](<有空白的目標>)，與參考式的 [名稱]: 目標。 */
+/** 一行裡的連結目標：[文字](目標)、![圖](目標)、[文字](<有空白的目標>)，與參考式的 [名稱]: 目標。目標裡可以有成對的括號（guide(v1).md）。 */
 function linkTargets(line) {
   const targets = [];
-  for (const match of line.matchAll(/\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+["'(][^)]*)?\)/g)) targets.push(match[1]);
+  for (const match of line.matchAll(/\]\(\s*(<[^>]*>|(?:[^()\s]|\([^()\s]*\))+)(?:\s+["'(][^)]*)?\)/g)) targets.push(match[1]);
   const reference = /^\s{0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)/.exec(line);
   if (reference) targets.push(reference[1]);
   return targets.map((target) => target.replace(/^<|>$/g, ''));

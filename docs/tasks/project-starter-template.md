@@ -238,6 +238,7 @@ Essence 這邊：
 - **in-flight.mjs**：決定編號改讀 `docs/decisions/D-<數字>.md`：`origin/main` 用 `git ls-tree`，PR 只算新增（`--diff-filter=A`）的檔，改到既有的決定不算。分組一律看到第二層。測試照 Essence 的假 GitHub（bare repo、insteadOf、gh 替身）跑：下一個編號、只看指定路徑、沒有共同起點時不給編號、gh 不能用。
 - **驗收第 2 項**：測試把 `files/` 複製進暫存資料夾、`dot-claude/` 改名、`git init`、全部 stage，`check.mjs` 通過；假金鑰（執行時才組出來）、`.env` 檔、壞連結、沒有執行權限的 hook、刪掉 `SETUP.md` 但留著空格，都被擋下，訊息有檔名與行號。另外設好 `core.hooksPath` 後真的 commit 一次壞連結，被 pre-commit 擋下。Node 22 手動跑過 `check.mjs` 與另外兩支的語法檢查（雲端沒有 Node 20）。
 - **分派**：測試檔開頭寫了這幾支程式的路徑全名，只改模板程式的 commit，pre-commit 也會跑它（照 Essence 的 block-dangerous-git 測試的做法），不必改分派的找法。
+- **GitHub 上 Codex 審查（PR #105）的兩項，都修**：P1，使用者的電腦上 git 預設不用 `.githooks/`、`cloud-setup.mjs` 又只在雲端跑，照舊的 SETUP.md 做時提交前的檢查不會跑；`SETUP.md` 第 0 步、`AGENTS.md`〈開始工作前〉與使用說明的複製步驟都加上 `git config core.hooksPath .githooks`，測試確認三處都寫了。P2，連結目標裡成對的括號（`guide(v1).md`）被當成壞連結；照 Markdown 的規則讀成對的括號，加回歸測試。
 - **第一個 commit 的 stage**：模板自己的 hook 擋一次 stage 全部，AI 做第一個 commit 時逐一寫出路徑；`SETUP.md` 與使用說明都寫了那一行。
 
 延後的測試：（收尾時填）
