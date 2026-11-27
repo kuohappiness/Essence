@@ -334,12 +334,13 @@ export function createAiCards(deps: AiCardsDeps) {
     directPreview(form: CardForm, materials: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string; settings?: boolean } | null {
       const direct = deps.direct;
       if (!direct) return null;
-      if (!form.unit.trim()) return { ok: false, reason: '先填單元。' };
       const target = endpoint(direct);
       // 要到設定頁改的（沒選服務、模型或金鑰）標 settings：畫面多一個「打開設定頁」（§2 驗收，L2 第一輪 R10）。
+      // 排在單元前面：先填了單元才看到要去設定頁，開設定頁會關掉視窗、剛填的要重來（L2 第二輪）。
       if ('error' in target) return { ok: false, reason: target.error, settings: true };
       const key = direct.key();
       if (!key.ok) return { ok: false, reason: NO_KEY[key.why], settings: true };
+      if (!form.unit.trim()) return { ok: false, reason: '先填單元。' };
       const problem = materialProblem(materials);
       if (problem) return { ok: false, reason: problem };
       const made = compose(form);
