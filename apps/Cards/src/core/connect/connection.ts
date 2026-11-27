@@ -142,7 +142,7 @@ const KEY_PROBLEM: Record<KeyProblem, { kind: 'no_key' | 'empty_key' | 'bad_key'
   empty: { kind: 'empty_key', text: '這把金鑰是空的或找不到，請重新貼上，或選另一把。' },
   malformed: { kind: 'bad_key', text: '這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。' },
 };
-const CONNECTED = '連得上。';
+const CONNECTED = '連得上，金鑰能用。';
 
 /** 錯誤的一句話：套件的中文說明，加上下一步。 */
 function connectionError(kind: AiErrorKind, text: string): string {

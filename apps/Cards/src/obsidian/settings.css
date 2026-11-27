@@ -40,3 +40,9 @@
   color: var(--text-error);
   margin-top: var(--size-2-2);
 }
+
+/* 測試連線成功（ai-direct.md §2）：和失敗一樣醒目，只是換成成功的顏色。 */
+.essence-cards-ai-ok {
+  color: var(--text-success);
+  margin-top: var(--size-2-2);
+}

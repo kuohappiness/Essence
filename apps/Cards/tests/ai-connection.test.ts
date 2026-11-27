@@ -86,7 +86,7 @@ void test('測試連線：成功是「連得上」；沒有金鑰不送出；每
   });
   const fake = cardsClient(fetch);
   replies['api.openai.com'] = { status: 200, body: { data: [{ id: 'gpt-5.6-terra' }] } };
-  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: true, key: FAKE_KEY } }), { ok: true, text: '連得上。' });
+  assert.deepEqual(await testConnection(fake, { provider: 'openai', key: { ok: true, key: FAKE_KEY } }), { ok: true, text: '連得上，金鑰能用。' });
   assert.equal(fetch.requests.at(-1)?.headers.authorization, `Bearer ${FAKE_KEY}`);
 
   // 沒有可用的金鑰：各寫一句、指向金鑰，不送出（L2 第一輪 R4、R11 第 4 項）。

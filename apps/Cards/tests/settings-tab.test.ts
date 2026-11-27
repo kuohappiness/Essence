@@ -410,15 +410,22 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   assert.deepEqual(storage(AI_PREFS), { provider: 'openai', models: {}, reasoning: 'default', secrets: { openai: 'family-openai' } });
   row(TEST).buttons[0].click();
   await settle();
-  assert.deepEqual(lines(row(TEST).descEl), ['連得上。']);
+  // 成功打勾、另跳一個提示（實機發現：結果半秒就出來、只有一行灰色小字，再按一次字也沒變，看起來像沒反應）。
+  assert.deepEqual(lines(row(TEST).descEl), ['✓ 連得上，金鑰能用。']);
+  assert.equal(h.notices.at(-1), 'Essence Cards：連得上，金鑰能用。');
   assert.equal(sent.length, 1);
   assert.match(sent[0].url, /^https:\/\/api\.openai\.com\//);
   assert.equal(sent[0].auth, `Bearer ${AI_KEY}`);
+  const shown = h.notices.length;
+  row(TEST).buttons[0].click();
+  await settle();
+  assert.equal(h.notices.length, shown + 1, '同樣的結果再按一次，也要再跳一次提示');
 
   status = 401;
   row(TEST).buttons[0].click();
   await settle();
   assert.deepEqual(lines(row(TEST).descEl), ['金鑰不對或已失效，請到設定頁重新貼上。']);
+  assert.equal(h.notices.at(-1), 'Essence Cards：金鑰不對或已失效，請到設定頁重新貼上。');
 
   // 家長清掉金鑰（存空字串）：說這把是空的，不送出（L2 第一輪 R11 第 4 項）；樣子不像金鑰的也不送出、請家長重貼（R4）。
   row(KEY).secret?.choose('cleared');
@@ -429,7 +436,7 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   row(TEST).buttons[0].click();
   await settle();
   assert.deepEqual(lines(row(TEST).descEl), ['這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。']);
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
 
   // localStorage 的每一筆都掃（§2 驗收「saveLocalStorage 的任何一筆」，L2 第一輪 R11 第 1 項），不只 AI 連線那一筆。
   const stored = h.storedKeys().map(key => [key, storage(key)]);
