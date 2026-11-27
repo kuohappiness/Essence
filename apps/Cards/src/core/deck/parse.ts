@@ -3,7 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './sources.ts';
 import type { TracedPiece } from './sources.ts';
-import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
+import { expandTabs, linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
 import { ALT_LIKE, altMentions, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
@@ -301,18 +301,23 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     }
     // 補充或多行答案裡的資料也屬於整個目標。
     for (const child of root.children) collectFields(child);
-    /** 一項連同底下的子項目的原文；資料欄位不放（collectFields 讀了），fields 是 true 時照放。 */
-    function markdown(node: Item, base = node.indent, nested = false, fields = false): string {
-      if (!fields && fieldStart.test(node.text)) return '';
+    /** 一項連同底下的子項目的原文；資料欄位不放（collectFields 讀了）。 */
+    function markdown(node: Item, base = node.indent, nested = false): string {
+      if (fieldStart.test(node.text)) return '';
       const prefix = nested ? ' '.repeat(node.indent - base) + lines[node.line].raw.trimStart().match(/^(?:[-*+]|\d+[.)])\s*/)?.[0] : '';
       const body = (prefix ?? '') + node.text;
-      return [body, ...node.children.map(child => markdown(child, base, true, fields)).filter(Boolean)].join('\n');
+      return [body, ...node.children.map(child => markdown(child, base, true)).filter(Boolean)].join('\n');
     }
     /**
-     * 題目的一項補充：另一種排法連底下的資料欄位也放（L2 第一輪 R2），底下有子項目就看得出來、不認（order.ts 的 readOther）；
-     * 欄位照樣屬於整個目標。
+     * 題目的一項補充。另一種排法照它在原文的範圍放（L2 第一輪 R2、第二輪 F4）：底下的資料欄位、子項目，清單不建項目的圍欄程式碼與引言都在，
+     * 有就多出一行、不認（order.ts 的 readOther）；欄位照樣屬於整個目標。
      */
-    const extraOf = (child: Item): string => markdown(child, child.indent, false, ALT_LIKE.test(child.text));
+    const extraOf = (child: Item): string => {
+      if (!ALT_LIKE.test(child.text)) return markdown(child);
+      const rest = lines.slice(child.starts[child.starts.length - 1].line + 1, child.end).map(({ raw }) =>
+        raw.trim() ? ' '.repeat(Math.max(0, /^ */.exec(expandTabs(raw))![0].length - child.indent)) + raw.trim() : '');
+      return [child.text, ...rest].join('\n');
+    };
     /** 寫在題目的下一層、當成那一題補充的另一種排法：句子排序在 readKind 讀，其他卡型下面提示；其他位置的由 misplaced 提示。 */
     const placed = new Set<Item>();
     const placeAlternatives = (children: readonly Item[]): void => {

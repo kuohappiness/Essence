@@ -100,6 +100,21 @@ void test('不認、提示（order-alt-invalid）：詞塊不同、塊數不同�
   assert.match(field.problems[0].message, /同一行/);
   assert.equal(othersOf(field), undefined);
   assert.equal(field.targets[0].fields.paused, true, '欄位照樣讀');
+
+  // L2 第二輪 F4：底下有沒有東西照原文的範圍看，清單不建項目的圍欄程式碼、引言、程式碼區塊也算。
+  const under = (lines: readonly string[], label: string): void => {
+    const deck = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n${lines.map(line => `            ${line}\n`).join('')}`);
+    assert.deepEqual(codes(deck), [[4, 'order-alt-invalid']], label);
+    assert.match(deck.problems[0].message, /同一行/, label);
+    assert.equal(othersOf(deck), undefined, label);
+  };
+  under(['- ```text', '  note', '  ```'], '子項目是圍欄程式碼');
+  under(['```', 'note', '```'], '底下是圍欄程式碼');
+  under(['> note'], '底下是引言');
+  under(['', 'note'], '空一行後的段落');
+  const spaced = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n\n    - ${PARK}\n`);
+  assert.deepEqual(codes(spaced), [], '後面空一行接下一題：排法底下沒有東西');
+  assert.equal(othersOf(spaced)?.length, 1);
 });
 
 void test('結束的引號（L2 第一輪 R1、第二輪 F3）：直引號照成對數，第一格前面的引號都成對時是結束的引號，照樣認；所有格的 \' 不算', () => {

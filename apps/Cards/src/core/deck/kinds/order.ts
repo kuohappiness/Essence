@@ -220,7 +220,7 @@ function readOthers(line: number, extras: readonly string[], cells: SentenceCell
 
 /** 一行另一種排法：認得的回傳詞塊與格後面的字，認不得的回傳原因（給家長看的一句）。 */
 function readOther(source: string, cells: SentenceCells, before: readonly SentenceAlt[], opening: boolean): SentenceAlt | string {
-  if (source.includes('\n')) return '另一種排法寫在同一行，底下不再分子項目';
+  if (source.includes('\n')) return '另一種排法寫在同一行，底下不放子項目、程式碼或其他內容';
   if (!source.startsWith(ALT_LABEL)) return '開頭寫成「另一種排法：」（全形冒號，前面不空格）';
   if (opening) return '題目第一格前面的字結尾是開頭的引號或括號，每一種排法都會在句首帶著它；這一題只照題目那一行判';
   const text = source.slice(ALT_LABEL.length);
