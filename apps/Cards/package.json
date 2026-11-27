@@ -21,7 +21,8 @@
     "check": "npm run typecheck && npm run lint && npm run knip && npm test",
     "bench": "node tools/bench-study.ts",
     "export-compare": "node tools/export-compare.ts",
-    "rule-test": "node tools/rule-test/cli.ts"
+    "rule-test": "node tools/rule-test/cli.ts",
+    "fake-ai": "node tools/fake-ai.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
