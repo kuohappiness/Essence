@@ -100,7 +100,8 @@ function apiFields(job: CardJob, save: SaveState, api: DirectEvidence): { early:
   const usage: [string, number | null][] = [['輸入用量', api.usage.input], ['快取讀取用量', api.usage.cacheRead], ['快取寫入用量', api.usage.cacheWrite], ['輸出用量', api.usage.output], ['推理用量', api.usage.reasoning]];
   for (const [name, value] of usage) if (value !== null) late[name] = value;
   if (api.cost) {
-    late['費用'] = api.cost.amount;
+    // 服務回報的金額可能帶浮點雜訊（0.30000000000000004，L2 第一輪的文字小項）：取 12 位有效數字，雜訊去掉、金額不變。
+    late['費用'] = Number(api.cost.amount.toPrecision(12));
     late['費用來源'] = api.cost.estimated ? '照牌價估計' : '服務回報';
     if (api.cost.estimated && api.cost.asOf) late['牌價日期'] = oneLine(api.cost.asOf);
   }

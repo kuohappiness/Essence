@@ -89,6 +89,9 @@ void test('§4 送出前的一行：教材、字數、模型與估計的費用�
 void test('§4 收完的一行：用量寫成萬、千，費用分照牌價估計與服務回報；服務沒回報用量時照實寫', () => {
   const usage = { input: 18_000, output: 4_000, cacheRead: null, cacheWrite: null, reasoning: null };
   assert.equal(usageLine({ usage, cost: { amount: 0.0121, estimated: true, asOf: '2026-11-20' } }), '這次用了輸入 1.8 萬、輸出 4 千 token，約 US$0.012（照牌價估計）');
+  // 進位到 10 千的寫成萬（L2 第一輪的文字小項）。
+  assert.deepEqual([999, 1_000, 9_949, 9_950, 9_960, 9_999, 10_000, 99_960].map(input => usageLine({ usage: { ...usage, input, output: null }, cost: null })),
+    ['這次用了輸入 999 token', '這次用了輸入 1 千 token', '這次用了輸入 9.9 千 token', '這次用了輸入 9.9 千 token', '這次用了輸入 1 萬 token', '這次用了輸入 1 萬 token', '這次用了輸入 1 萬 token', '這次用了輸入 10 萬 token']);
   assert.equal(usageLine({ usage: { ...usage, input: 850, output: 12_345 }, cost: { amount: 0.0019, estimated: false, asOf: null } }), '這次用了輸入 850、輸出 1.2 萬 token，約 US$0.0019（服務回報）');
   assert.equal(usageLine({ usage: { ...usage, input: null, output: null }, cost: null }), '服務沒有回報用量');
   assert.equal(usageLine({ usage: { ...usage, input: null }, cost: { amount: 0, estimated: false, asOf: null } }), '這次用了輸出 4 千 token，約 US$0（服務回報）');
@@ -145,7 +148,7 @@ void test('§6 套件丟的錯：金鑰錯（到設定頁）、額度、太頻�
   const error = (status: number, body: unknown, headers: Record<string, string> = {}): MockReply => ({ status, headers: { 'content-type': 'application/json', ...headers }, chunks: [JSON.stringify(body)] });
   const auth = await send(error(400, { error: { code: 400, message: 'API key not valid', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } })).result;
   assert.ok(!auth.ok);
-  assert.deepEqual([auth.failure.kind, auth.failure.text, auth.failure.settings], ['auth', '金鑰不對，或這把金鑰不能用這個模型。', true]);
+  assert.deepEqual([auth.failure.kind, auth.failure.text, auth.failure.next, auth.failure.settings], ['auth', '金鑰不對，或這把金鑰不能用這個模型。', '到設定頁的「AI 連線」重貼金鑰，按「測試連線」。', true]);
   assert.equal(JSON.stringify(auth).includes(FAKE_KEY), false);
   const quota = await send(error(429, { error: { code: 429, message: 'quota', status: 'RESOURCE_EXHAUSTED', details: [{ reason: 'RATE_LIMIT_EXCEEDED' }] } }, { 'retry-after': '0' }), { maxAttempts: 1 }).result;
   assert.ok(!quota.ok);

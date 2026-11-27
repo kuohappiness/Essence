@@ -133,11 +133,11 @@ export function usageLine(result: Pick<DirectEvidence, 'usage' | 'cost'>): strin
   const cost = result.cost ? `，約 US$${result.cost.amount > 0 ? result.cost.amount.toPrecision(2) : '0'}（${result.cost.estimated ? '照牌價估計' : '服務回報'}）` : '';
   return `${head}${cost}`;
 }
-/** 「1.8 萬」「4 千」「850」。 */
+/** 「1.8 萬」「4 千」「850」：先照千取一位小數，進位到 10 千的寫成萬（9,960 是「1 萬」，不寫「10 千」）。 */
 function tokens(n: number): string {
-  if (n >= 10_000) return `${trim((n / 10_000).toFixed(1))} 萬`;
-  if (n >= 1_000) return `${trim((n / 1_000).toFixed(1))} 千`;
-  return String(n);
+  if (n < 1_000) return String(n);
+  const thousands = (n / 1_000).toFixed(1);
+  return Number(thousands) < 10 ? `${trim(thousands)} 千` : `${trim((n / 10_000).toFixed(1))} 萬`;
 }
 
 /** 套件回報的 token 數：不是非負整數的當成沒回報（存進工作之後要讀得回來，F12）。 */
@@ -172,7 +172,7 @@ export interface DirectFailure {
   settings: boolean;
 }
 
-const SETTINGS_NEXT = '到設定頁的「AI 連線」重貼金鑰，按「測試連線」';
+const SETTINGS_NEXT = '到設定頁的「AI 連線」重貼金鑰，按「測試連線」。';
 /** §6 的表：每一種一句話與下一步。沒列到的種類照「其他」。 */
 const FAILURES: Partial<Record<DirectFailure['kind'], { text: string; next: string; settings?: boolean }>> = {
   auth: { text: '金鑰不對，或這把金鑰不能用這個模型。', next: SETTINGS_NEXT, settings: true },

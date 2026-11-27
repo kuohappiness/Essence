@@ -104,3 +104,13 @@ void test('§7 收到的回覆是 CRLF：輸入框交回的是換成 LF 的那�
   assert.equal(decks.length, 2);
   for (const [path, text] of decks) assert.equal(text.includes('\r'), false, path);
 });
+
+void test('§7 服務回報的費用帶浮點雜訊（0.30000000000000004）：快照寫 0.3', async t => {
+  const router: MockReply = {
+    status: 200, headers: { 'content-type': 'application/json' },
+    chunks: [JSON.stringify({ id: 'gen-3', model: 'openai/gpt-5.6-terra', choices: [{ message: { content: reply }, finish_reason: 'stop' }], usage: { prompt_tokens: 900, completion_tokens: 300, cost: 0.1 + 0.2 } })],
+  };
+  const { props, text } = await saved(t, [router], [lesson], { provider: 'openrouter', model: 'openai/gpt-5.6-terra' });
+  assert.deepEqual([props['費用'], props['費用來源']], [0.3, '服務回報']);
+  assert.match(text, /^費用: 0\.3$/m);
+});
