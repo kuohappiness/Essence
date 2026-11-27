@@ -221,11 +221,14 @@ void test('寫得更深或寫在最上層（L2 第一輪 R3）：補充、多行
   deeper(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n      ${ALT}\n`), 5, /另起一行/);
   deeper(english(`- 頻率的問法\n    - How often? ::\n      ${ALT}\n`), 5, /另起一行/);
   deeper(english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - 詳解：連接詞放前面時中間加逗號\n          ${ALT}\n`), 6, /另起一行/);
-  // L2 第二輪 F2：加粗的標籤、寫在同一行後面（前面不是字）也提示；程式碼裡的、和前面的字連在一起的（「換成另一種排法：」）不提示。
+  // L2 第二輪 F2：加粗的標籤也提示；程式碼裡的、和前面的字連在一起的（「換成另一種排法：」）不提示。
   const bold = '**另一種排法：**==today==, ==we== ==learn==.';
   deeper(english(`- 頻率的問法\n    - How often? :: Every day.\n      ${bold}\n`), 5, /另起一行/);
   deeper(english(`- 頻率的問法\n    - How often? :: Every day.\n        - ${bold}\n`), 4, /英文句子排序/);
-  deeper(english('- 頻率的問法\n    - How often? :: Every day. 另一種排法：==today==, ==we== ==learn==.\n'), 4, /另起一行/);
+  // L2 第三輪 F7：只認寫在行首的標籤。寫在一行中間的分不清是不是連結標題、HTML 屬性這類看不到的地方，不提示（已知的限制）。
+  for (const tail of ['另一種排法：==today==, ==we== ==learn==.', '[說明](help.md "另一種排法：==示範==")', '<span title="另一種排法：==示範==">說明</span>']) {
+    assert.deepEqual(codes(english(`- 頻率的問法\n    - How often? :: Every day. ${tail}\n`)), [], tail);
+  }
   const literal = english(`- 用 because 合成一句 排序\n    - ${BECAUSE}\n        - ${ALT}\n    - 詳解：寫法像 \`- 題目\n      另一種排法：==a== ==b==\` 這樣\n`);
   assert.deepEqual(codes(literal), [], '程式碼裡的不提示');
   assert.deepEqual(codes(english('- 句型轉換\n    - 把句子換成另一種排法：==Yesterday== I went to school.\n')), [], '和前面的字連在一起，是題目自己的話');

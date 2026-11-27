@@ -155,17 +155,14 @@ type KindProblem = PickReading['problems'][number];
 const ALT_LABEL = '另一種排法：';
 /** 看起來是另一種排法的補充（冒號前有空白、半形冒號、加粗或螢光的標籤也算，L2 第二輪 F2）：認不得的、放錯地方的都用它找出來提示（§1 第 5、6 點）。 */
 export const ALT_LIKE = /^[*_=~\s]*另一種排法[*_=~\s]*[：:]/u;
-/** 寫在一行中間的另一種排法：前面不是字（「換成另一種排法：」是題目自己的話），後面還有填空（L2 第二輪 F2）。 */
-const ALT_INLINE = /(?:^|[^\p{L}\p{N}])另一種排法[*_=~\s]*[：:].*==/u;
-
 /**
- * 一項的文字裡看起來是另一種排法的地方（§1 第 6 點，L2 第二輪 F2）：照行回傳，at 是第幾行（0 是這一項本身那一行，之後是接續行），
- * start 是寫在行首（ALT_LIKE），否則是寫在行的中間（ALT_INLINE）。行內程式碼、公式、`%%` 註解裡的是字面的內容，不算。
+ * 一項的文字裡寫在行首、看起來是另一種排法的行（§1 第 6 點，L2 第二輪 F2）：回傳第幾行（0 是這一項本身那一行，之後是接續行）。
+ * 行內程式碼、公式、`%%` 註解裡的是字面的內容，不算。寫在一行中間的不找（L2 第三輪 F7）：分不清是不是連結標題、HTML 屬性這類看不到的地方。
  */
-export function altMentions(text: string): { at: number; start: boolean }[] {
+export function altMentions(text: string): number[] {
   const masked = maskInline(text).replace(/%%[^]*?%%/g, part => part.replace(/[^\n]/g, '\0'));
   const lines = masked.split('').map((char, i) => text[i] === '\n' ? '\n' : char).join('').split('\n');
-  return lines.flatMap((line, at): { at: number; start: boolean }[] => ALT_LIKE.test(line) ? [{ at, start: true }] : ALT_INLINE.test(line) ? [{ at, start: false }] : []);
+  return lines.flatMap((line, at) => ALT_LIKE.test(line) ? [at] : []);
 }
 /** 字元參照寫的引號、括號、空白（`&quot;`、`&#34;`、`&nbsp;`）也看得出來（R1）：解開數字的參照與這些名稱（大小寫都算，HTML 也認 `&QUOT;`，L2 第二輪），其他照原文。 */
 const NAMED: Readonly<Record<string, string>> = {

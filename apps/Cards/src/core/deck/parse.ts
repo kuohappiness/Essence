@@ -395,14 +395,12 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     // 寫在題目的下一層以外的地方（§1 第 6 點、L2 第一輪 R3）：照現在的讀法（另一題、共用補充、補充或答案的一部分），只提示。
     const misplaced = (node: Item, depth: number): void => {
       const mentions = altMentions(node.text);
-      // 寫成接續行（前面沒有清單符號）、寫在一行的中間（L2 第二輪）：照現在是這一項的文字。
-      for (const { at, start } of mentions) {
-        if (at === 0 && start) continue;
-        problems.push({ line: node.starts[at]?.line ?? node.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: start
-          ? '另一種排法要另起一行、前面加「- 」，當那一題的子項目；沒有清單符號時會接在上一項後面，當成同一項的文字'
-          : '另一種排法要另起一行、前面加「- 」，當那一題的子項目；寫在一行的後面會當成這一項的文字' });
+      // 寫成接續行（前面沒有清單符號，L2 第二輪）：照現在是這一項的文字。
+      for (const at of mentions) {
+        if (at === 0) continue;
+        problems.push({ line: node.starts[at]?.line ?? node.line, targetLine: root.line, level: 'hint', code: 'order-alt-invalid', message: '另一種排法要另起一行、前面加「- 」，當那一題的子項目；沒有清單符號時會接在上一項後面，當成同一項的文字' });
       }
-      if (mentions.some(each => each.at === 0 && each.start) && !placed.has(node)) {
+      if (mentions.includes(0) && !placed.has(node)) {
         addProblem(node, 'order-alt-invalid', depth === 0 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在最上層會被當成另一個學習目標'
           : depth === 1 ? '另一種排法要縮到那一題底下，當那一題的子項目；寫在學習目標底下會被當成另一題或整個目標共用的補充'
           : '另一種排法要直接寫在那一題的下一層；寫在補充、答案或別的子項目底下，照原本的讀法顯示，不算對的順序');
