@@ -24,6 +24,16 @@ export const deepenRemindOff = flag('essence-cards-deepen-remind-off');
 /** 手機的製卡開關（D-226 第 1 點、tasks/phone-cards.md §2-1）：存的是 true 才算開，缺值或壞值是關。電腦不看它（電腦一直可以製卡）。 */
 export const phoneCards = flag('essence-cards-phone-cards');
 
+/**
+ * 設定頁「AI 連線」（apps/Cards/docs/tasks/ai-direct.md §2）：服務、每一家的模型、推理等級、每一家金鑰在 Obsidian SecretStorage 的名稱。
+ * 金鑰的值不存在這裡。原樣讀出來，由 core/connect 的 readConnection 判斷讀不讀得懂。
+ */
+const AI_CONNECTION = 'essence-cards-ai-connection';
+export const aiConnection = {
+  get: (app: App): unknown => app.loadLocalStorage(AI_CONNECTION),
+  set: (app: App, value: object): void => { app.saveLocalStorage(AI_CONNECTION, value); },
+};
+
 const TERMS = 'essence-cards-catalog-terms';
 /** 學期收合：只記使用者動過的；沒有記的照預設（最新的學期展開）。 */
 export type TermOpen = Record<string, boolean>;

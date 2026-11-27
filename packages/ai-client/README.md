@@ -42,12 +42,17 @@ const result = await ai.generate({
 result.text; result.stopReason; result.usage; result.cost; result.trace;
 
 const check = await ai.check({ endpoint: { provider: 'openai' }, apiKey });   // 測試連線，不花錢
+
+// 送出前估費用：同一份請求（PDF 的 part 寫 pages，或在這裡給 pdfPages），加上預期的輸出；不呼叫服務
+const estimate = ai.estimate(request, { expectedOutputTokens: { low: 3000, high: 10_000 } });
+estimate?.low; estimate?.high; estimate?.assumptions;   // 目錄沒有這個模型的價格時是 null
 ```
 
 - 失敗一律丟 `AiError`：`kind`（`auth`、`quota`、`rate_limit`、`overloaded`、`network`、`timeout`、`cancelled`、`input_too_large`、`content_blocked`…）、`retryable`、`afterResponse`、`partialText`、`retryAfterMs`、`requestId`。`describeAiError(error)` 給一句中文（或 `'en'`）。
 - 自動重送只在**還沒拿到成功的回應**時（連不上、429、5xx）：最多 3 次，等 2 秒、8 秒；服務要等超過 60 秒就不重送。拿到 200 之後才出錯（串流中斷、串流裡的錯誤）不自動重送，`afterResponse: true`，由呼叫端問使用者。
 - 金鑰不進結果、錯誤與訊息；只送到那一家的網址；網址只准 `https` 或本機的 `http`（`localhost`、`127.0.0.1`、`::1`）；不跟轉址。
 - 費用照目錄的牌價估計（不含免費額度），標 `estimated` 與查價日期；服務自己回報金額的（OpenRouter）用回報的。
+- 送出前的估計（`estimate`）只算牌價、不含免費額度與快取折扣：文字照字數估（中日韓的字每字 0.6～1.5 token、其他字元每字 0.2～0.35 token），附件照目錄的 `mediaTokens`（每頁 PDF、每張圖的範圍，附官方網址與查的日期，官方沒寫數字的標 `guessed`）；目錄沒寫的用寬範圍（PDF 每頁 258～4,600、每張圖 258～4,800），`assumptions.media` 是 `fallback`。OpenRouter 照轉給哪個模型而不同，目錄不寫。
 - 要用某家還沒包進來的參數：`extraBody`（深層合併進請求本文）、`extraHeaders`。
 
 ## 換傳輸層

@@ -110,7 +110,7 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
 
 Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件出現才建，結構照 Cards。
 
-`packages/<套件>/` 放軟體共用的套件（[任務說明〈8〉](tasks/ai-client.md#8-repo-要改的地方)）：登記在 `tools/apps.ts` 的 `PACKAGES` 表；程式不跨出自己的資料夾、不 import 任何軟體；有自己的完整檢查與 CI job，改到它就跑它。軟體放一個自己的轉接檔，用相對路徑 import 表上套件的入口檔，其他檔只 import 轉接檔；不用 npm 的 `file:`、git 相依或發布版（[D-232](decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 第 5 點）。這條放行等第一個軟體接上時才加進檢查，在那之前軟體不能 import 套件。
+`packages/<套件>/` 放軟體共用的套件（[任務說明〈8〉](tasks/ai-client.md#8-repo-要改的地方)）：登記在 `tools/apps.ts` 的 `PACKAGES` 表；程式不跨出自己的資料夾、不 import 任何軟體；有自己的完整檢查與 CI job，改到它就跑它。軟體放一個自己的轉接檔，用相對路徑 import 表上套件的入口檔，其他檔只 import 轉接檔；不用 npm 的 `file:`、git 相依或發布版（[D-232](decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo) 第 5 點）。用哪個套件、轉接檔是哪一個，登記在 `tools/dispatch.ts` 的 `PACKAGE_USERS`；`tools/check-app-imports.ts` 照這張表只准轉接檔 import 套件的入口檔（軟體的測試另准 import `src/testing.ts`），並檢查表上的轉接檔存在、真的 import 入口檔。現在只有 Cards 用 `ai-client`，轉接檔是 `apps/Cards/src/core/connect/client.ts`（[Cards 直接呼叫 AI](../apps/Cards/docs/tasks/ai-direct.md) §1）。
 
 ### 每一類放哪裡
 
@@ -153,7 +153,7 @@ Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件
 
 檢查的對象是共用工具（`tools/` 自己的型別、lint、knip 與 `tools/tests/`）、三個外掛與 `packages/` 的套件：
 
-- 只改 `apps/<軟體>/`，就只裝、只檢查那個軟體；只有文件的軟體（現在是 Portal）只跑共用檢查。只改 `packages/<套件>/`，就只檢查那個套件。
+- 只改 `apps/<軟體>/`，就只裝、只檢查那個軟體；只有文件的軟體（現在是 Portal）只跑共用檢查。只改 `packages/<套件>/`，檢查那個套件，`PACKAGE_USERS` 登記用它的軟體也跑完整檢查（現在是 `ai-client` 與 Cards）。
 - 改到兩個軟體都讀的規格（登錄在分派表，現在是轉錄稿格式 `docs/transcript.md`），讀它的軟體都檢查。
 - 改到 Cards 的文件，commit 只跑寫到那個檔的測試，CI 跑 Cards 的完整檢查；寫到那個檔的共用工具測試也跑。
 - 改到其他共用工具（文件檢查、進度白板、Codex 包裝、雲端的 hook 等），只跑共用工具的完整檢查。

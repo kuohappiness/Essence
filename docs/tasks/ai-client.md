@@ -1,6 +1,6 @@
 # AI 連線模組：可以換廠商、能拿到別的 repo 用的共用套件（給 Claude，雲端執行）
 
-狀態：實作中｜下一步：第一、二步做完（〈結果〉）；第三步照 [Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) 做（Cards 不切頁，切頁與轉錄放 Capture，使用者 2026-11-27），先跑探針；雲端設定第 ① 件記成[補測](../backlog.md#技術債)｜等誰：Claude
+狀態：實作中｜下一步：第一、二步做完（〈結果〉）；第三步照 [Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) 做（Cards 不切頁，切頁與轉錄放 Capture，使用者 2026-11-27），第 1 批（設定頁與測試連線）已合併（PR #78），接著做第 2 批的直接製作；雲端設定第 ① 件記成[補測](../backlog.md#技術債)｜等誰：Claude
 
 來自：使用者 2026-11-25 在「讓外掛直接呼叫 AI 製卡」討論串：「1. 取消 chatgpt 登入的作法，也刪除相關的規劃紀錄，未來只做 API　2. 能不能把這個做成 API 模組，我可以任意更改未來要對接的任何一間 API，甚至可以把這個模組拿給其他的 repo 做，要具備長遠的擴充彈性，所以在規劃上值得再三仔細設計。你規劃好之後請 fable 5.2 xhigh 想一下，我們不等，規劃好就來做」。
 
@@ -80,7 +80,7 @@ packages/ai-client/
 
 用法寫在套件的 [README](../../packages/ai-client/README.md)，型別以 `src/types.ts` 為準。這裡只記會影響之後的決定：
 
-- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`、`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
+- `createAiClient({ fetch?, responseTimeoutMs?, catalog?, clock? })` 回 `generate`、`check`、`providers()`、`catalogProblems`。`check` 拿到 200 也要是那一家模型清單的形狀（用 `checkPath` 的：JSON 物件、沒有 `error`）才算連上（L2 R12）。`estimate`（送出前估費用）在 Cards 要顯示預估時加了（[Cards 直接呼叫 AI](../../apps/Cards/docs/tasks/ai-direct.md) §3，2026-11-27，用法見套件的 README）；`listModels`、`capabilities` 等 Cards 真的要用再開（Fable 第 15 點）。
 - **傳輸層是標準 `fetch` 的形狀**：`(url, init) => Promise<Response>`，`init` 帶 `method`、`headers`、`body`（`Uint8Array`）、`signal`、`redirect: 'error'`。Obsidian 的 `requestUrl` 包成這個形狀時要設 `responseTimeoutMs: null`（它收完整段本文才交出）。
 - **端點**：`{ provider: 'openai' }`（目錄裡的）或 `{ custom: { dialect, baseUrl, auth, options? } }`；`apiKey` 選填（本機的 Ollama 不用）。
 - **逃生口**：`extraBody`（深層合併進請求本文，蓋過套件組的欄位）與 `extraHeaders`（不能蓋掉認證標頭）。各家的新參數不必等套件改版。`extraBody` 不能寫最上層的 `model` 與 `stream`（模型用 `request.model`，目錄與證據照它；一律串流），寫了回 `invalid_request`；改了哪些欄位（只記路徑）記在 `trace.warnings`（L2 R13）。標頭組好之後整份驗一次：名稱要是合法的 token、值不能有換行或 NUL、每個字都在 0～255（標準的 `Headers` 只收這些），認證標頭不能用套件固定的 `content-type`、`accept`；目錄、自訂服務、`extraHeaders`、認證的前綴與金鑰哪一個壞了，都回 `invalid_request`、不送出，訊息只寫標頭名稱（L2 第四輪 第 9 項）。
@@ -101,7 +101,7 @@ packages/ai-client/
 - 一律要求串流（SSE）；服務回 `application/json` 時照非串流讀。每種方言有自己的「做完」訊號，連線正常關閉卻沒看到算 `network`，收到的文字放在 `partialText`。看到傳完的事件就不再讀、直接交回（Responses 的 `response.completed`／`incomplete`、Anthropic 的 `message_stop`、Chat 的 `[DONE]`；Chat 的 `finish_reason` 只算做完，因為用量在它之後另一塊）。Chat 有 `finish_reason` 卻沒等到 `[DONE]` 就關了，照樣成功、記 warning（用量可能沒到）；Gemini 沒有傳完的事件，讀到服務關串流為止。已經看到做完的訊號、串流卻一直沒關時，閒置或整體逾時照已收到的交回，記 warning，不作廢已經付錢的結果（L2 R10）。
 - 每個 `fixtures/<方言>/case.json` 寫依據的官方文件網址與查的日期。
 - OpenAI 送 `store: false`，不用背景模式（之後要「斷線接回」就得開 `store`，那時再定）。Gemini 用 generateContent：Google 把它標成 Legacy 但寫明繼續完整支援，Interactions 還是 Beta；之後另加 `gemini-interactions` 方言。Anthropic 的 API 版號和方言綁在一起，不放在可覆蓋的標頭。
-- **目錄**：`catalog.json` 的 `schemaVersion` 是 1；一筆廠商寫方言、網址、認證標頭、上限（`maxRequestBytes`、`maxFileBytes`、`maxPdfPages`）、預設的輸入種類與推理寫法、`options`（`openai-chat` 各家的差異：`maxTokensField` 只能是 `max_tokens` 或 `max_completion_tokens`、`streamUsage`、`systemRole`；`checkPath` 給列模型不用金鑰的服務）與模型。一筆模型寫能收的輸入、推理寫法、輸出上限、價格（可以有好幾筆，照 `effectiveFrom` 換；長輸入另一組價）與查價日期。壞掉的那一筆跳過、回報在 `catalogProblems`，不讓整個套件不能用；形狀不對（該是物件或陣列的不是、`limits` 不是正整數）與日曆上沒有的日期（`2026-02-30`）也算壞掉（L2 R14）。
+- **目錄**：`catalog.json` 的 `schemaVersion` 是 1；一筆廠商寫方言、網址、認證標頭、上限（`maxRequestBytes`、`maxFileBytes`、`maxPdfPages`）、預設的輸入種類與推理寫法、`options`（`openai-chat` 各家的差異：`maxTokensField` 只能是 `max_tokens` 或 `max_completion_tokens`、`streamUsage`、`systemRole`；`checkPath` 給列模型不用金鑰的服務）與模型，另可寫 `mediaTokens`（每頁 PDF、每張圖大約幾個 token 的範圍，送出前估費用用，附官方網址與查的日期；Cards 第三步加的）。一筆模型寫能收的輸入、推理寫法、輸出上限、價格（可以有好幾筆，照 `effectiveFrom` 換；長輸入另一組價）與查價日期，和廠商不同時也寫 `mediaTokens`。壞掉的那一筆跳過、回報在 `catalogProblems`，不讓整個套件不能用；形狀不對（該是物件或陣列的不是、`limits` 不是正整數）與日曆上沒有的日期（`2026-02-30`）也算壞掉（L2 R14）。
 - 推薦哪一個給製卡，不寫在套件裡，寫在 Cards 的資料，和 [ai-models.md](../ai-models.md) 同步。Fable 建議套件只留一小份模型種子、主檔放 Cards（第 11 點）：第三步接上時一起定，現在的模型資料標了查價日期。
 - **快取**：不做 `cache: 'auto'`。Anthropic 的自動快取把斷點放在最後一個區塊，每課不同的 PDF 在最後，等於每次多付寫入、永遠讀不到（Fable 第 13 點）。之後要做時做成「到這個區塊為止可快取」的標記；第三步組請求時，規則放 `instructions`、PDF 放在文字前面。
 
@@ -214,6 +214,7 @@ packages/ai-client/
 - L2 第四輪（最後一輪）：12 項，使用者 2026-11-25 說「用 fable 5.2 xhigh 看一次，如果他也同意就不再送審」；Fable 有條件同意，照條件修了 10 項、第 2 項記進已知的限制，不再送 Codex（[審查報告〈Claude 修正（第四輪）〉](<../Claude Codex Discussion/2026-11-25-ai-client-l2.md#claude-修正第四輪>)）。最後版本 `480470ec` 在雲端與使用者的 Windows 電腦上，套件 220 個測試、共用檢查都過。
 - D-232：使用者 2026-11-26 同意，已寫成 [D-232](../decisions.md#d-232-ai-連線做成共用套件講四種方言能拿到別的-repo)。
 - 第 ① 件：使用者 2026-11-26 在決定卡選「合併後我自己驗」。合併後用一次性排程開了新的專案討論串，它回報的原文：hook 的輸出「沒看到 hook 輸出」；`git log --oneline -1` 是 `c0561be`；`git config core.hooksPath` 空白（exit 1）；`node --version` 是 `v22.23.5`（`/opt/node22/bin/node`）；三個 `node_modules` 都不存在。原因是專案討論串的 session 專案資料夾是 repo 的上一層資料夾、repo clone 在它底下，不載 repo 的 `.claude/settings.json`（這個 session 的 `CLAUDE_PROJECT_DIR` 也是空的），所以 hook 根本沒被叫到，不是這次改壞的。要在 claude.ai/code 開的一般雲端 session 才驗得到，記成技術債；[quality.md〈本機或雲端〉](../agents/quality.md#本機或雲端)補上要在哪裡開。
+- 第 ① 件補驗（2026-11-27）：「優化 Essence 開發流程」第 1 步（PR #80，main `69acd7db`）讓專案討論串開機時由雲端環境「Essence」的 setup script 跑 `cloud-setup.mjs`，並把 repo 的 hook 接到使用者設定。專案切到這個環境後新開的專案討論串，沒有手動補任何設定，開場訊息原文：「雲端環境設定：PATH 上的 Node 是 22.23.5，之後的指令改用 /opt/node24/bin 的 v24.22.3；core.hooksPath 已設為 .githooks；tools：鎖檔沒變，跳過；apps/Cards：鎖檔沒變，跳過；apps/Capture：沒有相依，跳過；apps/Mindboard：沒有相依，跳過；packages/ai-client：鎖檔沒變，跳過」；`node -v` 是 `v24.22.3`、`core.hooksPath` 是 `.githooks`、`v*` 的 tag 有 6 個。開場時有叫到 hook，這一項的完成條件都符合。
 - 冒煙測試（第二步）：2026-11-27 在使用者的 Windows 電腦（main `a902f97e`，金鑰只放在環境變數），每一家送一段自編短文與一頁程式產生的 PDF，總共不到 US$0.003。原始結果：
   - OpenAI `gpt-5.6-terra`（推理 low）：成功，3.8 秒，回應標頭約 3.1 秒到；輸入 50、輸出 24 token，US$0.000388，停止原因 `completed`。
   - Anthropic `claude-haiku-5-5`（low）：成功，0.8 秒，標頭約 0.57 秒到；輸入 1626、輸出 57，US$0.0001911，`end_turn`。
@@ -224,4 +225,4 @@ packages/ai-client/
   - 串流診斷（關掉標頭時限，請它寫約 600 字）：flash-lite 標頭 0.6 秒到、文字 1.8 秒內分 17 段送完；Haiku 標頭 0.9 秒到、6.1 秒內分 247 段；3.8 Flash 第一次 503、自動重送，第二次送出後約 176.6 秒標頭才到，文字在之後 5 秒內分 20 段送完（輸出 1552，推理 1062）。
   - 結論：Gemini 的思考不串流，想完才送回應標頭，套件原本 120 秒的標頭時限會把正常的請求算成逾時。照步驟 2「對不上的照實改」，改成 Gemini 預設不另外限時、只照整體期限（〈7〉第 4 點，PR #67，先寫重現 121 秒逾時的失敗測試再改，套件 222 個測試通過）。「連不上時照樣重送」的推斷（[已知的限制](../backlog.md#已知的限制)）對 Gemini 不成立，那一列改寫了。四種方言照現在的解析都拿到文字、用量與停止原因，範例回應不用改。
 
-延後的測試：「補測：雲端設定第 ① 件」
+延後的測試：無（原本延後的雲端設定第 ① 件，2026-11-27 補驗完，見上）

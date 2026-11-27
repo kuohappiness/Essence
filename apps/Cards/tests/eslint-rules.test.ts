@@ -135,6 +135,12 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
     ['src/state/index.ts', "import { EditorView } from '@codemirror/view';", true],
     ['src/dev/compare.ts', "require('@codemirror/state');", true],
     ['src/obsidian/lock.ts', "import { EditorState } from '@codemirror/state';", false],
+    // AI 連線套件（docs/tasks/ai-client.md〈8〉第三步）：只有轉接檔能 import 套件的入口；別的核心檔、套件的其他檔都擋。
+    ['src/core/connect/client.ts', "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", false],
+    ['src/core/connect/client.ts', "import '../../../../../packages/ai-client/src/client.ts';", true],
+    ['src/core/connect/index.ts', "export { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", true],
+    ['src/core/ai/prompt.ts', "import { createAiClient } from '../../../../../packages/ai-client/src/index.ts';", true],
+    ['src/core/deck/index.ts', "import '../../../../../packages/ai-client/src/index.ts';", true],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
     assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
@@ -265,6 +271,34 @@ void test('R8 state、review 不能 import ui；deck、study 不能 import ai、
     ['src/ui/Entry.tsx', "import { x } from '../core/errors/index.ts';", null],
     ['src/obsidian/settings-tab.ts', "import { readSettings } from '../core/settings/index.ts';", null],
     ['src/main.ts', "import { takeBackup } from './core/backup/index.ts';", null],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    const found = result.messages.filter(isBoundary);
+    if (message) assert.ok(found.some(m => message.test(m.message)), path + ': ' + code + ' → ' + JSON.stringify(found.map(m => m.message)));
+    else assert.deepEqual(found, [], path + ': ' + code);
+  }
+});
+
+// ai-direct.md §1、L2 第一輪 R5：core/connect 會載入 AI 連線套件，state、複習、其他核心模組、畫面與發布前比較都不拿它的值。
+void test('R5 core/connect 只有 main.ts、src/obsidian/ 與它自己能 import 值；別處只拿型別', async () => {
+  const lint = new ESLint({ overrideConfig: syntaxOnly });
+  const blocked = /core\/connect（AI 連線）只有 main\.ts、src\/obsidian\/ 與 core\/connect 自己能 import/;
+  for (const [path, code, message] of [
+    ['src/ui/prefs.ts', "import { readConnection } from '../core/connect/index.ts';", blocked],
+    ['src/ui/Entry.tsx', "import { type Connection } from '../core/connect/index.ts';", blocked],
+    ['src/state/index.ts', "import { cardsClient } from '../core/connect/index.ts';", blocked],
+    ['src/review/session.ts', "void import('../core/connect/index.ts');", blocked],
+    ['src/core/ai/index.ts', "export { cardsClient } from '../connect/index.ts';", blocked],
+    ['src/core/deck/parse.ts', "import '../connect/connection.ts';", /核心的模組之間只能 import 對方的 index\.ts/],
+    ['src/dev/compare.ts', "import { cardsClient } from '../core/connect/index.ts';", blocked],
+    ['tools/compare/adapter.ts', "import { cardsClient } from '../../src/core/connect/index.ts';", blocked],
+    // 不誤擋：接線的地方、模組自己、型別、測試。
+    ['src/main.ts', "import { cardsClient } from './core/connect/index.ts';", null],
+    ['src/obsidian/settings.ts', "import { cardsClient } from '../core/connect/index.ts';", null],
+    ['src/core/connect/connection.ts', "import { createAiClient } from './client.ts';", null],
+    ['src/ui/Entry.tsx', "import type { Connection } from '../core/connect/index.ts';", null],
+    ['src/state/index.ts', "type C = import('../core/connect/index.ts').Connection;", null],
+    ['tests/ai-connection.test.ts', "import { cardsClient } from '../src/core/connect/index.ts';", null],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
     const found = result.messages.filter(isBoundary);

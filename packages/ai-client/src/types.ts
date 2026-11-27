@@ -13,7 +13,7 @@ export type InputKind = 'text' | 'image' | 'pdf';
 export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: string; data: Uint8Array }
-  /** 現在只收 PDF（mediaType 'application/pdf'）。pages 是選填的頁數，只用來檢查頁數上限。 */
+  /** 現在只收 PDF（mediaType 'application/pdf'）。pages 是選填的頁數：送出時檢查頁數上限；送出前估費用（estimate）沒給 pdfPages 時照它算，兩個都沒有就丟錯。 */
   | { type: 'file'; mediaType: string; data: Uint8Array; name?: string; pages?: number };
 
 export interface Message {
@@ -48,6 +48,29 @@ export interface PriceSpec {
   longContext?: { aboveInputTokens: number; input: number; output: number; cachedInput?: number };
 }
 
+/** token 數的範圍：最少與最多。 */
+export interface TokenRange {
+  low: number;
+  high: number;
+}
+
+/**
+ * 一頁 PDF、一張圖大約算幾個輸入 token（送出前估費用用）。各家照頁面內容與解析度算，所以寫成範圍。
+ * 模型寫的欄位蓋過廠商的；都沒寫時估費用用寬範圍（PDF 每頁 258～4,600、每張圖 258～4,800）。
+ */
+export interface MediaTokens {
+  /** 一頁 PDF：文字和頁面圖合計。 */
+  pdfPage?: TokenRange;
+  /** 一張圖，例如手機拍的課本頁。 */
+  image?: TokenRange;
+  /** 依據的官方網址。 */
+  source?: string;
+  /** 查的日期（YYYY-MM-DD）。 */
+  asOf?: string;
+  /** true：官方沒有寫數字，範圍是推估的。 */
+  guessed?: boolean;
+}
+
 export interface ModelSpec {
   id: string;
   label?: string;
@@ -61,6 +84,8 @@ export interface ModelSpec {
   pricesAsOf?: string;
   /** 依據的官方網址。 */
   source?: string;
+  /** 這個模型和廠商不同時才寫。 */
+  mediaTokens?: MediaTokens;
 }
 
 /**
@@ -95,6 +120,8 @@ export interface ProviderSpec {
   /** 目錄沒列的模型用這些。 */
   defaults?: { inputs?: InputKind[]; reasoning?: ReasoningSpec; maxOutputTokens?: number };
   options?: ProviderOptions;
+  /** 送出前估費用用；模型的 mediaTokens 蓋過這裡。 */
+  mediaTokens?: MediaTokens;
   models: ModelSpec[];
 }
 
@@ -218,6 +245,40 @@ export interface GenerateResult {
   /** 可以原樣接在下一輪的 input 後面。 */
   message: Message;
   trace: Trace;
+}
+
+export interface EstimateOptions {
+  /** PDF 的總頁數；沒給時加總請求裡每個 PDF 的 pages（有 PDF 沒寫 pages 又沒給這一欄，丟 invalid_request）。 */
+  pdfPages?: number;
+  /** 圖片張數；沒給時數請求裡的圖片。 */
+  images?: number;
+  /** 預期的輸出 token（含推理）。 */
+  expectedOutputTokens: TokenRange;
+}
+
+/** 送出前的費用估計：照牌價、不含免費額度與快取折扣，假設不用快取。 */
+export interface Estimate {
+  /** 最少與最多大約多少（美元）。 */
+  low: number;
+  high: number;
+  currency: 'USD';
+  pricesAsOf: string | null;
+  /** 怎麼算出來的，畫面要說明時用。 */
+  assumptions: {
+    /** 提示與文字內容的字數（UTF-16 單位）。 */
+    textChars: number;
+    pdfPages: number;
+    images: number;
+    inputTokens: TokenRange;
+    outputTokens: TokenRange;
+    /** 每頁、每張用的範圍；沒有這種附件的是 null。 */
+    pdfPageTokens: TokenRange | null;
+    imageTokens: TokenRange | null;
+    /** 附件的範圍從哪裡來：目錄寫的、目錄寫的推估、目錄沒寫時的寬範圍；沒有附件的是 null。 */
+    media: 'catalog' | 'guessed' | 'fallback' | null;
+    mediaSource: string | null;
+    mediaAsOf: string | null;
+  };
 }
 
 export interface ModelInfo {

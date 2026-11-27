@@ -10,6 +10,7 @@
       "auth": { "header": "Authorization", "scheme": "Bearer" },
       "docsUrl": "https://developers.openai.com/api/docs",
       "limits": { "maxFileBytes": 52428800 },
+      "mediaTokens": { "pdfPage": { "low": 1000, "high": 4000 }, "image": { "low": 800, "high": 3000 }, "source": "https://developers.openai.com/api/docs/guides/file-inputs", "asOf": "2026-11-27", "guessed": true },
       "defaults": {
         "reasoning": { "path": "reasoning.effort", "values": { "off": "none", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } }
       },
@@ -36,6 +37,7 @@
       "auth": { "header": "x-api-key" },
       "docsUrl": "https://platform.claude.com/docs",
       "limits": { "maxRequestBytes": 134217728, "maxPdfPages": 600 },
+      "mediaTokens": { "pdfPage": { "low": 1500, "high": 4568 }, "image": { "low": 1568, "high": 4784 }, "source": "https://platform.claude.com/docs/en/build-with-claude/pdf-support", "asOf": "2026-11-27" },
       "defaults": {
         "inputs": ["text", "image", "pdf"],
         "reasoning": { "path": "output_config.effort", "values": { "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max" } }
@@ -95,6 +97,7 @@
       "auth": { "header": "x-goog-api-key" },
       "docsUrl": "https://ai.google.dev/gemini-api/docs",
       "defaults": { "inputs": ["text", "image", "pdf"] },
+      "mediaTokens": { "pdfPage": { "low": 258, "high": 560 }, "image": { "low": 1120, "high": 1120 }, "source": "https://ai.google.dev/gemini-api/docs/document-processing", "asOf": "2026-11-27" },
       "models": [
         {
           "id": "gemini-3.8-flash",
