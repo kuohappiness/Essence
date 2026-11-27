@@ -405,12 +405,17 @@ class EssenceSettingTab extends PluginSettingTab {
       this.aiResult = { ok: result.ok, text: result.text };
       this.refresh();
     } catch (error) {
-      // 交給錯誤紀錄（D-155）；已經被換掉或中止的這一次不畫。
-      this.host.aiFailed(error);
-      if (this.aiTest !== controller) return;
-      this.aiTest = null;
-      this.aiResult = { ok: false, text: AI.failed };
-      this.refresh();
+      // 先讓按鈕回來，再交給錯誤紀錄（D-155）：記錄本身出錯也不會停在「測試中…」（L2 第二輪 S1）。已經被換掉或中止的這一次不畫。
+      const current = this.aiTest === controller;
+      if (current) {
+        this.aiTest = null;
+        this.aiResult = { ok: false, text: AI.failed };
+      }
+      try {
+        this.host.aiFailed(error);
+      } finally {
+        if (current) this.refresh();
+      }
     }
   }
 
