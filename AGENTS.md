@@ -54,7 +54,7 @@
 
 - AI 能測的由 AI 測；請使用者測之前，先說明 AI 為什麼測不了；需要 iPhone 實機的測試集中成一次。
 - 測試或功能要延後時，照 `docs/agents/quality.md`〈測試分兩類〉（[D-195](docs/decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)）記進技術債表，不能只是沒做。
-- 規劃文件直接 commit 到 `main` 並 push；較大的程式改動開分支。
+- 規劃文件與程式都開分支、走 PR：`main` 要 CI 的 gate 綠燈才合得進去，不能直接 push（[D-245](docs/decisions.md#d-245-ci-只在-push-跑main-要-gate-綠燈才合得進去)）。
 
 ## Code Review Rules
 
