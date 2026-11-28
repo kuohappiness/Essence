@@ -17,6 +17,8 @@ const ANCHOR_LABEL = /^記憶錨點：([\s\S]*)$/;
 const OPTIONS_LABEL = /^選項：/;
 /** 像選項行的寫法（§3〈寫法不對、放錯位置〉）：冒號全半形、前面可以有空白，前後可以有粗體。 */
 const OPTIONS_LIKE = /^\s*(?:\*\*)?\s*選項\s*(?:\*\*)?\s*[：:]/;
+/** 選項行寫在最上層時的提示（L2 第一輪 R7、第二輪 7）。 */
+const ROOT_OPTIONS = '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項';
 /** 同一行接別的欄位的分隔：`｜`，或半形的 `|` 後面接欄位名稱加冒號（D-170 第 12 點）；給 tracedSplit 用，連結裡的不算。 */
 export const FIELD_SEPARATOR = /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/;
 const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', statusRead: 'missing', categories: [], isTranscript: false, need: null, issues: [] });
@@ -393,6 +395,8 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     if (!target.prompts.length) {
       // 一般筆記不是目標，不回報它的欄位提示。
       for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
+      // 只有選項行、少縮一層寫到最上層的（L2 第二輪 7）：不是目標，但還是提示放錯位置（下面寫在最上層的那一條）。
+      if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
       continue;
     }
     // 認卡型的題目階段（題型模組任務說明 §1-3）：比較卡、多音字、排序、接句照順序，讀成或有提示就停；文法與變化在名稱階段認了，不走這裡。
@@ -439,7 +443,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       for (const child of node.children) optionsAt(child, depth + 1);
     };
     // 寫在最上層的（L2 第一輪 R7）：是一個目標的名稱或隱式題，不是選項行。
-    if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項');
+    if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
     if (!implicit || !answerBelow(root)) for (const child of root.children) optionsAt(child, implicit ? 2 : 1);
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');

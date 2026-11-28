@@ -115,8 +115,18 @@ void test('單選：選項行寫在最上層（L2 第一輪 R7）：是目標的
   assert.deepEqual(hints('- 選項：北部 :: 東部;;西部;;南部\n'), [{ line: 0, message: '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項' }]);
   assert.deepEqual(hints('- 選項：北部;;東部;;西部\n    - 海岸平直的是哪一部？ :: 西部\n').map(each => each.line), [0]);
   assert.equal(kindSingle(first('- 選項：北部;;東部;;西部\n    - 海岸平直的是哪一部？ :: 西部\n')), undefined);
-  // 不是目標的一般筆記照舊不提示。
-  assert.deepEqual(hints('- 選項：北部;;東部;;西部\n'), []);
+  // 只有選項行、少縮一層寫到最上層的（L2 第二輪 7）：不是目標，也提示放錯位置；上面那個目標照原本的題型出。
+  const pasted = '- 能認出西部的海岸 ^west00\n    - 海岸平直的是哪一部？ :: 西部\n- 選項：北部;;東部;;西部\n';
+  assert.deepEqual(hints(pasted), [{ line: 2, message: '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項' }]);
+  assert.equal(kindSingle(first(pasted)), undefined);
+  assert.deepEqual(hints('- 選項：北部;;東部;;西部\n').map(each => each.line), [0]);
+  // 不是選項行的一般筆記照舊不提示。
+  assert.deepEqual(hints('- 北部;;東部;;西部\n'), []);
+  // 整類（第 2 代）：像選項行的每種寫法（冒號全半形、粗體、空白）寫在最上層，是不是目標、底下有什麼，都提示在那一行。
+  for (const label of ['選項：', '選項:', '**選項**：', '**選項：**', '選項 ：']) for (const below of ['', '    - 補充\n', '    - 海岸平直的是哪一部？ :: 西部\n']) {
+    const text = `- 能認出西部的海岸\n    - 海岸平直的是哪一部？ :: 西部\n- ${label}北部;;東部;;西部\n${below}`;
+    assert.deepEqual(hints(text).map(each => each.line), [2], JSON.stringify(text));
+  }
 });
 
 void test('單選：多行答案的行、記憶錨點的子項目不看', () => {
