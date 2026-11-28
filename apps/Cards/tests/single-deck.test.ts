@@ -126,9 +126,12 @@ void test('單選：選項行寫在最上層（L2 第一輪 R7）：是目標的
   for (const label of ['選項：', '選項:', '**選項**：', '**選項：**', '選項 ：']) for (const below of ['', '    - 補充\n', '    - 海岸平直的是哪一部？ :: 西部\n']) {
     const text = `- 能認出西部的海岸\n    - 海岸平直的是哪一部？ :: 西部\n- ${label}北部;;東部;;西部\n${below}`;
     assert.deepEqual(hints(text).map(each => each.line), [2], JSON.stringify(text));
+    // 看得到的 `;;` 加了註解照樣提示。
+    assert.deepEqual(hints(text.replace('北部;;東部;;西部\n', '北部;;東部;;西部 %%x%%\n')).map(each => each.line), [2], JSON.stringify(text));
   }
   // 沒有 `;;` 的一般清單不是選項行（L2 第三輪 5）：不是目標的不提示，寫法、底下有沒有補充都一樣；頓號、一個分號、空白隔開的都算。
-  for (const label of ['選項：', '選項:', '**選項**：', '**選項：**', '選項 ：']) for (const list of ['搭火車、搭公車', '搭火車；搭公車', '搭火車 搭公車']) for (const below of ['', '    - 補充\n']) {
+  // `;;` 只寫在 `%%` 註解裡的也不算，同選項的切法（L2 第四輪 4）。
+  for (const label of ['選項：', '選項:', '**選項**：', '**選項：**', '選項 ：']) for (const list of ['搭火車、搭公車', '搭火車；搭公車', '搭火車 搭公車', '搭火車、搭公車 %%舊寫法用 ;;%%']) for (const below of ['', '    - 補充\n']) {
     const text = `- 能認出西部的海岸\n    - 海岸平直的是哪一部？ :: 西部\n- ${label}${list}\n${below}`;
     assert.deepEqual(hints(text), [], JSON.stringify(text));
   }
