@@ -115,8 +115,8 @@ export function directEvidence(value: unknown): DirectEvidence | null {
     && optString(value.requestId) && optString(value.responseId) && Array.isArray(value.files) && value.files.every(isFile) && isString(value.text) && isString(value.sha256) && sha256Hex(value.text) === value.sha256;
   return ok ? value as unknown as DirectEvidence : null;
 }
-/** 這份工作的直接製作資料；沒有或讀不懂是 null（讀不懂的當成複製貼上的工作，F12）。 */
-export function directJob(job: CardJob): DirectJob | null {
+/** 這份工作（製卡或加深，§9）的直接製作資料；沒有或讀不懂是 null（讀不懂的當成複製貼上的工作，F12）。 */
+export function directJob(job: { api?: unknown }): DirectJob | null {
   const api: unknown = job.api;
   if (!isObject(api) || !isString(api.state) || !optString(api.kind) || !isString(api.at) || !Array.isArray(api.files) || !api.files.every(isFile)) return null;
   if (api.charged !== undefined && typeof api.charged !== 'boolean') return null;

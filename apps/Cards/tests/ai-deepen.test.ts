@@ -284,6 +284,12 @@ void test('§5-1 這次不用：外層壞了整份當沒有，某一篇壞了只
 void test('§4-2、§4-3 提醒一區的一行：等待貼回優先、再來待審核；第一次說「有」，之後說「又有」；沒到門檻不出現', () => {
   const ready = { show: true, first: true, fresh: 6, pool: 10, need: 5 };
   assert.deepEqual(deepenRow('a.md', 'L3 單字', { waiting: true, pending: true, remind: ready }), { path: 'a.md', kind: 'waiting', text: 'L3 單字：加深的提示已複製，等你貼回' });
+  // 直接製作的那一份（tasks/ai-direct.md §9，第 3 批 L2 R1）：沒有複製過，照它現在的情況寫；列的種類不變。
+  assert.deepEqual(['sent', 'failed', 'received'].map(direct => deepenRow('a.md', 'L3 單字', { waiting: true, direct: direct as 'sent', pending: false, remind: null })), [
+    { path: 'a.md', kind: 'waiting', text: 'L3 單字：加深已經直接送出，還沒收到回覆' },
+    { path: 'a.md', kind: 'waiting', text: 'L3 單字：加深直接製作沒有成功，還沒處理' },
+    { path: 'a.md', kind: 'waiting', text: 'L3 單字：加深直接製作收到回覆了，還沒寫進卡組' },
+  ]);
   assert.deepEqual(deepenRow('a.md', 'L3 單字', { waiting: false, pending: true, remind: ready })?.text, 'L3 單字：上一次加深的結果還沒審完');
   assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: ready })?.text, 'L3 單字：有 6 個記穩了，要加深嗎？');
   assert.equal(deepenRow('a.md', 'L3 單字', { waiting: false, pending: false, remind: { ...ready, first: false } })?.text, 'L3 單字：又有 6 個記穩了，要加深嗎？');

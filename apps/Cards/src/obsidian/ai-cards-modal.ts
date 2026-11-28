@@ -1,11 +1,12 @@
 import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
-import { directJob, freeName, groupHints, issueText, PURPOSES, sha256OfBytes, UNENDED_HINT } from '../core/ai/index.ts';
+import { directJob, freeName, groupHints, issueText, PURPOSES, UNENDED_HINT } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
-import { materialType, usageLine } from '../core/connect/index.ts';
+import { usageLine } from '../core/connect/index.ts';
 import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
 import { inspectionKey, PICK_NOTE, SERVICES } from './ai-cards.ts';
 import type { AiCards, DirectOutcome, Outcome } from './ai-cards.ts';
+import { ago, askCancel, DIRECT_TEXT, materialField, sendingView } from './direct-ui.ts';
 
 // AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：電腦一直有；手機在設定頁打開才有（D-226、tasks/phone-cards.md §2-1）。入口與目錄不放（D-100）。
 // 用 Obsidian 的視窗、和存檔按鈕的小視窗同一種做法：家長要在瀏覽器與 Obsidian 之間來回，視窗不蓋住整個工作區。
@@ -31,15 +32,7 @@ const TEXT = {
   // 清掉的時機照 readJobs（載入與存工作時）：寫「可能」，不寫成到期那一刻就清（L2 R7）。
   local: (id: string) => `這次的提示只記在這台裝置（識別碼 ${id}）：換一台貼不回來。還沒開始存成草稿的放超過 14 天，或超過 5 個時，舊的可能被清掉；開始存草稿之後就不會。`,
   broken: (n: number) => `有 ${String(n)} 份之前複製的提示讀不懂，已經拿掉；要用的話請重新複製一次。`,
-  files: '選擇檔案',
   filesNote: '課本那一課的 PDF 或照片（JPG、PNG），也可以拖進來。請先切出這一課的頁面，整本送會貴很多倍。',
-  notMaterial: (name: string) => `「${name}」不是 PDF、JPG 或 PNG，沒有加進來。`,
-  unreadable: (name: string) => `讀不到「${name}」，沒有加進來；請再選一次。`,
-  thinking: (time: string) => `AI 正在想（已經 ${time}）`,
-  receiving: (chars: number, time: string) => `已收到 ${chars.toLocaleString('en-US')} 字（已經 ${time}）`,
-  slowStart: '有些 AI 要想 2～3 分鐘才開始回答。',
-  retrying: (seconds: number, attempt: number) => `AI 那邊忙或連不上，${String(seconds)} 秒後再送一次（第 ${String(attempt)} 次）。`,
-  askCancel: '要取消這一次嗎？如果 AI 已經開始做，這一次可能仍會計費。',
   received: 'AI 回好了，整段已經放進下面的框、檢查過；看過結果再存成草稿。',
   directPaste: (label: string) => `${label}：AI 的回覆在下面的框裡。`,
   fallback: '已複製同一份提示；到 ChatGPT、Gemini 或 Claude 開一個新對話，自己附上教材檔，貼上提示送出；AI 回完後，按回覆裡程式碼區塊右上角的「複製」，貼在下面。',
@@ -47,28 +40,8 @@ const TEXT = {
   resumeReceived: (label: string, ago: string) => `接著存上一次收到的回覆（${label}，${ago}收到）`,
   resumeNoReply: (label: string, ago: string) => `上一次沒有收到回覆，可能已經送出並計費（${label}，${ago}送出）`,
   resumeFailed: (label: string, ago: string) => `上一次直接製作沒有成功（${label}，${ago}）`,
-  reselect: '教材檔不會存下來，重開過 Obsidian 之後要重新選一次，才能用同一份提示重送。',
-  resendKept: '用上一次選的教材檔、同一份提示重送；照設定頁現在的服務與模型送出。',
-  differs: '和上一次送的檔不同；快照會記這次送的檔。',
-  same: '和上一次送的檔相同。',
 };
 
-/** 「1 分 20 秒」「35 秒」。 */
-function elapsed(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  return seconds < 60 ? `${String(seconds)} 秒` : `${String(Math.floor(seconds / 60))} 分 ${String(seconds % 60)} 秒`;
-}
-/** 「1.2 MB」「340 KB」。 */
-const size = (bytes: number): string => bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${String(Math.max(1, Math.round(bytes / 1000)))} KB`;
-
-/** 給家長看的「多久以前」。 */
-function ago(ms: number, now: number): string {
-  const minutes = Math.max(0, Math.round((now - ms) / 60_000));
-  if (minutes < 1) return '剛剛';
-  if (minutes < 60) return `${String(minutes)} 分鐘前`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${String(hours)} 小時前` : `${String(Math.round(hours / 24))} 天前`;
-}
 const labelOf = (job: { form: CardForm; subject: Pick<CardJob['subject'], 'subject' | 'label'> }): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
 
 export interface AiCardsModalHost {
@@ -99,12 +72,12 @@ class AiCardsModal extends Modal {
   private inList = false;
   /** 第一步選的教材檔（直接製作，§5）：只在這個視窗開著的期間，內容不存。 */
   private materials: Material[] = [];
-  /** 送出中畫面的計時器；畫面換掉或關掉時停。 */
-  private timer: number | null = null;
+  /** 送出中的畫面；畫面換掉或關掉時停計時器。 */
+  private view: { ask: HTMLElement; stop(): void } | null = null;
   /** 關掉視窗前問過要不要取消送出中的那一個（§6 最後一點）；停用外掛時不問。 */
   private forced = false;
   /** 拖進視窗的檔交給誰（§5）：只有畫著教材欄的畫面有，換畫面時清掉。監聽器只在開視窗時掛一次，重畫教材欄不再多掛（PR #83 的 GitHub 審查）。 */
-  private dropped: ((files: File[]) => void) | null = null;
+  private dropped: ((files: readonly File[]) => void) | null = null;
   constructor(app: App, host: AiCardsModalHost, modals: Set<AiCardsModal>) {
     super(app);
     this.host = host;
@@ -123,16 +96,17 @@ class AiCardsModal extends Modal {
     });
     this.start();
   }
-  onClose(): void { this.stopTimer(); this.modals.delete(this); this.contentEl.empty(); }
+  onClose(): void { this.stopView(); this.modals.delete(this); this.contentEl.empty(); }
   /** 送出中按關閉（Esc、右上角的 ×）：先問要不要取消（§6）；停用外掛時直接關。 */
   close(): void {
     const cards = this.host.cards();
-    if (!this.forced && this.timer !== null && cards?.sending()) { this.askCancel(); return; }
+    const view = this.view;
+    if (!this.forced && view && cards?.sending()) { askCancel(view.ask, () => { this.forceClose(); }); return; }
     super.close();
   }
   /** 停用外掛、手機關掉製卡、按關閉後選了「取消這一次」：取消送出中的那一個，不再問。 */
   forceClose(): void { this.forced = true; this.host.cards()?.cancel(); this.close(); }
-  private stopTimer(): void { if (this.timer !== null) { window.clearInterval(this.timer); this.timer = null; } }
+  private stopView(): void { this.view?.stop(); this.view = null; }
 
   /** 重開命令時有沒完成的工作就先問（§2、§5）。 */
   private start(): void {
@@ -172,7 +146,7 @@ class AiCardsModal extends Modal {
     }
   }
   private reset(): HTMLElement {
-    this.stopTimer();
+    this.stopView();
     this.inList = false;
     this.dropped = null;
     this.contentEl.empty();
@@ -289,43 +263,11 @@ class AiCardsModal extends Modal {
     unit.focus();
   }
 
-  /**
-   * 第一步的「教材檔」（tasks/ai-direct.md §5）：選擇檔案或拖進來，PDF 讀總頁數；列出檔名、大小、頁數，可以拿掉。
-   * 回傳重畫清單的函式；清單變了時呼叫 changed（重算預覽）。
-   */
+  /** 第一步與重送的「教材檔」（tasks/ai-direct.md §5）：拖進視窗的檔也交給它。回傳重畫清單的函式。 */
   private materialField(cell: HTMLElement, changed: () => void): () => void {
-    const input = cell.createEl('input', { type: 'file', attr: { accept: '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png', multiple: '' } });
-    input.hide();
-    cell.createEl('button', { text: TEXT.files }).addEventListener('click', () => { input.click(); });
-    const list = cell.createEl('ul');
-    const note = cell.createDiv({ text: TEXT.filesNote, cls: 'essence-cards-ai-pick-note' });
-    const problems = cell.createDiv({ cls: 'essence-cards-backup-problem' });
-    const draw = (): void => {
-      list.empty();
-      this.materials.forEach((material, index) => {
-        const pages = material.mediaType === 'application/pdf' ? `${material.pages === null ? '讀不出頁數' : `${String(material.pages)} 頁`}，` : '';
-        const item = list.createEl('li', { text: `${material.name}（${pages}${size(material.data.length)}） ` });
-        item.createEl('button', { text: '拿掉' }).addEventListener('click', () => { this.materials.splice(index, 1); changed(); });
-      });
-      note.toggle(!this.materials.length);
-    };
-    const add = async (picked: readonly File[]): Promise<void> => {
-      const notes: string[] = [];
-      for (const file of picked) {
-        const type = materialType(file.name);
-        if (!type) { notes.push(TEXT.notMaterial(file.name)); continue; }
-        let data: Uint8Array;
-        try { data = new Uint8Array(await file.arrayBuffer()); } catch { notes.push(TEXT.unreadable(file.name)); continue; }
-        // pdf.js 可能把交給它的緩衝區移到背景執行緒，給它一份複本，送出的那一份才不會變成空的。
-        const pages = type === 'application/pdf' ? await (this.host.pdfPages?.(data.slice()) ?? Promise.resolve(null)) : null;
-        this.materials.push({ name: file.name, mediaType: type, data, pages, sha256: sha256OfBytes(data) });
-      }
-      problems.setText(notes.join(' '));
-      changed();
-    };
-    input.addEventListener('change', () => { void add(Array.from(input.files ?? [])); input.value = ''; });
-    this.dropped = files => { void add(files); };
-    return draw;
+    const field = materialField(cell, this.materials, TEXT.filesNote, this.host.pdfPages, changed);
+    this.dropped = files => { void field.add(files); };
+    return field.draw;
   }
 
   /**
@@ -334,26 +276,10 @@ class AiCardsModal extends Modal {
    */
   private async sendNow(label: string, work: (progress: (event: ProgressEvent) => void) => Promise<DirectOutcome>): Promise<string | null> {
     const el = this.reset();
-    const status = el.createEl('p', { text: `${label}：${TEXT.thinking(elapsed(0))}` });
-    const slow = el.createEl('p', { cls: 'essence-cards-issue-note' });
-    const retry = el.createEl('p', { cls: 'essence-cards-issue-note' });
-    this.ask = el.createDiv();
-    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
-    buttons.createEl('button', { text: '取消' }).addEventListener('click', () => { this.host.cards()?.cancel(); });
-    const started = this.host.now();
-    let chars = 0;
-    const draw = (): void => {
-      const time = elapsed(this.host.now() - started);
-      status.setText(`${label}：${chars ? TEXT.receiving(chars, time) : TEXT.thinking(time)}`);
-      slow.setText(!chars && this.host.now() - started >= 60_000 ? TEXT.slowStart : '');
-    };
-    this.timer = window.setInterval(draw, 1000);
-    const outcome = await work(event => {
-      if (event.type === 'text') { chars = event.totalChars; retry.setText(''); draw(); }
-      else if (event.type === 'retrying') retry.setText(TEXT.retrying(Math.round(event.delayMs / 1000), event.attempt));
-    });
-    this.stopTimer();
-    this.ask = null;
+    const view = sendingView(el, label, () => this.host.now(), () => { this.host.cards()?.cancel(); });
+    this.view = view;
+    const outcome = await work(event => { view.progress(event); });
+    this.stopView();
     this.busy = false;
     if (outcome.kind === 'blocked') return outcome.message;
     this.job = outcome.job;
@@ -362,18 +288,6 @@ class AiCardsModal extends Modal {
       this.showPaste(null);
     } else this.showFailure(outcome.failure);
     return null;
-  }
-  /** 送出中「要取消這一次嗎？」那一列（§6 最後一點）：畫在送出中畫面的按鈕上面。 */
-  private ask: HTMLElement | null = null;
-  private askCancel(): void {
-    const el = this.ask;
-    if (!el) return;
-    el.empty();
-    el.createEl('p', { text: TEXT.askCancel });
-    const buttons = el.createDiv({ cls: 'essence-cards-issue-buttons' });
-    // 這一列只在按關閉時出現：家長本來就是要關視窗，取消之後一起關（Windows 實機第 2 批第 3 點）。
-    buttons.createEl('button', { text: '取消這一次', cls: 'mod-warning' }).addEventListener('click', () => { this.forceClose(); });
-    buttons.createEl('button', { text: '繼續等' }).addEventListener('click', () => { el.empty(); });
   }
 
   /** 「打開設定頁」（§2 驗收，L2 第一輪 R10）：關掉製卡視窗再開設定頁，工作留在清單；主程式沒給開法時不畫。 */
@@ -445,7 +359,7 @@ class AiCardsModal extends Modal {
     const before = directJob(job)?.files.map(file => file.sha256) ?? [];
     this.materials = [];
     const el = this.reset();
-    el.createEl('p', { text: `${labelOf(job)}：${kept ? TEXT.resendKept : TEXT.reselect}` });
+    el.createEl('p', { text: `${labelOf(job)}：${kept ? DIRECT_TEXT.resendKept : DIRECT_TEXT.reselect}` });
     let draw = (): void => {};
     if (!kept) {
       const grid = el.createDiv({ cls: 'essence-cards-ai-form' });
@@ -462,7 +376,7 @@ class AiCardsModal extends Modal {
     const refresh = (): void => {
       draw();
       const now = this.materials.map(material => material.sha256);
-      compare.setText(kept || !now.length ? '' : now.length === before.length && now.every((sha, i) => sha === before[i]) ? TEXT.same : TEXT.differs);
+      compare.setText(kept || !now.length ? '' : now.length === before.length && now.every((sha, i) => sha === before[i]) ? DIRECT_TEXT.same : DIRECT_TEXT.differs);
       const ready = kept || now.length ? cards.resendPreview(job, picked()) : null;
       line.setText(ready === null ? '' : ready.ok ? ready.line : ready.reason);
       if (ready && !ready.ok && ready.settings) settings?.show(); else settings?.hide();
@@ -492,8 +406,9 @@ class AiCardsModal extends Modal {
       again.addEventListener('click', () => { void cards.recopy(job).then(ok => { this.host.notify(ok ? '已複製提示' : '放不進剪貼簿；請再按一次'); }); });
     }
     const box = el.createEl('textarea', { cls: 'essence-cards-ai-paste', attr: { placeholder: TEXT.paste, rows: '12' } });
-    // 重開 Obsidian 之後，收到的整段從工作裡拿回來（§7，F2）。
-    box.value = pasted.get(job.id) ?? evidence?.text ?? '';
+    // 重開 Obsidian 之後，收到的整段從工作裡拿回來（§7，F2）；框被清空過、只剩空白也一樣（加深第 3 批 L2 R7、第二輪 S2）。
+    const kept = pasted.get(job.id);
+    box.value = kept?.trim() ? kept : evidence?.text ?? kept ?? '';
     // 直接製作收到的：哪一家、哪個模型由程式記（§7），不問家長。
     if (!received) {
       const service = el.createDiv({ cls: 'essence-cards-ai-form' });
