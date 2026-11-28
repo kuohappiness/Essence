@@ -176,8 +176,6 @@ const PICK_ENDING = /[\s）)](相似字|相似詞|比較)$/; // 結尾整段是�
 const PICK_ANCHOR = /^記憶錨點\s*[：:]/;
 /** 單選的選項行（syntax §2，D-249）：目標底下、和題目同一層，以全形的「選項：」開頭。 */
 const OPTIONS_LINE = /^選項：/;
-/** 這一行有寫成選項的地方（寫對、半形冒號、粗體、接在資料那一行都算），同解析器的 OPTIONS_LIKE 不限開頭。 */
-const OPTIONS_SOMEWHERE = /選項\s*(?:\*\*)?\s*[：:]/;
 const foldPick = (s: string): string => s.replace(/\*\*|==/g, '').replace(/[！-～]/g, c => String.fromCodePoint(c.codePointAt(0)! - 0xFEE0)).replace(/[\s　]+/g, ' ').trim().toLowerCase();
 /** 整個答案出現在題目裡：英文看詞界（lend 在 blend 不算），片語要整段；中文要整個詞，單一漢字照預設〈相似字〉出現就算（喵喵叫）。 */
 function answerShown(question: string, answer: string): boolean {
@@ -527,7 +525,9 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     });
     // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
     // 選項行寫錯的（半形冒號、粗體、接在資料那一行）也是只補選項行：報選項行哪裡錯（parseBox），不報沒有題目（L2 第三輪 4）。
-    if (!target.questions.length && !(where === 'existing' && children.some(child => OPTIONS_SOMEWHERE.test(child.text)))) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
+    // 只看解析器的結果：認成選項行，或對這一項報了選項行寫錯；補充裡剛好有「選項：」的照報（L2 第四輪 2）。
+    const onlyOptions = where === 'existing' && (optioned || boxProblems.some(p => p.code === 'options-invalid' && p.target === node.line));
+    if (!target.questions.length && !onlyOptions) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
     // 加進已有的框的選項行讀不讀得成，由解析器報（parseBox，題目在不在框裡都是，L2 第二輪 2、第三輪 4）。
     // 框裡讀不成單選、沒有跑 checkSingle（題目在筆記裡）：讀成的選項自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5、第二輪 4）。
     if (where === 'existing' && optioned) {
@@ -551,9 +551,9 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
    * 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行、另一種排法與選項行的提示（行號已換回 text 的行）。本文的直接看 deck.problems。
    * 同一行已經報過錯誤的不重複（最後一段），所以候選框的另一種排法、選項行在 checkPick、checkSingle 報過就不再報。
    */
-  const boxProblems: { line: number; code: string; message: string }[] = [];
+  const boxProblems: { line: number; code: string; message: string; target: number | null }[] = [];
   const parseBox = (inner: readonly Line[], bare = false): void => {
-    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject, bare }).problems) if (p.level === 'error' || ORDER_ALT.has(p.code) || p.code === 'options-invalid') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
+    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject, bare }).problems) if (p.level === 'error' || ORDER_ALT.has(p.code) || p.code === 'options-invalid') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message, target: p.targetLine === null ? null : inner[p.targetLine].no });
   };
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {

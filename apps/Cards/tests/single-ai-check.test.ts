@@ -151,3 +151,11 @@ void test('加進已有的框只補選項行（L2 第三輪 4）：讀法和加�
   assert.deepEqual(field.found, [['錯誤', 10, 'options-invalid']]);
   assert.match(field.message, /不接在資料欄位那一行/);
 });
+
+void test('加進已有的框沒有題目（L2 第四輪 2）：補充或資料裡剛好有「選項：」照報沒有題目；解析器認成選項行、或報選項行寫錯的才不報', () => {
+  const box = (line: string): string => draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', `>     - ${line}`, ''].join('\n');
+  const all = (text: string): Found[] => check(text, { subject: '社會' }).issues.filter(each => each.level === '錯誤' || each.level === '不符').map(each => [each.level, each.line, each.code]);
+  // 名稱第 9 行、補的那一行第 10 行。
+  for (const line of ['記憶錨點：分類選項：與海浪對照', '備註：提醒家長檢查選項：再對照課本', '例子：選項：之外的海岸']) assert.deepEqual(all(box(line)).filter(each => each[2] === 'no-question'), [['不符', 9, 'no-question']], line);
+  for (const line of ['選項：岩岸;;沙岸;;斷層海岸', '選項:岩岸;;沙岸;;斷層海岸', '**選項**：岩岸;;沙岸;;斷層海岸', '出處：p.43｜選項：岩岸;;沙岸;;斷層海岸', '選項：岩岸;;沙岸']) assert.deepEqual(all(box(line)).filter(each => each[2] === 'no-question'), [], line);
+});
