@@ -5,7 +5,7 @@ import { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerNam
 import type { Connection, KeyLookup } from '../core/connect/index.ts';
 import { CAP_MINUTES, RETENTIONS, SEMESTERS } from '../core/settings/index.ts';
 import type { SaveResult, SettingsChange, SettingsKey, SettingsStore } from '../core/settings/index.ts';
-import { aiConnection, deepenRemindOff, phoneCards, previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
+import { aiConnection, deepenRemindOff, phoneCards, previewButton, previewFeedback, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
@@ -25,6 +25,8 @@ const REVIEW = {
   buttonNote: '卡組筆記的標題列多一顆「預覽」，看卡片在複習畫面上的樣子，不記錄、不動排程。只影響這台裝置。',
   reveal: '預覽時自動展開答案',
   revealNote: '一進卡片就是背面。只影響這台裝置。',
+  feedback: '預覽時可以留回饋',
+  feedbackNote: '預覽的每張卡下面多一列：可以用、要改、不要這張，也可以寫一句話。存在「紀錄/回饋/」，給改進製卡規則用，不影響複習與排程。只影響這台裝置。',
   quiz: '小考標記',
   quizNote: '在目錄替單元或某一篇設小考日期，入口最上面會多一列。不改複習的排程。只影響這台裝置的目錄按鈕。',
   deepen: '這台電腦的加深提醒',
@@ -311,6 +313,10 @@ class EssenceSettingTab extends PluginSettingTab {
     }));
     new Setting(containerEl).setName(REVIEW.reveal).setDesc(REVIEW.revealNote).addToggle(toggle => toggle.setValue(previewReveal.get(this.app)).onChange(on => {
       previewReveal.set(this.app, on);
+    }));
+    // 預覽的回饋（tasks/card-feedback.md §3-4）：下一次打開預覽才算，已經開著的不跟著變。
+    new Setting(containerEl).setName(REVIEW.feedback).setDesc(REVIEW.feedbackNote).addToggle(toggle => toggle.setValue(previewFeedback.get(this.app)).onChange(on => {
+      previewFeedback.set(this.app, on);
     }));
     new Setting(containerEl).setName(REVIEW.quiz).setDesc(REVIEW.quizNote).addToggle(toggle => toggle.setValue(quizMark.get(this.app)).onChange(on => {
       quizMark.set(this.app, on);

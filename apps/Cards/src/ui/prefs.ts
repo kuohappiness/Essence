@@ -1,6 +1,6 @@
 import { Platform, type App } from 'obsidian';
 
-// 只存在這台裝置的選擇（saveLocalStorage，同 D-116，不隨 vault 同步）：全部卡的提醒（D-146）、預覽的兩個開關（D-163 第 6 點；按鈕的預設見 D-222）、
+// 只存在這台裝置的選擇（saveLocalStorage，同 D-116，不隨 vault 同步）：全部卡的提醒（D-146）、預覽的開關（D-163 第 6 點；按鈕的預設見 D-222；回饋見 tasks/card-feedback.md §3-4）、
 // 目錄的學期收合（D-097）、目錄的小考按鈕（tasks/quiz-mark.md §2，入口那一列不看它）。
 
 const flag = (key: string) => ({
@@ -18,6 +18,8 @@ export const previewButton = {
   set: (app: App, on: boolean): void => { app.saveLocalStorage(PREVIEW_BUTTON, on); },
 };
 export const previewReveal = flag('essence-cards-preview-reveal');
+/** 預覽時可以留回饋（D-246、tasks/card-feedback.md §3-4）：存的是 true 才算開，缺值或壞值是關。 */
+export const previewFeedback = flag('essence-cards-preview-feedback');
 export const quizMark = flag('essence-cards-quiz-mark');
 /** 這台電腦的加深提醒（tasks/ai-cards-deepen.md §5-2）：存的是 true 才算關，缺值或壞值是開。 */
 export const deepenRemindOff = flag('essence-cards-deepen-remind-off');

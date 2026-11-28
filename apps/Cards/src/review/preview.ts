@@ -3,6 +3,7 @@ import { cardOf, choicePreviewCards, pickPreviewCards, singlePreviewCards } from
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
 import { isEnglish } from './english.ts';
+import { applyChange, canLeave, EMPTY, left, type FeedbackChange, type FeedbackSink, type FeedbackView } from './feedback.ts';
 import { createPreviewFlow } from './flow.ts';
 import type { CardView, Session, View } from './session.ts';
 
@@ -16,6 +17,8 @@ export interface PreviewOptions {
   deck: Deck;
   /** 預覽時自動展開答案：一進卡片就是背面。 */
   reveal: boolean;
+  /** 單張卡的回饋（D-246、tasks/card-feedback.md）：設定頁打開才給；沒給就沒有回饋列。 */
+  feedback?: FeedbackSink;
 }
 
 /**
@@ -57,6 +60,12 @@ export function createPreview(options: PreviewOptions): Session | null {
   let cached: View | null = null;
   /** 目前這張的狀態：每次進卡片都從頭開始。 */
   let flow = createPreviewFlow(first, options.reveal);
+  const sink = options.feedback;
+  /** 這一輪每張卡留的回饋（照 cards 的位置）：往回翻看得到，關掉預覽就清掉（§3-1）。 */
+  const feedbacks = new Map<number, FeedbackView>();
+  /** 每張卡最近一次存的序號：先送出的晚回來時，不蓋掉後來那一次的結果。 */
+  const saves = new Map<number, number>();
+  let closed = false;
 
   const notify = (): void => { cached = null; for (const listener of [...listeners]) listener(); };
 
@@ -73,14 +82,41 @@ export function createPreview(options: PreviewOptions): Session | null {
     const top = { center, fraction: Math.min(1, (index + 1) / cards.length), canBack: index > 0, viewing: false, canForward: index < cards.length, pinned: true };
     const card = cards.at(index);
     if (!card) {
-      return { kind: 'done', top: { ...top, center: LABEL }, done: { title: '預覽完了', detail: `共 ${String(cards.length)} 張`, buttons: [{ kind: 'close', label: '結束預覽' }] } };
+      const count = [...feedbacks.values()].filter(left).length;
+      const detail = `共 ${String(cards.length)} 張` + (count ? `，留了 ${String(count)} 張的回饋` : '');
+      return { kind: 'done', top: { ...top, center: LABEL }, done: { title: '預覽完了', detail, buttons: [{ kind: 'close', label: '結束預覽' }] } };
     }
     const { revealed, allowed, speakable, typed, pick } = flow.view();
     const view: CardView = {
       kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: isEnglish(card),
       speakable, autoRead: flow.autoRead, viewing: null, shown: index,
+      ...sink && canLeave(card) ? { feedback: feedbacks.get(index) ?? { ...EMPTY, status: null } } : {},
     };
     return { kind: 'card', top, card: view };
+  }
+
+  /** 改這張卡的回饋：先畫出來，再寫；寫的結果只在它還是這張卡最近一次時才畫（§2-3）。 */
+  function feedback(change: FeedbackChange): void {
+    const card = cards.at(index);
+    if (!sink || !card || !canLeave(card)) return;
+    const at = index;
+    const old = feedbacks.get(at) ?? { ...EMPTY, status: null };
+    const next = applyChange(old, change);
+    if (!next) return;
+    feedbacks.set(at, { ...next, status: 'saving' });
+    const seq = (saves.get(at) ?? 0) + 1;
+    saves.set(at, seq);
+    notify();
+    const done = (status: FeedbackView['status']): void => {
+      const now = feedbacks.get(at);
+      if (closed || !now || saves.get(at) !== seq) return;
+      feedbacks.set(at, { ...now, status });
+      notify();
+    };
+    // 寫的一方丟錯也算寫不進去：畫面寫「沒存到」，家長再點一次就再寫一次整份。
+    let saving: Promise<FeedbackView['status']>;
+    try { saving = sink.save(card, { rate: next.rate, tags: next.tags, note: next.note }); } catch { saving = Promise.resolve('failed'); }
+    void saving.then(done, () => { done('failed'); });
   }
 
   return {
@@ -109,8 +145,9 @@ export function createPreview(options: PreviewOptions): Session | null {
     continueWith() {},
     pause() {},
     resume() { notify(); return false; },
-    close() { listeners.clear(); },
+    close() { closed = true; listeners.clear(); },
     history: () => [],
     pick: () => ({ deck: path }),
+    ...sink ? { feedback } : {},
   };
 }

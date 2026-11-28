@@ -123,6 +123,26 @@ void test('手機的製卡開關（D-226 第 1 點、tasks/phone-cards.md §2-1�
   assert.ok(!visible().includes('Essence Cards：AI 製卡'));
 });
 
+void test('預覽時可以留回饋（tasks/card-feedback.md §3-4）：接在自動展開答案後面；預設關、壞值也是關；只存這台裝置，不寫設定檔', async t => {
+  const h = await open(t);
+  const names = h.tab.containerEl.rows.map(item => item.name);
+  assert.equal(names.indexOf('預覽時可以留回饋'), names.indexOf('預覽時自動展開答案') + 1);
+  const row = h.row('預覽時可以留回饋');
+  assert.match(row.desc, /可以用、要改、不要這張/);
+  assert.match(row.desc, /紀錄\/回饋\//);
+  assert.match(row.desc, /只影響這台裝置/);
+  assert.equal(row.toggle?.value, false);
+  const before = saved(h);
+  row.toggle?.choose(true);
+  assert.equal(h.storage('essence-cards-preview-feedback'), true);
+  row.toggle?.choose(false);
+  assert.equal(h.storage('essence-cards-preview-feedback'), false);
+  await settle();
+  assert.deepEqual(saved(h), before, '設定檔不動');
+  const broken = await open(t, { localStorage: { 'essence-cards-preview-feedback': 'yes' } });
+  assert.equal(broken.row('預覽時可以留回饋').toggle?.value, false);
+});
+
 void test('改上限：存進設定檔、data.json 不動，排程馬上照新的值', async t => {
   const h = await open(t, { data: { foo: 1 } });
   assert.equal(saved(h), undefined, '載入時不建立');

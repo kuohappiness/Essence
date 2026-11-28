@@ -5,7 +5,8 @@ import type { ReportKind } from '../core/errors/index.ts';
 import { questionType } from '../core/study/index.ts';
 import type { Rating } from '../core/study/index.ts';
 import { gesture, lockAxis, RATINGS } from '../review/index.ts';
-import type { Axis, DoneView, FlowAction, Gesture, Session, SourceOwner } from '../review/index.ts';
+import type { Axis, DoneView, FeedbackChange, FlowAction, Gesture, Session, SourceOwner } from '../review/index.ts';
+import { FeedbackRow, NoteSheet } from './Feedback.tsx';
 import { Icon } from './Icon.tsx';
 import { SCREENS } from './screens.tsx';
 import type { MaterialDeck } from './sources.ts';
@@ -93,6 +94,14 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const reportingRef = useRef(false);
   reportingRef.current = reporting;
   const menuEl = useRef<HTMLDivElement>(null);
+  // 預覽回饋的「寫一句」（tasks/card-feedback.md §3-3）：null 是關著，字串是框裡的草稿。開著時和回報的選單一樣，背後不能操作。
+  const [noting, setNoting] = useState<string | null>(null);
+  const notingRef = useRef(false);
+  notingRef.current = noting !== null;
+  const noteEl = useRef<HTMLTextAreaElement>(null);
+  /** 蓋在上面的東西（回報的選單、寫一句的框）開著。 */
+  const covered = reporting || noting !== null;
+  const coveredNow = (): boolean => reportingRef.current || notingRef.current;
 
   // 換卡、回看、切走超過 60 秒回來從頭開始（shown 加一，L2 的 F4）都算換了一張。
   const cardKey = view.kind === 'card' ? [view.card.card.lt, view.card.card.prompt.fingerprint, view.card.viewing?.index ?? -1, view.card.shown].join(':') : view.kind;
@@ -132,13 +141,16 @@ export function Review(props: ReviewProps): React.JSX.Element {
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
   // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後；回報的選單關上之後）。
   useEffect(() => {
-    if (!reporting && view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
-  }, [cardKey, view, cardSlot, reporting]);
+    if (!covered && view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
+  }, [cardKey, view, cardSlot, covered]);
   // 選單打開時焦點移到選單上（鍵盤也點得到）；開、關都告訴主機。
   useEffect(() => {
     if (reporting) menuEl.current?.focus({ preventScroll: true });
     props.onMenu?.(reporting);
   }, [reporting]);
+  // 寫一句的框打開時焦點移到輸入框（iPhone 這時跳出鍵盤）。
+  const noteOpen = noting !== null;
+  useEffect(() => { if (noteOpen) noteEl.current?.focus({ preventScroll: true }); }, [noteOpen]);
 
   async function slide(direction: number, change: () => void): Promise<void> {
     if (busy.current) return;
@@ -158,8 +170,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
   }
 
   // 換卡動畫期間（busy）的按鍵與點擊不算：回看的改評分、翻面、確認、沒印象都一樣，不然會改到滑走那張或還沒滑進來那張（Codex L2 F1）。
-  // 回報的選單開著時也一樣（D-160 第 3 點）。
-  const held = (): boolean => busy.current || reportingRef.current;
+  // 回報的選單、寫一句的框開著時也一樣（D-160 第 3 點）。
+  const held = (): boolean => busy.current || coveredNow();
   const reveal = (): void => { if (held()) return; session.reveal(); focusApp(); };
   const submit = (): void => { if (!held()) session.submit(); };
   const skip = (): void => { if (!held()) session.skip(); };
@@ -193,11 +205,24 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (el && !reducedMotion()) void animate(el, { opacity: [0, 1], x: [-35, 0] }, { duration: 0.16 });
     focusApp();
   }
-  const back = (): void => { if (!reportingRef.current && latest.current.top.canBack) void slide(1, () => { session.back(); }); };
-  const forward = (): void => { if (!reportingRef.current && (latest.current.top.viewing || latest.current.top.canForward)) void slide(-1, () => { session.forward(); }); };
-  const toCurrent = (): void => { if (!reportingRef.current && latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
+  const back = (): void => { if (!coveredNow() && latest.current.top.canBack) void slide(1, () => { session.back(); }); };
+  const forward = (): void => { if (!coveredNow() && (latest.current.top.viewing || latest.current.top.canForward)) void slide(-1, () => { session.forward(); }); };
+  const toCurrent = (): void => { if (!coveredNow() && latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
   /** 打開回報的選單（動畫期間不開）。 */
-  const openMenu = (): void => { if (!busy.current) setReporting(true); };
+  const openMenu = (): void => { if (!busy.current && !notingRef.current) setReporting(true); };
+  /** 預覽的回饋（tasks/card-feedback.md §3）：換卡動畫期間與蓋著東西時不算。 */
+  const feedback = (change: FeedbackChange): void => { if (!held()) session.feedback?.(change); };
+  const openNote = (): void => {
+    const current = latest.current;
+    if (!held() && current.kind === 'card' && current.card.feedback) setNoting(current.card.feedback.note);
+  };
+  /** 存：關上框、交出框裡的字（整理與「沒變不寫」在 review 裡）。取消：關上，不寫。 */
+  const saveNote = (): void => {
+    const text = noting;
+    setNoting(null);
+    if (text !== null) session.feedback?.({ kind: 'note', note: text });
+  };
+  const cancelNote = (): void => { setNoting(null); };
   const closeMenu = (): void => { setReporting(false); };
   /** 選了一項：交出畫面上那張卡（回看時是回看的那張），關掉選單；卡片的狀態不動（D-160 第 2、3 點）。 */
   const choose = (kind: ReportKind): void => {
@@ -212,8 +237,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (!el) return;
     let touch: { id: number; x: number; y: number; dx: number; dy: number; time: number; axis: Axis; before: boolean | null; interactive: boolean } | null = null;
     const start = (event: TouchEvent): void => {
-      // 回報的選單開著時不算滑動（選單蓋在上面，這是保險）。
-      if (reportingRef.current) { touch = null; return; }
+      // 回報的選單、寫一句的框開著時不算滑動（蓋在上面，這是保險）。
+      if (reportingRef.current || notingRef.current) { touch = null; return; }
       if (event.touches.length !== 1) { if (touch) touch.axis = 'vertical'; return; }
       const p = event.touches[0];
       touch = { id: p.identifier, x: p.clientX, y: p.clientY, dx: 0, dy: 0, time: performance.now(), axis: 'pending', before: sidebars(app), interactive: !!(event.target as HTMLElement).closest('input,button,a,audio') };
@@ -260,10 +285,16 @@ export function Review(props: ReviewProps): React.JSX.Element {
 
   // 鍵盤（W6 §3-5）：← 上一張、→ 往後一張、Esc 結束、Space／Enter 顯示答案、1～4 自評；輸入框裡只有 Enter；中文組字中不算。
   // 回報的選單開著時只有 Esc（關掉選單）；選單的按鈕照瀏覽器的方式用 Enter、空白鍵按。
+  // 寫一句的框開著時只有 Esc（取消）與 Enter（存），其他的鍵照常打字（tasks/card-feedback.md §3-3）。
   const onKey = (event: React.KeyboardEvent): void => {
     if (event.nativeEvent.isComposing) return;
     if (reportingRef.current) {
       if (event.key === 'Escape') { event.preventDefault(); closeMenu(); }
+      return;
+    }
+    if (notingRef.current) {
+      if (event.key === 'Escape') { event.preventDefault(); cancelNote(); }
+      else if (event.key === 'Enter' && !event.shiftKey && !(event.target as HTMLElement).closest('button')) { event.preventDefault(); saveNote(); }
       return;
     }
     const target = event.target as HTMLElement;
@@ -297,7 +328,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const bottom = screen && view.kind === 'card' ? screen.bottom({ view: view.card, animating, reveal, rate, act, commit: next, focusApp }) : undefined;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
     {/* 回報的選單開著時，背後的東西不能取得焦點也不能操作（inert，Codex L2 的 R1）：Tab 只在選單裡走 */}
-    <div className="ec-top" inert={reporting}>
+    <div className="ec-top" inert={covered}>
       {/* 預覽（D-161）：上一張、下一張成對夾住中間的字，下方和複習畫面一樣（使用者 2026-11-24）；左邊留一格空的，中間才會置中 */}
       {pager ? <span aria-hidden="true" /> : <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>}
       {pager
@@ -319,24 +350,28 @@ export function Review(props: ReviewProps): React.JSX.Element {
         : <span aria-hidden="true" />}
       <button type="button" className="ec-ico" aria-label="結束複習" onClick={props.close}><Icon type="close" /></button>
     </div>
-    <div className="ec-prog" aria-hidden="true" inert={reporting}><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
-    <div className={'ec-stage' + (screen && view.kind === 'card' ? screen.stage(view.card) : '')} ref={stage} inert={reporting} onClick={event => {
-      if (reporting || !screen || view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
+    <div className="ec-prog" aria-hidden="true" inert={covered}><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
+    <div className={'ec-stage' + (screen && view.kind === 'card' ? screen.stage(view.card) : '')} ref={stage} inert={covered} onClick={event => {
+      if (covered || !screen || view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
       screen.tap(view.card, { reveal, focusInput: () => { inputEl.current?.focus({ preventScroll: true }); } });
     }}>
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {screen && view.kind === 'card' && <screen.Body key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} owner={props.owner} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
+        {screen && view.kind === 'card' && <screen.Body key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} owner={props.owner} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!coveredNow()) session.input(value); }}
           qRef={questionEl} sticky={stickyQuestion} animating={animating} submit={submit} skip={skip} act={act}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
-    {bottom !== null && <div className="ec-actions" inert={reporting}>
+    {/* 預覽的回饋列（tasks/card-feedback.md §3-1）：卡片區和下方按鈕之間，不在 .ec-stage 裡，點卡片、滑動都不從這裡觸發 */}
+    {view.kind === 'card' && view.card.feedback && session.feedback
+      && <FeedbackRow view={view.card.feedback} change={feedback} openNote={openNote} disabled={animating} inert={covered} />}
+    {bottom !== null && <div className="ec-actions" inert={covered}>
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>{view.done.buttons.find(button => button.kind === 'close')?.label ?? '結束複習'}</button>}
       {bottom}
     </div>}
     {reporting && view.kind === 'card' && <ReportMenu menuRef={menuEl} choose={choose} cancel={closeMenu} />}
+    {noting !== null && view.kind === 'card' && <NoteSheet draft={noting} setDraft={setNoting} save={saveNote} cancel={cancelNote} noteRef={noteEl} />}
   </div>;
 }
 

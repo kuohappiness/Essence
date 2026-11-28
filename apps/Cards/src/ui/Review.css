@@ -161,11 +161,37 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-report-item + .ec-report-item { border-top: 1px solid var(--ec-line); }
 .ec-app .ec-report-item:not(:disabled):active { background: var(--ec-press); }
 .ec-app .ec-report-item + .ec-report-cancel { margin-top: 6px; border-top: 6px solid var(--ec-press); color: var(--ec-muted); text-align: center; }
+/* 預覽的回饋列（tasks/card-feedback.md §3）：卡片區和下方按鈕之間自己一條；小一號的細框膠囊，和下方的自評按鈕分得開。
+   按下去的評等有底色（可以用綠、要改黃、不要這張紅），標籤按下去是實心的淡底。 */
+.ec-feedback { flex: none; border-top: 1px solid var(--ec-line); padding: 6px 12px; }
+.ec-feedback-row { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: 560px; margin: 0 auto; }
+.ec-feedback-row + .ec-feedback-row { margin-top: 6px; }
+.ec-feedback-head { flex: none; min-width: 3em; font-size: var(--ec-size-meta); color: var(--ec-muted); text-align: center; }
+.ec-feedback-head[data-status="failed"], .ec-feedback-head[data-status="full"] { color: var(--ec-miss); }
+.ec-app .ec-fb { flex: 0 1 auto; min-height: 34px; padding: 4px 10px; border: 1px solid var(--ec-line); border-radius: 999px; background: none; color: var(--ec-ink); font-size: var(--ec-size-small); line-height: 1.2; white-space: nowrap; }
+.ec-app .ec-fb:not(:disabled):active { background: var(--ec-press); }
+.ec-app .ec-fb[data-rate="ok"][aria-pressed="true"] { border-color: var(--ec-good); background: color-mix(in srgb, var(--ec-good) 16%, var(--ec-page)); color: var(--ec-good); }
+.ec-app .ec-fb[data-rate="fix"][aria-pressed="true"] { border-color: var(--ec-near); background: color-mix(in srgb, var(--ec-near) 16%, var(--ec-page)); color: var(--ec-near); }
+.ec-app .ec-fb[data-rate="drop"][aria-pressed="true"] { border-color: var(--ec-miss); background: color-mix(in srgb, var(--ec-miss) 16%, var(--ec-page)); color: var(--ec-miss); }
+.ec-app .ec-fb-tag[aria-pressed="true"] { border-color: var(--ec-ink); background: var(--ec-press); }
+.ec-app .ec-fb-note { color: var(--ec-muted); }
+.ec-feedback-notice { margin: 4px 0 0; font-size: var(--ec-size-meta); color: var(--ec-miss); text-align: center; }
+/* 寫一句（§3-3）：從上方滑下，iPhone 的鍵盤在下面不會蓋住；輸入框 16px，iPhone 比 16px 小的輸入框一點就把畫面放大 */
+.ec-note { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: flex-start; background: rgb(0 0 0 / .35); animation: ec-fade-in .16s ease-out; }
+.ec-note-sheet { display: flex; flex-direction: column; gap: 8px; max-width: 560px; width: 100%; margin: 0 auto; padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; border-radius: 0 0 var(--ec-radius) var(--ec-radius); background: var(--ec-page); animation: ec-note-in .2s ease-out; }
+.ec-app .ec-note-input { width: 100%; min-height: 72px; resize: none; padding: 8px 10px; border: 1px solid var(--ec-line); border-radius: var(--ec-radius-small); background: var(--ec-page); color: var(--ec-ink); font: inherit; font-size: 16px; line-height: 1.5; }
+.ec-note-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.ec-app .ec-note-cancel, .ec-app .ec-note-save { min-height: 40px; padding: 6px 18px; border: 1px solid var(--ec-line); border-radius: 999px; background: none; color: var(--ec-ink); font-size: var(--ec-size-small); }
+.ec-app .ec-note-cancel { color: var(--ec-muted); }
+.ec-app .ec-note-save { font-weight: 600; }
+.ec-app .ec-note-cancel:not(:disabled):active, .ec-app .ec-note-save:not(:disabled):active { background: var(--ec-press); }
+@keyframes ec-note-in { from { transform: translateY(-24px); opacity: 0; } }
 @keyframes ec-fade-in { from { opacity: 0; } }
 @keyframes ec-sheet-in { from { transform: translateY(24px); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .ec-answer, .ec-rates, .ec-line.ec-filled .ec-line-word { animation: none; }
   .ec-report, .ec-report-sheet { animation: none; }
+  .ec-note, .ec-note-sheet { animation: none; }
   .ec-prog i { transition: none; }
 }
