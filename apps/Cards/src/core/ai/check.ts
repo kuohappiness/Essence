@@ -36,6 +36,8 @@ function findLast<T>(list: readonly T[], match: (item: T) => boolean): T | undef
 /** 一行文字切成的區塊：標題、引言框、程式碼、清單項目、接續行、段落、空行。line 從 1 算。 */
 type Block =
   | { kind: 'blank'; line: number }
+  /** 分隔線（`---`、`***`、`- - -`）沒有縮到清單項目的文字底下：自己一塊，清單到這裡結束（L2 第四輪 1）。 */
+  | { kind: 'rule'; line: number }
   /** col：清單項目裡的圍欄開在第幾欄；不在清單裡是 null。 */
   | { kind: 'code'; line: number; col: number | null }
   | { kind: 'callout'; line: number; body: Line[] }
@@ -90,6 +92,17 @@ export function calloutHead(raw: string): { title: string; folded: boolean } | n
   return head ? { title: head[3], folded: head[2] === '-' } : null;
 }
 
+/** 還開著的清單裡，最外層的項目文字開始的欄；不在清單裡是無限大。空行、接續、清單項目裡的圍欄不結束清單。 */
+function openColumn(blocks: readonly Block[]): number {
+  let column = Infinity;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
+    if (block.kind === 'item') column = Math.min(column, block.contentCol);
+    else if (!(block.kind === 'blank' || block.kind === 'cont' || (block.kind === 'code' && block.col !== null))) break;
+  }
+  return column;
+}
+
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
@@ -114,11 +127,11 @@ export function blocksOf(lines: readonly Line[]): Block[] {
     const heading = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(raw);
     if (heading) { blocks.push({ kind: 'heading', line: no, level: heading[1].length, text: heading[2] }); continue; }
     const line = expand(raw);
-    // 分隔線（`---`、`***`、`- - -`）是自己的區塊，`- - -` 也不是清單項目；縮排到上一項的文字底下的才是那一項的接續，同 listTree（CommonMark 4.1，L2 第三輪 4）。
+    // 分隔線（`---`、`***`、`- - -`）不是清單項目，同 listTree（CommonMark 4.1）：縮到還開著的某一項的文字底下，是那一項的接續（L2 第三輪 4）；
+    // 沒有縮到的自己一塊、清單結束，下一行另外判斷，例如篇名（L2 第四輪 1）。
     if (/^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line.trim())) {
-      const previous = findLast(blocks, b => b.kind !== 'blank');
-      const listed = !!previous && (previous.kind === 'item' || previous.kind === 'cont');
-      blocks.push(listed ? { kind: 'cont', line: no, text: raw.trim(), col: indentOf(line) } : { kind: 'para', line: no, text: raw.trim() });
+      const col = indentOf(line);
+      blocks.push(col >= openColumn(blocks) ? { kind: 'cont', line: no, text: raw.trim(), col } : { kind: 'rule', line: no });
       continue;
     }
     const item = /^( *)([-*+]|\d+[.)])( +|$)(.*)$/.exec(line);
