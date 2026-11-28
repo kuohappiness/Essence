@@ -1,6 +1,7 @@
 import { frontmatterLines, linesOf, listTree, parseDeck, TRAILING_ID } from '../deck/index.ts';
 import { blocksOf, calloutHead, fenceCloses } from './check.ts';
 import { linked } from './draft.ts';
+import { titlePrefix } from './prompt.ts';
 import type { CardForm } from './prompt.ts';
 import { introBoxes } from './intro.ts';
 import { checkPiece, nameLineIds, normalizeReply, quoteLine, segmentReply } from './reply.ts';
@@ -65,6 +66,21 @@ const onlyNothing = (lines: readonly string[]): boolean => {
 };
 
 /**
+ * 卡組段的第一個非空行是這一篇的篇名時拿掉（U3 比較測試 2026-11-28：製卡規則〈分篇與檔名〉要寫篇名，AI 加深時照寫，
+ * 8 篇英文加深都被當成清單跑掉擋下）。加深一次只有一篇，不拆篇：只認第一個非空行整行、和這次的單元相同
+ * （照拆篇的認法：等於篇名開頭或它加一個空白再加篇名，或等於這一篇的檔名；可以寫成標題），別的單元照樣檢查。
+ */
+function withoutTitle(range: number[], lines: readonly string[], form: CardForm, subject: Pick<RuleSubject, 'subject'>, path: string): number[] {
+  const at = range.findIndex(no => lines[no].trim() !== '');
+  if (at < 0) return range;
+  const text = lines[range[at]].replace(/^ {0,3}#{1,6}\s+/, '').replace(/[ \t　]+/g, ' ').trim();
+  const prefix = titlePrefix(form, subject);
+  const file = path.replace(/^.*\//, '').replace(/\.md$/i, '');
+  const same = text === file || (prefix !== null && (text === prefix || text.startsWith(prefix + ' ')));
+  return same ? [...range.slice(0, at), ...range.slice(at + 1)] : range;
+}
+
+/**
  * 檢查加深的回覆（§3-1）：整理與分段沿用製卡；卡組段不拆篇，框以外的是新的學習目標，AI 的三種框分開收。
  * 卡組段沒有任何目標也可以，只要有備註、或寫了「這一節目前沒有更深的內容」。
  */
@@ -72,7 +88,7 @@ export function inspectDeepen(reply: string, form: CardForm, subject: Pick<RuleS
   const normalized = normalizeReply(reply);
   const { lines, raw } = normalized;
   const segments = segmentReply(normalized, subject.r3);
-  const range = Array.from({ length: Math.max(0, segments.end - segments.start) }, (_, i) => segments.start + i);
+  const range = withoutTitle(Array.from({ length: Math.max(0, segments.end - segments.start) }, (_, i) => segments.start + i), lines, form, subject, deck.path);
   const nothing = onlyNothing(range.map(no => lines[no]));
   // 只寫了那一句時，不算「不是卡組的內容」（非 R3 的科目第一行就是它）。
   const errors = segments.errors.filter(each => !(nothing && each.message.startsWith('第一行')));

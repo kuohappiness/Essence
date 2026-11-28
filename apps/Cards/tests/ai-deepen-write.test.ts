@@ -411,3 +411,26 @@ void test('§3-2 寫入回呼裡驗沒過（沒關的圍欄）：不寫、不留
   files.set(HERE.path, DECK);
   assert.deepEqual(await runDeepen(stored.at(-1)!, io), { kind: 'done', wrote: true });
 });
+
+void test('AI 照製卡的寫法在卡組段第一行寫了這一篇的篇名：略過那一行，不當成清單跑掉（U3 比較測試 8 篇英文加深都被擋）', () => {
+  const english: CardForm = { subject: 'english', term: '國二上', unit: 'L3 文法', purpose: '平常複習', supplement: false, adjust: '', material: '' };
+  const here = { path: 'Essence Cards/學業/國二上/英文/國二上英文 L3 文法.md', targets: new Map<string, string>() };
+  const body = '## 文法\n\n- 能用 used to 說過去的習慣\n    - 出處：p.40\n    - I ＿＿ play soccer. :: used to\n\n<<<完>>>';
+  const plain = inspectDeepen(body, english, { subject: '英文', r3: false }, here);
+  assert.deepEqual(plain.errors, []);
+  for (const title of ['國二上英文 L3 文法', '國二上英文 L3', '# 國二上英文 L3 文法']) {
+    const found = inspectDeepen(`${title}\n\n${body}`, english, { subject: '英文', r3: false }, here);
+    assert.deepEqual(found.errors, [], title);
+    assert.deepEqual([found.counts.targets, found.body.map(no => found.normalized.lines[no])[0]], [1, '## 文法'], title);
+    // 略過的那一行不進寫入的框。
+    const batch = composeBatch(found, '國二上英文 L3 文法', ids('abc234'), '2026-11-28');
+    assert.ok(!batch.boxes.flat().some(line => line.includes('國二上英文 L3')), title);
+  }
+  // 只有篇名和那一句：照樣算沒有更深的內容。
+  assert.equal(inspectDeepen('國二上英文 L3 文法\n這一節目前沒有更深的內容\n<<<完>>>', english, { subject: '英文', r3: false }, here).nothing, true);
+  // R3 的科目：<<<卡組>>> 下一行的篇名也略過。
+  const r3 = inspectDeepen('<<<全貌>>>\n全貌\n\n<<<架構>>>\n1. 溫度\n\n<<<卡組>>>\n國二上自然 2-1 溫度\n\n' + REPLY, FORM, { subject: '自然', r3: true }, HERE);
+  assert.deepEqual(r3.errors, []);
+  // 別的單元的篇名不略過：照樣報錯，不猜。
+  assert.ok(inspectDeepen(`國二上英文 L4 文法\n\n${body}`, english, { subject: '英文', r3: false }, here).errors.length > 0);
+});
