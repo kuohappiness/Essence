@@ -90,6 +90,8 @@ void test('筆記裡已經是單選、這次只加題（L2 第一輪 R6）：題
 
 void test('筆記裡已經是單選、這次加的題目寫出自己的答案：寫進筆記前擋', () => {
   assert.equal(left(item('    - 北部常見岩岸，是哪一種海岸？ :: 岩岸'), dest(Q1, OPTIONS)), EXISTING_WHY.singleLeak);
+  // 答案只寫在 %% 註解裡（孩子看不到，L2 第二輪 5）：照常加。
+  assert.equal(kindOf(planned(item('    - 北部主要是哪種海岸？ %%岩岸%% :: 岩岸'), dest(Q1, OPTIONS))), 'single');
 });
 
 void test('只補選項行就把舊題變成單選（L2 第二輪 3）：筆記裡原本的題目寫「下列」或寫出自己的答案，寫進筆記前擋；已經是單選的舊題不重查', () => {

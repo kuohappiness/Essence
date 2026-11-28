@@ -115,4 +115,6 @@ void test('single-leak（錯誤）：有選項行的題目寫出這一題自己�
   assert.deepEqual(found(draft('    - 不像東部的斷層海岸，北部是哪一種海岸？ :: 岩岸', OPTIONS)), []);
   assert.deepEqual(found(draft('    - 臺灣北部常見岩岸，是哪一種海岸？ :: 岩岸')), []);
   assert.deepEqual(found(draft('    - 東北角在臺灣哪一部？ :: 東', '    - 選項：東;;西;;南;;北')), []);
+  // 答案只寫在 %% 註解裡（孩子看不到，L2 第二輪 5）：不算。
+  assert.deepEqual(found(draft('    - 北部主要是哪種海岸？ %%岩岸%% :: 岩岸', OPTIONS)), []);
 });

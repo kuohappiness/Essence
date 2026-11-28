@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, choiceProblems, choiceStem, optionsInvalid, outsideSource, parseDeck, pickKey, readOptionLines, splitSourceItems } from '../deck/index.ts';
+import { blanksIn, choiceProblems, choiceStem, optionsInvalid, outsideSource, parseDeck, pickKey, readOptionLines, splitSourceItems, withoutComments } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -270,9 +270,9 @@ const ALL_OR_NONE = /以上皆是|以上皆非/;
 export const allOrNone = (options: readonly string[]): boolean => options.some(option => ALL_OR_NONE.test(pickKey(option)));
 /**
  * 點選作答的題目寫出這一題自己的答案（§7 再試一次，2026-11-28）：孩子不用想就點得對。比對同比較卡（全半形、大小寫、粗體不分）；
- * 一個字的答案常是別的詞的一部分，不算。寫到同一組別的選項不算（洩漏只算這一題自己的答案）。
+ * 一個字的答案常是別的詞的一部分，不算。寫到同一組別的選項不算（洩漏只算這一題自己的答案）。`%%` 註解孩子看不到，不算（L2 第二輪 5）。
  */
-export const leaks = (question: string, answer: string): boolean => { const key = pickKey(answer); return [...key].length > 1 && pickKey(question).includes(key); };
+export const leaks = (question: string, answer: string): boolean => { const key = pickKey(answer); return [...key].length > 1 && pickKey(withoutComments(question)).includes(key); };
 const SINGLE_LEAK_WHY = '題目寫出了這一題自己的答案，孩子不用想就點得對：題目改寫這一類自己的特徵或例子';
 /** 考卷式的問法（§6）：有選項行的目標是錯誤，沒有的是提醒。 */
 export const WHICH_OF = /下列|以下何者/;
