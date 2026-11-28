@@ -2,6 +2,24 @@
 
 這份說明不複製進新專案。依據：[D-247](../../docs/decisions.md#d-247-新專案的初始架構分起步包與成長包防線第-0-天就帶)、[D-216](../../docs/decisions.md#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)；規格與驗收在[任務說明](../../docs/tasks/project-starter-template.md)。
 
+## 開新專案：只要貼一句話
+
+任何新專案都一樣：在那個專案新開一個討論串，貼這一句（不用改）：
+
+```text
+請用 https://github.com/kuohappiness/Essence/tree/main/templates/project-starter 的模板初始化這個 repo：先讀那裡的 README.md，照〈給新專案的 Claude〉一步一步做。
+```
+
+### 給新專案的 Claude
+
+你在新專案的 repo 裡，要用這包模板開始。照順序做：
+
+1. 先看這個 repo 是不是空的。已經有自己的流程或很多檔的，停下來問使用者要不要用（模板不套用到已經有流程的專案）。
+2. 用下面〈怎麼複製〉的方法 A 或方法 B，把 `files/` 複製到 repo 的根目錄。讀不到這個 repo（網路或權限擋住）時，請使用者改由他電腦上的 Claude 複製。
+3. 照〈怎麼複製〉的步驟 2～4：`dot-claude/` 改名成 `.claude/`；`git add` 之後確認 `.githooks/pre-commit` 是 `100755`；跑 `git config core.hooksPath .githooks`。
+4. 照複製過去的 `SETUP.md` 做：八個問題一次問一題、附建議；第 0 步把模板和八題的答案當第一個 commit；第 1～3 步告訴使用者怎麼做，能代做的代做；最後請使用者開新的討論串核對。
+5. 過程中模板哪裡看不懂、步驟不對，或可以更好的地方，整理成一段給使用者，請他帶回模板的來源修。
+
 ## 裡面有什麼
 
 | 資料夾 | 是什麼 | 怎麼用 |
