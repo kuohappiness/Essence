@@ -1,5 +1,5 @@
 // 直接製作（apps/Cards/docs/tasks/ai-direct.md §4～§6）：教材的檢查、組請求、送出前寫給家長看的那一行、這一家的上限、送出，
-// 與每一種結果給家長看的一句話和下一步。不碰 Obsidian：選檔、讀 PDF 頁數、拿金鑰由呼叫端做好交進來。
+// 碰到輸出上限時接著要（tasks/ai-direct-continue.md），與每一種結果給家長看的一句話和下一步。不碰 Obsidian：選檔、讀 PDF 頁數、拿金鑰由呼叫端做好交進來。
 import { sha256Hex, stamp } from '../ai/index.ts';
 import type { DirectEvidence, SentFile } from '../ai/index.ts';
 import { describeAiError, isAiError } from './client.ts';
@@ -27,8 +27,6 @@ export function sentFiles(materials: readonly Material[]): SentFile[] {
 /** 一次最多（§5）：一課通常 10～20 頁；也擋住整本送出。 */
 const MAX_PDF_PAGES = 30;
 const MAX_IMAGES = 10;
-/** 含推理的輸出上限（§4 第 3 步）：超過就是截斷。 */
-const MAX_OUTPUT_TOKENS = 32_000;
 /** 一課的輸出量（§3，architecture §6 的用量估計，含推理）：之後照快照裡實際的用量調。 */
 const EXPECTED_OUTPUT = { low: 3_000, high: 10_000 };
 
@@ -71,10 +69,12 @@ export function providerProblem(provider: ProviderSpec, model: string, materials
 }
 const megabytes = (bytes: number): string => `${String(Math.floor(bytes / 1_000_000))} MB`;
 
-/** 送出的請求（§4 第 2、3 步）：提示和「複製提示」的完全一樣，教材檔當附件放在提示前面；推理等級照設定，「照服務的預設」不送。 */
+/**
+ * 送出的請求（§4 第 2、3 步）：提示和「複製提示」的完全一樣，教材檔當附件放在提示前面；推理等級照設定，「照服務的預設」不送。
+ * 不寫輸出上限：套件照目錄裡這個模型的 maxOutputTokens 送，目錄沒寫的（OpenRouter 自己填的模型）不送、照服務的預設（ai-direct-continue.md）。
+ */
 export function directRequest(input: {
-  connection: Connection; provider: ProviderSpec; apiKey: string; prompt: string; materials: readonly Material[];
-  signal?: AbortSignal; onProgress?: (event: ProgressEvent) => void;
+  connection: Connection; provider: ProviderSpec; apiKey: string; prompt: string; materials: readonly Material[]; signal?: AbortSignal;
 }): GenerateRequest {
   // 檔名可能帶孩子的名字，送給服務的一律換成代稱（格式查核 F16）；真正的檔名只寫進 vault 的快照。照片本來就不帶檔名。
   let pdfs = 0;
@@ -88,9 +88,7 @@ export function directRequest(input: {
     model: modelOf(input.connection, input.provider),
     input: [{ role: 'user', content: [...files, { type: 'text', text: input.prompt }] }],
     ...reasoning === 'default' ? {} : { reasoning },
-    maxOutputTokens: MAX_OUTPUT_TOKENS,
     ...input.signal ? { signal: input.signal } : {},
-    ...input.onProgress ? { onProgress: input.onProgress } : {},
   };
 }
 
@@ -186,7 +184,8 @@ const FAILURES: Partial<Record<DirectFailure['kind'], { text: string; next: stri
   unsupported_input: { text: '這個模型不收這種教材。', next: '到設定頁換一個模型，或改用另一種檔（PDF 或照片）。', settings: true },
   model_not_found: { text: '找不到設定的模型。', next: '到設定頁換模型，按「測試連線」。', settings: true },
   content_blocked: { text: 'AI 拒絕回答這份教材。', next: '到設定頁換一個模型，或改用複製貼上。' },
-  length: { text: '回答太長被截斷了。', next: '切成小一點的檔再送。' },
+  // 截斷（停止原因 length）分兩種，由 sendDirect 照接著要的結果挑（ai-direct-continue.md）：還沒寫出一行就到上限、接著要到上限還沒寫完。
+  length: { text: 'AI 還沒寫出內容，就用完了一次回覆的上限（多半是想太久）。', next: '到設定頁把推理等級調低一級再送，或切成小一點的檔。', settings: true },
   content_filter: { text: 'AI 拒絕回答這份教材。', next: '到設定頁換一個模型，或改用複製貼上。' },
   refusal: { text: 'AI 拒絕回答這份教材。', next: '到設定頁換一個模型，或改用複製貼上。' },
   other: { text: 'AI 沒有正常回完。', next: '重送，或改用複製貼上。' },
@@ -214,25 +213,153 @@ function stopFailure(result: Pick<GenerateResult, 'stopReason' | 'text'>): Direc
   const kind = result.stopReason === 'end' ? (result.text.trim() ? null : 'empty') : result.stopReason;
   if (kind === null) return null;
   const known = FAILURES[kind] ?? FAILURES.other!;
-  return { kind, text: known.text, next: known.next, afterResponse: true, settings: false };
+  return { kind, text: known.text, next: known.next, afterResponse: true, settings: known.settings ?? false };
+}
+
+/** 送出中的進度：套件的事件，加上碰到輸出上限、程式自動接著要的第幾段（part 從 2 算，ai-direct-continue.md）。 */
+export type DirectProgress = ProgressEvent | { type: 'continuing'; part: number };
+
+/**
+ * 碰到輸出上限時最多再接著要幾次（ai-direct-continue.md）：上限照目錄之後，現行規則的一課一次就交得完；
+ * 接了兩次還沒寫完，多半是教材太大或 AI 停不下來，再接下去只是多花錢，照截斷處理。
+ */
+const MAX_CONTINUATIONS = 2;
+/** 程式碼區塊的開頭（三個以上的反引號或波浪號，可以帶 markdown）：提示要整段放進一個 ````markdown 的程式碼區塊。 */
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*(?:markdown|md)?[ \t]*$/i;
+/** 一定是開頭的那一種（帶 markdown）：結尾不能帶說明文字，所以不會把關掉程式碼區塊的那一行當成它。 */
+const FENCE_OPENER = /^ {0,3}(`{3,}|~{3,})[ \t]*(?:markdown|md)[ \t]*$/i;
+/** 接著要的那一段開頭重寫了上一段最後幾行時，最多比幾行。 */
+const MAX_OVERLAP = 40;
+
+/** 收到的文字裡確定完整的部分：最後一個換行以前（含換行）。最後一行可能只寫了一半，拿掉，讓 AI 從那一行重寫。 */
+const completeLines = (text: string): string => text.slice(0, text.lastIndexOf('\n') + 1);
+/** 值不值得接著要：完整的部分除了程式碼區塊的開頭還有字。只想、還沒寫出一行的，接著要和重送一樣，多半又是想到上限。 */
+const written = (kept: string): boolean => kept.split('\n').some(line => line.trim() !== '' && !FENCE_LINE.test(line));
+
+/** 接著要時跟在收到的那一段後面的一句（給 AI 看）：從哪一行接、不要重寫、程式碼區塊不要再開。 */
+function continuePrompt(kept: string): string {
+  const lines = kept.split('\n').filter(line => line.trim() !== '');
+  const fence = FENCE_LINE.exec(lines[0] ?? '')?.[1];
+  return [
+    '上一則回覆寫到一半，碰到一次回覆的長度上限被切斷了；最後一行如果只寫了一半，已經拿掉。請接著寫完：',
+    '- 從上一則最後一行的下一行開始寫；寫過的行一行都不要重寫，也不要寫開場白或說明。',
+    fence
+      ? `- 上一則已經開了程式碼區塊，這一則不要再開；照原本的要求寫完，最後單獨一行寫 \`<<<完>>>\`，下一行寫 ${fence} 關掉程式碼區塊。`
+      : '- 照原本的要求寫完，最後單獨一行寫 `<<<完>>>`。',
+    '- 上一則最後一行是：',
+    '',
+    lines.at(-1) ?? '',
+  ].join('\n');
 }
 
 /**
- * 送一次：成功是收到的整段；不成功是 §6 的一句話，error 是套件丟的錯（給錯誤紀錄，§8），result 是收到了但沒有正常結束的那一份，
- * partial 是已經收到的文字（沒有是 null）。
+ * 接上接著要的那一段：AI 又開了一次程式碼區塊（前面最多兩行開場白）就拿掉到那一行；開頭重寫了上一段最後幾行（要有字，只有空行不算）也拿掉。
+ * 其他照原樣接在後面，接錯的交給原本的檢查擋（例如重複的學習目標、<<<完>>> 出現兩次）。
  */
-export async function sendDirect(client: AiClient, request: GenerateRequest): Promise<
+function joinParts(kept: string, next: string): string {
+  let lines = next.split('\n');
+  const opener = lines.findIndex(line => FENCE_OPENER.test(line));
+  if (opener >= 0 && lines.slice(0, opener).filter(line => line.trim() !== '').length <= 2) lines = lines.slice(opener + 1);
+  const before = kept.split('\n').slice(0, -1);
+  for (let k = Math.min(MAX_OVERLAP, before.length, lines.length); k > 0; k--) {
+    const tail = before.slice(-k);
+    if (tail.some(line => line.trim() !== '') && tail.every((line, at) => line.trimEnd() === lines[at].trimEnd())) {
+      lines = lines.slice(k);
+      break;
+    }
+  }
+  return kept + lines.join('\n');
+}
+
+type Usage = GenerateResult['usage'];
+/** 每一段都有才加總；有一段沒回報就是不知道（不寫，免得寫少了）。 */
+function total(parts: readonly GenerateResult[], pick: (usage: Usage) => number | null): number | null {
+  let sum = 0;
+  for (const part of parts) {
+    const value = pick(part.usage);
+    if (value === null) return null;
+    sum += value;
+  }
+  return sum;
+}
+/** 每一段的編號照順序，空一格接起來；都沒有是 null。 */
+function joined(values: readonly (string | null)[]): string | null {
+  const present = values.filter((value): value is string => value !== null);
+  return present.length ? present.join(' ') : null;
+}
+
+/**
+ * 接好的那一份（快照與工作的證據照它寫，syntax.md §6）：文字是接好的整段；用量與費用是每一段加起來；請求編號、回應編號照順序寫每一段的；
+ * 模型相同只寫一次；收到的時刻、停止原因照最後一段。只有一段時原樣交回。
+ */
+function mergeParts(parts: readonly GenerateResult[], text: string): GenerateResult {
+  const last = parts[parts.length - 1];
+  if (parts.length === 1) return last;
+  const costs = parts.map(part => part.cost);
+  const known = costs.every(cost => cost !== null) ? costs.filter(cost => cost !== null) : null;
+  return {
+    text, stopReason: last.stopReason,
+    usage: {
+      inputTokens: total(parts, usage => usage.inputTokens), cachedInputTokens: total(parts, usage => usage.cachedInputTokens),
+      cacheWriteInputTokens: total(parts, usage => usage.cacheWriteInputTokens), outputTokens: total(parts, usage => usage.outputTokens),
+      reasoningTokens: total(parts, usage => usage.reasoningTokens),
+    },
+    cost: known && {
+      amount: known.reduce((sum, cost) => sum + cost.amount, 0), currency: 'USD',
+      estimated: known.some(cost => cost.estimated), pricesAsOf: known.find(cost => cost.estimated)?.pricesAsOf ?? null,
+    },
+    message: { role: 'assistant', content: [{ type: 'text', text }] },
+    trace: {
+      ...last.trace, startedAt: parts[0].trace.startedAt,
+      resolvedModel: joined([...new Set(parts.map(part => part.trace.resolvedModel))]),
+      requestId: joined(parts.map(part => part.trace.requestId)), responseId: joined(parts.map(part => part.trace.responseId)),
+      attempts: parts.flatMap(part => part.trace.attempts), warnings: parts.flatMap(part => part.trace.warnings),
+    },
+  };
+}
+
+/**
+ * 送出：成功是收到的整段；不成功是 §6 的一句話，error 是套件丟的錯（給錯誤紀錄，§8），result 是收到了但沒有正常結束的那一份，
+ * partial 是已經收到的文字（沒有是 null）。
+ * 碰到輸出上限（停止原因 length）而且已經寫出完整的行，就用同一份請求接著要（同一份提示與教材，加上收到的那一段與 continuePrompt），
+ * 最多再要 MAX_CONTINUATIONS 次；接好的整段當成收到的回覆，交給呼叫端照原本的檢查（ai-direct-continue.md）。
+ * 接著要的那一次送不成時，前面的已經收到、已經計費，一律標 afterResponse。onProgress 收到的字數接著前面的算。
+ */
+export async function sendDirect(client: AiClient, request: GenerateRequest, onProgress?: (event: DirectProgress) => void): Promise<
   | { ok: true; result: GenerateResult }
   | { ok: false; failure: DirectFailure; error: unknown; result: GenerateResult | null; partial: string | null }
 > {
-  let result: GenerateResult;
-  try {
-    result = await client.generate(request);
-  } catch (error) {
-    return { ok: false, failure: failureOf(error), error, result: null, partial: isAiError(error) ? error.partialText : null };
+  const parts: GenerateResult[] = [];
+  let kept = '';
+  for (;;) {
+    const offset = kept.length;
+    const input = parts.length ? [...request.input, { role: 'assistant' as const, content: kept }, { role: 'user' as const, content: continuePrompt(kept) }] : request.input;
+    const progress = onProgress && ((event: ProgressEvent): void => { onProgress(event.type === 'text' ? { ...event, totalChars: offset + event.totalChars } : event); });
+    let result: GenerateResult;
+    try {
+      result = await client.generate({ ...request, input, ...progress ? { onProgress: progress } : {} });
+    } catch (error) {
+      const failure = failureOf(error);
+      const partial = isAiError(error) ? error.partialText : null;
+      if (!parts.length) return { ok: false, failure, error, result: null, partial };
+      return { ok: false, failure: { ...failure, afterResponse: true }, error, result: null, partial: partial === null ? kept : joinParts(kept, partial) };
+    }
+    parts.push(result);
+    const text = parts.length === 1 ? result.text : joinParts(kept, result.text);
+    const next = completeLines(text);
+    const more = result.stopReason === 'length' && written(next);
+    if (more && parts.length <= MAX_CONTINUATIONS) {
+      kept = next;
+      onProgress?.({ type: 'continuing', part: parts.length + 1 });
+      continue;
+    }
+    const whole = mergeParts(parts, text);
+    const failure = stopFailure(whole);
+    if (!failure) return { ok: true, result: whole };
+    // 接著要到上限還沒寫完：和「還沒寫出內容」是不同的一句（FAILURES.length 是後者）。
+    const cut = failure.kind === 'length' && more ? { ...failure, text: `回答太長，接著要了 ${String(MAX_CONTINUATIONS)} 次還是沒寫完。`, next: '切成小一點的檔再送。', settings: false } : failure;
+    return { ok: false, failure: cut, error: null, result: whole, partial: whole.text || null };
   }
-  const failure = stopFailure(result);
-  return failure ? { ok: false, failure, error: null, result, partial: result.text || null } : { ok: true, result };
 }
 
 /** 錯誤紀錄那一行的 AI 欄（§8，syntax.md §9）：服務名稱（D-244）、要求的模型、最後一次的 HTTP 狀態碼、請求編號、送了幾次。 */

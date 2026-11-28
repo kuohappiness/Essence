@@ -3,7 +3,7 @@ import {
 } from '../core/ai/index.ts';
 import type { CardForm, Purpose, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, DirectEvidence, EmbeddedRules, SentFile, SnapshotInfo } from '../core/ai/index.ts';
 import { directRequest, evidenceOf, failureLog, materialProblem, providerName, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
-import type { Connection, DirectFailure, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
+import type { Connection, DirectFailure, DirectProgress, Material, ProviderSpec } from '../core/connect/index.ts';
 import { endpoint, NO_KEY } from './ai-cards.ts';
 import type { DirectDeps } from './ai-cards.ts';
 import { deckInScope, scopeDate, unitKey } from '../core/catalog/index.ts';
@@ -384,12 +384,12 @@ export function createDeepen(deps: DeepenDeps) {
    * 送出一次（同製卡）：成功交回整段與證據、存進工作；不成功交給錯誤紀錄（取消的不記，§8）。
    * controller 是直接製作在讀這一篇之前就佔好的那一個（讀的期間取消也算數）；重送沒有讀，這裡新建。
    */
-  async function send(direct: DirectDeps, job: DeepenJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void, controller = new AbortController()): Promise<DeepenDirectOutcome> {
+  async function send(direct: DirectDeps, job: DeepenJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: DirectProgress) => void, controller = new AbortController()): Promise<DeepenDirectOutcome> {
     const files: SentFile[] = sentFiles(materials);
     sending = controller;
     try {
-      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} });
-      const sent = await sendDirect(direct.client, request);
+      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal });
+      const sent = await sendDirect(direct.client, request, onProgress);
       if (sent.ok) {
         const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
         const evidence = evidenceOf(sent.result, providerName(target.provider), files, reasoning, deps.now());
@@ -489,7 +489,7 @@ export function createDeepen(deps: DeepenDeps) {
      * 直接製作（§9，同製卡的 §4 第 1～5 步）：組提示、建這一篇的加深工作（先存再送），送出、等回覆。送出前擋下的不建工作；
      * 送出之後不論成功與否都留著那一份（重送、改用複製貼上或取消）。這一篇上一次直接送出的還沒處理完時擋下（格式查核 F14 第 2 點）。
      */
-    async direct(path: string, direction: string, material: string, pick: boolean | undefined, materials: readonly Material[], onProgress?: (event: ProgressEvent) => void): Promise<DeepenDirectOutcome> {
+    async direct(path: string, direction: string, material: string, pick: boolean | undefined, materials: readonly Material[], onProgress?: (event: DirectProgress) => void): Promise<DeepenDirectOutcome> {
       const direct = deps.direct;
       if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一篇正在送出，等它好了再按' };
@@ -532,7 +532,7 @@ export function createDeepen(deps: DeepenDeps) {
       return { ok: true, line: sendingLine(ready.direct.client, ready.target.provider, request, ready.materials, ready.prompt.length) };
     },
     /** 重送（§6）：同一份提示，不重組；收到過的那一份留到重送成功才換（L2 第二輪 S2）。 */
-    async resend(job: DeepenJob, onProgress?: (event: ProgressEvent) => void, picked?: readonly Material[]): Promise<DeepenDirectOutcome> {
+    async resend(job: DeepenJob, onProgress?: (event: DirectProgress) => void, picked?: readonly Material[]): Promise<DeepenDirectOutcome> {
       if (!deps.direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一篇正在送出，等它好了再按' };
       const ready = resendTarget(job, picked);

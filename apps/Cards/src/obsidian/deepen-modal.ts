@@ -3,7 +3,7 @@ import type { App, Plugin } from 'obsidian';
 import { deepenPending, directJob, groupHints, issueText } from '../core/ai/index.ts';
 import type { DeepenInspection, DeepenJob } from '../core/ai/index.ts';
 import { usageLine } from '../core/connect/index.ts';
-import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
+import type { DirectFailure, DirectProgress, Material } from '../core/connect/index.ts';
 import { isDeckPath } from '../core/deck/index.ts';
 import { PICK_NOTE, SERVICES } from './ai-cards.ts';
 import { limitedRead } from './deepen.ts';
@@ -265,7 +265,7 @@ class DeepenModal extends Modal {
   /**
    * 送出中（§4 第 4 步）：work 送出並交回結果；送出前就擋下時回傳原因，其他情況由這裡畫下一步，回傳 null。
    */
-  private async sendNow(flow: Deepen, work: (progress: (event: ProgressEvent) => void) => Promise<DeepenDirectOutcome>): Promise<string | null> {
+  private async sendNow(flow: Deepen, work: (progress: (event: DirectProgress) => void) => Promise<DeepenDirectOutcome>): Promise<string | null> {
     const el = this.reset();
     const view = sendingView(el, nameOf(this.path), () => this.now(), () => { flow.abort(); });
     this.view = { ...view, flow };

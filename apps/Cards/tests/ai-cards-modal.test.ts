@@ -275,6 +275,18 @@ void test('L2 R10 送不成是金鑰不對：失敗的畫面有「打開設定�
   assert.equal(button(again.contentEl, '打開設定頁'), undefined);
 });
 
+void test('ai-direct-continue 碰到輸出上限：送出中的畫面寫正在接著要第 2 段（另外計費），接好之後是一般收到的畫面、框裡是接好的整段', async t => {
+  const cut = reply.indexOf('- 能用');
+  const { made, openModal } = await open(t, [ok(reply.slice(0, cut + 3), 'MAX_TOKENS'), { ...ok(reply.slice(cut)), headersDelayMs: 200 }]);
+  const modal = openModal();
+  await sendFromForm(modal);
+  assert.ok(texts(modal.contentEl).includes('回答太長，一次寫不完；正在接著要第 2 段（這一段另外計費）。'), texts(modal.contentEl).join('|'));
+  await sleep(400);
+  assert.equal(made.fetch.requests.length, 2);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+  assert.equal(textarea(modal.contentEl)?.value, reply);
+});
+
 void test('實機第 1 點 拿到回應之後才失敗（回答太長被截斷）：重開之後清單的重送也寫會再計費；拿到回應之前就失敗的不寫', async t => {
   const first = await load(t, [ok(reply, 'MAX_TOKENS')]);
   const cut = await first.cards.direct(form, [lesson]);

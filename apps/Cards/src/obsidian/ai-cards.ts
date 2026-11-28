@@ -2,7 +2,7 @@ import { abandonJob, beginSave, buildPrompt, directJob, inspectReply, NEWER_SAVE
 import type { CardForm, CardJob, DeckStop, DirectEvidence, DirectJob, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck, SentFile } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import { directRequest, evidenceOf, failureLog, materialProblem, modelOf, providerName, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
-import type { AiClient, Connection, DirectFailure, DirectLog, KeyLookup, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
+import type { AiClient, Connection, DirectFailure, DirectLog, DirectProgress, KeyLookup, Material, ProviderSpec } from '../core/connect/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
 // AI 製卡的流程（tasks/ai-cards-mvp.md §2、§3、§5）：複製提示、貼回檢查、存草稿與繼續。畫面在 ai-cards-modal.ts；這裡不碰 Obsidian，測試直接用。
@@ -252,14 +252,14 @@ export function createAiCards(deps: AiCardsDeps) {
     return { client: direct.client, latest, materials, target, key: key.key, prompt: latest.parts.map(part => part.text).join('\n\n'), chars };
   }
   /** 送出一次（§4 第 2～5 步）：成功交回整段與證據、存進工作（F2）；不成功交給錯誤紀錄（取消的不記，§8）。 */
-  async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+  async function send(job: CardJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: DirectProgress) => void): Promise<DirectOutcome> {
     const direct = deps.direct!;
     const controller = new AbortController();
     const files: SentFile[] = sentFiles(materials);
     sending = controller;
     try {
-      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} });
-      const sent = await sendDirect(direct.client, request);
+      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal });
+      const sent = await sendDirect(direct.client, request, onProgress);
       if (sent.ok) {
         const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
         const evidence = evidenceOf(sent.result, providerName(target.provider), files, reasoning, deps.now());
@@ -359,7 +359,7 @@ export function createAiCards(deps: AiCardsDeps) {
      * 直接製作（§4 第 1～5 步）：組提示、建一份待貼回的工作（先存再送：送到一半 Obsidian 被關掉，下次打開還找得到），送出、等回覆。
      * 送出前擋下的不建工作；送出之後不論成功與否都留著那一份工作（§6：重送、改用複製貼上或放棄）。一次只送一個（§6 最後一點）。
      */
-    async direct(form: CardForm, materials: readonly Material[], onProgress?: (event: ProgressEvent) => void): Promise<DirectOutcome> {
+    async direct(form: CardForm, materials: readonly Material[], onProgress?: (event: DirectProgress) => void): Promise<DirectOutcome> {
       const direct = deps.direct;
       if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
@@ -396,7 +396,7 @@ export function createAiCards(deps: AiCardsDeps) {
      * 重送（§6）：同一份提示，不重組；教材用這次記得的，重開過 Obsidian 的由家長重選後交進來（picked，格式查核 F15）。
      * 工作已經結束、開始存了，或教材不在了是 blocked。
      */
-    async resend(job: CardJob, onProgress?: (event: ProgressEvent) => void, picked?: readonly Material[]): Promise<DirectOutcome> {
+    async resend(job: CardJob, onProgress?: (event: DirectProgress) => void, picked?: readonly Material[]): Promise<DirectOutcome> {
       if (!deps.direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
       if (sending) return { kind: 'blocked', message: '另一課正在送出，等它好了再按' };
       const ready = resendTarget(job, picked);
