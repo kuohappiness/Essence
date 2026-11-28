@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   appendBatch, beginDeepen, composeBatch, idsInDeepenBoxes, inspectDeepen, introBoxes, isDeepenJob, planAppend, readDeepenJobs, runDeepen, settleUnclear, sha256Hex, unclosedFence, verifyAppend,
 } from '../src/core/ai/index.ts';
-import type { AppendWrite, CardForm, DeepenIo, DeepenJob } from '../src/core/ai/index.ts';
+import type { AppendWrite, CardForm, DeepenIo, DeepenJob, DirectEvidence } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 
 // AI 製卡第 2 批：加深交回的內容寫進那一篇（tasks/ai-cards-deepen.md §3-1、§3-2）。預期照任務說明手寫。
@@ -187,9 +187,15 @@ const JOB: DeepenJob = {
   parts: [{ name: '通用規則', version: 'v1', text: '規則', sha256: sha256Hex('規則') }, { name: '任務段', version: '加深 v1', text: '任務', sha256: sha256Hex('任務') }],
   promptSha: 'p', stable: ['abc234'], sent: 1, save: null,
 };
-function started(job = JOB): DeepenJob {
+/** 直接製作收到的那一次（tasks/ai-direct.md §9）：快照照它寫 `接法: API` 與用量、費用、教材檔。 */
+const EVIDENCE: DirectEvidence = {
+  service: 'Gemini', requestedModel: 'gemini-3.8-flash', model: 'gemini-3.8-flash-001', reasoning: null, reasoningSent: null, receivedAt: '2026-11-17T09:01:00+08:00',
+  usage: { input: 18_000, cacheRead: null, cacheWrite: null, output: 4_000, reasoning: null }, cost: { amount: 0.0123, estimated: true, asOf: '2026-11-01' },
+  requestId: null, responseId: 'gem-1', files: [{ sha256: 'a'.repeat(64), pages: 4, name: '補充 講義.pdf' }], text: REPLY, sha256: sha256Hex(REPLY),
+};
+function started(job = JOB, api?: DirectEvidence): DeepenJob {
   const found = inspectDeepen(REPLY, FORM, SUBJECT, HERE);
-  return beginDeepen(job, REPLY, 'Claude', composeBatch(found, '國二上自然 2-1', ids('xyz234', 'qrs567'), '2026-11-17'), '2026-11-17T10:00:00+08:00', new Set());
+  return beginDeepen(job, REPLY, api ? null : 'Claude', composeBatch(found, '國二上自然 2-1', ids('xyz234', 'qrs567'), '2026-11-17'), '2026-11-17T10:00:00+08:00', new Set(), api);
 }
 function fakeIo(files: Map<string, string>, options: { appendResult?: AppendWrite; after?: (text: string) => string } = {}) {
   const log: string[] = [];
@@ -253,9 +259,11 @@ void test('寫入順序：記 writing → 寫卡組 → 原文 → 快照 → �
   assert.deepEqual(again.log, []);
 });
 
-void test('L2 R13 快照寫好、工作還在，之後改名改了快照的對象：恢復時認得是同一份，不再建一份；同識別碼有別的不同就停下', async () => {
+// 直接製作的快照（tasks/ai-direct.md §10 加深的例子）多了接法 API、用量、費用、教材檔：改名後照樣認得是同一份。
+for (const [name, api] of [['複製貼上', undefined], ['接法 API', EVIDENCE]] as const) void test(`L2 R13 快照寫好、工作還在，之後改名改了快照的對象：恢復時認得是同一份，不再建一份；同識別碼有別的不同就停下（${name}）`, async () => {
   const files = new Map([[HERE.path, DECK]]);
-  const job = started();
+  const job = started(JOB, api);
+  assert.equal(job.save!.snapshot.includes('接法: API'), api !== undefined);
   assert.deepEqual(await runDeepen(job, fakeIo(files).io), { kind: 'done', wrote: true });
   const path = job.save!.snapshotPath;
   const done = { ...job, save: { ...job.save!, writing: true, written: true } };

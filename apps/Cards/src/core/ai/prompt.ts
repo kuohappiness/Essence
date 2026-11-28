@@ -48,6 +48,8 @@ export interface SentPart { name: string; version: string; text: string; sha256:
 export interface Prompt { parts: SentPart[]; text: string; sha256: string }
 
 export const sha256Hex = (text: string): string => bytesToHex(sha256(utf8ToBytes(text)));
+/** 一份檔的位元組的 SHA-256（直接製作的教材檔，tasks/ai-direct.md §7）。 */
+export const sha256OfBytes = (data: Uint8Array): string => bytesToHex(sha256(data));
 /** 帶時區、到秒的時間（快照的 `時間`、`複製時間`）。 */
 export const stamp = (ms: number, offset: number): string => formatTime(Math.floor(ms / 1000) * 1000, offset).replace(/\.\d{3}(?=[+-])/, '');
 

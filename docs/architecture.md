@@ -93,6 +93,7 @@ Essence/                         GitHub 的 repo 與本機資料夾（2026-11-18
 │                                產品定義的共用部分、decisions.md、progress-map.md、roadmap 與 backlog 的入口、
 │                                agents/、ai-models.md、archive/，以及跨外掛的 plans/、tasks/、Claude Codex Discussion/（D-213）
 ├─ experiments/                  試作場
+├─ templates/project-starter/    給新專案的初始架構：起步包 files/、成長包 growth/、使用說明 README.md（D-247）；不是 Essence 自己的設定
 ├─ tools/                        共用的檢查、分派表、hook 與 CI gate 的邏輯、進度網頁，與它們的測試（tools/tests/）；
 │                                有自己的 package.json
 └─ apps/
@@ -132,12 +133,13 @@ Capture、Mindboard、Portal 的 `docs/` 與裡面的資料夾，第一份文件
 | 展開的主題細項規畫：一主題一份，從 backlog 引用，命名與維護見[該目錄 README](plans/README.md) | 跨軟體的在最上層 `docs/plans/`，其餘在軟體的 `docs/plans/` |
 | 參考軟體研究 | 軟體的 `docs/research/` |
 | 現在推薦的 AI 服務與模型；新模型推出時更新 | 最上層 `docs/ai-models.md` |
-| 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts` |
+| 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 | 最上層 `docs/agents/`；分派表 `tools/dispatch.ts`；只有某個軟體用得到的（建置、安裝、平台的做法、里程碑）在軟體的 `docs/quality.md`（使用者 2026-11-27 同意） |
 | 功能地圖 | 最上層 `docs/progress-map.md` |
 | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 | 最上層 `docs/archive/` |
 | 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態行（[寫法](agents/workflow.md#入口的狀態行)） | 跨軟體的在最上層 `docs/tasks/`，其餘在軟體的 `docs/tasks/`（[D-213](decisions.md#d-213-任務與討論稿放進-docs外掛專用的放外掛的-docs)） |
 | Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 | 跨軟體的在最上層 `docs/Claude Codex Discussion/`，其餘在軟體的 `docs/Claude Codex Discussion/`（D-213） |
 | 試作場：樣式稿、試作外掛與測試結果 | 最上層 `experiments/` |
+| 給新專案複製的初始架構（[D-247](decisions.md#d-247-新專案的初始架構分起步包與成長包防線第-0-天就帶)）：裡面的規則、skill、hook 與 CI 是給新專案的，Essence 不照著做 | 最上層 `templates/project-starter/`；分派表只跑共用工具的測試，格式由它自己的檢查與 `tools/tests/` 的測試守 |
 | 程式、測試與開發工具（[D-110](decisions.md#d-110-v1-外掛的程式結構)） | 軟體的 `src/`、`tests/`、`tools/`；共用的檢查與它們的測試在最上層 `tools/`（自己的 `package.json`） |
 
 ### 新文件放哪裡

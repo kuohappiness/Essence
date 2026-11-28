@@ -1,6 +1,6 @@
 # 程式品質：本專案的設定
 
-給 `code-quality` skill 讀（[D-119](../decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。這裡只寫對應與連結，規則本身在連到的地方。
+給 `code-quality` skill 讀（[D-119](../decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。這裡只寫對應與連結，規則本身在連到的地方。全專案共用的寫在這裡；只有某個軟體用得到的（建置、安裝、平台的做法、里程碑）寫在那個軟體的 `docs/quality.md`，例如 [Cards](../../apps/Cards/docs/quality.md)，這裡的同名標題下留一行指過去。
 
 ## 角色
 
@@ -25,7 +25,7 @@
 - **雲端**（電腦可以關）：其餘的，例如不屬高風險範圍的程式、文件與規劃、不碰 Obsidian 的試作場與研究。在本機 session 遇到這類任務，開工前提醒使用者可以改到雲端做。
 - 雲端做到一半發現要本機：推分支，在任務說明寫下進度與下一步，提醒使用者回本機接手。
 - 雲端 session 照它自己的規則只推自己的 `claude/` 分支，不直接推 `main`（只改文件也一樣）；做完開 PR 合併。
-- 只改 Markdown 文件的 PR：開 PR 後訂閱 PR 動態，CI 綠燈就 squash 合併、回報，不再先問；有程式、設定、hook、workflow、skill、`AGENTS.md`，或 `apps/Cards/docs/syntax.md`、`docs/transcript.md` 的實質修改，照舊先問使用者（[D-239](../decisions.md#d-239-只改文件的-prci-綠燈就合併)）。
+- 只改 Markdown 文件的 PR：開 PR 後訂閱 PR 動態、打開 GitHub 的自動合併（squash），gate 綠燈 GitHub 自己合併，合併後回報，不再先問（[D-245](../decisions.md#d-245-ci-只在-push-跑main-要-gate-綠燈才合得進去) 第 3 點）；有程式、設定、hook、workflow、skill、`AGENTS.md`，或 `apps/Cards/docs/syntax.md`、`docs/transcript.md` 的實質修改，照舊先問使用者（[D-239](../decisions.md#d-239-只改文件的-prci-綠燈就合併)）。
 - 雲端 session 的環境由 `.claude/hooks/cloud-setup.mjs` 準備：設 `core.hooksPath`、淺層 clone 沒有的 git tag 補抓（跨版本測試要用）、PATH 上的 Node 低於 24 時改用映像裡 `/opt/node24`、在 CI 用到的資料夾（`tools`、`apps/Cards`、`apps/Capture`、`apps/Mindboard`、`packages/ai-client`）`npm ci`（沒有相依的跳過），每個資料夾印一行結果。雲端讀不到本機的記憶，會影響做法的規則要寫進 repo。
 - 兩條路會跑到它。claude.ai/code 開的 session 專案資料夾就是 repo，由 `.claude/settings.json` 的 `SessionStart` 跑。專案討論串開的 session 專案資料夾是 repo 的上一層、讀不到那份設定（2026-11-26 [AI 連線模組〈結果〉](../tasks/ai-client.md#結果)遇到），改由雲端環境「Essence」的 setup script 在開機時跑（加 `--setup-script`）：它同時把那份設定的 hook 抄進這台機器的使用者設定 `~/.claude/settings.json`（指令換成絕對路徑；專案資料夾就是 repo 時直接結束，不跑兩次），所以專案討論串一樣有開場設定、擋危險 git 指令與 main 紅燈提醒。setup script 只呼叫這支程式，出錯不擋開場（session 開場時會再跑一次，把結果告訴 Claude），全文：
 
@@ -44,24 +44,21 @@
 
 ## 檢查指令
 
+Cards 的檢查、建置與安裝（`npm run check`、只改文件時的相關測試、`install-vault`）在 [Cards 的程式品質設定](../../apps/Cards/docs/quality.md#檢查指令)；這裡是全專案的。
+
 - 安裝：每個資料夾有自己的 `package.json`，根目錄沒有。每個 clone 與 worktree 先在 `tools/` 跑 `npm ci`（共用檢查與 hook 的相依；`prepare` 順便設 `core.hooksPath`）；要跑 Cards 的檢查、建置或安裝時再在 `apps/Cards/` `npm ci`；Capture、Mindboard 有相依之後在各自的資料夾 `npm ci`（[D-208](../decisions.md#d-208-三個外掛在同一個-repo-開發每個外掛有自己的資料夾) 第一步、第二步）。
-- Cards 的 `npm run check`（在 `apps/Cards/` 跑，或從根目錄 `npm --prefix apps/Cards run check`）：型別、ESLint（含模組邊界，以及 Obsidian 官方審查會算錯誤的規則，[D-220](../decisions.md#d-220-給其他家庭的外掛上架-obsidian-官方目錄第一個外部家庭要裝時才上架) 第 3 點；現有的 lookbehind 記在 `apps/Cards/eslint-suppressions.json`）、knip，最後測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。共用檢查不在裡面，另外跑。
 - `tools/` 的 `npm run check` 是共用檢查：文件檢查、金鑰（secretlint）、本機路徑、skill 副本一致性、軟體之間不 import 與 `apps/` 的資料夾、寫死的路徑對得上 `tools/apps.ts` 的表（`tools/check-app-imports.ts`，[D-218](../decisions.md#d-218-plugins-改名-apps每個軟體的資料夾首字大寫)；紀錄與例外表除外，例外逐檔列在檢查裡）、狀態板與〈已完成〉和入口的狀態行一致（`roadmap-sync --check`，[D-217](../decisions.md#d-217-狀態只寫在入口狀態板與已完成由工具產生)）、進度白板讀得出每一份 roadmap（`roadmap-board --check`）。`tools/` 的 `npm run self-check` 是共用工具本身的完整檢查：型別、ESLint、knip（`tools/knip.jsonc`）與 `tools/tests/` 的測試（含 hook、分派表、CI 的 gate）；hook 照分派表決定什麼時候跑它。Capture、Mindboard 的 `npm run check` 在各自的資料夾，現在只印一行，寫程式的第一個任務換成型別、lint 與測試。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）；`apps/<軟體>/` 底下的狀態目錄、roadmap 與任務照同樣的規則查。它只認 git 追蹤的檔：連到還沒 `git add` 的新檔會報找不到，`npm run check` 停在這一步；pre-commit 又在暫存區與工作樹各查一次，所以新文件和連到它的舊文件要一起 stage，要分開 commit 時先 commit 文件。
 - 測試的時間上限：`npm test` 每個測試最多 10 分鐘（`--test-timeout`）；自己另外跑 `node --test` 時也加上限。用 Node 的 mock timers 時，呼叫被測的非同步函式後先 `await tick(t, 0)` 再推時間，不然假時鐘不再前進，`await` 永遠等不到（2026-11-04 一個測試因此無聲掛了近三小時）。背景指令超過預期又沒有輸出，先查進程與輸出，不要說成跑得比較久。
-- pre-commit（`.githooks/pre-commit` 只確認 `tools/` 裝過，邏輯在 `tools/hooks.ts`）：先在 Git 給的環境讀暫存區（`git commit <路徑>`、`-a` 用的是另一份索引），每次都跑共用檢查的暫存區版本：文件、暫存檔的金鑰（repo 公開，只改文件的 commit 也直接推上 main，[第二次里程碑檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R4）、本機路徑（R5：帳號名、iCloud 雲碟、vault 名稱；通用規則不含真實的值，本機規則在執行時從這台電腦取；commit 訊息由 `.githooks/commit-msg` 掃）、兩份 skill、軟體之間不 import 與 `apps/` 的資料夾、狀態板和入口一致、roadmap 讀得出來。接著照**分派表**（`tools/dispatch.ts`，規則見 [architecture.md〈repo 結構〉](../architecture.md#9-repo-結構-d-208)，這裡不抄第二份）決定共用工具與每個外掛跑完整檢查、只跑相關測試或照表跳過，最後印一行每個對象跑了什麼、跳過的理由。要看某次改動怎麼分派：`node tools/dispatch.ts --staged --explain`（或 `--range <base> <head>`）。
+- pre-commit（`.githooks/pre-commit` 只確認 `tools/` 裝過，邏輯在 `tools/hooks.ts`）：先在 Git 給的環境讀暫存區（`git commit <路徑>`、`-a` 用的是另一份索引），每次都跑共用檢查的暫存區版本：文件、暫存檔的金鑰（repo 公開，只改文件的 commit 也會進 main，[第二次里程碑檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R4）、本機路徑（R5：帳號名、iCloud 雲碟、vault 名稱；通用規則不含真實的值，本機規則在執行時從這台電腦取；commit 訊息由 `.githooks/commit-msg` 掃）、兩份 skill、軟體之間不 import 與 `apps/` 的資料夾、狀態板和入口一致、roadmap 讀得出來。接著照**分派表**（`tools/dispatch.ts`，規則見 [architecture.md〈repo 結構〉](../architecture.md#9-repo-結構-d-208)，這裡不抄第二份）決定共用工具與每個外掛跑完整檢查、只跑相關測試或照表跳過，最後印一行每個對象跑了什麼、跳過的理由。要看某次改動怎麼分派：`node tools/dispatch.ts --staged --explain`（或 `--range <base> <head>`）。
   - 測試用 dot reporter（`NODE_OPTIONS` 加 `--test-reporter=dot`）：通過的測試只印一個點，失敗的照常印出，exit code 照常傳回；AI 讀 commit 的輸出要花 token，原本約 4.2 萬字（[外掛架構檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 Q2）。代價是通過的測試印的訊息看不到，需要時自己跑 `npm run check`；手動跑與 CI 不變。
-  - Cards 的「相關測試」：只改 Cards 的文件時，跑寫到那個路徑的測試檔，通過時只印一行（2026-10-29：`b63c1bb` 只改 `syntax.md` 的範例就讓 CI 紅了）。新的測試要讀文件時，在測試裡寫出它的路徑（例如 `apps/Cards/tests/` 裡的 `new URL('../../../docs/syntax.md', import.meta.url)`），分派表才找得到；兩個以上外掛都讀的最上層檔案，登錄在分派表的 `SHARED_SPECS`。
   - 外掛的檢查（完整與相關測試）在只有暫存內容的副本跑：`git checkout-index` 取出到系統的暫存資料夾（LF，和 CI 一樣），`.git` 檔指向這個工作樹的 git 資料夾，`node_modules` 用連結借工作樹的，跑完先拆連結再刪副本。工作樹裡沒 stage 的改動不影響結果，檢查跑的時候可以繼續改檔。`git commit <路徑>`、`-a` 時，測試裡的 git 讀的是預設的索引，可能和副本不同（[one-repo-step-1 §10](../tasks/one-repo-step-1.md#10-技術債)）。
-- CI（`.github/workflows/check.yml`）：plan job 照事件決定比較的端點（PR 是分岔點到 PR 的 head；push 到 `main` 是上一次到這次；push 到其他分支是和 `origin/main` 的合併基點到這次，算整個分支；tag 與找不到基點時跑全部），用分派表的 CI 跑法（Cards 的相關測試升成完整檢查）決定外掛的 job；shared job 每次都跑共用檢查，只裝 `tools/`；tools job 照分派表跑 `tools/` 的 `npm run self-check`；cards job 在 `apps/Cards/` 跑檢查、建置與 `npm audit`，不裝 `tools/`；capture、mindboard 的 job 在自己的資料夾跑。最後的 gate job（`tools/ci-gate.ts`）確認每個 job 都照 plan：要跑的成功、不跑的跳過；要跑的被跳過或取消、不該跑的跑了都紅燈，摘要表寫每個外掛跑不跑、理由與結果。`main` 現在沒有分支保護、也沒有必過檢查（2026-11-17 查過）；之後要設時只設 gate，不設會被照表跳過的外掛 job。
-- 合併進 `main`：`.githooks/pre-merge-commit`（邏輯也在 `tools/hooks.ts`）先讀合併的索引跑一次共用檢查（合併不經過 pre-commit，合併到哪個分支都跑）；合併進 `main` 時，用分派表的 CI 跑法比合併基點到要合併的 commit，有外掛要跑（只改文件也算，因為 CI 會跑 Cards 的完整檢查）就要那個 commit 的 **push** run 是綠燈（`gh run list --commit <head> --workflow check.yml --event push`；PR 或探針的 run 比的是別的範圍），沒有紀錄、紅燈、取消、還沒跑完都擋，`gh` 不能用時警告放行。快轉與有衝突的合併不經過它，要自己記得：先 push 分支、等 Check 是綠燈再合併（[第二次里程碑檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R2：還原分支沒 push 過就合併，25 個測試在 Linux 失敗）。
+- CI（`.github/workflows/check.yml`）：只在 push 跑，被新的 push 取代的 run 照樣跑完、不取消（[D-245](../decisions.md#d-245-ci-只在-push-跑main-要-gate-綠燈才合得進去) 第 1 點）。plan job 照事件決定比較的端點（push 到 `main` 是上一次到這次；push 到其他分支是和 `origin/main` 的合併基點到這次，算整個分支，和 PR 的範圍一樣，PR 上看到的就是這次的結果；tag 與找不到基點時跑全部；`tools/ci-gate.ts` 也認 PR 事件，現在用不到），用分派表的 CI 跑法（Cards 的相關測試升成完整檢查）決定外掛的 job；shared job 每次都跑共用檢查，只裝 `tools/`；tools job 照分派表跑 `tools/` 的 `npm run self-check`；cards job 在 `apps/Cards/` 跑檢查、建置與 `npm audit`，不裝 `tools/`；capture、mindboard 的 job 在自己的資料夾跑。最後的 gate job（`tools/ci-gate.ts`）確認每個 job 都照 plan：要跑的成功、不跑的跳過；要跑的被跳過或取消、不該跑的跑了都紅燈，摘要表寫每個外掛跑不跑、理由與結果。`main` 的 ruleset（[D-245](../decisions.md#d-245-ci-只在-push-跑main-要-gate-綠燈才合得進去) 第 2 點）：必過 gate（不設會被照表跳過的外掛 job）、禁 force push 與刪除、沒有例外名單、不要求分支先跟上 `main`。所以直接 push 到 `main`、在 GitHub 網頁直接改 `main`、本機做的合併 commit（沒跑過 CI）都推不上去，一律開 PR、由 GitHub 合併。
+- 本機合併：`.githooks/pre-merge-commit`（邏輯也在 `tools/hooks.ts`）先讀合併的索引跑一次共用檢查（合併不經過 pre-commit，合併到哪個分支都跑）；合併進 `main` 時，用分派表的 CI 跑法比合併基點到要合併的 commit，有外掛要跑（只改文件也算，因為 CI 會跑 Cards 的完整檢查）就要那個 commit 的 **push** run 是綠燈（`gh run list --commit <head> --workflow check.yml --event push`；PR 或探針的 run 比的是別的範圍），沒有紀錄、紅燈、取消、還沒跑完都擋，`gh` 不能用時警告放行。快轉與有衝突的合併不經過它，要自己記得：先 push 分支、等 Check 是綠燈再合併。`main` 設了 ruleset 之後，本機合併進 `main` 的合併 commit 推不上去，這一關主要用在合併到其他分支（[第二次里程碑檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R2：還原分支沒 push 過就合併，25 個測試在 Linux 失敗）。
 - worktree 的 hook：`core.hooksPath` 是相對的 `.githooks`，每個 worktree 讀自己的；開 worktree 的工具把它改成另一個 checkout 的絕對路徑時，hook 會轉給這個 worktree 自己的 `.githooks`（[one-repo-step-1〈平台事實〉](../tasks/one-repo-step-1.md#平台事實)）。在 `tools/` 跑 `npm ci` 會改回相對的。轉交寫在 D-208 第一步之後的 hook 裡：指到的 checkout 還沒有第一步時，跑的是那裡的舊 hook，不會轉交（[backlog〈已知的限制〉](../backlog.md#已知的限制)）；所以合併後先更新主資料夾。
-- CI 的結果：每個 Claude session 開始時，`.claude/hooks/ci-status.mjs` 會查 `main` 最近一次跑完的 GitHub Actions，沒通過就提醒；看到提醒先用 `gh run view <id> --log-failed` 找原因，能修就修，不能修就告訴使用者。本機是 Windows、CI 是 Linux，只在一邊壞的問題 pre-commit 擋不到（2026-10 曾紅了三天沒人發現，[第一個里程碑的檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-27-milestone-1-review.md>) R1）。
+- CI 的結果：每個 Claude session 開始時，`.claude/hooks/ci-status.mjs` 會查 `main` 上 Check 與進度白板（Progress board）各自最近一次跑完的結果，沒通過就提醒（白板被新的 push 取消不算，[D-245](../decisions.md#d-245-ci-只在-push-跑main-要-gate-綠燈才合得進去) 第 4 點）；看到提醒先用 `gh run view <id> --log-failed` 找原因，能修就修，不能修就告訴使用者。白板發布遇到 GitHub 的暫時錯誤時 workflow 會等 30 秒自己重試一次，兩次都失敗才會提醒，這時重跑 `progress-board.yml` 就好。本機是 Windows、CI 是 Linux，只在一邊壞的問題 pre-commit 擋不到（2026-10 曾紅了三天沒人發現，[第一個里程碑的檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-27-milestone-1-review.md>) R1）。
 - knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：Cards 與 `tools/` 的 `npm run knip`（`apps/Cards/tools/knip.mjs`、`tools/run-knip.mjs`）已經自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`，檢查項目不變；直接跑 `npx knip` 時要自己加（2026-10-27 W6 合併時遇到）。
 - Codex 審查時：完整的 `npm run check` 要在沙箱外跑，由 Claude 送審前自己跑、把結果寫進請求。Codex 的沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣），所以 Codex 只跑和發現有關的測試，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。跑的時候一次等到結束或出錯（設足夠且有上限的等待），不要短間隔反覆查進度：2026-11-04 那次 L2，這種輪詢約佔 Codex 輸入的 43%（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點，試行）。審查請求的「驗證方式」連到這一點。
-- 建置、安裝與 Cards 的工具（`install-vault`、`update-vault`、`backup`、`restore`、`locate` 等）都在 `apps/Cards/` 跑，或從根目錄加 `npm --prefix apps/Cards run …`；產物（`main.js`、`styles.css`）也在 `apps/Cards/`。
-- 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`apps/Cards/tools/build.mjs` 會擋）。
-- 安裝：`npm run install-vault -- <vault> [--dev]`（[D-149](../decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 4 點，擋法在 `apps/Cards/tools/install.ts`）。開發版只裝登錄過的測試 vault：登錄存在主資料夾的 `.local/test-vaults.json`（各 worktree 共用、不進 repo），第一次先 `npm run install-vault -- <測試 vault> --register-test`。裝到測試 vault（含 `--dev`）是在 Cards 的資料夾建置、再從那裡複製（`apps/Cards/tools/install.ts` 的 `install` 裡測試 vault 那一段：`build({ root, … })` 之後 `deploy(root, …)`），中間有別的程序寫了 `main.js` 就會裝到那一份；裝完用開發命令結果檔的 `BUILD` 核對是不是這次的建置（[外掛架構檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 N2：照實記下，不改）。其他 vault 一律當正式使用的：要工作樹乾淨、HEAD 是 `v<版號>` 的 tag、`package.json` 版號相同、DEV 關閉，產物與雜湊存到 `.local/releases/<版號>/`；退回用 `--release <版號>`，現有資料的 `需要版本`、`need` 比那一版新就拒絕。
 
 ## 規格來源
 
@@ -118,47 +115,27 @@ GitHub 上的 Codex 審查（[D-212](../decisions.md#d-212-claude-直接呼叫�
 
 ## 本專案的做法
 
-- 寫回筆記的函式，往返與冪等測試登錄進共用的範例清單：`apps/Cards/tests/deck.test.ts` 的 `deckCases`。
-- 只在 Node 驗過的檔案存取，接上 Obsidian 前要在 Windows 版 Obsidian 對照一次（D-110）。
-- 規格的平台事實表（code-quality〈寫規格〉，[第二次里程碑檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R7）在本專案常見的列：iPhone（例如 `stack` 沒有位置，[D-173](../decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)）、CI 的 Linux、Obsidian 的渲染器（和 markdown-it 不同）、Obsidian 的檔案操作與計時器（例如底層的操作不會因為外掛的上限停下）。探針用 Windows 版 Obsidian 的開發命令；iPhone 的項目集中成一次實機測試。
-- 測試只用 syntax.md 的例子或自編的內容。
-- markdown-it 只當第一層的快速探針，Obsidian 的渲染器不一樣：`$…$` 是數學式、`%%…%%` 是註解、`www.` 開頭會變連結、字中間的底線也算強調（2026-11-04，Obsidian 1.15.0）。結論取決於實際畫面時，用不提交的開發命令跑真的渲染器，並告訴查核者用哪一個重現；程式判斷 Markdown 時寧可用白名單。
-- 開發命令要按按鈕或寫檔時，先找到自己建立那一篇的 leaf，在它的 `containerEl` 裡查，不用 `document.querySelector`；有確認視窗時先核對是不是這一篇。測試 vault 常開著使用者自己的分頁（2026-11-08 誤把一篇草稿改成啟用）。
-- 內容含 `\uXXXX` 跳脫時，Write 與 Edit 會把它解開成真的零寬或私用區字元（讀出來看起來仍是跳脫）。寫完用 node 掃改過的檔，有就用腳本換回跳脫，只換自己改的行；repo 裡原本就有的真字元（例如測試裡的 BOM）不動。
-- Obsidian 畫面的截圖用開發版的 `ui` 命令（Electron 的 `capturePage()`），不要用 computer-use：它會截到舊畫面，還會讓 Obsidian 被當成隱藏而停止繪製，計時器和 `requestAnimationFrame` 也跟著變慢（W6 的 Windows 實測）。
-- 測試不改全域的 `node:fs` 等 Node 內建模組：Node 自己的實作也會呼叫它們，換掉之後結果會隨 Node 的版本改變。要模擬失敗，就把替身直接交給要測的函式（例如 `createNodeFiles` 的 `seams`）。
-- 產品程式（`apps/Cards/src/`，開發命令除外）裡的 `catch` 與 `.catch()`，不是交給錯誤紀錄（[D-155](../decisions.md#d-155-正式版的錯誤紀錄)）就要在旁邊寫一句為什麼不用，例如「讀不到是預期的，state 會重試」「已經經過 onError 記下」；ESLint 的 `no-console` 擋得到直接印 console，擋不到空的 `catch` 與吞掉的拒絕，L2 審查照這條看。
-- 維修時怎麼讀錯誤紀錄（[D-155](../decisions.md#d-155-正式版的錯誤紀錄)、[D-160](../decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)）：使用者回報問題，或問有沒有學生的回報時，先讀 vault 的 `Essence Cards/紀錄/錯誤/` 那段時間的行（格式見 [syntax.md §9](../../apps/Cards/docs/syntax.md#9-錯誤紀錄)；學生的回報是 `where: "report"`，用 `lt` 在卡組裡找到那一行）。用 `build` 找是哪一版；要把 `stack` 對回原始碼時在 `apps/Cards/` 用 `npm run locate -- <版號> <行:欄>`（只有正式安裝存過對照表的版本能用）；iPhone 的 `stack` 只有名稱、沒有行與欄，`where: "uncaught"` 的可能是別的外掛的錯（[D-173](../decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)）。紀錄可能因同步、上限或寫入失敗而缺漏，沒有那一行不代表沒發生；寫進 repo 的只寫摘要（D-003）。
+Cards 寫程式與測試的做法（寫回筆記、Obsidian 與 iPhone 的平台事實、開發命令、錯誤紀錄）在 [Cards 的程式品質設定](../../apps/Cards/docs/quality.md#cards-的做法)；這裡是全專案的。
 
+- 內容含 `\uXXXX` 跳脫時，Write 與 Edit 會把它解開成真的零寬或私用區字元（讀出來看起來仍是跳脫）。寫完用 node 掃改過的檔，有就用腳本換回跳脫，只換自己改的行；repo 裡原本就有的真字元（例如測試裡的 BOM）不動。
+- 測試不改全域的 `node:fs` 等 Node 內建模組：Node 自己的實作也會呼叫它們，換掉之後結果會隨 Node 的版本改變。要模擬失敗，就把替身直接交給要測的函式（例如 `createNodeFiles` 的 `seams`）。
 - 同一件工作留在原對話，靠自動壓縮，不例行請使用者開新對話；壓縮後反覆找不到驗收依據，或工作已換成可獨立交付的一段，才換（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點）。
 - 待驗的條件或排除某個修法的原因，從 commit、測試、報告找不回來時，在任務的進度段或審查回覆留一句：驗過哪個測試或 commit、還剩哪個條件，必要時附失敗原因。找得回來就不用寫。
 - 量 Claude 與 Codex 的 token 用量：方法與每次的結果記在 [token-usage.md](token-usage.md)（D-171 第 6 點）。
 
 ## 技術債清單
 
-[backlog 的「技術債」一節](../../apps/Cards/docs/backlog.md#技術債)。
+各軟體 backlog 的「技術債」一節（例如 [Cards](../../apps/Cards/docs/backlog.md#技術債)），共用工具的在[最上層](../backlog.md#技術債)。
 
 L2 的發現機率極低或真實路徑走不到、這次不修的，記在那個外掛 backlog 的[「已知的限制」一節](../../apps/Cards/docs/backlog.md#已知的限制)（共用工具的記在[最上層](../backlog.md#已知的限制)）（[D-202](../decisions.md#d-202-l2-的發現先估發生機率極低的記成已知的限制)、[D-207](../decisions.md#d-207-l2-的發現先分一定修可記限制交使用者選修法先收窄最後才加機制)）。
 
 ## Obsidian 相容性檢查
 
-[D-138](../decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)：Obsidian 出新的次版本（例如 1.14 → 1.15）時做一次，由 AI 做。
-
-- **目前驗證過的版本**：Windows 1.15.0（2026-11-03，[相容性檢查](../../apps/Cards/docs/tasks/obsidian-1.15-compat.md)；npm 還沒有 1.15 的型別檔，比對列在[技術債](../../apps/Cards/docs/backlog.md#技術債)）；iPhone 1.15.0（2026-11-03，[iPhone 測試](../../apps/Cards/docs/tasks/iphone-test-2026-11.md)）。
-- **怎麼發現新版**：開發命令的結果檔會記 Obsidian 的版本（`obsidian` 欄位），AI 在 Windows 版 Obsidian 跑開發命令時看到比上面新的次版本就做；每個里程碑結束時也查一次 Obsidian 的改版說明。
-- **三層**：
-  1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `apps/Cards/package.json` 的開發相依改成一樣，在 `apps/Cards/` 跑 `npm run check`。npm 常比 app 晚：還沒有新版時，先讀 `%APPDATA%\obsidian\obsidian-<版本>.asar` 裡的 `app.js`（只讀不執行），查用到的匯出還在、用 CodeMirror 新舊版的差異推定版本，型別檔的比對記進技術債；安裝資料夾的 `resources\obsidian.asar` 是安裝當時的舊版，不能當上一版比。
-  2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（在 `apps/Cards/` 跑 `npm run install-vault -- <測試 vault> --dev`），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
-  3. 讀改版說明裡和這幾點有關的條目：編輯器與 CodeMirror、Markdown 解析與閱讀模式（清單、區塊 ID）、檔案與 vault 的事件、iOS 與同步；每一點寫一句結論。
-- **結果**：寫在相容性檢查的任務說明〈結果〉，收尾時 roadmap 的〈已完成〉由工具從它的狀態行產生；通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。
+[D-138](../decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)：Obsidian 出新的次版本（例如 1.14 → 1.15）時做一次，由 AI 做。三個外掛都跑在 Obsidian 上，各自照自己的做法查；Cards 的做法（驗證過的版本、怎麼發現新版、三層、結果寫在哪裡）在 [Cards 的程式品質設定](../../apps/Cards/docs/quality.md#obsidian-相容性檢查)。
 
 ## 里程碑
 
-見 [roadmap](../roadmap.md)。
-
-1. W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（[D-111](../decisions.md#d-111-v1-的開發順序capture-延後)），2026-10-27 達成；[檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-10-27-milestone-1-review.md>)。
-2. 上線前：第一次升正式版前（`0.4.0`，考試範圍、小考、點選填空、AI 製卡最小版、設定頁、補紀錄缺口、外掛內還原），2026-11-10 檢查、2026-11-12 裝到正式 vault；[檢查](<../../apps/Cards/docs/Claude Codex Discussion/2026-11-10-milestone-2-review.md>)。
-3. 還沒定。💡 v1 功能做完、開始真實使用驗證之前（roadmap 路線圖 v1 的完成條件）。
+Cards 的里程碑在 [Cards 的程式品質設定](../../apps/Cards/docs/quality.md#里程碑)；全專案的路線圖見 [roadmap](../roadmap.md)。
 
 ## 共用的 skill
 

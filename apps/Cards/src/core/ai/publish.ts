@@ -2,7 +2,9 @@ import { stringify } from 'yaml';
 import { blockIds } from '../deck/index.ts';
 import { freeName, rawPath } from './draft.ts';
 import type { PlannedDraft } from './draft.ts';
-import type { CardJob, SavedDeck, SaveState } from './job.ts';
+import { directEvidence } from './job.ts';
+import { apiFields } from './snapshot-api.ts';
+import type { CardJob, DirectEvidence, SavedDeck, SaveState } from './job.ts';
 import { sha256Hex, stamp } from './prompt.ts';
 
 // 存草稿與快照的順序（tasks/ai-cards-mvp.md §5）：先存恢復資料 → 原文 → 一篇一篇建卡組 → 準備發布 → 發布（快照寫成＝成功）→ 清理。
@@ -53,15 +55,22 @@ export type PublishResult =
   | { kind: 'name'; path: string }
   | DeckStop;
 
-/** 存草稿的第 2 步：恢復資料。reply 是輸入框交出的文字。 */
-export function beginSave(job: CardJob, reply: string, service: string | null, planned: PlannedDraft, startedAt: string): CardJob {
+/**
+ * 存草稿的第 2 步：恢復資料。reply 是輸入框交出的文字。
+ * api 是直接製作收到的那一次的證據（tasks/ai-direct.md §7，F1）：在這裡凍結，快照只看這一份；改用複製貼上貼回的不給。
+ */
+export function beginSave(job: CardJob, reply: string, service: string | null, planned: PlannedDraft, startedAt: string, api?: DirectEvidence): CardJob {
   const save: SaveState = {
     reply, replySha: sha256Hex(reply), service, startedAt,
     decks: planned.decks.map(deck => ({ path: deck.path, base: deck.base, text: deck.text, sha256: deck.sha256, ids: deck.ids, stage: 'pending', skipped: false })),
     snapshotPath: planned.snapshotPath, snapshotBase: planned.snapshotBase, snapshotBody: planned.snapshotBody, edits: planned.edits, published: null,
+    ...api ? { api } : {},
   };
   return { ...job, save };
 }
+
+/** 直接製作的證據讀不懂（較新的版本存的，F12）：不寫快照、工作留著。 */
+export const NEWER_SAVE = '這份草稿是較新的版本存的，請更新外掛';
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const folderOf = (path: string): string => path.slice(0, path.lastIndexOf('/'));
@@ -81,6 +90,9 @@ export async function publishedElsewhere(save: SaveState, io: Pick<PublishIo, 'r
 function snapshotText(job: CardJob, time: string): string {
   const save = job.save!;
   const rules = job.parts.slice(0, -1);
+  // 讀不懂的證據在 publish 一開始就擋下（NEWER_SAVE），走到這裡的不是 null 就是讀得懂的。
+  const api = save.api === undefined ? null : directEvidence(save.api);
+  const extra = api ? apiFields(job.copiedAt, save.replySha, api) : null;
   const fields: Record<string, unknown> = {
     日期: time.slice(0, 10),
     時間: time,
@@ -91,14 +103,17 @@ function snapshotText(job: CardJob, time: string): string {
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,
     回覆原文: save.replySha,
-    複製時間: job.copiedAt,
+    ...extra ? extra.early : { 複製時間: job.copiedAt },
     已有目標: job.existing.length,
     記穩目標: '無（初次製卡）',
   };
   if (job.form.material.trim()) fields['教材說明'] = job.form.material.trim();
-  fields['接法'] = '複製貼上';
-  if (save.service) fields['服務'] = save.service;
-  fields['模型'] = '未記錄';
+  if (extra) Object.assign(fields, extra.files, extra.late);
+  else {
+    fields['接法'] = '複製貼上';
+    if (save.service) fields['服務'] = save.service;
+    fields['模型'] = '未記錄';
+  }
   if (save.edits.length) fields['程式改動'] = save.edits;
   const body = save.snapshotBody.endsWith('\n') ? save.snapshotBody : save.snapshotBody + '\n';
   return '---\n' + stringify(fields, { lineWidth: 0 }) + '---\n\n' + body;
@@ -159,11 +174,15 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   };
   const early = await already();
   if (early) return early;
+  // 直接製作的證據讀不懂（F12）：快照會記錯，整份停下，工作留著，等外掛更新再接著存。
+  if (job.save?.api !== undefined && directEvidence(job.save.api) === null) return { kind: 'blocked', reason: NEWER_SAVE };
   /** 這一輪核對每一篇時讀到的全文（照 index）：快照寫入的當下要一字不差（末次核對，D-226 第 5 點）。 */
   const seenText = new Map<number, string>();
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。
-  for (const text of [...job.parts.map(part => part.text), save().reply]) {
+  // 直接製作收到的整段和輸入框交出的不同時（家長改了字），收到的那一段也存（tasks/ai-direct.md §7，F3）。
+  const received = save().api === undefined ? null : directEvidence(save().api);
+  for (const text of [...job.parts.map(part => part.text), save().reply, ...received && received.sha256 !== save().replySha ? [received.text] : []]) {
     const path = rawPath(sha256Hex(text));
     const found = await read(path);
     if ('kind' in found) return found;

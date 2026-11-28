@@ -1,6 +1,6 @@
 # 英文句子排序：好幾種順序都算對（D-238，給 Claude）
 
-狀態：待審｜下一步：使用者同意合併 PR #73（L2 四輪審完、第四輪判可以合併，[審查紀錄](<../Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)）；合併後 iPhone 併進 0.7.0 那一次｜等誰：使用者
+狀態：已結案 → [題型模組](question-type-modules.md)｜完成：PR #73 合併（使用者 2026-11-27 同意，`8433d5f6`），〈結果〉；iPhone 實機併進 0.7.0 那一次（[backlog](../backlog.md)）｜等誰：—
 
 來自：[D-238](../../../../docs/decisions.md#d-238-英文的句子排序好幾種順序都對時都算對)（第 3、6 點交給這份任務說明定）；併進[題型模組](question-type-modules.md)這一串做（同一塊程式、同一版 0.7.0）
 
@@ -256,4 +256,12 @@
 
 ## 結果
 
-（實作後寫）
+PR #73 在 2026-11-27 合併（squash，`8433d5f6`），使用者在決定卡選「合併 PR #73」。
+
+- **檢查**：`1cc68213` 在雲端跑 Cards 的 `npm run check`，3219 項，3215 通過、0 失敗、4 略過；之後每個 commit 的 pre-commit 都跑了完整檢查，CI 綠燈。
+- **比較工具**（§8）：兩個正式 vault 的 `compare-versions`（`23d084ee` 對各輪的 head）四次都是零差異。
+- **畫面**：Windows 版 Obsidian 1.15.1 看過。答對、答錯、再選都不閃（改成只換標點之後），96 種寬度下逗號都黏著前一格；圖片替代文字的案例也看過。
+- **L2**：Codex 四輪，都沒有 P1（[審查紀錄](<../Claude Codex Discussion/2026-11-27-sentence-order-alternatives-l2.md>)）。第三輪照 D-207 收窄，兩項記成[已知的限制](../backlog.md#已知的限制)：寫在一行中間的標籤不提示、少見的字元參照名稱整題不認。第四輪判可以合併，剩下的兩項 P3 合併前修完。
+- **還沒做**：iPhone 實機併進 0.7.0 那一次。
+
+延後的測試：「補測：英文句子排序的另一種排法在 iPhone 的畫面」（[backlog 的技術債](../backlog.md#技術債)），併進 0.7.0 那一次 iPhone 實機。

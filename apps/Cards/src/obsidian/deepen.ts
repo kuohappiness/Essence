@@ -1,7 +1,11 @@
 import {
-  baselineOf, beginDeepen, buildDeepenPrompt, chooseBase, composeBatch, deepenPending, deepenRow, deepenTargets, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSkips, readSnapshot, remindOf, RULE_SUBJECTS, skipFor, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
+  baselineOf, beginDeepen, buildDeepenPrompt, chooseBase, composeBatch, deepenPending, deepenRow, deepenTargets, directJob, goneTargets, inspectDeepen, latestMap, ownSnapshots, readDeepenJobs, readSkips, readSnapshot, remindOf, RULE_SUBJECTS, skipFor, runDeepen, settleUnclear, sha256Hex, stamp, unitSiblings,
 } from '../core/ai/index.ts';
-import type { CardForm, Purpose, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, EmbeddedRules, SnapshotInfo } from '../core/ai/index.ts';
+import type { CardForm, Purpose, DeepenInspection, DeepenJob, DeepenResult, DeepenRow, DeepenStop, DirectEvidence, EmbeddedRules, SentFile, SnapshotInfo } from '../core/ai/index.ts';
+import { directRequest, evidenceOf, failureLog, materialProblem, providerName, providerProblem, sendDirect, sendingLine, sentFiles } from '../core/connect/index.ts';
+import type { Connection, DirectFailure, Material, ProgressEvent, ProviderSpec } from '../core/connect/index.ts';
+import { endpoint, NO_KEY } from './ai-cards.ts';
+import type { DirectDeps } from './ai-cards.ts';
 import { deckInScope, scopeDate, unitKey } from '../core/catalog/index.ts';
 import { blockIds, isDeckPath, newId } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
@@ -41,7 +45,20 @@ export interface DeepenDeps {
   onError: (error: unknown) => void;
   /** 一次讀取最多等多久（毫秒，預設 30 秒；L2 R14）：iCloud 佔位檔可能一直不回來，提醒的重算與手動加深不能卡在同一次讀取。 */
   readWait?: number;
+  /** 直接製作（tasks/ai-direct.md §9）：只在電腦，和製卡用同一份連線；沒有這一欄就只有複製提示。 */
+  direct?: DirectDeps;
 }
+
+/** 加深直接送出之前就擋下（沒有建工作、沒有送出）的原因，或送出之後的結果（§9，同製卡的 DirectOutcome）。 */
+export type DeepenDirectOutcome =
+  | { kind: 'blocked'; message: string }
+  | { kind: 'received'; job: DeepenJob; reply: string; evidence: DirectEvidence }
+  | { kind: 'failed'; job: DeepenJob; failure: DirectFailure; partial: string | null };
+
+/** 組好、還沒存的一份加深提示（複製與直接製作共用）。 */
+type Composed = { job: DeepenJob; prompt: string; key: string };
+/** 這一篇讀好的材料：家長改方向、教材說明、點選填空時，用同一份重組提示（送出前那一行的字數與費用）。 */
+export interface DeepenContext { build(direction: string, material: string, pick: boolean | undefined): Composed | { error: string } }
 
 /** 這一篇能不能加深（§1 第 1、4 點）：能的話附上卡組與三個數字。 */
 export type Readiness =
@@ -80,14 +97,20 @@ const STOP: Record<DeepenStop['why'], string> = {
   loading: '正在讀取卡組，先不寫；讀完再按「繼續」',
   'needs-update': '這一篇需要新版的外掛才讀得懂，先不寫',
   displaced: '外掛用的資料夾不在原位，先不寫；照提醒把它放回原位，再按「繼續」',
+  newer: '這次加深是較新版的外掛存的，這一版認不出來，先不寫；請更新外掛再按「繼續」',
 };
 
 export function createDeepen(deps: DeepenDeps) {
   let jobs = readDeepenJobs(deps.store.jobs(), deps.now().ms).jobs;
+  /** 直接製作這次開著 Obsidian 的期間記得的教材檔（重送不用重選，§6）：內容不存。 */
+  const sentMaterials = new Map<string, Material[]>();
+  /** 正在送出的那一個的中止開關（一次只送一個，§6）。 */
+  let sending: AbortController | null = null;
   function persist(next: DeepenJob[]): void {
     const kept = readDeepenJobs(next, deps.now().ms).jobs;
     deps.store.saveJobs(kept);
     jobs = kept;
+    for (const id of sentMaterials.keys()) if (!kept.some(job => job.id === id && !job.save)) sentMaterials.delete(id);
     void refreshLater();
   }
   // 等待貼回的列跟著工作變（§4-3）：rows 的計算在下面定義，這裡晚一拍叫。
@@ -238,7 +261,8 @@ export function createDeepen(deps: DeepenDeps) {
       const { props } = entry.deck;
       if (props.isTranscript || props.status !== 'active' || !isDeckPath(entry.path) || state.deckStatus(entry.path).needsUpdate) continue;
       const name = fileName(entry.path);
-      const waiting = jobs.some(job => job.deck === entry.path);
+      const job = jobs.find(each => each.deck === entry.path);
+      const waiting = job !== undefined;
       let pending = false;
       if (!waiting) {
         // 一篇讀不到只略過那一篇，不讓整次重算失敗、留著舊的列（L2 R4）。
@@ -256,15 +280,20 @@ export function createDeepen(deps: DeepenDeps) {
         const mastery = masteryOf(active, history.reviews, id => history.incomplete || history.held.includes(id));
         remind = remindOf(active, mastery, chooseBase(base && base.at !== null ? { at: base.at, stable: base.stable ?? [], first: base.kind !== 'deepen' } : null, skip));
       }
-      const row = deepenRow(entry.path, name, { waiting, writing: waiting && busyDeck(entry.path), pending, remind });
+      const row = deepenRow(entry.path, name, { waiting, writing: waiting && busyDeck(entry.path), direct: job && directState(job), pending, remind });
       if (row) found.push(row);
     }
     return found;
   }
+  /** 直接製作的那一份現在的情況（提醒一區的字，第 3 批 L2 R1）；複製貼上的是 undefined。 */
+  function directState(job: DeepenJob): 'sent' | 'failed' | 'received' | undefined {
+    const api = directJob(job);
+    return api ? api.received ? 'received' : api.state === 'failed' ? 'failed' : 'sent' : undefined;
+  }
   /** 只有這台電腦自己知道的列：等你貼回、正在寫。 */
   function waitingRows(state: State): DeepenRow[] {
     const known = new Set(state.decks().map(entry => entry.path));
-    return jobs.filter(job => known.has(job.deck)).flatMap(job => deepenRow(job.deck, fileName(job.deck), { waiting: true, writing: busy.has(job.id), pending: false, remind: null }) ?? []);
+    return jobs.filter(job => known.has(job.deck)).flatMap(job => deepenRow(job.deck, fileName(job.deck), { waiting: true, writing: busy.has(job.id), direct: directState(job), pending: false, remind: null }) ?? []);
   }
   /** 重算一次（同時只跑一份，中間又被叫就再跑一次）；回傳時已經算好。 */
   function refresh(): Promise<void> {
@@ -279,6 +308,103 @@ export function createDeepen(deps: DeepenDeps) {
       } while (again);
     })().finally(() => { computing = null; });
     return computing;
+  }
+
+  const at = (): string => { const now = deps.now(); return stamp(now.ms, now.offset); };
+  async function recopyParts(job: DeepenJob): Promise<boolean> {
+    try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }
+  }
+  /** 這一篇上一次直接送出、還沒處理完的（格式查核 F14 第 2 點）：再做一份新的會把它無聲地換掉，可能已經計費，先擋下。 */
+  function heldDirect(path: string): string | null {
+    const job = jobs.find(each => each.deck === path);
+    return job && !job.save && directJob(job) ? '這一篇上一次直接送出的還沒處理完：先在「加深這一節」重送、改用複製貼上，或取消那一次' : null;
+  }
+  /**
+   * 讀好這一篇（§1 第 2 點）：卡組、全文、以前的快照；組提示的其他東西（方向、教材說明、點選填空）由 build 帶進來。
+   * build 每次用現在的時間與新的識別碼組一份還沒存的工作；複製與直接製作在按下的當下讀一次，送出前那一行用表單開著時讀的那一份。
+   */
+  async function context(path: string): Promise<DeepenContext | { error: string }> {
+    const now = ready(path);
+    if (!now.ok) return { error: now.why };
+    const state = deps.state()!;
+    if (!formOf(now.deck, path, '', '', undefined)) return { error: '這一科還沒有規則，不能加深' };
+    let text: string | null;
+    try { text = await state.aiRead(path); } catch (error) { deps.onError(error); return { error: '讀不到這一篇（可能還在從 iCloud 下載）；等一下再按' }; }
+    if (text === null) return { error: '找不到這一篇' };
+    let snapshots: SnapshotInfo[];
+    try { snapshots = await owned(path, now.deck); } catch (error) { if (!(error instanceof Late)) deps.onError(error); return { error: '讀不到以前的快照；等一下再按' }; }
+    const baseSha = sha256Hex(text);
+    const ids = new Set(now.deck.targets.flatMap(t => t.id ?? []));
+    const targets = deepenTargets(now.deck, now.mastery);
+    const siblings = unitSiblings(state.decks(), path, now.deck);
+    return {
+      build(direction, material, pick) {
+        const made = formOf(now.deck, path, direction, material, pick);
+        if (!made) return { error: '這一科還沒有規則，不能加深' };
+        const subject = RULE_SUBJECTS.find(each => each.key === made.key)!;
+        const at = deps.now();
+        const map = latestMap(snapshots, at.ms)?.map ?? null;
+        const prompt = buildDeepenPrompt({ form: made.form, subject, targets, siblings, map, gone: goneTargets(snapshots, ids),
+          words: subject.subject === '英文' ? state.aiWords(subject.subject, made.form.term) : null }, deps.rules[made.key]);
+        const job: DeepenJob = {
+          kind: 'deepen', id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }), copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms,
+          deck: path, ids: [...ids], baseSha, form: made.form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
+          parts: prompt.parts, promptSha: prompt.sha256, stable: targets.filter(t => t.mastery === 'stable').map(t => t.id).sort(), sent: targets.length, save: null,
+        };
+        return { job, prompt: prompt.text, key: made.key };
+      },
+    };
+  }
+  /** 重送與重送前的那一行共用的檢查（§6）：工作還在、教材在（上一次沒附的不用選）、設定與金鑰、上限；要到設定頁改的標 settings。 */
+  function resendTarget(job: DeepenJob, picked?: readonly Material[]): { error: string; settings?: boolean } | { direct: DirectDeps; latest: DeepenJob; materials: Material[]; target: { connection: Connection; provider: ProviderSpec; model: string }; key: string; prompt: string } {
+    const direct = deps.direct;
+    if (!direct) return { error: '這台裝置不能直接製作，請用複製提示' };
+    const latest = current(job);
+    if (!latest || latest.save) return { error: '這次加深已經結束或開始寫了，不能重送' };
+    const materials = picked ? [...picked] : sentMaterials.get(latest.id) ?? (directJob(latest)?.files.length === 0 ? [] : undefined);
+    if (!materials) return { error: '上次選的教材檔已經不在了（重開過 Obsidian），請重新選一次，或改用複製貼上' };
+    const problem = materials.length ? materialProblem(materials) : null;
+    if (problem) return { error: problem };
+    const target = endpoint(direct);
+    if ('error' in target) return { error: target.error, settings: true };
+    const key = direct.key();
+    if (!key.ok) return { error: NO_KEY[key.why], settings: true };
+    const prompt = latest.parts.map(part => part.text).join('\n\n');
+    const limit = providerProblem(target.provider, target.model, materials, prompt.length);
+    if (limit) return { error: limit };
+    return { direct, latest, materials, target, key: key.key, prompt };
+  }
+  /** 直接製作的狀態存進這一份工作（§7 `api`）：存不進去交給錯誤紀錄、照樣往下（送出前的那一次由呼叫端擋），交回手上的那一份。 */
+  function mark(job: DeepenJob, api: NonNullable<DeepenJob['api']>): DeepenJob {
+    const next: DeepenJob = { ...job, api };
+    try { put(next); } catch (error) { deps.onError(error); }
+    return next;
+  }
+  /**
+   * 送出一次（同製卡）：成功交回整段與證據、存進工作；不成功交給錯誤紀錄（取消的不記，§8）。
+   * controller 是直接製作在讀這一篇之前就佔好的那一個（讀的期間取消也算數）；重送沒有讀，這裡新建。
+   */
+  async function send(direct: DirectDeps, job: DeepenJob, prompt: string, materials: readonly Material[], target: { connection: Connection; provider: ProviderSpec }, apiKey: string, onProgress?: (event: ProgressEvent) => void, controller = new AbortController()): Promise<DeepenDirectOutcome> {
+    const files: SentFile[] = sentFiles(materials);
+    sending = controller;
+    try {
+      const request = directRequest({ ...target, apiKey, prompt, materials, signal: controller.signal, ...onProgress ? { onProgress } : {} });
+      const sent = await sendDirect(direct.client, request);
+      if (sent.ok) {
+        const reasoning = target.connection.reasoning === 'default' ? null : target.connection.reasoning;
+        const evidence = evidenceOf(sent.result, providerName(target.provider), files, reasoning, deps.now());
+        const saved = mark(current(job) ?? job, { state: 'received', kind: null, at: at(), files, received: evidence });
+        return { kind: 'received', job: saved, reply: evidence.text, evidence };
+      }
+      if (sent.failure.kind !== 'cancelled') {
+        try { direct.onFailure?.(failureLog(sent.failure, sent.error, sent.result, request, providerName(target.provider)), sent.failure); } catch (error) { deps.onError(error); }
+      }
+      const latest = current(job) ?? job;
+      const saved = mark(latest, { state: 'failed', kind: sent.failure.kind, at: at(), files, received: directJob(latest)?.received ?? null, ...sent.failure.afterResponse ? { charged: true } : {} });
+      return { kind: 'failed', job: saved, failure: sent.failure, partial: sent.partial };
+    } finally {
+      if (sending === controller) sending = null;
+    }
   }
 
   return {
@@ -323,36 +449,116 @@ export function createDeepen(deps: DeepenDeps) {
     },
     /** pick：這次勾不勾點選填空；沒給照 pick(path)。 */
     async copy(path: string, direction: string, material: string, pick?: boolean): Promise<{ job: DeepenJob; chars: number } | { error: string }> {
-      const now = ready(path);
-      if (!now.ok) return { error: now.why };
-      const state = deps.state()!;
-      const made = formOf(now.deck, path, direction, material, pick);
-      if (!made) return { error: '這一科還沒有規則，不能加深' };
-      const subject = RULE_SUBJECTS.find(each => each.key === made.key)!;
-      let text: string | null;
-      try { text = await state.aiRead(path); } catch (error) { deps.onError(error); return { error: '讀不到這一篇（可能還在從 iCloud 下載）；等一下再按' }; }
-      if (text === null) return { error: '找不到這一篇' };
-      const at = deps.now();
-      let snapshots: SnapshotInfo[];
-      try { snapshots = await owned(path, now.deck); } catch (error) { if (!(error instanceof Late)) deps.onError(error); return { error: '讀不到以前的快照；等一下再按' }; }
-      const ids = new Set(now.deck.targets.flatMap(t => t.id ?? []));
-      const map = latestMap(snapshots, at.ms)?.map ?? null;
-      const targets = deepenTargets(now.deck, now.mastery);
-      const prompt = buildDeepenPrompt({ form: made.form, subject, targets, siblings: unitSiblings(state.decks(), path, now.deck), map, gone: goneTargets(snapshots, ids),
-        words: subject.subject === '英文' ? state.aiWords(subject.subject, made.form.term) : null }, deps.rules[made.key]);
-      const job: DeepenJob = {
-        kind: 'deepen', id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }), copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms,
-        deck: path, ids: [...ids], baseSha: sha256Hex(text), form: made.form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
-        parts: prompt.parts, promptSha: prompt.sha256, stable: targets.filter(t => t.mastery === 'stable').map(t => t.id).sort(), sent: targets.length, save: null,
-      };
+      const held = heldDirect(path);
+      if (held) return { error: held };
+      const ctx = await context(path);
+      if ('error' in ctx) return ctx;
+      const made = ctx.build(direction, material, pick);
+      if ('error' in made) return made;
+      const { job, prompt } = made;
       try { put(job); } catch (error) { deps.onError(error); return { error: '存不進這台電腦，這次沒有複製；請再按一次' }; }
-      deps.store.savePick(subject.key, made.form.pick === true);
-      try { await deps.clipboard(prompt.text); } catch (error) { deps.onError(error); return { error: '放不進剪貼簿；請再按一次' }; }
-      return { job, chars: prompt.text.length };
+      deps.store.savePick(made.key, job.form.pick === true);
+      try { await deps.clipboard(prompt); } catch (error) { deps.onError(error); return { error: '放不進剪貼簿；請再按一次' }; }
+      return { job, chars: prompt.length };
     },
-    async recopy(job: DeepenJob): Promise<boolean> {
-      try { await deps.clipboard(job.parts.map(part => part.text).join('\n\n')); return true; } catch (error) { deps.onError(error); return false; }
+    /** 這台有沒有直接製作（電腦才有，§9）。 */
+    canDirect: (): boolean => deps.direct !== undefined,
+    /** 讀好這一篇（送出前那一行用，§9）：表單開著的期間用同一份重組提示；讀不到是原因。 */
+    context,
+    /**
+     * 直接製作能不能按、按了會送出什麼（§9，同製卡的 directPreview）：不能按時是原因，要到設定頁改的標 settings。教材檔選填，選了照 §5 檢查。
+     * 不存、不送；沒有直接製作的裝置是 null。
+     */
+    directPreview(ctx: DeepenContext, direction: string, material: string, pick: boolean | undefined, materials: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string; settings?: boolean } | null {
+      const direct = deps.direct;
+      if (!direct) return null;
+      const target = endpoint(direct);
+      if ('error' in target) return { ok: false, reason: target.error, settings: true };
+      const key = direct.key();
+      if (!key.ok) return { ok: false, reason: NO_KEY[key.why], settings: true };
+      const problem = materials.length ? materialProblem(materials) : null;
+      if (problem) return { ok: false, reason: problem };
+      const made = ctx.build(direction, material, pick);
+      if ('error' in made) return { ok: false, reason: made.error };
+      const limit = providerProblem(target.provider, target.model, materials, made.prompt.length);
+      if (limit) return { ok: false, reason: limit };
+      const request = directRequest({ connection: target.connection, provider: target.provider, apiKey: key.key, prompt: made.prompt, materials });
+      return { ok: true, line: sendingLine(direct.client, target.provider, request, materials, made.prompt.length) };
     },
+    /**
+     * 直接製作（§9，同製卡的 §4 第 1～5 步）：組提示、建這一篇的加深工作（先存再送），送出、等回覆。送出前擋下的不建工作；
+     * 送出之後不論成功與否都留著那一份（重送、改用複製貼上或取消）。這一篇上一次直接送出的還沒處理完時擋下（格式查核 F14 第 2 點）。
+     */
+    async direct(path: string, direction: string, material: string, pick: boolean | undefined, materials: readonly Material[], onProgress?: (event: ProgressEvent) => void): Promise<DeepenDirectOutcome> {
+      const direct = deps.direct;
+      if (!direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
+      if (sending) return { kind: 'blocked', message: '另一篇正在送出，等它好了再按' };
+      const target = endpoint(direct);
+      if ('error' in target) return { kind: 'blocked', message: target.error };
+      const key = direct.key();
+      if (!key.ok) return { kind: 'blocked', message: NO_KEY[key.why] };
+      const problem = materials.length ? materialProblem(materials) : null;
+      if (problem) return { kind: 'blocked', message: problem };
+      const held = heldDirect(path);
+      if (held) return { kind: 'blocked', message: held };
+      // 讀這一篇之前就佔住「正在送出」（PR #99 的 GitHub 審查）：畫面已經是送出中，讀的期間按取消或關視窗也要擋得住，不在讀完之後才送出。
+      const controller = new AbortController();
+      sending = controller;
+      try {
+        const ctx = await context(path);
+        if (controller.signal.aborted) return { kind: 'blocked', message: '已取消，這次沒有送出' };
+        if ('error' in ctx) return { kind: 'blocked', message: ctx.error };
+        const made = ctx.build(direction, material, pick);
+        if ('error' in made) return { kind: 'blocked', message: made.error };
+        const limit = providerProblem(target.provider, target.model, materials, made.prompt.length);
+        if (limit) return { kind: 'blocked', message: limit };
+        // 先存再送：送到一半被關掉，重開看得到「上一次沒有收到回覆」（§6）。
+        const job: DeepenJob = { ...made.job, api: { state: 'sending', kind: null, at: made.job.copiedAt, files: sentFiles(materials), received: null } };
+        try { put(job); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+        deps.store.savePick(made.key, job.form.pick === true);
+        sentMaterials.set(job.id, [...materials]);
+        return await send(direct, job, made.prompt, materials, target, key.key, onProgress, controller);
+      } finally {
+        if (sending === controller) sending = null;
+      }
+    },
+    /** 這次開著 Obsidian 的期間記得這一份的教材檔，或上一次沒附教材（重送不用重選，§6）。 */
+    keeps: (job: DeepenJob): boolean => sentMaterials.has(job.id) || directJob(job)?.files.length === 0,
+    /** 重送前的那一行（§6，同製卡）：照現在的設定會送到哪一家、哪個模型、約多少錢；不能送時是原因。 */
+    resendPreview(job: DeepenJob, picked?: readonly Material[]): { ok: true; line: string } | { ok: false; reason: string; settings?: boolean } {
+      const ready = resendTarget(job, picked);
+      if ('error' in ready) return { ok: false, reason: ready.error, ...ready.settings ? { settings: true } : {} };
+      const request = directRequest({ connection: ready.target.connection, provider: ready.target.provider, apiKey: ready.key, prompt: ready.prompt, materials: ready.materials });
+      return { ok: true, line: sendingLine(ready.direct.client, ready.target.provider, request, ready.materials, ready.prompt.length) };
+    },
+    /** 重送（§6）：同一份提示，不重組；收到過的那一份留到重送成功才換（L2 第二輪 S2）。 */
+    async resend(job: DeepenJob, onProgress?: (event: ProgressEvent) => void, picked?: readonly Material[]): Promise<DeepenDirectOutcome> {
+      if (!deps.direct) return { kind: 'blocked', message: '這台裝置不能直接製作，請用複製提示' };
+      if (sending) return { kind: 'blocked', message: '另一篇正在送出，等它好了再按' };
+      const ready = resendTarget(job, picked);
+      if ('error' in ready) return { kind: 'blocked', message: ready.error };
+      const { latest, materials, target, key, prompt } = ready;
+      const sendingNow: DeepenJob = { ...latest, api: { state: 'sending', kind: null, at: at(), files: sentFiles(materials), received: directJob(latest)?.received ?? null } };
+      try { put(sendingNow); } catch (error) { deps.onError(error); return { kind: 'blocked', message: '存不進這台電腦，這次沒有送出；請再按一次' }; }
+      sentMaterials.set(latest.id, materials);
+      return send(ready.direct, sendingNow, prompt, materials, target, key, onProgress);
+    },
+    /** 取消送出中的那一個（§6）：關掉視窗之前問過、停用外掛時。 */
+    abort(): void { sending?.abort(); },
+    /** 現在有沒有一個正在送出。 */
+    sending: (): boolean => sending !== null,
+    /**
+     * 改用複製貼上（§6，同製卡）：再放一次同一份提示；放進去了，這一份改回一般的待貼回（拿掉 `api`、忘掉記得的教材檔）。放不進剪貼簿時不改、交回 null。
+     */
+    async fallback(job: DeepenJob): Promise<DeepenJob | null> {
+      if (!await recopyParts(job)) return null;
+      const plain: DeepenJob = { ...current(job) ?? job };
+      delete plain.api;
+      sentMaterials.delete(plain.id);
+      try { put(plain); } catch (error) { deps.onError(error); }
+      return plain;
+    },
+    recopy: recopyParts,
     /** 檢查（§3-1），不寫檔。 */
     inspect(job: DeepenJob, reply: string): DeepenInspection | { error: string } {
       const now = ready(job.deck);
@@ -361,7 +567,10 @@ export function createDeepen(deps: DeepenDeps) {
       return inspectDeepen(reply, job.form, job.subject, { path: job.deck, targets });
     },
     /** 寫進那一篇（§3-2 第 2 步之後接著做）。已經用另一份回覆開始的停下；同一份從停下的地方接著做。 */
-    save: (job: DeepenJob, reply: string, service: string | null): Promise<DeepenOutcome> => exclusive(job.id, async () => {
+    /**
+     * received：框裡的是直接製作收到的（家長可能改過字，§9）；那一次的證據在組快照之前凍結，快照寫 `接法: API`。改用複製貼上的不給。
+     */
+    save: (job: DeepenJob, reply: string, service: string | null, received = false): Promise<DeepenOutcome> => exclusive(job.id, async () => {
       const latest = current(job);
       if (!latest) return GONE;
       if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆開始寫了：要繼續上一次的，或取消它', unclear: false };
@@ -377,7 +586,10 @@ export function createDeepen(deps: DeepenDeps) {
       let n = 0;
       const at = deps.now();
       const batch = composeBatch(inspection, fileName(latest.deck), () => ids[n++], stamp(at.ms, at.offset).slice(0, 10));
-      const begun = beginDeepen(latest, reply, service, batch, stamp(at.ms, at.offset), deps.names());
+      // 證據只用存著的那一份，而且要和畫面拿的是同一次（同製卡的 L2 第三輪 T1）：對不上就當成複製貼上。
+      const kept = received ? directJob(latest)?.received ?? undefined : undefined;
+      const evidence = kept && JSON.stringify(kept) === JSON.stringify(directJob(job)?.received) ? kept : undefined;
+      const begun = beginDeepen(latest, reply, evidence ? null : service, batch, stamp(at.ms, at.offset), deps.names(), evidence);
       try { put(begun); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次', unclear: false }; }
       return run(begun);
     }),

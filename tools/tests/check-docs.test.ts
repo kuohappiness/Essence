@@ -263,6 +263,22 @@ void test('「→」與「來自」互相連回；日期要是真的；backlog�
   ]);
 });
 
+void test('檔名有括號的連結（guide(v1).md）：「→」、「來自」、決定的「來自」與「已結案 →」都認得整個檔名', async t => {
+  const { add, run } = await repo(t);
+  await add('docs/decisions.md', [
+    '# 決策紀錄', '', '## D-218 新', '', '✅ 2026-11-22｜來自 [指南](plans/guide(v1).md)', '', '主題：協作與文件｜一句話：x。', '',
+  ].join('\n'));
+  await add('docs/plans/guide(v1).md', [
+    '# 指南', '', '狀態：已結案 → [D-218](../decisions.md#d-218-新)、[任務](../tasks/next(v2).md)｜完成：談定｜等誰：—', '', '## 一', '',
+    '→ [D-218](../decisions.md#d-218-新)（2026-11-22）', '→ [任務](../tasks/next(v2).md)（2026-11-22）', '',
+  ].join('\n'));
+  await add('docs/tasks/next(v2).md', '# 下一步\n\n狀態：實作中｜下一步：x｜等誰：Claude\n\n來自：[指南](../plans/guide(v1).md)\n');
+  assert.deepEqual(run(), []);
+  // 找不到的照樣報整個檔名。
+  await add('docs/tasks/next(v2).md', '# 下一步\n\n狀態：實作中｜下一步：x｜等誰：Claude\n\n來自：[指南](../plans/guide(v1).md)、[舊版](../plans/old(v0).md)\n');
+  assert.ok(run().includes('docs/tasks/next(v2).md:5  ../plans/old(v0).md  找不到檔案'), run().join('\n'));
+});
+
 void test('L2 R6 backlog 的一站是「檔＋最近的標題」：子項的「來自」不能代替父項的', async t => {
   const { add, run } = await repo(t);
   await add(BACKLOG, [

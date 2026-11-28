@@ -1,12 +1,15 @@
 import { stringify } from 'yaml';
 import { parseDeck } from '../deck/index.ts';
 import { freeName, rawPath, SNAPSHOT_FOLDER } from './draft.ts';
+import { directEvidence } from './job.ts';
+import type { DirectEvidence, DirectJob } from './job.ts';
 import { readSnapshot, sameButTargets } from './deepen-snapshot.ts';
 import { appendBatch, idsInDeepenBoxes, unclosedFence, verifyAppend } from './deepen-write.ts';
 import type { CardForm, SentPart } from './prompt.ts';
 import { PURPOSES, sha256Hex } from './prompt.ts';
 import { safeFileName } from './reply.ts';
 import type { RuleSubject } from './rules.ts';
+import { apiFields } from './snapshot-api.ts';
 
 // 加深的工作（tasks/ai-cards-deepen.md §3-2）：恢復資料存在這台電腦（和製卡的工作分開存，製卡的讀法會把它當成壞的）。
 // 原則：同一次工作最多寫進卡組一次；一旦開始寫過，程式就不再自己重寫，認不出來的交給家長選。
@@ -30,6 +33,11 @@ interface DeepenSave {
   unclear: boolean;
   /** 卡組寫好、驗過（或家長選了當作完成、或沒有要寫的）：只剩原文與快照。 */
   written: boolean;
+  /**
+   * 直接製作收到的那一次的證據（tasks/ai-direct.md §9，格式查核 F14 第 1 點）：第 2 步組快照之前就凍結，快照照它寫 `接法: API`；
+   * 改用複製貼上貼回的沒有這一欄。家長改了字時，收到的整段另存一份原文。讀不懂（較新的版本存的）不寫（F12）。
+   */
+  api?: DirectEvidence;
 }
 
 export interface DeepenJob {
@@ -49,6 +57,8 @@ export interface DeepenJob {
   stable: string[];
   sent: number;
   save: DeepenSave | null;
+  /** 直接製作的加深才有（§9，欄位同製卡的工作 `api`，§7）；讀的時候照 directJob 判斷，讀不懂就當成複製貼上的工作（F12）。 */
+  api?: DirectJob;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -85,8 +95,12 @@ export function readDeepenJobs(value: unknown, nowMs: number): { jobs: DeepenJob
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const folderOf = (path: string): string => path.slice(0, path.lastIndexOf('/'));
 
-/** 加深的快照（syntax §6）：`工作` 加深、`對象` 一項寫完整路徑、`記穩目標` 寫送出時的集合（空的寫「無」）。time 是準備寫入那一刻，之後重試沿用。 */
-function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'service'>, edits: readonly string[], body: string, time: string): string {
+/**
+ * 加深的快照（syntax §6）：`工作` 加深、`對象` 一項寫完整路徑、`記穩目標` 寫送出時的集合（空的寫「無」）。time 是準備寫入那一刻，之後重試沿用。
+ * api 是直接製作收到的那一次（§9）：欄位與位置和製卡的快照相同（`送出時間`、`收到時間` 換掉 `複製時間`，其餘在 `教材說明` 之後）。
+ */
+function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'service'>, edits: readonly string[], body: string, time: string, api: DirectEvidence | null): string {
+  const extra = api ? apiFields(job.copiedAt, save.replySha, api) : null;
   const rules = job.parts.slice(0, -1);
   const fields: Record<string, unknown> = {
     日期: time.slice(0, 10),
@@ -98,24 +112,30 @@ function deepenSnapshot(job: DeepenJob, save: Pick<DeepenSave, 'replySha' | 'ser
     送出: job.parts.map(part => `${part.name} ${part.version} ${part.sha256}`),
     提示雜湊: job.promptSha,
     回覆原文: save.replySha,
-    複製時間: job.copiedAt,
+    ...extra ? extra.early : { 複製時間: job.copiedAt },
     已有目標: job.sent,
     記穩目標: job.stable.length ? [...new Set(job.stable)].sort() : '無',
   };
   // 複製時這一篇的目標（L2 R7）：同一路徑的快照靠它認回，這次的新目標全部捨棄、又一個都沒記穩時也不會當成換了一篇。
   if (job.ids.length) fields['原有目標'] = [...new Set(job.ids)].sort();
   if (job.form.material.trim()) fields['教材說明'] = job.form.material.trim();
-  fields['接法'] = '複製貼上';
-  if (save.service) fields['服務'] = save.service;
-  fields['模型'] = '未記錄';
+  if (extra) Object.assign(fields, extra.files, extra.late);
+  else {
+    fields['接法'] = '複製貼上';
+    if (save.service) fields['服務'] = save.service;
+    fields['模型'] = '未記錄';
+  }
   if (edits.length) fields['程式改動'] = [...edits];
   return '---\n' + stringify(fields, { lineWidth: 0 }) + '---\n\n' + (body.endsWith('\n') ? body : body + '\n');
 }
 
-/** 第 2 步：組好這一批與快照，存進恢復資料。taken 是整個 vault 現在的檔名（小寫），快照檔名用掉的會加進去。 */
-export function beginDeepen(job: DeepenJob, reply: string, service: string | null, batch: { boxes: string[][]; noteItems: string[][]; ids: string[]; edits: string[]; snapshotBody: string }, time: string, taken: Set<string>): DeepenJob {
+/**
+ * 第 2 步：組好這一批與快照，存進恢復資料。taken 是整個 vault 現在的檔名（小寫），快照檔名用掉的會加進去。
+ * api 是直接製作收到的那一次的證據（§9）：快照在這一步就做好，證據要在這裡備齊（F14 第 1 點）；改用複製貼上的不給。
+ */
+export function beginDeepen(job: DeepenJob, reply: string, service: string | null, batch: { boxes: string[][]; noteItems: string[][]; ids: string[]; edits: string[]; snapshotBody: string }, time: string, taken: Set<string>, api?: DirectEvidence): DeepenJob {
   const replySha = sha256Hex(reply);
-  const snapshot = deepenSnapshot(job, { replySha, service }, batch.edits, batch.snapshotBody, time);
+  const snapshot = deepenSnapshot(job, { replySha, service }, batch.edits, batch.snapshotBody, time, api ?? null);
   const snapshotBase = safeFileName(`${time.slice(0, 10)} ${fileName(job.deck)} 加深`.replace(/[ \t　]+/g, ' '));
   const empty = !batch.boxes.length && !batch.noteItems.length;
   return {
@@ -124,6 +144,7 @@ export function beginDeepen(job: DeepenJob, reply: string, service: string | nul
       reply, replySha, service, boxes: batch.boxes, noteItems: batch.noteItems, ids: batch.ids,
       snapshotPath: `${SNAPSHOT_FOLDER}/${freeName(snapshotBase, taken)}.md`, snapshotBase, snapshot, snapshotSha: sha256Hex(snapshot),
       writing: false, unclear: false, written: empty,
+      ...api ? { api } : {},
     },
   };
 }
@@ -153,7 +174,7 @@ export interface DeepenIo {
 /** 停下來的原因（畫面換成給家長看的字）。 */
 export interface DeepenStop {
   kind: 'stop';
-  why: 'changed' | 'fence' | 'verify' | 'unsaved' | 'locked' | 'unclear' | 'blocked' | 'failed' | 'unreadable' | 'conflict' | 'name' | 'timeout' | 'phone' | 'loading' | 'needs-update' | 'displaced';
+  why: 'changed' | 'fence' | 'verify' | 'unsaved' | 'locked' | 'unclear' | 'blocked' | 'failed' | 'unreadable' | 'conflict' | 'name' | 'timeout' | 'phone' | 'loading' | 'needs-update' | 'displaced' | 'newer';
   detail?: string;
 }
 export type DeepenResult = { kind: 'done'; wrote: boolean } | DeepenStop;
@@ -180,6 +201,9 @@ export function planAppend(job: DeepenJob, text: string): { text: string; before
 export async function runDeepen(start: DeepenJob, io: DeepenIo): Promise<DeepenResult> {
   let job = start;
   if (!job.save) throw Error('這個加深工作還沒貼回');
+  // 直接製作的證據讀不懂（較新的版本存的，F12）：收到的整段可能要另存原文，認不出來就不寫，工作留著。
+  const received = job.save.api === undefined ? null : directEvidence(job.save.api);
+  if (job.save.api !== undefined && received === null) return { kind: 'stop', why: 'newer' };
   const save = (): DeepenSave => job.save!;
   const keep = (change: Partial<DeepenSave>): void => { job = { ...job, save: { ...save(), ...change } }; io.store(job); };
   const read = async (path: string): Promise<{ text: string | null } | DeepenStop> => {
@@ -231,8 +255,8 @@ export async function runDeepen(start: DeepenJob, io: DeepenIo): Promise<DeepenR
     }
   }
 
-  // 原文（送出的每一部分與回覆）：只建立；已存在而且內容相同就跳過。
-  for (const text of [...job.parts.map(part => part.text), save().reply]) {
+  // 原文（送出的每一部分與回覆；直接製作收到的整段和回覆不同時也存，§7 `收到的回覆`）：只建立；已存在而且內容相同就跳過。
+  for (const text of [...job.parts.map(part => part.text), save().reply, ...received && received.sha256 !== save().replySha ? [received.text] : []]) {
     const path = rawPath(sha256Hex(text));
     const found = await read(path);
     if ('kind' in found) return found;

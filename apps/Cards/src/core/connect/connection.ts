@@ -4,18 +4,18 @@
 import { createAiClient, describeAiError, isAiError } from './client.ts';
 import type { AiClient, AiErrorKind, FetchLike, ProviderSpec } from './client.ts';
 
-/**
- * 推薦（docs/ai-models.md〈外掛的預設選單〉，D-072）：這幾家排在最上面、名稱後面加標籤，推薦的模型也放最上面。
- * name 是那張表「選單上的名稱」，和目錄的名稱不同時才寫（L2 第一輪 R11 第 5 項）。
- */
-const RECOMMENDED: readonly { provider: string; tag: string; model: string; name?: string }[] = [
+/** 推薦（docs/ai-models.md〈外掛的預設選單〉，D-072）：這幾家排在最上面、名稱後面加標籤，推薦的模型也放最上面。 */
+const RECOMMENDED: readonly { provider: string; tag: string; model: string }[] = [
   { provider: 'openai', tag: '推薦', model: 'gpt-5.6-terra' },
-  { provider: 'google', tag: '免費', model: 'gemini-3.8-flash', name: 'Google Gemini' },
+  { provider: 'google', tag: '免費', model: 'gemini-3.8-flash' },
 ];
 
-/** 選單上的服務名稱（不含標籤）：docs/ai-models.md 有寫的照它，其他照目錄。 */
+/**
+ * 服務的名稱（不含標籤）：只有一套，就是目錄的名稱（ChatGPT、Claude、Gemini、OpenRouter，D-244）。
+ * 選單、畫面、快照的 `服務` 與錯誤紀錄都用它，和複製貼上選的服務同一套名字。
+ */
 export function providerName(provider: ProviderSpec): string {
-  return RECOMMENDED.find(r => r.provider === provider.id)?.name ?? provider.label;
+  return provider.label;
 }
 
 /** 推理等級（§2）：預設不指定，照服務自己的預設。 */
@@ -142,7 +142,7 @@ const KEY_PROBLEM: Record<KeyProblem, { kind: 'no_key' | 'empty_key' | 'bad_key'
   empty: { kind: 'empty_key', text: '這把金鑰是空的或找不到，請重新貼上，或選另一把。' },
   malformed: { kind: 'bad_key', text: '這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。' },
 };
-const CONNECTED = '連得上。';
+const CONNECTED = '連得上，金鑰能用。';
 
 /** 錯誤的一句話：套件的中文說明，加上下一步。 */
 function connectionError(kind: AiErrorKind, text: string): string {

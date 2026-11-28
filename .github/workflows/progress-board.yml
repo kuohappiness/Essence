@@ -13,6 +13,7 @@ on:
       - tools/check-docs.ts
       - tools/decisions.ts
       - tools/status-line.ts
+      - tools/link-target.ts
       - tools/progress-board*.ts
       - tools/roadmap-board.ts
       - tools/apps.ts
@@ -34,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,5 +52,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # 發布偶爾遇到 GitHub 的暫時錯誤（剛上傳的產物抓不到中繼資料，訊息建議稍後重跑；2026-11-24～27 看過的失敗都是這種），
+      # 失敗時等 30 秒再試一次；兩次都失敗時 job 紅燈，開場提醒（.claude/hooks/ci-status.mjs）會看到（D-245 第 4 點）。
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

@@ -4,7 +4,7 @@
   "providers": [
     {
       "id": "openai",
-      "label": "OpenAI",
+      "label": "ChatGPT",
       "dialect": "openai-responses",
       "baseUrl": "https://api.openai.com/v1",
       "auth": { "header": "Authorization", "scheme": "Bearer" },
@@ -31,7 +31,7 @@
     },
     {
       "id": "anthropic",
-      "label": "Anthropic Claude",
+      "label": "Claude",
       "dialect": "anthropic-messages",
       "baseUrl": "https://api.anthropic.com/v1",
       "auth": { "header": "x-api-key" },
@@ -91,7 +91,7 @@
     },
     {
       "id": "google",
-      "label": "Google AI Studio（Gemini）",
+      "label": "Gemini",
       "dialect": "gemini-generate-content",
       "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
       "auth": { "header": "x-goog-api-key" },
