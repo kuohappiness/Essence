@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { LINK_TARGET } from './link-target.ts';
 
 export const SHARED = ['code-quality', 'essence-decision', 'essence-discuss'];
 export const COPIES = ['.claude/skills', '.agents/skills'];
@@ -72,10 +73,10 @@ const normalize = (text: string) => text.replace(/\r\n/g, '\n');
 
 function brokenLinks(tree: Tree, file: string, text: string): string[] {
   const problems: string[] = [];
-  // [文字](路徑) 或 [文字](<有空格的路徑>)
-  for (const [, bracketed, plain] of text.matchAll(/\]\((?:<([^>]+)>|([^)\s]+))\)/g)) {
-    const target = bracketed ?? plain;
-    if (/^[a-z]+:/i.test(target) || target.startsWith('#')) continue;
+  // [文字](路徑)、[文字](<有空格的路徑>)，路徑裡可以有成對的括號（link-target.ts）
+  for (const [, raw] of text.matchAll(new RegExp(String.raw`\]\((${LINK_TARGET})\)`, 'g'))) {
+    const target = raw.replace(/^<|>$/g, '');
+    if (!target || /^[a-z]+:/i.test(target) || target.startsWith('#')) continue;
     const path = posix.normalize(posix.join(posix.dirname(file), decodeURI(target.split('#')[0]))).replace(/\/+$/, '');
     if (!tree.exists(path)) problems.push(target);
   }
