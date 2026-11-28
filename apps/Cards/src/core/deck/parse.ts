@@ -438,6 +438,8 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       if (ANCHOR_LABEL.test(node.text) || (own && answerBelow(node))) return;
       for (const child of node.children) optionsAt(child, depth + 1);
     };
+    // 寫在最上層的（L2 第一輪 R7）：是一個目標的名稱或隱式題，不是選項行。
+    if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項');
     if (!implicit || !answerBelow(root)) for (const child of root.children) optionsAt(child, implicit ? 2 : 1);
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');

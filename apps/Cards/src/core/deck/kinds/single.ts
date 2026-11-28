@@ -48,7 +48,8 @@ function readOptions(text: string): string[] | string {
   const options = splitOptions(body);
   if (!options) return '選項要用頓號隔開';
   if (options.some(option => FORBIDDEN.test(foldWidth(option)))) return '選項裡不能有連結、程式碼、公式、HTML、==、::、底線或｜';
-  if (options.some(option => LABEL_START.test(foldWidth(option).trim()))) return '選項不能以「出處：」「記憶錨點：」這類名稱加冒號開頭';
+  // 粗體的名稱（`**出處**：`）也算（L2 第一輪 R7）：比對鍵不分粗體，名稱的檢查也一樣。
+  if (options.some(option => LABEL_START.test(foldWidth(option).replace(/\*\*/g, '').trim()))) return '選項不能以「出處：」「記憶錨點：」這類名稱加冒號開頭';
   if (options.length < 3) return '選項至少要 3 個';
   return options;
 }

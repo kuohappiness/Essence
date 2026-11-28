@@ -111,6 +111,14 @@ void test('單選：選項行寫在題目或隱式題底下（M2 J、K）：照�
   notSingle(implicit, '和題目同一層', 1);
 });
 
+void test('單選：選項行寫在最上層（L2 第一輪 R7）：是目標的名稱或隱式題，照原本的讀法，提示', () => {
+  assert.deepEqual(hints('- 選項：北部 :: 東部、西部、南部\n'), [{ line: 0, message: '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項' }]);
+  assert.deepEqual(hints('- 選項：北部、東部、西部\n    - 海岸平直的是哪一部？ :: 西部\n').map(each => each.line), [0]);
+  assert.equal(kindSingle(first('- 選項：北部、東部、西部\n    - 海岸平直的是哪一部？ :: 西部\n')), undefined);
+  // 不是目標的一般筆記照舊不提示。
+  assert.deepEqual(hints('- 選項：北部、東部、西部\n'), []);
+});
+
 void test('單選：多行答案的行、記憶錨點的子項目不看', () => {
   const answer = ['- 能說出臺灣的海岸', '    - 臺灣有哪幾部的海岸？ ::', '        - 選項：北部、東部、西部', ''].join('\n');
   assert.deepEqual(hints(answer), []);
@@ -197,6 +205,8 @@ void test('單選：選項以欄位或標籤的名稱加冒號開頭（§3 第 3
   for (const label of ['出處', '類型', '重要性', '狀態', '備註', '錯題補強', '記憶錨點', '選項']) {
     notSingle(one([`    - 選項：北部、東部、${label}：p.42`]), '名稱加冒號開頭');
     notSingle(one([`    - 選項：北部、東部、${label}:p.42`]), '名稱加冒號開頭');
+    // L2 第一輪 R7：粗體的名稱也算。
+    notSingle(one([`    - 選項：北部、東部、**${label}**：p.42`]), '名稱加冒號開頭');
   }
 });
 
