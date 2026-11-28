@@ -77,3 +77,7 @@ void test('筆記裡已經是單選、這次只加題（L2 第一輪 R6）：題
   // 不是單選的目標照舊寫（草稿的提醒已經報過）。
   assert.equal(planExisting(input(item('    - 下列何者是臺灣北部最多的海岸？ :: 岩岸'), dest(Q1))).kind, 'plan');
 });
+
+void test('筆記裡已經是單選、這次加的題目寫出自己的答案：寫進筆記前擋', () => {
+  assert.equal(left(item('    - 北部常見岩岸，是哪一種海岸？ :: 岩岸'), dest(Q1, OPTIONS)), EXISTING_WHY.singleLeak);
+});

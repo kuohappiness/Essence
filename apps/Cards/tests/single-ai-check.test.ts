@@ -6,7 +6,7 @@ import type { CardForm, ExistingNow, ExistingTarget } from '../src/core/ai/index
 // 單選與配對的 AI 草稿檢查（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，草稿算錯誤；本文、候選框、加進已有的框都擋。
 // 每個代碼一個會中、一個不會中的例子；預期值手算（行號從 1 算）。
 type Found = [level: string, line: number, code: string];
-const CODES = ['options-invalid', 'options-all-none', 'which-of', 'shared-label'];
+const CODES = ['options-invalid', 'options-all-none', 'which-of', 'shared-label', 'single-leak'];
 const found = (text: string): Found[] => check(text, { subject: '社會' }).issues
   .filter(each => CODES.includes(each.code))
   .map(each => [each.level, each.line, each.code]);
@@ -75,4 +75,12 @@ void test('加進已有的框只補一行選項行（L2 第一輪 R4）：草稿
   const empty = inspectReply(reply('>     - 出處：p.43'), FORM, SOCIAL, SENT, here);
   assert.equal(empty.errors.length, 1);
   assert.match(empty.errors[0].message, /縮排或清單符號/);
+});
+
+void test('single-leak（錯誤）：有選項行的題目寫出這一題自己的答案；寫到別的選項、一個字的答案、沒有選項行的不算', () => {
+  assert.deepEqual(found(draft('    - 臺灣北部常見岩岸，是哪一種海岸？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'single-leak']]);
+  assert.deepEqual(found(draft('    - 臺灣北部常見**岩岸**，是哪一種海岸？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'single-leak']]);
+  assert.deepEqual(found(draft('    - 不像東部的斷層海岸，北部是哪一種海岸？ :: 岩岸', OPTIONS)), []);
+  assert.deepEqual(found(draft('    - 臺灣北部常見岩岸，是哪一種海岸？ :: 岩岸')), []);
+  assert.deepEqual(found(draft('    - 東北角在臺灣哪一部？ :: 東', '    - 選項：東、西、南、北')), []);
 });

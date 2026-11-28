@@ -2,7 +2,7 @@ import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../dec
 import type { Deck, DeckProps, Item, Kind, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
-import { ALL_OR_NONE, WHICH_OF } from './check.ts';
+import { ALL_OR_NONE, leaks, WHICH_OF } from './check.ts';
 import { encode, indentOf } from './move.ts';
 
 // 加進已有的學習目標（tasks/ai-cards-add.md §3-2）：框裡那一項的第一層子項目分成資料欄位、題目、其他，各自的完整範圍跟著走；
@@ -26,6 +26,7 @@ export const EXISTING_WHY = {
   singleLost: '加過去之後這個目標不能點選作答：答案不在這個目標的選項裡、題目不是一行的問答題，或選項行寫錯。請改好再手動貼上',
   singleAllNone: '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案。請改好再手動貼上',
   singleWhichOf: '這個目標是點選作答，題目不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答。請改好再手動貼上',
+  singleLeak: '這個目標是點選作答，題目寫出了自己的答案，孩子不用想就點得對：題目改寫這一類自己的特徵或例子。請改好再手動貼上',
   sources: SOURCE_WHY,
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
@@ -214,6 +215,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   // 筆記裡已經有選項行、這次只加題（§6、§7 的清單規則，L2 第一輪 R6）：草稿看不到筆記裡的選項行，「下列何者」在這裡擋。
   const added = missing.flatMap(unit => unit.prompt?.kind === 'qa' ? [unit.prompt] : []);
   if (single && added.some(prompt => WHICH_OF.test(prompt.question))) return leave(EXISTING_WHY.singleWhichOf);
+  if (single && added.some(prompt => leaks(prompt.question, prompt.answer))) return leave(EXISTING_WHY.singleLeak);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 
