@@ -141,10 +141,16 @@ const kindItems = {
   },
   couplet: (value: unknown, name: string): KindSnap => ({ id: 'couplet', style: null, items: [strings(fields(value, name).lines, name + '.lines')], marks: [] }),
   // 單選與配對（tasks/matching-single-choice.md §8）：只有新版有，舊版的這種目標是 null（一般的問答）。
+  // 一列好幾個（tasks/matching-many.md §9）：第 1 段的 answers 是平的 [0,2]、沒有 many；之後是 [[0],[2]] 加 many。沒有 many 的兩種都寫成
+  // style: null、marks: [[0,2]]；many 是 true 的是 style: 'many'、marks 每一題一份答案位置。
   single: (value: unknown, name: string): KindSnap => {
     const single = fields(value, name);
+    const answers = array<unknown>(single.answers, name + '.answers');
+    const many = single.many === undefined ? false : yesNo(single.many, name + '.many');
+    const each = (at: unknown): number[] => Array.isArray(at) ? array<unknown>(at, name + '.answers').map(one => integer(one, name + '.answers')) : [integer(at, name + '.answers')];
+    if (many) return { id: 'single', style: 'many', items: [strings(single.options, name + '.options')], marks: answers.map(each) };
     return { id: 'single', style: null, items: [strings(single.options, name + '.options')],
-      marks: [array<unknown>(single.answers, name + '.answers').map(at => integer(at, name + '.answers'))] };
+      marks: [answers.map(at => { const [only, ...rest] = each(at); if (rest.length) throw wrongType(name + '.answers'); return only; })] };
   },
 };
 

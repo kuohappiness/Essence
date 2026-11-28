@@ -38,17 +38,23 @@ void test('加深的目標：單選的那一行接「這個目標的選項」；
   assert.ok(!deepenTask({ ...input, targets: targets.slice(1) }).includes(RULE));
 });
 
-void test('清單上的選項照 D-250 重讀得回來（L2 第二輪 6）：選項頭尾剛好有一個分號的，不黏進分隔', () => {
-  const edge = (options: string): string => ['---', '年級學期: 五上', '科目: 社會', '單元: 2-1 臺灣的海岸', '狀態: 啟用', '---',
-    '- 能說出臺灣北部海岸的地形 ^aaaaa2', '    - 出處：p.42', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸；', `    - 選項：${options}`, ''].join('\n');
-  const deck = parseDeck(edge('岩岸； ;; 沙灘、沙洲 ;; ；岬角、海灣'));
+void test('清單上的選項照 D-250 重讀得回來（L2 第二輪 6）；選項頭尾有分號的不認、不送（tasks/matching-many.md §2）', () => {
+  const edge = (options: string, answer: string): string => ['---', '年級學期: 五上', '科目: 社會', '單元: 2-1 臺灣的海岸', '狀態: 啟用', '---',
+    '- 能說出臺灣北部海岸的地形 ^aaaaa2', '    - 出處：p.42', `    - 臺灣北部的海岸是哪一種海岸？ :: ${answer}`, `    - 選項：${options}`, ''].join('\n');
+  // 頭尾有分號：照原本的題型，清單與加深都不送選項。
+  const bad = parseDeck(edge('岩岸； ;; 沙灘、沙洲 ;; ；岬角、海灣', '岩岸；'));
+  assert.equal(bad.targets[0].kind, undefined);
+  assert.ok(bad.problems.some(p => p.code === 'options-invalid' && p.message.includes('選項的頭尾不能是分號')));
+  assert.deepEqual([existingTargets([{ path: 'a.md', deck: bad }], '社會', '五上')[0].options, deepenTargets(bad, new Map())[0].options], [undefined, undefined]);
+  // 選項中間的分號：送出去的清單重讀得回來。
+  const deck = parseDeck(edge('岩岸；礁岸 ;; 沙灘、沙洲 ;; 岬角；海灣', '岩岸；礁岸'));
   assert.equal(deck.targets[0].kind?.id, 'single');
   const sent = [existingTargets([{ path: 'a.md', deck }], '社會', '五上')[0].options, deepenTargets(deck, new Map())[0].options];
   for (const options of sent) {
     assert.ok(options !== undefined);
-    const again = parseDeck(edge(options)).targets[0];
+    const again = parseDeck(edge(options, '岩岸；礁岸')).targets[0];
     assert.equal(again.kind?.id, 'single', options);
-    assert.deepEqual(again.kind?.id === 'single' ? again.kind.single.options : [], ['岩岸；', '沙灘、沙洲', '；岬角、海灣']);
+    assert.deepEqual(again.kind?.id === 'single' ? again.kind.single.options : [], ['岩岸；礁岸', '沙灘、沙洲', '岬角；海灣']);
   }
 });
 

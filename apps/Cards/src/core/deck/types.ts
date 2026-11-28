@@ -114,9 +114,11 @@ export interface PickGroup { word: string; members: readonly string[]; key: stri
 export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; anchors: readonly (string | null)[]; rest: readonly string[] }
 /**
  * 單選（tasks/matching-single-choice.md §3）：選項照寫的字（切好、去重），optionKeys 是比對鍵（和 options 對齊）；key 是組的身分（比對鍵排序後的 JSON，
- * 和比較卡的 group.key 同一種算法，組卡時先比卡型再比它）；answers 對齊 prompts，是每一題的答案在 options 的位置；at 是選項行在 target.shared 的第幾項（畫面不顯示它）。
+ * 和比較卡的 group.key 同一種算法，組卡時先比卡型再比它）；answers 對齊 prompts，是每一題的答案在 options 的位置，一題一組（照寫的先後、去重，
+ * 一個答案是一個元素的清單，tasks/matching-many.md §3）；at 是選項行在 target.shared 的第幾項（畫面不顯示它）。
+ * many 是整組的（§3）：同一篇、key 相同的單選目標只要有一題的答案兩個以上就都是 true，parseDeck 讀完整篇時定；組卡、預覽、今天的份只讀它。
  */
-export interface Single { options: readonly string[]; optionKeys: readonly string[]; key: string; answers: readonly number[]; at: number }
+export interface Single { options: readonly string[]; optionKeys: readonly string[]; key: string; answers: readonly (readonly number[])[]; many: boolean; at: number }
 export interface Fields {
   sources: string[];
   type: string | null;

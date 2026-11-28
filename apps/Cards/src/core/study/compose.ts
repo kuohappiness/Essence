@@ -199,13 +199,20 @@ export function singleCardKey(target: Target): string | null {
   return single && target.id !== null ? single.key : null;
 }
 
-/** 一格：答案換成選中的目標寫的字（照比對鍵對上，§5），同一組兩個目標寫法或順序不同時，對錯照字串全等也判得對。 */
+/**
+ * 一格：答案換成選中的目標寫的字（照比對鍵對上，§5），同一組兩個目標寫法或順序不同時，對錯照字串全等也判得對。
+ * 一題好幾個答案時照寫的先後換（tasks/matching-many.md §4）；一列可以放好幾個的卡只有 answers，一列一個的卡 answer 與 answers 都有。
+ */
 function singleCell(chosen: Single, mate: PickMate, prompt: Prompt): Blank {
   const own = singleOf(mate.target);
-  const key = own?.optionKeys[own.answers[mate.target.prompts.indexOf(prompt)] ?? -1];
-  const answer = key === undefined ? undefined : chosen.options[chosen.optionKeys.indexOf(key)];
-  if (answer === undefined) throw TypeError('單選的答案不在這一組的選項裡：' + mate.target.name);
-  return { lt: mate.lt, target: mate.target, prompt, answer };
+  const places = own?.answers[mate.target.prompts.indexOf(prompt)] ?? [];
+  const answers = places.map(place => {
+    const key = own?.optionKeys[place];
+    return key === undefined ? undefined : chosen.options[chosen.optionKeys.indexOf(key)];
+  });
+  if (!answers.length || answers.some(answer => answer === undefined)) throw TypeError('單選的答案不在這一組的選項裡：' + mate.target.name);
+  const words = answers as string[];
+  return chosen.many ? { lt: mate.lt, target: mate.target, prompt, answers: words } : { lt: mate.lt, target: mate.target, prompt, answer: words[0], answers: words };
 }
 
 /** 格子定了之後的一張：打散格子與字鍵（字鍵三個以上時順序一定和寫的不同，同比較卡）；lt、target、prompt 是選中的目標那一格。 */
@@ -216,7 +223,7 @@ function singleAssembled(fields: { deck: string; isNew: boolean; early: boolean 
   if (keys.length >= 3 && keys.every((key, i) => key === single.options[i])) keys.push(keys.shift() as string);
   const first = blanks.find(each => each.target === chosen.target) ?? blanks[0];
   return { lt: chosen.lt, deck: fields.deck, target: chosen.target, prompt: first.prompt, isNew: fields.isNew, typed: false, early: fields.early, blanks,
-    group: { title: '', members: single.options, keys, rows: [], single: true } };
+    group: { title: '', members: single.options, keys, rows: [], single: true, ...(single.many ? { many: true as const } : {}) } };
 }
 
 /**

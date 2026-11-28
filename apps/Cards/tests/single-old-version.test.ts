@@ -1,21 +1,13 @@
 import test from 'node:test';
-import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { symlink } from 'node:fs/promises';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { gitEnv, pluginRoot } from '../tools/git.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { RATE_DELAY } from '../src/review/index.ts';
 import { check, PC, pick, setup, skip, stage, tap, view } from './helpers/pick-session.ts';
-import { tempFolder } from './helpers/vault.ts';
+import { oldRun, PARSE_LINE_SCRIPT } from './helpers/old-version.ts';
+import type { OldRun } from './helpers/old-version.ts';
 
 // 單選給舊版讀（tasks/matching-single-choice.md §2〈舊版〉、〈驗收〉）：用真的 v0.6.0 標籤的程式。舊版不認選項行，
 // 照一般的問答出，選項行是背面的補充；每一題的讀法與指紋和新版相同，紀錄才對得上同一題。
-const root = fileURLToPath(new URL('../', import.meta.url));
-const env = gitEnv();
-const git = (dir: string, ...args: string[]): string => execFileSync('git', args, { cwd: dir, env, encoding: 'utf8' }).trim();
 const DECK = `---
 科目: 社會
 ---
@@ -33,32 +25,12 @@ const DECK = `---
     - 臺灣北部的海岸主要是哪一種海岸？ :: 岩岸
     - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸 ^ddd444
 `;
-const SCRIPT = `
-import { parseDeck } from './src/core/deck/index.ts';
-const [text] = JSON.parse(process.argv[1]);
-const deck = parseDeck(text);
-console.log(JSON.stringify({
-  targets: deck.targets.map(target => ({ id: target.id, ok: target.ok, kind: target.kind?.id ?? null, shared: target.shared, prompts: target.prompts.map(prompt => [prompt.kind, prompt.fingerprint]) })),
-  problems: deck.problems.map(problem => problem.code),
-}));
-`;
-interface OldRun { targets: { id: string | null; ok: boolean; kind: string | null; shared: string[]; prompts: [string, string][] }[]; problems: string[] }
-
-async function oldRun(t: TestContext, args: readonly unknown[], script = SCRIPT): Promise<unknown> {
-  const dir = await tempFolder(t, 'essence-v060-');
-  git(root, 'clone', '-q', '--no-checkout', git(root, 'rev-parse', '--show-toplevel'), dir);
-  git(dir, 'checkout', '-q', 'v0.6.0');
-  const cards = join(dir, pluginRoot(dir, 'v0.6.0'));
-  await symlink(join(root, 'node_modules'), join(cards, 'node_modules'), 'junction');
-  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script, JSON.stringify(args)], { cwd: cards, env, encoding: 'utf8' });
-  return JSON.parse(out) as unknown;
-}
 
 void test('v0.6.0 讀單選：照一般的問答、選項行是補充、沒有提示；每一題的讀法與指紋和新版相同', async t => {
   const now = parseDeck(DECK);
   assert.deepEqual(now.targets.map(target => target.kind?.id), ['single', 'single', 'single']);
   assert.deepEqual(now.problems, []);
-  const old = await oldRun(t, [DECK]) as OldRun;
+  const old = await oldRun(t, 'v0.6.0', [DECK]) as OldRun;
   assert.deepEqual(old.targets.map(target => [target.id, target.ok, target.kind]), [['aaa111', true, null], ['bbb222', true, null], ['ccc333', true, null]]);
   assert.deepEqual(old.targets.map(target => target.shared), [
     ['選項：北部;;東部;;西部;;南部'],
@@ -84,7 +56,7 @@ void test('選項行的 %% 註解裡有 ::、==（L2 第一輪 R1）：和其他
   const now = parseDeck(deck);
   assert.deepEqual(now.targets.map(target => [target.kind?.id ?? null, target.prompts.map(prompt => prompt.kind)]), [[null, ['qa', 'qa']], [null, ['qa', 'cloze']]]);
   assert.deepEqual(now.problems.map(problem => [problem.line, problem.code]), [[5, 'options-invalid'], [8, 'options-invalid']]);
-  const old = await oldRun(t, [deck]) as OldRun;
+  const old = await oldRun(t, 'v0.6.0', [deck]) as OldRun;
   assert.deepEqual(old.targets.map(target => target.prompts), now.targets.map(target => target.prompts.map(prompt => [prompt.kind, prompt.fingerprint])));
   assert.deepEqual(old.problems, []);
 });
@@ -118,7 +90,6 @@ void test('v0.6.0 的 parseLine 讀單選卡寫的行：每一行都是合法的
   assert.deepEqual(written.map(({ t: _t, v: _v, ...rest }) => rest), lts[0] === 'aaa111'
     ? [{ lt: 'aaa111', r: 'near', pick: '北部', retry: 'right' }, { lt: 'bbb222', r: 'miss', pick: null, with: first.t }]
     : [{ lt: 'bbb222', r: 'miss', pick: null }, { lt: 'aaa111', r: 'near', pick: '北部', retry: 'right', with: first.t }]);
-  const script = "import { parseLine } from './src/core/study/index.ts'; console.log(JSON.stringify(JSON.parse(process.argv[1])[0].map(line => parseLine(line))));";
-  const read = await oldRun(t, [lines], script);
+  const read = await oldRun(t, 'v0.6.0', [lines], PARSE_LINE_SCRIPT);
   assert.deepEqual(read, written.map(each => ({ kind: 'review', t: each.t, at: Date.parse(each.t), offset: 480, typed: null, src: null, lt: each.lt, r: each.r, v: each.v, ...each.with === undefined ? {} : { with: each.with } })));
 });

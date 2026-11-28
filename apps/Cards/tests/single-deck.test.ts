@@ -42,10 +42,10 @@ function notSingle(text: string, reason: string, line?: number): void {
 void test('單選：任務說明的例子，兩組選項各自同一個 key，選項行是 shared 的那一項', () => {
   const deck = parseDeck(COAST);
   assert.deepEqual(deck.targets.map(kindSingle), [
-    { options: ['北部', '東部', '西部', '南部'], optionKeys: ['北部', '東部', '西部', '南部'], key: '["北部","南部","東部","西部"]', answers: [2], at: 0 },
-    { options: ['北部', '東部', '西部', '南部'], optionKeys: ['北部', '東部', '西部', '南部'], key: '["北部","南部","東部","西部"]', answers: [1], at: 0 },
-    { options: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], optionKeys: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], key: '["岩岸","斷層海岸","沙岸","珊瑚礁海岸"]', answers: [0], at: 0 },
-    { options: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], optionKeys: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], key: '["岩岸","斷層海岸","沙岸","珊瑚礁海岸"]', answers: [1], at: 0 },
+    { options: ['北部', '東部', '西部', '南部'], optionKeys: ['北部', '東部', '西部', '南部'], key: '["北部","南部","東部","西部"]', answers: [[2]], many: false, at: 0 },
+    { options: ['北部', '東部', '西部', '南部'], optionKeys: ['北部', '東部', '西部', '南部'], key: '["北部","南部","東部","西部"]', answers: [[1]], many: false, at: 0 },
+    { options: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], optionKeys: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], key: '["岩岸","斷層海岸","沙岸","珊瑚礁海岸"]', answers: [[0]], many: false, at: 0 },
+    { options: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], optionKeys: ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'], key: '["岩岸","斷層海岸","沙岸","珊瑚礁海岸"]', answers: [[1]], many: false, at: 0 },
   ]);
   assert.deepEqual(deck.targets[0].shared, ['選項：北部;;東部;;西部;;南部']);
   assert.deepEqual(deck.targets[0].fields.sources, ['p.42']);
@@ -55,7 +55,7 @@ void test('單選：任務說明的例子，兩組選項各自同一個 key，�
 
 void test('單選：選項行在題目前面也認（同一層不分先後），at 照 shared 的位置', () => {
   const text = ['- 能從景觀描述認出西部的海岸', '    - 記憶錨點：西部是沙岸', '    - 選項：北部;;東部;;西部', QUESTION, ''].join('\n');
-  assert.deepEqual(kindSingle(first(text)), { options: ['北部', '東部', '西部'], optionKeys: ['北部', '東部', '西部'], key: '["北部","東部","西部"]', answers: [2], at: 1 });
+  assert.deepEqual(kindSingle(first(text)), { options: ['北部', '東部', '西部'], optionKeys: ['北部', '東部', '西部'], key: '["北部","東部","西部"]', answers: [[2]], many: false, at: 1 });
   assert.deepEqual(hints(text), []);
 });
 
@@ -166,20 +166,20 @@ void test('單選：選項之間只照 ;; 切（全半形、兩個以上），�
   assert.deepEqual(money?.options, ['2,300 萬', '1,000 萬', '500 萬']);
   const coast = kindSingle(first(one(['    - 選項：沙灘、沙洲;;岬角、海灣;;斷崖峭壁;;珊瑚礁'], '能說出西部海岸的景觀', '    - 海岸平直、有潟湖的西部，常見哪一種景觀？ :: 沙灘、沙洲')));
   assert.deepEqual(coast?.options, ['沙灘、沙洲', '岬角、海灣', '斷崖峭壁', '珊瑚礁']);
-  assert.deepEqual(coast?.answers, [0]);
+  assert.deepEqual(coast?.answers, [[0]]);
   // 中文描述裡的一個分號是選項的字：不是答案的那個選項也不會被切開。
   const climate = kindSingle(first(one(['    - 選項：四季如春;;夏季炎熱；冬季溫暖;;終年寒冷，降雪多'], '能說出南部的氣候', '    - 南部的氣候是？ :: 夏季炎熱；冬季溫暖')));
   assert.deepEqual(climate?.options, ['四季如春', '夏季炎熱；冬季溫暖', '終年寒冷，降雪多']);
-  assert.deepEqual(climate?.answers, [1]);
+  assert.deepEqual(climate?.answers, [[1]]);
   // 全形、半形混著打，打成三個也一樣。
   assert.deepEqual(kindSingle(first(one(['    - 選項：北部；；東部;；西部;;;南部'])))?.options, ['北部', '東部', '西部', '南部']);
-  // 答案寫了 ;;：一題只有一個答案。
-  notSingle(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是哪一部？ :: 西部;;北部'), '（;; 只用來隔開選項，一題只有一個答案）', 2);
+  // 答案寫了 ;;：一題好幾個答案（tasks/matching-many.md §2），照寫的先後。
+  assert.deepEqual(kindSingle(first(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是哪一部？ :: 西部;;北部')))?.answers, [[2, 0]]);
 });
 
 void test('單選：比例尺的冒號不擋，＞＜ 折成半形擋（N6）', () => {
   const scale = kindSingle(first(one(['    - 選項：1：5000;;1：25000;;1：50000'], '能說出地圖的比例尺', '    - 這張地圖的比例尺是？ :: 1：25000')));
-  assert.deepEqual(scale?.answers, [1]);
+  assert.deepEqual(scale?.answers, [[1]]);
   notSingle(one(['    - 選項：＞;;＜;;＝'], '能比較大小', '    - 3 和 5 誰大？ :: ＜'), '選項裡不能有');
 });
 
@@ -195,13 +195,13 @@ void test('單選：兩行選項行', () => {
 });
 
 void test('單選：答案和選項的寫法不同（全半形、大小寫、粗體）照比對鍵對上', () => {
-  assert.deepEqual(kindSingle(first(one(['    - 選項：Ａ型;;B 型;;AB 型'], '能說出血型', '    - 他是什麼血型？ :: **a型**')))?.answers, [0]);
-  assert.deepEqual(kindSingle(first(one(['    - 選項：Ａ型;;B 型;;AB 型'], '能說出血型', '    - 他是什麼血型？ :: ab 型')))?.answers, [2]);
+  assert.deepEqual(kindSingle(first(one(['    - 選項：Ａ型;;B 型;;AB 型'], '能說出血型', '    - 他是什麼血型？ :: **a型**')))?.answers, [[0]]);
+  assert.deepEqual(kindSingle(first(one(['    - 選項：Ａ型;;B 型;;AB 型'], '能說出血型', '    - 他是什麼血型？ :: ab 型')))?.answers, [[2]]);
 });
 
 void test('單選：一個目標兩題、答案不同，每題自己的答案', () => {
   const text = ['- 能從景觀描述認出西部的海岸', QUESTION, '    - 臺灣哪一部的海岸山緊靠著海？ :: 東部', '    - 選項：北部;;東部;;西部', ''].join('\n');
-  assert.deepEqual(kindSingle(first(text))?.answers, [2, 1]);
+  assert.deepEqual(kindSingle(first(text))?.answers, [[2], [1]]);
 });
 
 void test('單選：同一篇兩個目標的選項同樣幾個、順序或寫法不同，key 相同', () => {
@@ -209,7 +209,7 @@ void test('單選：同一篇兩個目標的選項同樣幾個、順序或寫法
   const [a, b] = parseDeck(text).targets.map(kindSingle);
   assert.equal(a?.key, b?.key);
   assert.deepEqual(b?.options, ['**西部**', '東部', '北部']);
-  assert.deepEqual(b?.answers, [1]);
+  assert.deepEqual(b?.answers, [[1]]);
 });
 
 void test('單選：重複的選項只留第一個；剩不到 3 個認不成', () => {
@@ -220,7 +220,7 @@ void test('單選：重複的選項只留第一個；剩不到 3 個認不成', 
 
 void test('單選：題幹有兩個 ＿＿、題目是填空、答案多行、答案不在選項裡（§3 第 4 條）', () => {
   notSingle(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是＿＿部，山靠海的是＿＿部 :: 西'), '最多一個空格');
-  assert.deepEqual(kindSingle(first(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是臺灣＿＿的海岸 :: 西部')))?.answers, [2]);
+  assert.deepEqual(kindSingle(first(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是臺灣＿＿的海岸 :: 西部')))?.answers, [[2]]);
   notSingle(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是==西部==的海岸'), '全部是問答題');
   notSingle(one(['    - 選項：北部;;東部;;西部'], undefined, '    - 海岸平直的是哪一部？ ::\n        - 西部\n        - 南部'), '全部是問答題');
   // L2 第一輪 R2：多行答案只寫一個子項目，答案沒有換行，照寫法仍是多行答案，不認。

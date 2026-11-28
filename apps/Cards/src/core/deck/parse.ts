@@ -466,6 +466,19 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       layouts.set(root.line, { fields: sourceFields, entries, parts, fieldColons, end: root.end });
     }
   }
+  manyGroups(targets);
   problems.sort((a, b) => a.line - b.line);
   return result();
+}
+
+/**
+ * 一列可以放好幾個是整組的（tasks/matching-many.md §3）：同一篇、key 相同的單選目標（有沒有 ID、暫停沒有都算）只要有一題的答案兩個以上，
+ * 這些目標的 many 都是 true。今天只出一部分的列時，卡的樣子才不會變。
+ */
+function manyGroups(targets: readonly Target[]): void {
+  const many = new Set<string>();
+  for (const target of targets) if (target.kind?.id === 'single' && target.kind.single.many) many.add(target.kind.single.key);
+  for (const target of targets) {
+    if (target.kind?.id === 'single' && !target.kind.single.many && many.has(target.kind.single.key)) target.kind = { id: 'single', single: { ...target.kind.single, many: true } };
+  }
 }

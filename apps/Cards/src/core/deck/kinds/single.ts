@@ -56,6 +56,8 @@ function readOptions(text: string): string[] | string {
   if (options.some(option => FORBIDDEN.test(foldWidth(option)))) return '選項裡不能有連結、程式碼、公式、HTML、==、::、底線或｜';
   // 粗體的名稱（`**出處**：`）也算（L2 第一輪 R7）：比對鍵不分粗體，名稱的檢查也一樣。
   if (options.some(option => LABEL_START.test(foldWidth(option).replace(/\*\*/g, '').trim()))) return '選項不能以「出處：」「記憶錨點：」這類名稱加冒號開頭';
+  // 頭尾的分號看比對鍵（tasks/matching-many.md §2，粗體包住的也算）：`A;;;B` 才只有一種切法，干擾項 `A;` 不會被答案的 ;; 吃掉。
+  if (options.some(option => /^;|;$/.test(pickKey(option)))) return '選項的頭尾不能是分號';
   if (options.length < 3) return '選項至少要 3 個';
   return options;
 }
@@ -72,18 +74,36 @@ export function readSingle(target: Target, lines: readonly OptionLine[], stacked
   const read = readOptionLines(lines);
   if ('reason' in read) return fail(read.reason, read.line);
   const { options, at } = read;
-  // 答案裡有 ;;：一題寫了好幾個答案，說 ;; 只用來隔開選項。
-  const how = (answer: string): string => SEPARATOR.test(answer) ? '（;; 只用來隔開選項，一題只有一個答案）' : '';
   const optionKeys = options.map(pickKey);
-  const answers: number[] = [];
+  const answers: number[][] = [];
   for (const prompt of target.prompts) {
     if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || stacked.has(prompt.line)) return fail('題目要全部是問答題（::），答案寫在同一行');
     if (countBlanks(prompt.question) > 1) return fail('題目最多一個空格（＿＿）');
-    const answer = optionKeys.indexOf(pickKey(prompt.answer));
-    if (answer < 0) return fail(`答案「${prompt.answer}」不在選項裡${how(prompt.answer)}`);
-    answers.push(answer);
+    const read = readAnswers(prompt.answer, optionKeys);
+    if (typeof read === 'string') return fail(read);
+    answers.push(read);
   }
-  return { single: { options, optionKeys, key: JSON.stringify([...optionKeys].sort()), answers, at }, problems: [] };
+  return { single: { options, optionKeys, key: JSON.stringify([...optionKeys].sort()), answers, many: answers.some(each => each.length > 1), at }, problems: [] };
+}
+
+/**
+ * 一題的答案在選項的哪幾個位置（tasks/matching-many.md §2〈答案的切法〉）：沒有 ;; 整串比；有 ;; 照它切，空的丟掉、比對鍵重複的只留第一個，
+ * 切完至少一項、每一項都要在選項裡。照寫的字切與比，%% 註解不去掉。認不成時回傳原因。
+ */
+function readAnswers(answer: string, optionKeys: readonly string[]): number[] | string {
+  if (!SEPARATOR.test(answer)) {
+    const at = optionKeys.indexOf(pickKey(answer));
+    if (at >= 0) return [at];
+    // 少打一個分號、用頓號接：多說一句好幾個答案的寫法。
+    return `答案「${answer}」不在選項裡${/[;；、]/.test(answer) ? '（答案好幾個時用 ;; 接）' : ''}`;
+  }
+  const found: number[] = [];
+  for (const item of answer.split(SEPARATOR).map(each => each.trim()).filter(Boolean)) {
+    const at = optionKeys.indexOf(pickKey(item));
+    if (at < 0) return `答案「${item}」不在選項裡`;
+    if (!found.includes(at)) found.push(at);
+  }
+  return found.length ? found : '答案是空的';
 }
 
 /**

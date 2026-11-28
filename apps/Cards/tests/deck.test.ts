@@ -325,8 +325,8 @@ void test('syntax §2-3 的單選與配對範例：兩個都是單選、同一�
   assert.deepEqual(deck.problems, []);
   const options = ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'];
   assert.deepEqual(deck.targets.map(t => [t.name, t.kind?.id === 'single' ? [t.kind.single.options, t.kind.single.answers] : null, t.ok]), [
-    ['能說出臺灣北部海岸的地形', [options, [0]], true],
-    ['能說出臺灣西部海岸的地形', [options, [1]], true],
+    ['能說出臺灣北部海岸的地形', [options, [[0]]], true],
+    ['能說出臺灣西部海岸的地形', [options, [[1]]], true],
   ]);
 });
 for (const [name, answer, typed, fingerprint, problems] of [

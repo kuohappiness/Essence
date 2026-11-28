@@ -219,8 +219,10 @@ export interface Blank {
   lt: string;
   target: Target;
   prompt: Prompt;
-  /** 比較卡才有：這一格對的字鍵，照 CardGroup.members 的寫法。 */
+  /** 比較卡才有：這一格對的字鍵，照 CardGroup.members 的寫法。一列可以放好幾個的卡（CardGroup.many）沒有，看 answers。 */
   answer?: string;
+  /** 單選與配對才有（tasks/matching-many.md §4）：這一格對的那一組字鍵，照寫的先後；判分與紀錄只看它。一列一個的卡是一個元素、和 answer 相同。 */
+  answers?: readonly string[];
   /** 全詩順序卡才有：這一題的第幾格，從 0 算（同一題好幾格，紀錄要分得出是哪一格）。 */
   cell?: number;
 }
@@ -247,6 +249,8 @@ export interface CardGroup {
    * rows 是空的，每一列的記憶錨點與詳解從那一格自己的目標與題目拿。
    */
   single?: true;
+  /** 一列可以放好幾個（tasks/matching-many.md §4）：整組的 single.many 是 true 才有；作答走 review/pick-many.ts。 */
+  many?: true;
 }
 
 export interface Card {
