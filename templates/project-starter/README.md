@@ -49,7 +49,7 @@ git log <整理時的 commit>.. -- AGENTS.md docs/agents/workflow.md docs/agents
 
 ## 成長包
 
-新專案的 `docs/workflow.md`〈成長條件〉列出每個條件與要拿的那一份；表的全文在 `growth/README.md`。
+新專案的 `docs/workflow.md`〈成長條件〉列出每個條件與要拿的那一份；表的全文、怎麼拿與三支小工具怎麼接進檢查，在 [growth/README.md](growth/README.md)。
 
 ## 第一個專案要回報的兩項
 
