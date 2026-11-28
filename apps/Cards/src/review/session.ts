@@ -6,6 +6,7 @@ import { doneView, firstTry, todayStats, type DoneView } from './done.ts';
 import { createFlow, type Flow, type FlowAction, type LookBack, type ReviewLine } from './flow.ts';
 import type { PickView } from './pick.ts';
 import type { TypedView } from './typed.ts';
+import type { FeedbackChange, FeedbackView } from './feedback.ts';
 
 // 一次複習的狀態（W6 §2）：純程式，不碰 React 與 Obsidian。React 元件只把這裡的狀態畫出來、把按鍵與手勢轉成動作。
 // 一張卡走到有結果的整段在 Flow（flow.ts，D-181）；這裡只留取卡、上方的進度、回看、切走重來、衝突與停用、0.3 秒、寫紀錄。
@@ -50,6 +51,8 @@ export interface CardView {
   viewing: { index: number; total: number } | null;
   /** 這一張第幾次從頭出現：切走超過 60 秒回來重新開始時加一（畫面用它換卡）；回看的卡是 0。 */
   shown: number;
+  /** 預覽的單張卡回饋（D-246、tasks/card-feedback.md §3）：這張卡能留回饋時才有，畫面看到它才畫回饋列。一般複習沒有。 */
+  feedback?: FeedbackView;
 }
 interface TopView {
   /** 中間的文字：「還剩 N 張」或「再複習一些」。 */
@@ -104,6 +107,8 @@ export interface Session {
   history(): readonly DoneCard[];
   /** 目前的 pick（做哪一科或再複習一些）。 */
   pick(): StudyPick;
+  /** 預覽的單張卡回饋（tasks/card-feedback.md §3）：改畫面上這張卡的評等、標籤或一句話。只有打開回饋的預覽有。 */
+  feedback?: (change: FeedbackChange) => void;
 }
 
 interface SessionOptions {

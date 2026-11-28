@@ -3,9 +3,9 @@ import type { App, Plugin } from 'obsidian';
 import { activationCounts, check } from '../core/ai/index.ts';
 import { codeKey, isDeckPath, parseDeck, termKey } from '../core/deck/index.ts';
 import { createPreview } from '../review/index.ts';
-import type { Session } from '../review/index.ts';
+import type { FeedbackSink, Session } from '../review/index.ts';
 import type { State, StudyPick } from '../state/index.ts';
-import { noRemind, previewButton, previewReveal } from '../ui/prefs.ts';
+import { noRemind, previewButton, previewFeedback, previewReveal } from '../ui/prefs.ts';
 
 // 卡組筆記標題列的「全部卡」（D-146）與「預覽」（D-161、D-163 第 3 點）：按鈕與同名命令，電腦與 iPhone 都有；
 // 和存檔按鈕同一套掛法與卸載（save.ts，技術債 W2：Obsidian 卸載外掛時不會拿掉 addAction 加的按鈕）。
@@ -22,6 +22,11 @@ export interface DeckActionsHost {
   start: (pick: StudyPick) => void;
   /** 打開預覽；結束時回筆記。 */
   preview: (session: Session) => void;
+  /**
+   * 預覽的回饋（tasks/card-feedback.md §4-2）：設定頁打開時，每次打開預覽要一個寫紀錄的一方；text 是這篇在編輯器裡的文字（紀錄要存卡的原文）。
+   * 沒傳就沒有回饋列。
+   */
+  feedback?: (path: string, text: string) => FeedbackSink;
   notify: (message: string) => void;
   /** 草稿的「啟用」（tasks/ai-cards-mvp.md §7）：只在電腦傳；回傳要提示的字，沒事是 null。 */
   activate?: (path: string, confirmed: string) => Promise<string | null>;
@@ -170,7 +175,9 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
   /** 內容讀編輯器目前的文字：看到的就是畫面上寫的（§7）。 */
   function openPreview(view: MarkdownView, path: string): void {
     if (!alive) return;
-    const session = createPreview({ path, deck: parseDeck(view.editor.getValue()), reveal: previewReveal.get(app) });
+    const text = view.editor.getValue();
+    const feedback = previewFeedback.get(app) ? host.feedback?.(path, text) : undefined;
+    const session = createPreview({ path, deck: parseDeck(text), reveal: previewReveal.get(app), ...feedback ? { feedback } : {} });
     if (session) host.preview(session);
     else host.notify(NO_PREVIEW);
   }

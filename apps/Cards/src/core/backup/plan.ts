@@ -1,6 +1,7 @@
 import { isDeckPath, parseDeck } from '../deck/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { isErrorLogPath } from '../errors/index.ts';
+import { isFeedbackLogPath } from '../feedback/index.ts';
 import { SETTINGS_FILE, decodeSettings, overlayLegacy, parseLoadData, sameSaved } from '../settings/index.ts';
 import { isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { missingLogLines } from './logs.ts';
@@ -74,10 +75,10 @@ const info = (bytes: Uint8Array): FileInfo => ({ size: bytes.length, sha256: has
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 const byText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 /**
- * 勾選清單裡的檔：複習紀錄另外逐行補（logs）；錯誤紀錄（`紀錄/錯誤/`）不列也不補回（D-155 第 6 點、syntax §9），
- * 家長看不懂它的衝突與「備份後才有」，舊的錯誤仍在備份 zip 裡。這個例外只寫在這裡，不擴大 isLogPath。
+ * 勾選清單裡的檔：複習紀錄另外逐行補（logs）；錯誤紀錄（`紀錄/錯誤/`）與預覽的回饋（`紀錄/回饋/`）不列也不補回
+ * （D-155 第 6 點、syntax §9、§11），只往後加的檔家長看不懂它的衝突與「備份後才有」，舊的仍在備份 zip 裡。這個例外只寫在這裡，不擴大 isLogPath。
  */
-const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path);
+const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path) && !isFeedbackLogPath(path);
 /** 這個檔還原時算不算卡組：備份的路徑或現在實際會寫的路徑，任何一邊是卡組就算（只差副檔名大小寫時兩邊不同，L2 的 R5）。 */
 const isDeckWrite = (target: string, found: string | null | undefined): boolean => isDeckPath(target) || (found != null && isDeckPath(found));
 /**

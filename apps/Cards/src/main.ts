@@ -8,6 +8,7 @@ import type { DeepenRow, EmbeddedRules } from './core/ai/index.ts';
 import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
+import { createFeedbackLog, previewSink } from './core/feedback/index.ts';
 import type { Files } from './core/files.ts';
 import { createSettingsFile, createSettingsStore, isSettingsPath, type SaveResult, type SettingsFile } from './core/settings/index.ts';
 import { dayOf } from './core/study/index.ts';
@@ -221,6 +222,8 @@ export default class EssenceCardsPlugin extends Plugin {
       preview: session => { this.startPreview(session); },
       notify: message => { new Notice(message); },
       activate: Platform.isDesktopApp ? (path, confirmed) => this.state ? activateDeck(this.app, this.state, path, confirmed, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
+      // 預覽的回饋（D-246、syntax.md §11）：一次預覽一份，上限照一次預覽算；寫不進去的記進錯誤紀錄（where: feedback）。
+      feedback: (path, text) => previewSink(createFeedbackLog({ files, device: this.device, build: BUILD, failed: (error, file) => { this.fail('feedback', error, file); } }), path, text),
     });
     // AI 製卡：電腦一直有，手機在設定頁打開才有（D-226 第 1 點）。待貼回的工作在建立 state 之前就讀好：state 第一次配號時，未完成工作的預留一定已經載入（§5〈ID 的預留〉）。
     const app = this.app;

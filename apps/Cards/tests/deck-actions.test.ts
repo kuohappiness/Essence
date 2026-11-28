@@ -26,10 +26,11 @@ const texts: Record<string, string> = {
   'Essence Cards/需要新版.md': '---\n需要版本: 9.0.0\n---\n- 目標 ^f23456\n    - 問 :: 答\n',
 };
 const PREVIEW_ON = 'essence-cards-preview-button';
+const FEEDBACK_ON = 'essence-cards-preview-feedback';
 const NO_REMIND = 'essence-cards-full-deck-no-remind';
 
 interface FakeView { actions: { icon: string; label: string; click: () => void }[]; value: string; file: { path: string } | null }
-async function setup(t: TestContext, local: Record<string, unknown> = {}, options: { desktop?: boolean } = {}) {
+async function setup(t: TestContext, local: Record<string, unknown> = {}, options: { desktop?: boolean; feedback?: boolean } = {}) {
   const memory = createMemoryFiles(texts);
   const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: false, build: '0.2.0+test', now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
   t.after(() => state.close());
@@ -39,8 +40,11 @@ async function setup(t: TestContext, local: Record<string, unknown> = {}, option
   const commands = new Map<string, { checkCallback: (checking: boolean) => boolean }>();
   const plugin = { app: stub.app, addCommand(command: { id: string; checkCallback: (checking: boolean) => boolean }) { commands.set(command.id, command); }, registerEvent() {}, register(cleanup: () => void) { cleanups.push(cleanup); } };
   const { wireDeckActions } = stub.load<{ wireDeckActions: (host: unknown) => { refresh(): void } }>(code);
-  const starts: StudyPick[] = [], previews: { view(): { kind: string } }[] = [], notices: string[] = [];
-  const actions = wireDeckActions({ plugin, state: () => state, start(pick: StudyPick) { starts.push(pick); }, preview(session: { view(): { kind: string } }) { previews.push(session); }, notify(message: string) { notices.push(message); } });
+  const starts: StudyPick[] = [], previews: { view(): { kind: string }; feedback?: unknown }[] = [], notices: string[] = [];
+  /** 預覽的回饋（tasks/card-feedback.md §4-2）：要過幾次寫的一方、每次的卡組與文字。 */
+  const feedbacks: { path: string; text: string }[] = [];
+  const feedback = options.feedback ? { feedback(path: string, text: string) { feedbacks.push({ path, text }); return { save: () => Promise.resolve('saved') }; } } : {};
+  const actions = wireDeckActions({ plugin, state: () => state, start(pick: StudyPick) { starts.push(pick); }, preview(session: { view(): { kind: string } }) { previews.push(session); }, notify(message: string) { notices.push(message); }, ...feedback });
   const open = (path: string): FakeView => {
     const leaf = stub.leaf(path);
     stub.leaves.push(leaf);
@@ -51,7 +55,7 @@ async function setup(t: TestContext, local: Record<string, unknown> = {}, option
   };
   const activate = (view: FakeView): void => { (stub.app.workspace as { getActiveViewOfType: () => unknown }).getActiveViewOfType = () => view; };
   const button = (view: FakeView, label: string) => view.actions.find(action => action.label === label);
-  return { stub, state, memory, actions, commands, starts, previews, notices, open, activate, button, unload() { for (const cleanup of cleanups.splice(0)) cleanup(); } };
+  return { stub, state, memory, actions, commands, starts, previews, notices, feedbacks, open, activate, button, unload() { for (const cleanup of cleanups.splice(0)) cleanup(); } };
 }
 const labels = (view: FakeView): string[] => view.actions.map(action => action.label);
 
@@ -173,4 +177,26 @@ void test('§7 預覽讀編輯器目前的文字，不強迫存檔；沒有題�
   h.button(view, '預覽')?.click();
   assert.equal(h.previews.length, 1);
   assert.equal(h.previews[0].view().kind, 'card');
+});
+
+void test('預覽的回饋（tasks/card-feedback.md §3-4、§4-2）：設定頁打開才要寫的一方，交出卡組與編輯器的文字；預設、壞值、主機沒給都沒有', async t => {
+  const on = await setup(t, { [PREVIEW_ON]: true, [FEEDBACK_ON]: true }, { feedback: true });
+  const view = on.open(ACTIVE);
+  view.value += '- 剛打的 ^g23456\n    - 問 :: 答\n';
+  on.button(view, '預覽')?.click();
+  assert.deepEqual(on.feedbacks, [{ path: ACTIVE, text: view.value }]);
+  assert.equal(typeof on.previews[0].feedback, 'function');
+  on.button(view, '預覽')?.click();
+  assert.equal(on.feedbacks.length, 2, '每次打開預覽各要一個');
+  for (const [local, options, why] of [
+    [{ [PREVIEW_ON]: true }, { feedback: true }, '沒動過開關'],
+    [{ [PREVIEW_ON]: true, [FEEDBACK_ON]: 'yes' }, { feedback: true }, '壞值'],
+    [{ [PREVIEW_ON]: true, [FEEDBACK_ON]: true }, {}, '主機沒給'],
+  ] as const) {
+    const h = await setup(t, local, options);
+    h.button(h.open(ACTIVE), '預覽')?.click();
+    assert.equal(h.feedbacks.length, 0, why);
+    assert.equal(h.previews.length, 1, why);
+    assert.equal(h.previews[0].feedback, undefined, why);
+  }
 });

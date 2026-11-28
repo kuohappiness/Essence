@@ -372,6 +372,22 @@ void test('§5 還原計畫：錯誤紀錄不見、同名不同內容、備份�
   assert.deepEqual(result.order, ['Essence Cards/紀錄/AI 輸出/不見的快照.md']);
 });
 
+// tasks/card-feedback.md §4-3、§6 第 10 項：預覽的回饋（`紀錄/回饋/`）和錯誤紀錄一樣不列、不補回；旁邊名稱像的檔照 `紀錄/` 的通用規則。
+void test('還原計畫：回饋紀錄不見、同名不同內容、備份後才有、衝突副本，都不出現在計畫裡；名稱像的旁邊資料夾（`紀錄/回饋舊/`）照舊', () => {
+  const feedback = 'Essence Cards/紀錄/回饋/2026-12 iPhone-7f3a 回饋.jsonl';
+  const changed = 'Essence Cards/紀錄/回饋/2026-12 Windows-2c9e 回饋.jsonl';
+  const copy = 'Essence Cards/紀錄/回饋/2026-12 iPhone-7f3a 回饋 2.jsonl';
+  const added = 'Essence Cards/紀錄/回饋/2027-01 iPhone-7f3a 回饋.jsonl';
+  const beside = 'Essence Cards/紀錄/回饋舊/x.md';
+  const result = plan({
+    [feedback]: '{"rate":"fix"}\n', [changed]: '{"rate":"ok"}\n', [copy]: '{"rate":"drop"}\n', [beside]: '舊',
+  }, {
+    [changed]: '{"rate":"ok"}\n{"rate":"fix"}\n', [added]: '{"rate":"ok"}\n',
+  });
+  assert.deepEqual(summary(result.files), [`${beside} missing restore`]);
+  assert.deepEqual(result.order, [beside]);
+});
+
 // 技術債「讀備份時，zip 的註解裡剛好有 EOCD 簽章」：先依檔尾與長度辨認有效的 EOCD，嚴格名稱檢查與解壓用同一份結構。
 /** 在 zip 的 EOCD 後面接上註解（改註解長度欄位）。 */
 function withComment(zip: Uint8Array, comment: Uint8Array): Uint8Array {

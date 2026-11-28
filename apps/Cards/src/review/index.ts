@@ -26,3 +26,5 @@ export type { ExamForm, ScopeRow } from './exam-form.ts';
 export { checkQuizDate, COPIES_NOTE, quizButton, quizChoices, quizFailure, quizOtherLabel, quizViews } from './quiz.ts';
 export type { QuizButtonView, QuizRowView } from './quiz.ts';
 export { createPreview } from './preview.ts';
+export { FEEDBACK_RATES, FEEDBACK_TAGS, NOTE_LIMIT } from './feedback.ts';
+export type { Feedback, FeedbackChange, FeedbackRate, FeedbackSink, FeedbackTag, FeedbackView, SaveResult } from './feedback.ts';
