@@ -9,6 +9,7 @@
 | [entry-and-reveal.html](entry-and-reveal.html) | 入口、複習畫面（顯示答案、自評、回看上一張、出處與朗讀圖示）、目錄與管理、考試範圍、考前抽測、電腦版的「給家長」一區 | 第 16 版，使用者 2026-10-19 看過後同意（[D-107](../../docs/decisions.md#d-107-考前抽測放在入口科目列的第一列)）；做 T2 時照這份 |
 | [edit-markup.html](edit-markup.html) | 電腦版的編輯畫面：目標的細線、題目的 `::`、兩種波浪線、出處的圖示與小表單（入口與目錄第四批） | 使用者 2026-11-06 看過後同意；實作照[第四批任務說明](../../apps/Cards/docs/tasks/edit-markup.md)，Obsidian 裡的截圖要和這份比 |
 | [poem-order-card.html](poem-order-card.html) | 全詩順序卡：題目一句一列、整句的字鍵、交換、對答案後只有打勾有顏色、每句底下緊接解釋 | 使用者 2026-11-15 逐題選定（[D-204](../../docs/decisions.md#d-204-全詩順序卡的版面一句一列解釋緊接每句只有打勾有顏色)）；程式照這份 |
+| [matching-card.html](matching-card.html) | 配對卡（單選與配對，D-249）：一題一列、空格接在題目後面、字鍵用過不淡掉、長選項一排少放一個、對答案後每題下面接記憶錨點與詳解 | 使用者 2026-11-28 看過，空格選「接在題目後面」（[任務說明 §5](../../apps/Cards/docs/tasks/matching-single-choice.md#5-作答紀錄與畫面srcreviewpicktssrcuipickcardtsx)）；程式照這份 |
 | [review-styles.html](review-styles.html) | T1 的複習畫面，只留安靜樣式 | 已被上面那份接手；只在追溯 T1 時看 |
 
 已確認的介面寫在 [D-070](../../docs/decisions.md#d-070-複習畫面採用安靜樣式)、[D-095](../../docs/decisions.md#d-095-入口畫面)～[D-098](../../docs/decisions.md#d-098-考試範圍只用在大考日期改成考試期間)、[D-103](../../docs/decisions.md#d-103-總覽改成入口的給家長一區)、[D-107](../../docs/decisions.md#d-107-考前抽測放在入口科目列的第一列)。設定頁、總覽不在樣式稿裡（設定頁照 Obsidian 內建，[D-104](../../docs/decisions.md#d-104-設定頁)）。
