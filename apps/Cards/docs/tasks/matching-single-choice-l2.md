@@ -23,6 +23,7 @@
 - **這一輪只讀**：[審查紀錄](<../Claude Codex Discussion/2026-11-28-matching-single-choice-l2.md>)的〈第一輪〉與〈Claude 回應（第一輪）〉、上面那些 commit 改到的檔案與相關的段落；第一輪沒有發現的地方不重審。
 - **看什麼**：每一項是不是真的修好、有沒有帶進新的問題。特別是 R3 的跟著出（今天的份、剩幾張、單篇練習與小考）、R2 的多行答案判斷（對別的卡型有沒有影響）、R4 讓加進已有的框沒有題目也能過（有沒有放過不該過的）、新加的 `single-leak`（會不會擋掉正常的題目）。R1、R10 前半沒照建議改，理由在〈Claude 回應〉，不同意就再列。
 - **第一輪之後改的寫法**：選項之間改成 `;;`（[D-250](../../../../docs/decisions.md#d-250-選項行的選項之間用兩個分號隔開)，使用者 2026-11-28 同意）：切法（`single.ts`）、錯誤訊息、送給 AI 的規則與清單（`prompt.ts`）、syntax §2-3、任務說明 §2 的邊界表，測試與往返範例跟著換。請看有沒有漏改、`;;` 會不會和別的寫法撞在一起（資料欄位的分隔、出處的切法、比較卡的組、舊版讀到的樣子）。
+- **社會的規則先不送**（§7 開頭）：§7 再試一次停損成立，`pickRules` 拿掉第一輪時多收的科目與社會的那一段，回到和 `main` 一樣；送給 AI 的已有目標帶選項照送。請看拿掉之後版號、比較測試工具的任務段與測試是否一致。
 - 報告寫在同一份紀錄的最後，標「第二輪」。
 
 ## 規格與優先順序
@@ -33,7 +34,7 @@
 
 ## 行為與風險
 
-- **公開介面**：`src/core/deck/types.ts` 的 `Kind` 多 `{ id: 'single'; single: Single }`、`ProblemCode` 多 `options-invalid`；`src/core/study/types.ts` 的 `CardGroup.single?: true`；`src/core/study/index.ts` 多 `singlePreviewCards`；`src/review/index.ts` 多 `singleQuestion`、`singleExtras`；`src/core/ai/prompt.ts` 的 `ExistingTarget.options?`、`pickRules(pick, subject)`、`optionsOf`、`optionsSuffix`、`optionsRule`；`EXISTING_WHY.singleLost`。
+- **公開介面**：`src/core/deck/types.ts` 的 `Kind` 多 `{ id: 'single'; single: Single }`、`ProblemCode` 多 `options-invalid`；`src/core/study/types.ts` 的 `CardGroup.single?: true`；`src/core/study/index.ts` 多 `singlePreviewCards`；`src/review/index.ts` 多 `singleQuestion`、`singleExtras`；`src/core/ai/prompt.ts` 的 `ExistingTarget.options?`、`optionsOf`、`optionsSuffix`、`optionsRule`；`EXISTING_WHY.singleLost`。
 - **呼叫端**：認法在 `src/core/deck/kinds/single.ts`、`question-types.ts`（`readKind` 最後才認）、`parse.ts`（收選項行、寫錯與放錯位置的提示）；組卡在 `src/core/study/compose.ts`（`singleCardKey`、`singleCardOf`、`singlePreviewCards`）、`plan.ts`（跟著出的那幾格）、`session.ts`、`practice.ts`、`src/review/preview.ts`；畫面在 `src/review/single.ts`、`src/ui/PickCard.tsx`、`PickCard.css`；AI 在 `src/core/ai/check.ts`、`existing.ts`、`prompt.ts`、`deepen-prompt.ts`、`job.ts`；工具在 `tools/compare/adapter.ts`、`tools/rule-test/tasks.ts`。
 - **不可破壞的性質**：
   - 沒有選項行的卡組：解析、今天的份、作答、紀錄、畫面都和 `main` 相同（`tests/single-compare.test.ts` 對 `v0.6.0` 零差異；合併前在使用者的電腦對兩個正式 vault 跑 `compare-versions`）。

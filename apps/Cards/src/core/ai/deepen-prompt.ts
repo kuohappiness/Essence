@@ -8,7 +8,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 加深的任務段（tasks/ai-cards-deepen.md §2-2）：版號 `加深 v2`（第 3 批加點選填空與英文單字，D-210），和製卡的 `提示 v3` 分開記。規則組照這一篇的科目送（同最小版）。
 
 /** 任務段的版號：改字就加一。 */
-const DEEPEN_VERSION = '加深 v4'; // v4：目標帶選項、社會的點選填空加配對與單選（tasks/matching-single-choice.md §6、§7）
+const DEEPEN_VERSION = '加深 v4'; // v4：目標帶選項（tasks/matching-single-choice.md §6）
 
 /** 這一篇的一個學習目標：ID、名稱、記穩了的判斷（§2-1）、第一題（寫法同 `提示 v3`）與單選的選項（同 `提示 v6`）。 */
 interface DeepenTarget { id: string; name: string; mastery: Mastery; first?: string; options?: string }
@@ -98,7 +98,7 @@ export function deepenTask(input: DeepenInput): string {
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
-    ...pickRules(form.pick, subject.subject),
+    ...pickRules(form.pick),
     ...optionsRule(input.targets.some(each => each.options !== undefined)),
     '- 提到已有的學習目標一律用上面清單的 ID，不要自己編；不要寫新的學習目標 ID 與屬性區，程式會加。',
     ...subject.r3 ? ['- 照規則交三段，標記照抄（`<<<全貌>>>`、`<<<架構>>>`、`<<<卡組>>>`）；卡組段沒有新的內容時可以只寫給家長的備註。'] : [],

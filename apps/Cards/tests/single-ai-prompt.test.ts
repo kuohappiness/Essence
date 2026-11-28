@@ -63,18 +63,16 @@ void test('比較測試工具的精簡清單：重組這一行時選項接在最
   ]);
 });
 
-void test('§7 社會勾了點選填空：多送配對與單選的子項目與縮排的例子；沒勾、別科不送；比較測試「點選填空說明：不送」時整段不見', () => {
-  const on = taskSection(form(), subject('social'), []).split('\n');
-  const head = on.indexOf(SOCIAL_HEAD);
-  assert.ok(head > on.findIndex(line => line.startsWith('- 家長勾了點選填空：')), '寫在勾了的那一段底下');
-  assert.ok(on.includes('          - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸'));
-  // 例子縮排：從勾了的那一段到下一個最上層的項目之間，沒有頂格的行。
-  const next = on.findIndex((line, i) => i > head && line.startsWith('- '));
-  assert.ok(on.slice(head, next).every(line => line === '' || line.startsWith('  ')));
-  assert.ok(!taskSection(form({ pick: false }), subject('social'), []).includes(SOCIAL_HEAD));
-  assert.ok(!taskSection(form({ subject: 'chinese' }), subject('chinese'), []).includes(SOCIAL_HEAD));
+void test('§7 社會的配對與單選第 1 段先不送（再試一次停損成立）：勾了點選填空也只送比較卡的規則，製卡與加深都一樣', () => {
+  const on = taskSection(form(), subject('social'), []);
+  assert.ok(on.includes('- 家長勾了點選填空：'));
+  assert.ok(!on.includes(SOCIAL_HEAD) && !on.includes('選項：'), on);
   const deepen: DeepenInput = { form: { term: '五上', unit: '2-1', purpose: '平常複習', adjust: '', material: '', pick: true }, subject: { subject: '社會', r3: true }, targets: [], siblings: [], map: null, gone: [], words: null };
-  assert.ok(deepenTask(deepen).includes(SOCIAL_HEAD));
-  const cut = applyTaskOptions(taskSection(form(), subject('social'), []), { ...PLUGIN_TASK, pickRules: false }, { subject: subject('social'), existing: [] });
-  assert.ok(!cut.includes('家長勾了點選填空') && !cut.includes(SOCIAL_HEAD) && !cut.includes('選項：岩岸'), cut);
+  assert.ok(!deepenTask(deepen).includes(SOCIAL_HEAD));
+  // 和國語勾了點選填空的那一段一字不差：沒有照科目多送的。
+  const pickPart = (text: string): string => text.slice(text.indexOf('- 家長勾了點選填空：'), text.indexOf('\n- ', text.indexOf('- 家長勾了點選填空：') + 1));
+  assert.equal(pickPart(on), pickPart(taskSection(form({ subject: 'chinese' }), subject('chinese'), [])));
+  // 比較測試「點選填空說明：不送」時整段不見。
+  const cut = applyTaskOptions(on, { ...PLUGIN_TASK, pickRules: false }, { subject: subject('social'), existing: [] });
+  assert.ok(!cut.includes('家長勾了點選填空'), cut);
 });

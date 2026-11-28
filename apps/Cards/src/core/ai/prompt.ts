@@ -9,7 +9,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 提示的組成（tasks/ai-cards-mvp.md §3）：規則組的每一份 → 任務段，照順序、中間空一行接起來；每一部分與整份提示各算 SHA-256。
 
 /** §3 的任務段與附加說明的版號：改字就加一（§1〈提示模板的版本〉）。 */
-const PROMPT_VERSION = '提示 v6'; // v6：已有目標帶選項、社會的點選填空加配對與單選（tasks/matching-single-choice.md §6、§7）
+const PROMPT_VERSION = '提示 v6'; // v6：已有目標帶選項（tasks/matching-single-choice.md §6）
 export const PURPOSES = ['準備段考', '準備小考', '平常複習'] as const;
 export type Purpose = (typeof PURPOSES)[number];
 
@@ -168,37 +168,10 @@ export function wordsLine(words: readonly string[] | null): string[] {
 }
 
 /**
- * 社會勾了點選填空時多送的配對與單選（tasks/matching-single-choice.md §7，D-249）：寫在「家長勾了點選填空」底下的子項目，
- * 例子也縮排（比較測試工具切「點選填空說明」到下一個最上層的 `- `）。例子只示範結構，用國小社會預設的海岸。
+ * 點選填空的規則（D-210 第 1 點、tasks/ai-cards-materials.md §3）：製卡與加深共用，寫在「另外」底下。
+ * 社會的配對與單選（tasks/matching-single-choice.md §7）第 1 段先不送：§7 再試一次停損成立，規則改好、再試過才加回這裡。
  */
-const SOCIAL_SINGLE: readonly string[] = [
-  '  - 社會另外有兩種點選，是短規則「沒有選項」的例外，只用在這兩種：',
-  '    - 判斷是固定幾類中的哪一類：每一類一個學習目標，名稱寫「能從……認出……」，題目是那一類的描述或例子，這幾個目標寫同一組選項。',
-  '    - 一組一對一的事實（例如四個方位的海岸各是什麼地形）：每個事實一個學習目標，也寫同一組選項。',
-  '    - 這兩種在每天複習會併成一張配對。教材列出一套固定類別的（例如五種地形、四部海岸），一律這樣做，不做比較卡；比較卡留給不是一套分類、又容易混的字、詞或觀念，它們自己是要分辨的對象，題目是挖空的句子。',
-  '    - 用在：要練的是把一個例子或描述歸到固定的幾類，或一組對應容易互相記混，而且題目自己就能回答。出處要指得到教材的分類或對照表、習作用選或連的那一題，或架構段寫的邊界；指不到就不加選項行。',
-  '    - 不用在：「下列何者」「哪一個不是」、是非、只有兩項的配對、彼此不相干的一組、定義、原因、語詞解釋、計算。',
-  '    - 選項只從教材來：固定的類別、同一組其他目標的答案、架構段「邊界」寫的錯答；不自己編，湊不出兩個錯的選項就不加選項行。3～5 個；類別本來有 4、5 個就全列。',
-  '    - 選項行自己一行，寫在題目後面、和題目同一層，冒號用全形；選項之間用兩個半形分號（;;）隔開，選項裡可以有頓號、逗號、一個分號。不接在出處那一行，也不縮在出處或題目底下。',
-  '    - 同一組的每個目標寫完全相同的選項行（同樣的字、同樣的順序），一組 3～5 個目標；判斷是哪一類的，類別有幾個就寫幾個目標。一組裡有學生已有的目標，那幾個也用「加進已有的學習目標」加同一行選項行，整組才併得成配對。',
-  '    - 題目寫教材給這一類、而同一組其他類沒有的特徵。寫完試填每個選項：別的選項都要被題目裡的一個特徵排除，只剩一個說得通。',
-  '    - 例子（只示範結構，正式出題照教材）：',
-  '',
-  '      ```markdown',
-  '      - 能說出臺灣北部海岸的地形',
-  '          - 出處：<頁碼>',
-  '          - 臺灣北部的海岸是哪一種海岸？ :: 岩岸',
-  '          - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸',
-  '      - 能說出臺灣東部海岸的地形',
-  '          - 出處：<頁碼>',
-  '          - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸',
-  '          - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸',
-  '      ```',
-  '',
-];
-
-/** 點選填空的規則（D-210 第 1 點、tasks/ai-cards-materials.md §3）：製卡與加深共用，寫在「另外」底下。社會勾了多送配對與單選（SOCIAL_SINGLE）。 */
-export function pickRules(pick: boolean | undefined, subject: string | null = null): string[] {
+export function pickRules(pick: boolean | undefined): string[] {
   if (pick !== true) {
     return [
       // L2 第一輪 R1：名稱結尾單獨寫「比較」「相似字」（tasks/polyphone-pick.md §2 加「相似詞」）又沒有括號的組，貼回時會被當成沒寫好的點選填空擋下。R2：排序照 D-187 第 8 點不做。
@@ -211,7 +184,6 @@ export function pickRules(pick: boolean | undefined, subject: string | null = nu
     '  - 題目是一句話，要考的那一個寫成 ＿＿，答案只有組裡的那一個；每一個至少兩句，只有兩個的組至少三句。試填組裡的每一個，有兩個說得通就改句子。',
     '  - 每一個都寫分辨的線索，放在自己目標底下的記憶錨點。',
     '  - 規則寫得更細的（例如英文介系詞的組用整個片語當名稱）照規則。',
-    ...subject === '社會' ? SOCIAL_SINGLE : [],
   ];
 }
 
@@ -236,7 +208,7 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
-    ...pickRules(form.pick, subject.subject),
+    ...pickRules(form.pick),
     ...optionsRule(existing.some(each => each.options !== undefined)),
     ...existing.length ? existingRules(subject.r3) : [],
     ...prefix === null ? [] : [`- 一課分成幾篇時，篇名照 \`${prefix} <篇名>\` 寫${subject.subject === '英文' ? `，例如 \`${prefix} 單字\`` : ''}，單獨一行、前面不加 \`#\`。`],
