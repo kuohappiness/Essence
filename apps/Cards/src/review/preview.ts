@@ -3,7 +3,7 @@ import { cardOf, choicePreviewCards, pickPreviewCards, singlePreviewCards } from
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
 import { isEnglish } from './english.ts';
-import { applyChange, canLeave, EMPTY, left, type FeedbackChange, type FeedbackSink, type FeedbackView } from './feedback.ts';
+import { applyChange, canLeave, EMPTY, feedbackKey, left, type FeedbackChange, type FeedbackSink, type FeedbackView } from './feedback.ts';
 import { createPreviewFlow } from './flow.ts';
 import type { CardView, Session, View } from './session.ts';
 
@@ -61,10 +61,10 @@ export function createPreview(options: PreviewOptions): Session | null {
   /** 目前這張的狀態：每次進卡片都從頭開始。 */
   let flow = createPreviewFlow(first, options.reveal);
   const sink = options.feedback;
-  /** 這一輪每張卡留的回饋（照 cards 的位置）：往回翻看得到，關掉預覽就清掉（§3-1）。 */
-  const feedbacks = new Map<number, FeedbackView>();
+  /** 這一輪每張卡留的回饋（照 feedbackKey）：往回翻看得到，關掉預覽就清掉（§3-1）。 */
+  const feedbacks = new Map<string, FeedbackView>();
   /** 每張卡最近一次存的序號：先送出的晚回來時，不蓋掉後來那一次的結果。 */
-  const saves = new Map<number, number>();
+  const saves = new Map<string, number>();
   let closed = false;
 
   const notify = (): void => { cached = null; for (const listener of [...listeners]) listener(); };
@@ -90,18 +90,22 @@ export function createPreview(options: PreviewOptions): Session | null {
     const view: CardView = {
       kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: isEnglish(card),
       speakable, autoRead: flow.autoRead, viewing: null, shown: index,
-      ...sink && canLeave(card) ? { feedback: feedbacks.get(index) ?? { ...EMPTY, status: null } } : {},
+      ...sink && canLeave(card) ? { feedback: feedbacks.get(feedbackKey(card)) ?? { ...EMPTY, status: null } } : {},
     };
     return { kind: 'card', top, card: view };
   }
 
-  /** 改這張卡的回饋：先畫出來，再寫；寫的結果只在它還是這張卡最近一次時才畫（§2-3）。 */
+  /**
+   * 改這張卡的回饋：先畫出來，再寫；寫的結果只在它還是這張卡最近一次時才畫（§2-3）。
+   * 上一次沒存到時（格式查核 F2）：點「再存」、一句話沒改字再按「存」，都把現在的整份再寫一次。
+   */
   function feedback(change: FeedbackChange): void {
     const card = cards.at(index);
     if (!sink || !card || !canLeave(card)) return;
-    const at = index;
+    const at = feedbackKey(card);
     const old = feedbacks.get(at) ?? { ...EMPTY, status: null };
-    const next = applyChange(old, change);
+    const again = old.status === 'failed' && (change.kind === 'retry' || change.kind === 'note');
+    const next = applyChange(old, change) ?? (again ? old : null);
     if (!next) return;
     feedbacks.set(at, { ...next, status: 'saving' });
     const seq = (saves.get(at) ?? 0) + 1;

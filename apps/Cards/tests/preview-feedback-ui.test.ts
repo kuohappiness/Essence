@@ -109,13 +109,20 @@ void test('寫一句：從上方的框寫，打字不存；Enter 存；框開著
   assert.equal(ui.find('ec-note').length, 0);
 });
 
-void test('沒存到：開頭寫「沒存到」、多一行說明；寫滿寫「這次預覽的回饋滿了」', async t => {
-  const saves = store(['failed', 'full']);
+void test('沒存到：開頭寫「沒存到」、多一行「點這裡再存」，點了再寫一次整份、評等照舊選著；寫滿寫「這次預覽的回饋滿了」', async t => {
+  const saves = store(['failed', 'saved', 'full']);
   const { ui } = await show(t, saves.value);
   ui.click(button(ui, '不要這張'));
   await ui.settle();
   assert.equal(ui.text(ui.find('ec-feedback-head')[0]), '沒存到');
-  assert.equal(ui.text(ui.find('ec-feedback-notice')[0]), '沒存到，再點一次');
+  const retry = ui.find('ec-feedback-retry');
+  assert.equal(ui.text(retry[0]), '沒存到，點這裡再存');
+  ui.click(retry[0]);
+  await ui.settle();
+  assert.equal(ui.text(ui.find('ec-feedback-head')[0]), '已存');
+  assert.equal(ui.find('ec-feedback-retry').length, 0);
+  assert.equal(button(ui, '不要這張').props['aria-pressed'], true);
+  assert.deepEqual(saves.saved, [{ rate: 'drop', tags: [], note: '' }, { rate: 'drop', tags: [], note: '' }]);
   ui.click(button(ui, '版面'));
   await ui.settle();
   assert.equal(ui.text(ui.find('ec-feedback-notice')[0]), '這次預覽的回饋滿了');

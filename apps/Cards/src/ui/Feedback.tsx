@@ -9,8 +9,9 @@ const RATE_LABELS: Record<FeedbackRate, string> = { ok: '可以用', fix: '要�
 const TAG_LABELS: Record<FeedbackTag, string> = { explain: '詳解', point: '考點', layout: '版面', worth: '不值得考' };
 /** 開頭那一格：平常寫「回饋」，存好、沒存到、寫滿時換成短短的狀態（§3-2）。 */
 const HEAD: Record<NonNullable<FeedbackView['status']>, string> = { saving: '回饋', saved: '已存', failed: '沒存到', full: '已滿' };
-/** 沒存到、寫滿時多一行說明（§2-3）。 */
-const NOTICE: Partial<Record<NonNullable<FeedbackView['status']>, string>> = { failed: '沒存到，再點一次', full: '這次預覽的回饋滿了' };
+/** 寫滿時多一行說明（§2-3）；沒存到時那一行是「再存」的按鈕（格式查核 F2：再點一次評等是取消，不能拿來重存）。 */
+const FULL = '這次預覽的回饋滿了';
+const RETRY = '沒存到，點這裡再存';
 
 interface RowProps {
   view: FeedbackView;
@@ -22,7 +23,6 @@ interface RowProps {
 
 export function FeedbackRow({ view, change, openNote, disabled, inert }: RowProps): React.JSX.Element {
   const head = view.status ? HEAD[view.status] : '回饋';
-  const notice = view.status ? NOTICE[view.status] : undefined;
   const tags = view.rate === 'fix' || view.rate === 'drop';
   return <div className="ec-feedback" inert={inert}>
     <div className="ec-feedback-row" role="group" aria-label="這張卡的回饋">
@@ -35,7 +35,8 @@ export function FeedbackRow({ view, change, openNote, disabled, inert }: RowProp
       {FEEDBACK_TAGS.map(tag => <button key={tag} type="button" className="ec-fb ec-fb-tag" data-tag={tag} aria-pressed={view.tags.includes(tag)} disabled={disabled}
         onClick={() => { change({ kind: 'tag', tag }); }}>{TAG_LABELS[tag]}</button>)}
     </div>}
-    {notice && <p className="ec-feedback-notice">{notice}</p>}
+    {view.status === 'failed' && <button type="button" className="ec-feedback-notice ec-feedback-retry" disabled={disabled} onClick={() => { change({ kind: 'retry' }); }}>{RETRY}</button>}
+    {view.status === 'full' && <p className="ec-feedback-notice">{FULL}</p>}
   </div>;
 }
 

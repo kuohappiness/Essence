@@ -176,6 +176,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-fb-tag[aria-pressed="true"] { border-color: var(--ec-ink); background: var(--ec-press); }
 .ec-app .ec-fb-note { color: var(--ec-muted); }
 .ec-feedback-notice { margin: 4px 0 0; font-size: var(--ec-size-meta); color: var(--ec-miss); text-align: center; }
+/* 沒存到：整行是「再存」的按鈕，點的範圍夠大 */
+.ec-app .ec-feedback-retry { display: block; width: 100%; min-height: 36px; padding: 4px 8px; border: none; background: none; text-decoration: underline; }
 /* 寫一句（§3-3）：從上方滑下，iPhone 的鍵盤在下面不會蓋住；輸入框 16px，iPhone 比 16px 小的輸入框一點就把畫面放大 */
 .ec-note { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: flex-start; background: rgb(0 0 0 / .35); animation: ec-fade-in .16s ease-out; }
 .ec-note-sheet { display: flex; flex-direction: column; gap: 8px; max-width: 560px; width: 100%; margin: 0 auto; padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; border-radius: 0 0 var(--ec-radius) var(--ec-radius); background: var(--ec-page); animation: ec-note-in .2s ease-out; }

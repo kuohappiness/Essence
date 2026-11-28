@@ -124,7 +124,7 @@ void test('標籤：沒選評等或選可以用時點了不算；要改、不要
   ]);
 });
 
-void test('一句話：換行換成空白、去掉頭尾空白；整理後沒變不寫；最多 500 字，不切在半個表情符號上；收回寫空的', async () => {
+void test('一句話：換行換成空白、去掉頭尾空白；整理後沒變不寫；最多 500 個字，表情符號算一個字；收回寫空的', async () => {
   const store = sink();
   const s = open(DECK, store.value);
   s.feedback?.({ kind: 'note', note: '  詳解沒講\n為什麼\r\n  ' });
@@ -134,27 +134,49 @@ void test('一句話：換行換成空白、去掉頭尾空白；整理後沒變
   s.feedback?.({ kind: 'note', note: '字'.repeat(499) + '😀' + '多' });
   s.feedback?.({ kind: 'note', note: '多'.repeat(600) });
   await settle();
-  assert.deepEqual(store.saved.map(each => each.feedback.note), ['詳解沒講 為什麼', '', '字'.repeat(499), '多'.repeat(500)]);
+  assert.deepEqual(store.saved.map(each => each.feedback.note), ['詳解沒講 為什麼', '', '字'.repeat(499) + '😀', '多'.repeat(500)]);
   assert.equal(card(s).feedback?.note, '多'.repeat(500));
 });
 
-void test('寫不進去：丟錯、拒絕都是 failed；寫滿是 full；畫面上的評等不退回，再點一次就再寫整份', async () => {
-  const store = sink(['throw', 'reject', 'full']);
+void test('寫不進去：丟錯、拒絕都是 failed；寫滿是 full；畫面上的評等不退回；點「再存」寫現在的整份，評等照舊是選的那個', async () => {
+  const store = sink(['throw', 'reject', 'failed', 'full']);
   const s = open(DECK, store.value);
+  s.feedback?.({ kind: 'retry' });
+  assert.equal(store.saved.length, 0, '沒有沒存到的，再存不寫');
   s.feedback?.({ kind: 'rate', rate: 'fix' });
   await settle();
   assert.equal(card(s).feedback?.status, 'failed');
   assert.equal(card(s).feedback?.rate, 'fix');
-  s.feedback?.({ kind: 'tag', tag: 'explain' });
+  s.feedback?.({ kind: 'retry' });
+  await settle();
+  assert.equal(card(s).feedback?.status, 'failed');
+  assert.deepEqual(store.saved.map(each => each.feedback), [{ rate: 'fix', tags: [], note: '' }, { rate: 'fix', tags: [], note: '' }]);
+  // 一句話：上一次沒存到時，沒改字再按「存」也照寫（格式查核 F2）。
+  s.feedback?.({ kind: 'note', note: '看不懂' });
   await settle();
   assert.equal(card(s).feedback?.status, 'failed');
   s.feedback?.({ kind: 'note', note: '看不懂' });
   await settle();
   assert.equal(card(s).feedback?.status, 'full');
+  s.feedback?.({ kind: 'note', note: '看不懂' });
+  s.feedback?.({ kind: 'retry' });
+  assert.equal(store.saved.length, 4, '寫滿之後沒改的不再寫');
   s.feedback?.({ kind: 'tag', tag: 'explain' });
   await settle();
   assert.equal(card(s).feedback?.status, 'saved');
-  assert.deepEqual(store.saved.at(-1)?.feedback, { rate: 'fix', tags: [], note: '看不懂' });
+  assert.deepEqual(store.saved.at(-1)?.feedback, { rate: 'fix', tags: ['explain'], note: '看不懂' });
+});
+
+void test('同一個目標裡同一題寫了兩次：兩張卡是同一份回饋（和讀紀錄的一方一致，格式查核 F7）；背面不同也一樣', async () => {
+  const store = sink();
+  const s = open(PROPS + '- 目標一 ^a\n    - 第一題 :: 一\n        - 詳解：甲\n    - 第一題 :: 一\n        - 詳解：乙\n', store.value);
+  s.feedback?.({ kind: 'rate', rate: 'drop' });
+  s.forward();
+  assert.equal(card(s).feedback?.rate, 'drop');
+  s.forward();
+  const done = s.view();
+  assert.equal(done.kind === 'done' && done.done.detail, '共 2 張，留了 1 張的回饋');
+  await settle();
 });
 
 void test('先送的晚回來：狀態照最後一次的結果', async () => {

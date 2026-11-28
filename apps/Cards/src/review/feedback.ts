@@ -10,7 +10,7 @@ export type FeedbackTag = 'explain' | 'point' | 'layout' | 'worth';
 /** 畫面的順序。 */
 export const FEEDBACK_RATES: readonly FeedbackRate[] = ['ok', 'fix', 'drop'];
 export const FEEDBACK_TAGS: readonly FeedbackTag[] = ['explain', 'point', 'layout', 'worth'];
-/** 一句話最多幾個字（UTF-16 長度，§2-2）。 */
+/** 一句話最多幾個字（照字算，表情符號算一個字，syntax.md §11）。 */
 export const NOTE_LIMIT = 500;
 
 /** 一張卡那一刻的完整回饋：每次存都是整份，不是差異（§2-1）。 */
@@ -28,7 +28,9 @@ export interface FeedbackView extends Feedback {
 export type FeedbackChange =
   | { kind: 'rate'; rate: FeedbackRate }
   | { kind: 'tag'; tag: FeedbackTag }
-  | { kind: 'note'; note: string };
+  | { kind: 'note'; note: string }
+  /** 沒存到之後點「再存」：把這張卡現在的整份再寫一次（格式查核 F2：評等與標籤的點法不因為沒存到而改變）。 */
+  | { kind: 'retry' };
 
 /** 寫紀錄的一方：卡是畫面上那一張，feedback 是改完的整份。丟錯算寫不進去。 */
 export interface FeedbackSink {
@@ -43,12 +45,18 @@ export const left = (feedback: Feedback): boolean => feedback.rate !== null || f
 /** 這張卡能不能留回饋：每一格都有學習目標 ID（§3-1；預覽讀的是編輯器的文字，還沒補 ID 的是空字串）。 */
 export const canLeave = (card: Card): boolean => card.blanks.every(blank => blank.lt !== '');
 
-/** 整理一句話（§2-2）：換行換成一個空白、去掉頭尾空白、最多 NOTE_LIMIT 個 UTF-16 單位，不切在代理對中間。 */
+/**
+ * 這張卡的回饋算哪一份：每一格的學習目標 ID 與題目指紋，去掉重複、照字串排序（和讀紀錄的一方認同一張卡的方法相同，syntax.md §11）。
+ * 同一個目標裡同一題寫了兩次的兩張卡是同一份（格式查核 F7）：畫面和讀的一方一致。
+ */
+export const feedbackKey = (card: Card): string =>
+  JSON.stringify([...new Set(card.blanks.map(blank => JSON.stringify([blank.lt, blank.prompt.fingerprint])))].sort());
+
+/** 整理一句話（§2-2）：換行換成一個空白、去掉頭尾空白、最多 NOTE_LIMIT 個字（照字算，不切在半個表情符號上）。 */
 function cleanNote(text: string): string {
   const flat = text.replace(/\r\n|[\r\n\u2028\u2029]/g, ' ').trim();
-  if (flat.length <= NOTE_LIMIT) return flat;
-  const end = /[\uD800-\uDBFF]/.test(flat.charAt(NOTE_LIMIT - 1)) ? NOTE_LIMIT - 1 : NOTE_LIMIT;
-  return flat.slice(0, end).trimEnd();
+  const chars = Array.from(flat);
+  return chars.length <= NOTE_LIMIT ? flat : chars.slice(0, NOTE_LIMIT).join('').trimEnd();
 }
 
 /**
@@ -72,6 +80,7 @@ export function applyChange(old: Feedback, change: FeedbackChange): Feedback | n
       const note = cleanNote(change.note);
       return note === old.note ? null : { ...old, note };
     }
+    case 'retry': return null;
     default: { const never: never = change; return never; }
   }
 }
