@@ -17,6 +17,7 @@ export { pickWord } from './kinds/group.ts';
 export { choiceProblems, choiceStem } from './kinds/polyphone.ts';
 export { mentions, pairWordOf, readTyping } from './kinds/typing.ts';
 export { ALT_LIKE, altMentions, movingTails, otherSentences, shownTails } from './kinds/order.ts';
+export { hasOptionSeparator } from './kinds/single.ts';
 export type { OptionLine } from './kinds/single.ts';
 
 /** 題目階段讀出的卡型與提示（比較卡、多音字的診斷；一個目標只有一種）。 */
@@ -39,7 +40,6 @@ export function readKind(target: Target, notes: readonly string[], promptNotes: 
   return { kind: single.single ? { id: 'single', single: single.single } : null, problems: single.problems };
 }
 
-/** 單選以前的四種，照原本的先後。 */
 /**
  * 加進已有的框只補選項行、沒有題目的項目（題目在筆記裡，tasks/matching-single-choice.md §6，L2 第二輪 2、第三輪 4）：
  * 選項行本身讀不成的提示，和 readKind 認單選時同一套讀法。答案在不在選項裡，加入時核對。
@@ -50,6 +50,7 @@ export function bareOptionProblems(options: readonly OptionLine[]): KindReading[
   return 'reason' in read ? [optionsInvalid(read.line, read.reason)] : [];
 }
 
+/** 單選以前的四種，照原本的先後。 */
 function readEarlier(target: Target, notes: readonly string[], promptNotes: readonly string[], english: boolean): KindReading {
   const pick = readPick(target);
   if (pick.group) return { kind: { id: 'group', group: pick.group }, problems: [] };

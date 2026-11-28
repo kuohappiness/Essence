@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { expandTabs, linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { ALT_LIKE, altMentions, bareOptionProblems, optionsTaken, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import { ALT_LIKE, altMentions, bareOptionProblems, hasOptionSeparator, optionsTaken, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
 import type { OptionLine } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
@@ -419,7 +419,8 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
         for (const child of root.children) optionsAt(child, 1);
       }
       // 只有選項行、少縮一層寫到最上層的（L2 第二輪 7）：不是目標，但還是提示放錯位置（下面寫在最上層的那一條）。
-      if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
+      // 要有 `;;` 才算：「- 選項：搭火車、搭公車」這種一般的清單不提示（L2 第三輪 5）。
+      if (OPTIONS_LIKE.test(root.text) && hasOptionSeparator(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
       continue;
     }
     // 認卡型的題目階段（題型模組任務說明 §1-3）：比較卡、多音字、排序、接句照順序，讀成或有提示就停；文法與變化在名稱階段認了，不走這裡。

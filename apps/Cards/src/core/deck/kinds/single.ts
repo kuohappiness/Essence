@@ -34,6 +34,8 @@ const LABEL_START = /^(?:出處|類型|重要性|狀態|備註|錯題補強|記�
  * 一個分號、頓號、逗號都是選項裡的字，不切（中文的描述常有一個分號）。
  */
 const SEPARATOR = /[;；]{2,}/;
+/** 這一行有選項的分隔（D-250）：最上層像選項行、不是目標的一般筆記，有 `;;` 才提示（L2 第三輪 5）。 */
+export const hasOptionSeparator = (text: string): boolean => SEPARATOR.test(text);
 /** 切選項（§2〈切法與比對〉）：只照 `;;` 切，沒有的切不開。空的丟掉，比對鍵重複的只留第一個。 */
 function splitOptions(body: string): string[] | null {
   if (!SEPARATOR.test(body)) return null;
