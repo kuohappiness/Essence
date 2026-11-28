@@ -4,6 +4,9 @@ import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, nextCard, planToday, questionType } from '../src/core/study/index.ts';
 import type { Card, DeckEntry, Next, Pick, Today, TodayInput } from '../src/core/study/index.ts';
 import { createPreview } from '../src/review/index.ts';
+import { entryView } from '../src/review/entry.ts';
+import { createState } from '../src/state/index.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // 單選與配對的組卡（tasks/matching-single-choice.md §4、〈驗收〉組卡）：預期值手寫，不用同樣的算法再算一次。
 const P = 'Essence Cards/社會/海岸.md';
@@ -115,8 +118,10 @@ void test('配對：同一組 7 個目標照筆記順序切成 5、2 兩張，�
 });
 
 const SEVEN = ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000'];
-const sevenOf = (ids: readonly string[] = SEVEN, path = P): DeckEntry => deckOf(ids.map((id, i) => target(id, `能認出第 ${String(i + 1)} 個`, `第 ${String(i + 1)} 題是哪一部？`, COAST[i % 4])).join(''), path);
-const plainOf = (n: number, path: string, head = ''): DeckEntry => ({ path, deck: parseDeck(`---\n科目: 社會\n${head}---\n` + Array.from({ length: n }, (_, i) => `- 能說出第 ${String(i + 1)} 個 ^p${String(i).padStart(5, '0')}\n    - 第 ${String(i + 1)} 個？ :: 答${String(i + 1)}\n`).join('')) });
+const sevenText = (ids: readonly string[] = SEVEN): string => '---\n科目: 社會\n---\n' + ids.map((id, i) => target(id, `能認出第 ${String(i + 1)} 個`, `第 ${String(i + 1)} 題是哪一部？`, COAST[i % 4])).join('');
+const sevenOf = (ids: readonly string[] = SEVEN, path = P): DeckEntry => ({ path, deck: parseDeck(sevenText(ids)) });
+const plainText = (n: number, head = ''): string => `---\n科目: 社會\n${head}---\n` + Array.from({ length: n }, (_, i) => `- 能說出第 ${String(i + 1)} 個 ^p${String(i).padStart(5, '0')}\n    - 第 ${String(i + 1)} 個？ :: 答${String(i + 1)}\n`).join('');
+const plainOf = (n: number, path: string, head = ''): DeckEntry => ({ path, deck: parseDeck(plainText(n, head)) });
 const where = (today: Today, lt: string): 'share' | 'more' | null => today.share.some(item => item.lt === lt) ? 'share' : today.more.some(item => item.lt === lt) ? 'more' : null;
 
 void test('配對：切開的每一張各自出（L2 第三輪 1、2，§4〈上限〉）：那一張有一格要出才出、整張作答，別張沒有要出的不跟著出', () => {
@@ -136,12 +141,26 @@ void test('配對：一組很大時（L2 第三輪 1），前面幾張照放進�
   assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [big.slice(0, 20), [big[20], 'p00000']]);
 });
 
+const STOP = 'Essence Cards/社會/停.md', PAUSED = '狀態: 暫停\n';
+/** 社會的作答一題平均 100 秒（暫停的那一篇記的紀錄）：一張 5 格要 500 秒，超過 5 分鐘的上限。 */
+const slowOf = (paused: DeckEntry): string[] => Array.from({ length: 31 }, (_, i) => good(new Date(Date.parse(at('10-23', '09:00:00.000')) + i * 100_000 + 8 * 3600_000).toISOString().slice(0, 23) + '+08:00', 'p00000', v(paused, 'p00000')));
 void test('配對：一張卡自己就超過每天的上限、今天的份還是空的（L2 第三輪 1）：照放，孩子才開始得了', () => {
-  // 社會的作答一題平均 100 秒（暫停的那一篇記的紀錄），一張 5 格要 500 秒，上限 5 分鐘。
-  const paused = plainOf(1, 'Essence Cards/社會/停.md', '狀態: 暫停\n');
-  const slow = Array.from({ length: 31 }, (_, i) => good(new Date(Date.parse(at('10-23', '09:00:00.000')) + i * 100_000 + 8 * 3600_000).toISOString().slice(0, 23) + '+08:00', 'p00000', v(paused, 'p00000')));
-  const today = plan([paused, sevenOf()], slow, at('10-24'), 5).today;
+  const paused = plainOf(1, STOP, PAUSED);
+  const today = plan([paused, sevenOf()], slowOf(paused), at('10-24'), 5).today;
   assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [SEVEN.slice(0, 5), SEVEN.slice(5)]);
+});
+
+void test('配對：一張卡自己就超過每天的上限時，入口有今天的份可以開始（L2 第三輪 1，從讀檔、排程走到入口）', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles({ [STOP]: plainText(1, PAUSED), [P]: sevenText(), 'Essence Cards/紀錄/2026-10 Phone-test.jsonl': slowOf(plainOf(1, STOP, PAUSED)).join('\n') + '\n' });
+  const settingsFirst = Promise.resolve({ settings: { capMinutes: 5, retention: 0.8, filter: [] }, semester: null, examCountdown: true, known: true });
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, now: () => Date.parse(at('10-24')), offset: () => 480, settingsFirst });
+  t.after(() => state.close());
+  await state.ready();
+  const view = entryView(state);
+  assert.ok(view.kind === 'ready', view.kind);
+  // 今天的份是切開的第一張（5 格），社會一列、還沒做完，畫面有「開始」。
+  assert.deepEqual([view.done, view.total, view.finished, view.rows.map(row => row.pick)], [0, 5, false, [{ subject: '社會' }]]);
 });
 
 void test('配對：別張的新目標不借先出那一張的先後（L2 第三輪 2）：到期的一般目標照樣排在新的前面', () => {
