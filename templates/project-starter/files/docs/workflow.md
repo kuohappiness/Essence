@@ -85,4 +85,4 @@ docs/roadmap.md〈已完成〉…… 加一列：日期、做了什麼、連到�
 | 第一個里程碑完成 | 回顧與安全檢查 | `code-quality` 已經內含，照它的 `milestone.md` 做 |
 | 出現第二個子專案 | 每個子專案自己的資料夾與規則 | 子專案的做法 |
 
-模板來源：https://github.com/kuohappiness/Essence 的 templates/project-starter（commit 收尾時填，日期收尾時填）
+模板來源：https://github.com/kuohappiness/Essence 的 templates/project-starter（commit 65448dc5，2026-11-28）
