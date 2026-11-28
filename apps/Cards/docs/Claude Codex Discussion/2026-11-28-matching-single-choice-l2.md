@@ -1,6 +1,6 @@
 # 配對與單選第 1 段的 L2（審查紀錄）
 
-狀態：待審｜下一步：第五輪的 1 項修了（829822ef），合併等使用者｜等誰：使用者
+狀態：已結案｜完成：L2 五輪做完，PR #117 已合併（`bad3e103`）｜等誰：—
 
 審查請求：[matching-single-choice-l2.md](../tasks/matching-single-choice-l2.md)；任務說明：[matching-single-choice.md](../tasks/matching-single-choice.md)。
 
