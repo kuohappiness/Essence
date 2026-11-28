@@ -1,6 +1,6 @@
 # 配對與單選第 1 段的 L2（審查紀錄）
 
-狀態：待審｜下一步：第四輪之後停（D-171），三項修正要不要再查、合併，等使用者｜等誰：使用者
+狀態：待審｜下一步：第五輪窄查（使用者 2026-11-28 選），Codex 回報後 Claude 核對｜等誰：Codex
 
 審查請求：[matching-single-choice-l2.md](../tasks/matching-single-choice-l2.md)；任務說明：[matching-single-choice.md](../tasks/matching-single-choice.md)。
 
