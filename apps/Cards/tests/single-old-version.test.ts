@@ -70,6 +70,25 @@ void test('v0.6.0 讀單選：照一般的問答、選項行是補充、沒有�
   assert.deepEqual(old.problems, []);
 });
 
+void test('選項行的 %% 註解裡有 ::、==（L2 第一輪 R1）：和其他行一樣先讀成一題，新舊版同樣多一題、指紋相同，新版多提示', async t => {
+  const deck = `---
+科目: 社會
+---
+- 能說出臺灣北部海岸的地形 ^aaa111
+    - 臺灣北部的海岸主要是哪一種海岸？ :: 岩岸
+    - 選項：岩岸、沙岸、斷層海岸 %%例：甲 :: 乙%%
+- 能說出臺灣西部海岸的地形 ^bbb222
+    - 臺灣西部的海岸主要是哪一種海岸？ :: 沙岸
+    - 選項：岩岸、沙岸、斷層海岸 %%例：==沙岸==%%
+`;
+  const now = parseDeck(deck);
+  assert.deepEqual(now.targets.map(target => [target.kind?.id ?? null, target.prompts.map(prompt => prompt.kind)]), [[null, ['qa', 'qa']], [null, ['qa', 'cloze']]]);
+  assert.deepEqual(now.problems.map(problem => [problem.line, problem.code]), [[5, 'options-invalid'], [8, 'options-invalid']]);
+  const old = await oldRun(t, [deck]) as OldRun;
+  assert.deepEqual(old.targets.map(target => target.prompts), now.targets.map(target => target.prompts.map(prompt => [prompt.kind, prompt.fingerprint])));
+  assert.deepEqual(old.problems, []);
+});
+
 void test('v0.6.0 的 parseLine 讀單選卡寫的行：每一行都是合法的作答，pick、retry 忽略、with 照比較卡讀（不用 need）', async t => {
   // 只留同一組選項的兩個目標：併成一張兩格的卡。
   const h = await setup(t, { 'Essence Cards/社會/海岸.md': DECK.slice(0, DECK.indexOf('- 能說出臺灣北部')) });
