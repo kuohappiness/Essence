@@ -141,6 +141,13 @@ void test('配對：切成兩張、兩張都有要出的（L2 第二輪 1），�
   const mixed = plan([plain, seven], notDue, at('10-24'), 5).today;
   assert.equal(mixed.share.length, 16);
   assert.deepEqual(mixed.more.map(item => item.lt).sort(), all);
+  // 整類（第 2 代）：上限從 15 秒到 6 分鐘、前面有沒有一般目標、哪幾格沒到期，整組都在同一份，不拆開。
+  const patterns = [[], ['eee000', 'ggg000'], ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000'], ['fff000', 'ggg000'], ['bbb000', 'fff000']];
+  for (const before of [[], [plain]]) for (const skip of patterns) for (let quarter = 1; quarter <= 24; quarter++) {
+    const today = plan([...before, seven], skip.map(lt => good(at('10-23'), lt, v(seven, lt))), at('10-24'), quarter / 4).today;
+    const share = today.share.filter(item => all.includes(item.lt)).length, more = today.more.filter(item => all.includes(item.lt)).length;
+    assert.ok((share === 7 && more === 0) || (share === 0 && more === 7), JSON.stringify({ before: before.length, skip, quarter, share, more }));
+  }
 });
 
 void test('配對：今天答過一次之後，答錯的那幾格到時間只出那幾格，不再整組', () => {
