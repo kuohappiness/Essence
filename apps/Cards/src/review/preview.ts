@@ -36,7 +36,7 @@ function cardsOf(path: string, targets: readonly Target[]): Card[] {
         return pickPreviewCards(path, ok.filter(each => each.kind?.id === 'group' && each.kind.group.key === key), targets);
       }
       case 'polyphone': return choicePreviewCards(path, target);
-      case 'order': case 'typing': case 'couplet': case undefined: return plain();
+      case 'order': case 'typing': case 'couplet': case 'single': case undefined: return plain();
       default: { const never: never = target.kind; return never; }
     }
   });

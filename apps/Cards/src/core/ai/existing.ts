@@ -242,7 +242,7 @@ const content = (value: unknown): string => JSON.stringify(value, (key, each: un
 
 /**
  * 加題核對比的卡型（題型模組任務說明 §1-4）：題型的內容跟著題目變，只比種類與組的身分。比較卡比組的身分；排序比樣子（全詩、句子）；
- * 多音字（tasks/polyphone-pick.md §5）的答案與錨點跟著題目變，只比字與括號裡的讀音；文法與變化從名稱讀，整個比；接句只比是不是。
+ * 多音字（tasks/polyphone-pick.md §5）的答案與錨點跟著題目變，只比字與括號裡的讀音；文法與變化從名稱讀，整個比；接句只比是不是；單選只比組的身分。
  */
 function kindShape(kind: Kind | undefined): string | null {
   if (!kind) return null;
@@ -252,6 +252,8 @@ function kindShape(kind: Kind | undefined): string | null {
     case 'order': return content([kind.id, kind.order.style]);
     case 'typing': return content([kind.id, kind.typing]);
     case 'couplet': return content([kind.id]);
+    // 單選（tasks/matching-single-choice.md §6）：每題的答案位置跟著題目變，只比組的身分。
+    case 'single': return content([kind.id, kind.single.key]);
     default: { const never: never = kind; return never; }
   }
 }

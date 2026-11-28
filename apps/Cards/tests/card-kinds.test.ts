@@ -21,6 +21,7 @@ function kindOf(target: Target): string {
     case 'order': return kind.order.style + '-order';
     case 'couplet': return 'couplet';
     case 'typing': return 'typing-' + kind.typing.style;
+    case 'single': return 'single';
   }
 }
 
@@ -165,7 +166,7 @@ for (const { kind, type, subject, text } of KIND_SAMPLES) {
 
 // 題型對得上（題型模組任務說明 §1-7，Fable G2 b）：卡型決定題型，questionType 只看卡片自己（compose.ts），兩邊在這裡對齊。
 // 比較卡、多音字是點選，排序是排序（A2，§1-8）；其他卡型和沒有卡型的照這張卡打不打字（null）。多一種卡型時這張表編譯不過，要寫它是哪一種題型。
-const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null };
+const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null, single: null };
 void test('題型對得上：卡型範例的每一張卡，questionType 和卡型一致', async t => {
   for (const { kind, subject, text } of KIND_SAMPLES) {
     const h = await setup(t, { [`Essence Cards/${subject}/範例.md`]: `---\n科目: ${subject}\n---\n${text}` });

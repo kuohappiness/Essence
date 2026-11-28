@@ -226,7 +226,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     // 多音字（tasks/polyphone-pick.md §3）：出題歷史是本輪以前加上這一輪，和今天的份同一種組法。
     case 'polyphone':
       return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early: !ready.length && !fresh.length }, shownWith(seen, valid.get(item.id) ?? [])) };
-    case 'order': case 'typing': case 'couplet': case undefined: break;
+    case 'order': case 'typing': case 'couplet': case 'single': case undefined: break;
     default: { const never: never = item.target.kind; return never; }
   }
   const slot: Slot = {

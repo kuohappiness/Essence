@@ -131,7 +131,7 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   switch (slot.target.kind?.id) {
     case 'group': return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
     case 'polyphone': return { kind: 'card', card: choiceCardOf({ lt: item.lt, deck: item.deck, target: slot.target, isNew: slot.memory === null && !any.has(item.lt), early }, shownWith(slot.seen, valid.get(item.lt) ?? [])) };
-    case 'order': case 'typing': case 'couplet': case undefined: break;
+    case 'order': case 'typing': case 'couplet': case 'single': case undefined: break;
     default: { const never: never = slot.target.kind; return never; }
   }
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);

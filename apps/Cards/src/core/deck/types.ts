@@ -60,13 +60,15 @@ export interface Target {
  *   sentence 是英文的句子排序卡（D-193 第 8 點）：名稱最後是「排序」、每一題都是好幾格的英文填空。
  * - typing：名稱結尾是「文法」或變化種類的目標（D-193 第 5、6 點）：問答題打字。
  * - couplet：接句卡（D-185 第 8 點）：名稱最後是「接句」、題目是一題剛好一格的填空。
+ * - single：單選（D-249、tasks/matching-single-choice.md §3）：目標底下一行 `選項：`；同一篇選項組相同的幾個目標組卡時併成配對。
  */
 export type Kind =
   | { id: 'group'; group: PickGroup }
   | { id: 'polyphone'; polyphone: Choice }
   | { id: 'order'; order: Order }
   | { id: 'typing'; typing: Typing }
-  | { id: 'couplet'; couplet: Couplet };
+  | { id: 'couplet'; couplet: Couplet }
+  | { id: 'single'; single: Single };
 export type KindId = Kind['id'];
 /** 排序的兩種樣子（§1-2）：只分畫面與組卡；欄位照 PoemOrder、SentenceOrder。 */
 type Order = ({ style: 'poem' } & PoemOrder) | ({ style: 'sentence' } & SentenceOrder);
@@ -110,6 +112,11 @@ export interface PickGroup { word: string; members: readonly string[]; key: stri
  * 所以指紋也不重複）；anchors 對齊 options，是記憶錨點裡那個讀音的說明與常用詞（第一個全形冒號後面，沒有是 null）；rest 是對不到讀音的錨點行，照原本的順序。
  */
 export interface Choice { word: string; options: readonly string[]; optionKeys: readonly string[]; title: string; answers: readonly number[]; anchors: readonly (string | null)[]; rest: readonly string[] }
+/**
+ * 單選（tasks/matching-single-choice.md §3）：選項照寫的字（切好、去重），optionKeys 是比對鍵（和 options 對齊）；key 是組的身分（比對鍵排序後的 JSON，
+ * 和比較卡的 group.key 同一種算法，組卡時先比卡型再比它）；answers 對齊 prompts，是每一題的答案在 options 的位置；at 是選項行在 target.shared 的第幾項（畫面不顯示它）。
+ */
+export interface Single { options: readonly string[]; optionKeys: readonly string[]; key: string; answers: readonly number[]; at: number }
 export interface Fields {
   sources: string[];
   type: string | null;
@@ -169,7 +176,9 @@ export type ProblemCode =
   | 'pick-answer-invalid' | 'pick-mixed' | 'pick-not-recognized'
   // 英文句子排序的另一種排法（tasks/sentence-order-alternatives.md §1 第 5～7 點）：都是 hint。order-alt-invalid 是那一行不認或寫錯地方，
   // order-alt-all-right 是排錯的排法剩不到兩種。AI 的草稿兩個都算錯誤（§6）。
-  | 'order-alt-invalid' | 'order-alt-all-right';
+  | 'order-alt-invalid' | 'order-alt-all-right'
+  // 單選的選項行（tasks/matching-single-choice.md §3）：hint，有選項行但認不成單選、或選項寫錯、放錯位置；照原本的題型出。AI 的草稿算錯誤（§6）。
+  | 'options-invalid';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
   random?: () => number;

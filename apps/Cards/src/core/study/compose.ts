@@ -23,7 +23,7 @@ export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>, times = 0): Card 
   // 照卡型分（題型模組任務說明 §1-4）：排序再照樣子；比較卡、多音字由 pickCardOf、choiceCardOf 組，走到這裡照一格出。
   switch (kind.id) {
     case 'order': return kind.order.style === 'poem' ? orderCardOf(fields, kind.order, times) : sentenceCardOf(fields, kind.order, times);
-    case 'group': case 'polyphone': case 'typing': case 'couplet': return plain();
+    case 'group': case 'polyphone': case 'typing': case 'couplet': case 'single': return plain();
     default: { const never: never = kind; return never; }
   }
 }
