@@ -188,21 +188,15 @@ export function choicePreviewCards(deck: string, target: Target): Card[] {
 
 // ── 單選與配對（tasks/matching-single-choice.md §4、§5）：一個目標一格，同一篇同一組選項的目標併成一張；純計算，同一張卡重來不變。 ──
 
-/** 一張最多幾格（§4〈上限〉）：家長手寫超過的同一組，照筆記順序每這麼多個切一張。 */
-const SINGLE_CELLS = 5;
-
 const singleOf = (target: Target): Single | undefined => target.kind?.id === 'single' ? target.kind.single : undefined;
 
 /**
- * 單選的目標併成哪一張（§4〈配對〉〈上限〉）：同一篇（deckTargets 是這篇卡組全部的目標）、同一組選項（single.key）的目標照筆記順序，每 SINGLE_CELLS 個一張；
- * 回傳那一張的鍵（組的身分加第幾張），不是單選是 null。只算讀得出、有 ID 的目標，暫停的也算，切法才不跟著暫停變。
+ * 單選的目標併成哪一張（§4〈配對〉〈上限〉）：同一篇、同一組選項（single.key）的目標是一張，幾個都不切（使用者 2026-11-28，D-249 整組作答）；
+ * 回傳那一張的鍵，不是單選或沒有 ID 是 null。同一篇由呼叫的一方比。
  */
-export function singleCardKey(target: Target, deckTargets: readonly Target[]): string | null {
+export function singleCardKey(target: Target): string | null {
   const single = singleOf(target);
-  if (!single || target.id === null) return null;
-  const members = deckTargets.filter(each => each.ok && each.id !== null && singleOf(each)?.key === single.key);
-  const at = Math.max(0, members.findIndex(each => each.id === target.id));
-  return single.key + '\0' + String(Math.floor(at / SINGLE_CELLS));
+  return single && target.id !== null ? single.key : null;
 }
 
 /** 一格：答案換成選中的目標寫的字（照比對鍵對上，§5），同一組兩個目標寫法或順序不同時，對錯照字串全等也判得對。 */

@@ -202,7 +202,7 @@ export function planToday(input: TodayInput): Today {
     if (list) list.push(c);
     else followers.set(key, [c]);
   }
-  // 一張配對今天要出的格數，占時間照這個算。切開的每一張各自出（§4〈上限〉，L2 第三輪 1、2）：同一組別張的格數不算進來。
+  // 一張配對今天要出的格數，占時間照這個算（§4〈估時〉）；跟著出的沒到期目標不算。一組幾個都是一張，不切（§4〈上限〉）。
   const shownIn = new Map<string, number>();
   for (const c of ordered) { const key = groupKey(c); if (key?.startsWith(SINGLE)) shownIn.set(key, (shownIn.get(key) ?? 0) + 1); }
 
@@ -246,12 +246,12 @@ export function planToday(input: TodayInput): Today {
 /** 單選的組鍵開頭：和比較卡的組分開（§4〈新的排在一起與估時〉）。 */
 const SINGLE = 'single\0';
 /**
- * 併成一張的組的身分：比較卡是同一篇、key 相同（§3）；單選是同一篇、同一張（singleCardKey，tasks/matching-single-choice.md §4），
+ * 併成一張的組的身分：比較卡是同一篇、key 相同（§3）；單選是同一篇、同一組選項（singleCardKey，tasks/matching-single-choice.md §4），
  * 前面加卡型，選項剛好和比較卡的括號一樣也不併。
  */
 function groupKey(c: Candidate): string | null {
   if (c.target.kind?.id === 'group') return c.entry.path + '\0' + c.target.kind.group.key;
-  const key = c.target.kind?.id === 'single' ? singleCardKey(c.target, c.entry.whole ?? c.entry.deck.targets) : null;
+  const key = c.target.kind?.id === 'single' ? singleCardKey(c.target) : null;
   return key === null ? null : SINGLE + c.entry.path + '\0' + key;
 }
 

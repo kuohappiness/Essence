@@ -108,13 +108,14 @@ void test('配對：不同組、不同篇、比較卡的組不併', () => {
   assert.deepEqual(ids(next(today, data, { deck: 'Essence Cards/社會/另一篇.md' })), ['east01', 'north1', 'south1', 'west01']);
 });
 
-void test('配對：同一組 7 個目標照筆記順序切成 5、2 兩張，兩張都出；不多放一題', () => {
+void test('配對：同一組 7 個目標是一張、7 格都作答，不切（§4〈上限〉，使用者 2026-11-28）；不多放一題', () => {
   const seven = deckOf(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((x, i) => target(`${x}${x}${x}000`, `能認出第 ${String(i + 1)} 個`, `第 ${String(i + 1)} 題是哪一部？`, COAST[i % 4])).join(''));
   const { today, data } = plan([seven], [], at('10-24'));
   const first = next(today, data);
-  assert.deepEqual(ids(first), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000']);
-  assert.deepEqual(ids(next(today, data, { targets: ['ggg000'] })), ['fff000', 'ggg000']);
-  assert.equal(first.blanks.length, 5);
+  assert.deepEqual(ids(first), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000']);
+  // 範圍只有最後一個，也是整組（今天的份裡同一組的併成一張，不看範圍）。
+  assert.deepEqual(ids(next(today, data, { targets: ['ggg000'] })), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000']);
+  assert.equal(first.blanks.length, 7);
 });
 
 const SEVEN = ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000'];
@@ -124,30 +125,32 @@ const plainText = (n: number, head = ''): string => `---\n科目: 社會\n${head
 const plainOf = (n: number, path: string, head = ''): DeckEntry => ({ path, deck: parseDeck(plainText(n, head)) });
 const where = (today: Today, lt: string): 'share' | 'more' | null => today.share.some(item => item.lt === lt) ? 'share' : today.more.some(item => item.lt === lt) ? 'more' : null;
 
-void test('配對：切開的每一張各自出（L2 第三輪 1、2，§4〈上限〉）：那一張有一格要出才出、整張作答，別張沒有要出的不跟著出', () => {
+void test('配對：一組有一格要出就整組出（D-249），超過 5 個也是一張、照今天要出的格數占時間', () => {
   const seven = sevenOf();
+  // 只有第一個是新的、其他前一天答過：上限 15 秒剛好放得下要出的那一格，沒到期的 6 格跟著出。
   const later = SEVEN.slice(1).map(lt => good(at('10-23'), lt, v(seven, lt)));
   const { today, data } = plan([seven], later, at('10-24'), 0.25);
-  assert.deepEqual([today.share.map(item => item.lt), today.more], [SEVEN.slice(0, 5), []]);
-  assert.deepEqual(ids(next(today, data)), SEVEN.slice(0, 5));
-  // 反過來，只有第二張有要出的：只出第二張（跟著出的接在要出的後面）。
+  assert.deepEqual([today.share.map(item => item.lt), today.more], [SEVEN, []]);
+  assert.deepEqual(ids(next(today, data)), SEVEN);
+  // 反過來，只有最後一個要出：跟著出的照筆記順序接在它後面。
   const first = SEVEN.slice(0, 6).map(lt => good(at('10-23'), lt, v(seven, lt)));
-  assert.deepEqual(plan([seven], first, at('10-24'), 0.25).today.share.map(item => item.lt), ['ggg000', 'fff000']);
+  assert.deepEqual(plan([seven], first, at('10-24'), 0.25).today.share.map(item => item.lt), ['ggg000', ...SEVEN.slice(0, 6)]);
 });
 
-void test('配對：一組很大時（L2 第三輪 1），前面幾張照放進今天的份，放不下的那張和後面的進「再複習一些」', () => {
+void test('配對：一組很大、整組超過每天的上限時（L2 第三輪 1）：今天的份還空著就整組放進去，後面的進「再複習一些」', () => {
+  // 21 格新的，每格 15 秒共 315 秒，上限 5 分鐘。
   const big = Array.from({ length: 21 }, (_, i) => `g${String(i).padStart(5, '0')}`);
   const today = plan([sevenOf(big), plainOf(1, 'Essence Cards/社會/海洋.md')], [], at('10-24'), 5).today;
-  assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [big.slice(0, 20), [big[20], 'p00000']]);
+  assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [big, ['p00000']]);
 });
 
 const STOP = 'Essence Cards/社會/停.md', PAUSED = '狀態: 暫停\n';
-/** 社會的作答一題平均 100 秒（暫停的那一篇記的紀錄）：一張 5 格要 500 秒，超過 5 分鐘的上限。 */
+/** 社會的作答一題平均 100 秒（暫停的那一篇記的紀錄）：一張 7 格要 700 秒，超過 5 分鐘的上限。 */
 const slowOf = (paused: DeckEntry): string[] => Array.from({ length: 31 }, (_, i) => good(new Date(Date.parse(at('10-23', '09:00:00.000')) + i * 100_000 + 8 * 3600_000).toISOString().slice(0, 23) + '+08:00', 'p00000', v(paused, 'p00000')));
 void test('配對：一張卡自己就超過每天的上限、今天的份還是空的（L2 第三輪 1）：照放，孩子才開始得了', () => {
   const paused = plainOf(1, STOP, PAUSED);
   const today = plan([paused, sevenOf()], slowOf(paused), at('10-24'), 5).today;
-  assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [SEVEN.slice(0, 5), SEVEN.slice(5)]);
+  assert.deepEqual([today.share.map(item => item.lt), today.more.map(item => item.lt)], [SEVEN, []]);
 });
 
 void test('配對：一張卡自己就超過每天的上限時，入口有今天的份可以開始（L2 第三輪 1，從讀檔、排程走到入口）', async t => {
@@ -159,35 +162,34 @@ void test('配對：一張卡自己就超過每天的上限時，入口有今天
   await state.ready();
   const view = entryView(state);
   assert.ok(view.kind === 'ready', view.kind);
-  // 今天的份是切開的第一張（5 格），社會一列、還沒做完，畫面有「開始」。
-  assert.deepEqual([view.done, view.total, view.finished, view.rows.map(row => row.pick)], [0, 5, false, [{ subject: '社會' }]]);
+  // 今天的份是整組那一張（7 格），社會一列、還沒做完，畫面有「開始」。
+  assert.deepEqual([view.done, view.total, view.finished, view.rows.map(row => row.pick)], [0, 7, false, [{ subject: '社會' }]]);
 });
 
-void test('配對：別張的新目標不借先出那一張的先後（L2 第三輪 2）：到期的一般目標照樣排在新的前面', () => {
-  // 第二張只有一格，前一天答錯，在重學；第一張 5 格都是新的。19 個一般目標都到期了，加上重學的一格剛好 5 分鐘。
+void test('配對：一格在重學、其他是新的（L2 第三輪 2，使用者 2026-11-28 選不切）：整張排在重學的位置、新的格一起作答也占時間，排不下的到期目標進「再複習一些」', () => {
+  // 一組 6 個：fff000 前一天答錯、在重學，其他 5 個新的，一張 6 格 90 秒。19 個一般目標都到期了，一個 15 秒；上限 5 分鐘放得下 14 個。
   const six = SEVEN.slice(0, 6);
   const group = sevenOf(six);
   const plain = plainOf(19, 'Essence Cards/社會/一般.md');
   const due = Array.from({ length: 19 }, (_, i) => `p${String(i).padStart(5, '0')}`);
   const lines = [...due.map(lt => good(at('10-04'), lt, v(plain, lt))), encodeEntry(at('10-23', '21:00:00.000'), { lt: 'fff000', r: 'miss', v: v(group, 'fff000'), pick: null })];
   const today = plan([plain, group], lines, at('10-24'), 5).today;
-  assert.deepEqual(today.share.map(item => item.lt).sort(), ['fff000', ...due].sort());
-  assert.deepEqual(today.more.map(item => item.lt), six.slice(0, 5));
+  assert.deepEqual(today.share.map(item => item.lt).sort(), [...six, ...due.slice(0, 14)].sort());
+  assert.deepEqual(today.more.map(item => item.lt), due.slice(14));
 });
 
-void test('配對：切開的組整類（第 3 代）：每一張整張在同一份、沒有要出的那張不出、今天的份不會是空的', () => {
+void test('配對整類（第 3 代）：一組永遠整組在同一份、整組都沒有要出的才不出、今天的份不會是空的', () => {
   const seven = sevenOf();
   const plain = plainOf(16, 'Essence Cards/社會/一般.md');
-  const patterns = [[], ['eee000', 'ggg000'], SEVEN.slice(0, 5), ['fff000', 'ggg000'], ['bbb000', 'fff000'], SEVEN.slice(1)];
+  const patterns = [[], ['eee000', 'ggg000'], SEVEN.slice(0, 5), ['fff000', 'ggg000'], ['bbb000', 'fff000'], SEVEN.slice(1), SEVEN];
   for (const before of [[], [plain]]) for (const skip of patterns) for (let quarter = 1; quarter <= 24; quarter++) {
     const today = plan([...before, seven], skip.map(lt => good(at('10-23'), lt, v(seven, lt))), at('10-24'), quarter / 4).today;
     const say = JSON.stringify({ before: before.length, skip, quarter });
-    assert.ok(today.share.length > 0, say);
-    for (const card of [SEVEN.slice(0, 5), SEVEN.slice(5)]) {
-      const places = new Set(card.map(lt => where(today, lt)));
-      assert.equal(places.size, 1, say);
-      assert.equal(places.has(null), card.every(lt => skip.includes(lt)), say);
-    }
+    // 有要出的就不會是空的；整組都答過、前面又沒有一般目標，今天本來就沒有卡。
+    assert.equal(today.share.length > 0, before.length > 0 || skip.length < SEVEN.length, say);
+    const places = new Set(SEVEN.map(lt => where(today, lt)));
+    assert.equal(places.size, 1, say);
+    assert.equal(places.has(null), SEVEN.every(lt => skip.includes(lt)), say);
   }
 });
 

@@ -96,16 +96,14 @@ function pickCard(item: QueueItem, slot: Slot, scope: readonly QueueItem[], toda
 function singleCard(item: QueueItem, slot: Slot, today: Today, input: TodayInput, answers: Answers, early: boolean): Card {
   const { valid, any } = answers;
   const mateOf = (lt: string): PickMate => { const each = slotOf(today, lt); return { lt, target: each.target, shown: shownWith(each.seen, valid.get(lt) ?? []) }; };
-  const entry = input.decks.find(each => each.path === item.deck);
-  const deckTargets = entry ? entry.whole ?? entry.deck.targets : [slot.target];
-  const key = singleCardKey(slot.target, deckTargets);
+  const key = singleCardKey(slot.target);
   const again = valid.has(item.lt);
   const seen = new Set([item.lt]);
   const others = [...today.share, ...today.more].filter(other => {
     if (seen.has(other.lt) || other.deck !== item.deck) return false;
     seen.add(other.lt);
     const each = slotOf(today, other.lt);
-    if (each.target.kind?.id !== 'single' || singleCardKey(each.target, deckTargets) !== key) return false;
+    if (each.target.kind?.id !== 'single' || singleCardKey(each.target) !== key) return false;
     const entries = valid.get(other.lt);
     return !again || joins(entries, early, () => againAt(each, entries ?? []) <= input.now);
   });

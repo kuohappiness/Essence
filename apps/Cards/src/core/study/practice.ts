@@ -226,10 +226,9 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     }
     // 單選與配對（tasks/matching-single-choice.md §4）：這一輪裡同一張的目標整組出；這一輪答過了是重來，只併答錯、到時間的。
     case 'single': {
-      const deckTargets = item.entry.whole ?? item.entry.deck.targets;
-      const key = singleCardKey(item.target, deckTargets);
+      const key = singleCardKey(item.target);
       const again = valid.has(item.id);
-      const others = items.filter(other => other !== item && other.path === item.path && other.target.kind?.id === 'single' && singleCardKey(other.target, deckTargets) === key
+      const others = items.filter(other => other !== item && other.path === item.path && other.target.kind?.id === 'single' && singleCardKey(other.target) === key
         && (!again || joins(valid.get(other.id), early, () => dueBy(other))));
       return { kind: 'card', card: singleCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)]) };
     }
