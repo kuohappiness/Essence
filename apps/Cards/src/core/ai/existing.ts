@@ -2,7 +2,7 @@ import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../dec
 import type { Deck, DeckProps, Item, Kind, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
-import { allOrNone, leaks, WHICH_OF } from './check.ts';
+import { allOrNone, asksWhichOf, leaks } from './check.ts';
 import { encode, indentOf } from './move.ts';
 
 // 加進已有的學習目標（tasks/ai-cards-add.md §3-2）：框裡那一項的第一層子項目分成資料欄位、題目、其他，各自的完整範圍跟著走；
@@ -216,7 +216,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   // 這次才變成單選的（只補選項行），筆記裡原本的題目也變成點選，一起查（L2 第二輪 3）；已經是單選的舊題是家長的，不重查。
   const checked = target.kind?.id === 'single' ? missing.flatMap(unit => unit.prompt ? [unit.prompt] : []) : now?.prompts ?? [];
   const asked = checked.flatMap(prompt => prompt.kind === 'qa' ? [prompt] : []);
-  if (single && asked.some(prompt => WHICH_OF.test(prompt.question))) return leave(EXISTING_WHY.singleWhichOf);
+  if (single && asked.some(prompt => asksWhichOf(prompt.question))) return leave(EXISTING_WHY.singleWhichOf);
   if (single && asked.some(prompt => leaks(prompt.question, prompt.answer))) return leave(EXISTING_WHY.singleLeak);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }

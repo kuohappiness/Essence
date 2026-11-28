@@ -275,7 +275,9 @@ export const allOrNone = (options: readonly string[]): boolean => options.some(o
 export const leaks = (question: string, answer: string): boolean => { const key = pickKey(answer); return [...key].length > 1 && pickKey(withoutComments(question)).includes(key); };
 const SINGLE_LEAK_WHY = '題目寫出了這一題自己的答案，孩子不用想就點得對：題目改寫這一類自己的特徵或例子';
 /** 考卷式的問法（§6）：有選項行的目標是錯誤，沒有的是提醒。 */
-export const WHICH_OF = /下列|以下何者/;
+const WHICH_OF = /下列|以下何者/;
+/** 題幹用了考卷式的問法：只看孩子看得到的字，`%%` 註解裡的不算（同 leaks，L2 第三輪 3）。草稿與寫進筆記前共用。 */
+export const asksWhichOf = (question: string): boolean => WHICH_OF.test(withoutComments(question));
 const ALL_NONE_WHY = '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案';
 function checkSingle(deck: Deck, issue: Report): void {
   for (const p of deck.problems) if (p.code === 'options-invalid') issue(p.line + 1, '錯誤', p.code, p.message);
@@ -450,8 +452,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     // 「……？為什麼？」是一題理解題；其他一行問兩個問題的，要拆開（通用規則 8）。
     if ((q.front.match(/[？?]/g) ?? []).length >= 2 && !/[？?]\s*為什麼[？?]\s*$/.test(q.front)) issue(node.line, '提醒', 'two-questions', '一題問了兩件事（通用規則 8）');
     if (optioned && leaks(q.front, q.back)) issue(node.line, '錯誤', 'single-leak', SINGLE_LEAK_WHY);
-    if (optioned && WHICH_OF.test(q.front)) issue(node.line, '錯誤', 'which-of', '有選項行的目標不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答，選項只給孩子點選');
-    else if (q.front.includes('下列')) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
+    if (optioned && asksWhichOf(q.front)) issue(node.line, '錯誤', 'which-of', '有選項行的目標不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答，選項只給孩子點選');
+    else if (withoutComments(q.front).includes('下列')) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
     if (/如上|上述|上圖|下圖/.test(q.front) && !images(q.front).length) issue(node.line, '提醒', 'context', '題目依賴上下文（通用規則 9）');
     return q;
   }

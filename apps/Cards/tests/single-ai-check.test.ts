@@ -118,3 +118,15 @@ void test('single-leak（錯誤）：有選項行的題目寫出這一題自己�
   // 答案只寫在 %% 註解裡（孩子看不到，L2 第二輪 5）：不算。
   assert.deepEqual(found(draft('    - 北部主要是哪種海岸？ %%岩岸%% :: 岩岸', OPTIONS)), []);
 });
+
+void test('題幹的檢查只看孩子看得到的字（L2 第二輪 5、第三輪 3）：「下列」「以下何者」、寫出答案寫在 %% 註解裡不算；本文與候選框都一樣', () => {
+  const candidate = (question: string): string => draft(undefined, OPTIONS) + ['', '> [!note]- 候選卡片', '> - 能說出臺灣東部海岸的地形', '>     - 理由：x', '>     - 出處：p.42', `>     - ${question}`, `> ${OPTIONS}`, ''].join('\n');
+  for (const [words, code] of [['下列何者是', 'which-of'], ['以下何者是', 'which-of'], ['常見斷層海岸，', 'single-leak']]) {
+    const question = (shown: string): string => `臺灣東部${shown}哪一種海岸？ :: 斷層海岸`;
+    // 本文第 5 行、候選框的題目第 12 行。
+    assert.deepEqual(found(draft(`    - ${question(words)}`, OPTIONS)).filter(each => each[2] === code), [['錯誤', 5, code]], words);
+    assert.deepEqual(found(draft(`    - ${question(`%%${words}%%`)}`, OPTIONS)), [], words);
+    assert.deepEqual(found(candidate(question(words))).filter(each => each[2] === code), [['錯誤', 12, code]], words);
+    assert.deepEqual(found(candidate(question(`%%${words}%%`))), [], words);
+  }
+});

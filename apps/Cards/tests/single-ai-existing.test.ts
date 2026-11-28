@@ -112,3 +112,14 @@ void test('只補選項行就把舊題變成單選（L2 第二輪 3）：筆記�
     assert.equal(kindOf(planned(item(GOOD), dest(question, OPTIONS))), 'single', question);
   }
 });
+
+void test('題幹的檢查只看孩子看得到的字（L2 第二輪 5、第三輪 3）：寫在 %% 註解裡的不算，筆記裡原本的題與這次加的題都一樣', () => {
+  for (const [words, why] of [['下列何者是', EXISTING_WHY.singleWhichOf], ['以下何者是', EXISTING_WHY.singleWhichOf], ['常見岩岸，', EXISTING_WHY.singleLeak]]) {
+    const question = (shown: string): string => `    - 臺灣北部${shown}哪一種海岸？ :: 岩岸`;
+    // 這次才變成單選（筆記裡原本的題）、這次加的題。
+    assert.equal(left(item(OPTIONS), dest(question(words))), why, words);
+    assert.equal(kindOf(planned(item(OPTIONS), dest(question(`%%${words}%%`)))), 'single', words);
+    assert.equal(left(item(question(words)), dest(Q1, OPTIONS)), why, words);
+    assert.equal(kindOf(planned(item(question(`%%${words}%%`)), dest(Q1, OPTIONS))), 'single', words);
+  }
+});
