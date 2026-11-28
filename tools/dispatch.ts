@@ -1,4 +1,4 @@
-// 分派表（D-208 第 5 點，docs/tasks/one-repo-step-1.md §2；第二步 §A3 加共用工具、§B3 改登錄表與第 9 條）：照這次改到的路徑決定 commit 與 CI 檢查哪些對象。
+// 分派表（D-208 第 5 點，docs/tasks/one-repo-step-1.md §2；第二步 §A3 加共用工具、§B3 改登錄表與第 10 條；D-247 加第 9 條模板）：照這次改到的路徑決定 commit 與 CI 檢查哪些對象。
 // hook 與 CI 只讀這一份。
 // 用法：
 //   node tools/dispatch.ts --staged [--ci] [--explain]               暫存區（pre-commit）
@@ -110,12 +110,17 @@ export const RULES: Rule[] = [
     effect: path => ({ ...SHARED_SPECS[path], tools: 'related' }),
   },
   {
-    // 任務與討論稿在 docs/ 底下（D-213）：規劃文件的 commit 不跑完整檢查。舊位置的 tasks/、Claude Codex Discussion/ 落第 10 條，文件檢查也擋。
-    id: 9, name: '最上層的文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related', tools: 'related' }),
+    // 給新專案的模板（D-247）：裡面的程式、hook 與 CI 設定是給新專案複製的，不是 Essence 的入口，不觸發任何軟體的檢查。
+    // commit 時只跑寫到改動路徑的 tools/tests/ 測試；CI 照 --ci 的跑法升成共用工具的完整檢查，模板的測試在那裡跑。
+    id: 9, name: '給新專案的模板', effect: () => ({ tools: 'related' }), matches: under('templates/'),
+  },
+  {
+    // 任務與討論稿在 docs/ 底下（D-213）：規劃文件的 commit 不跑完整檢查。舊位置的 tasks/、Claude Codex Discussion/ 落第 11 條，文件檢查也擋。
+    id: 10, name: '最上層的文件、任務、討論稿、試作場與 skill', effect: () => ({ cards: 'related', tools: 'related' }),
     matches: path => under('docs/', 'experiments/', '.claude/', '.agents/')(path)
       || (!path.includes('/') && lower(path).endsWith('.md')),
   },
-  { id: 10, name: '以上都不是', matches: () => true, effect: () => 'all' },
+  { id: 11, name: '以上都不是', matches: () => true, effect: () => 'all' },
 ];
 
 export interface PathResult { status: string; path: string; rule: number; ruleName: string }

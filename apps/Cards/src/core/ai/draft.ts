@@ -53,6 +53,9 @@ function addProblem(id: string, sent: readonly ExistingTarget[], now: (id: strin
   return null;
 }
 
+/** 最後一行不是 <<<完>>> 的提示（複製貼上的做法）；直接製作的畫面換成自己的一句（L2 第一輪 R3）。 */
+export const UNENDED_HINT = '最後一行不是 <<<完>>>：AI 可能還沒寫完，或沒有整段複製。回 AI 那邊看它寫完了沒，寫完再按程式碼區塊的「複製」重貼一次';
+
 /**
  * 檢查貼回的回覆（§4）：整理、分段、拆篇，每一篇用 parseDeck 讀、再跑草稿的檢查。sent 是這次送出的已有學習目標，now 問 state 現在的樣子。
  * 沒有錯誤時 pieces 每一篇都可以存；有錯誤時 pieces 照樣列出（畫面寫原因用），不能存。
@@ -107,7 +110,7 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
   // 寫出最後一行（真人測試 2026-11-08：還沒寫完就按了複製，家長看不出少了 <<<完>>>，就勾了確定）。
   if (!segments.ended) {
     const last = normalized.lines.findLastIndex(line => line.trim() !== '');
-    hints.push({ line: last < 0 ? 0 : normalized.raw[last], message: '最後一行不是 <<<完>>>：AI 可能還沒寫完，或沒有整段複製。回 AI 那邊看它寫完了沒，寫完再按程式碼區塊的「複製」重貼一次' });
+    hints.push({ line: last < 0 ? 0 : normalized.raw[last], message: UNENDED_HINT });
   }
   const quoted = (issue: ReplyIssue): ReplyIssue => {
     const quote = issue.line ? quoteLine(reply, issue.line) : undefined;

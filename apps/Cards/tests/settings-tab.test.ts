@@ -353,21 +353,27 @@ void test('AI 連線：舊版 Obsidian（沒有 SecretStorage）只寫一句要�
 
 void test('AI 連線：選單與預設；換服務時模型跟著換、OpenRouter 自己填；每次改都存在這台裝置，換回來模型還在', async t => {
   const { row, storage } = await open(t, { desktop: true });
-  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['OpenAI（推薦）', 'Google Gemini（免費）', 'Anthropic Claude', 'OpenRouter']);
+  assert.deepEqual(row(PROVIDER).dropdown?.options.map(option => option.label), ['ChatGPT（推薦）', 'Gemini（免費）', 'Claude', 'OpenRouter']);
   assert.equal(row(PROVIDER).dropdown?.value, 'openai');
   assert.equal(row(MODEL).dropdown?.value, 'gpt-5.6-terra');
   assert.equal(row(REASONING).dropdown?.value, 'default');
   assert.deepEqual(row(REASONING).dropdown?.options.map(option => option.label), ['照服務的預設', '低', '中', '高']);
   assert.equal(row(KEY).secret?.value, '');
   assert.match(row(KEY).desc, /金鑰只存在這台電腦，不會同步到手機；其他外掛也讀得到 Obsidian 存的金鑰/);
+  // 金鑰到哪裡申請、和訂閱無關（D-244 第 5 點）。
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 OpenAI 的 API 網站申請，另外計費，和 ChatGPT 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   assert.equal(storage(AI_PREFS), null);
 
   row(PROVIDER).dropdown?.choose('google');
   assert.deepEqual(row(MODEL).dropdown?.options.map(option => option.value), ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 Google 的 AI Studio 網站申請，和 Gemini 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   row(MODEL).dropdown?.choose('gemini-3.5-flash-lite');
   row(REASONING).dropdown?.choose('low');
+  row(PROVIDER).dropdown?.choose('anthropic');
+  assert.ok(lines(row(KEY).descEl).includes('金鑰到 Anthropic 的 API 網站申請，另外計費，和 Claude 的訂閱無關。'), lines(row(KEY).descEl).join('|'));
   row(PROVIDER).dropdown?.choose('openrouter');
   assert.equal(row(MODEL).dropdown, null);
+  assert.ok(!lines(row(KEY).descEl).some(line => line.startsWith('金鑰到')), 'OpenRouter 沒有訂閱，不寫');
   assert.equal(row(MODEL).text?.placeholder, 'google/gemini-3.8-flash');
   row(MODEL).text?.type(' google/gemini-3.8-flash ');
   row(PROVIDER).dropdown?.choose('google');
@@ -404,15 +410,22 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   assert.deepEqual(storage(AI_PREFS), { provider: 'openai', models: {}, reasoning: 'default', secrets: { openai: 'family-openai' } });
   row(TEST).buttons[0].click();
   await settle();
-  assert.deepEqual(lines(row(TEST).descEl), ['連得上。']);
+  // 成功打勾、另跳一個提示（實機發現：結果半秒就出來、只有一行灰色小字，再按一次字也沒變，看起來像沒反應）。
+  assert.deepEqual(lines(row(TEST).descEl), ['✓ 連得上，金鑰能用。']);
+  assert.equal(h.notices.at(-1), 'Essence Cards：連得上，金鑰能用。');
   assert.equal(sent.length, 1);
   assert.match(sent[0].url, /^https:\/\/api\.openai\.com\//);
   assert.equal(sent[0].auth, `Bearer ${AI_KEY}`);
+  const shown = h.notices.length;
+  row(TEST).buttons[0].click();
+  await settle();
+  assert.equal(h.notices.length, shown + 1, '同樣的結果再按一次，也要再跳一次提示');
 
   status = 401;
   row(TEST).buttons[0].click();
   await settle();
   assert.deepEqual(lines(row(TEST).descEl), ['金鑰不對或已失效，請到設定頁重新貼上。']);
+  assert.equal(h.notices.at(-1), 'Essence Cards：金鑰不對或已失效，請到設定頁重新貼上。');
 
   // 家長清掉金鑰（存空字串）：說這把是空的，不送出（L2 第一輪 R11 第 4 項）；樣子不像金鑰的也不送出、請家長重貼（R4）。
   row(KEY).secret?.choose('cleared');
@@ -423,7 +436,7 @@ void test('AI 連線：金鑰只記名稱，測試連線時才拿值；成功、
   row(TEST).buttons[0].click();
   await settle();
   assert.deepEqual(lines(row(TEST).descEl), ['這把金鑰看起來不完整，或夾了空白、全形字，請到服務的網站重新複製再貼上。']);
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
 
   // localStorage 的每一筆都掃（§2 驗收「saveLocalStorage 的任何一筆」，L2 第一輪 R11 第 1 項），不只 AI 連線那一筆。
   const stored = h.storedKeys().map(key => [key, storage(key)]);
@@ -487,9 +500,9 @@ void test('AI 連線：同一個金鑰名稱設給了另一家，金鑰那一列
   assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));
   h.row(PROVIDER).dropdown?.choose('google');
   h.row(KEY).secret?.choose('family-openai');
-  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 OpenAI；每一家的金鑰不能通用，請確認選對了。'));
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 ChatGPT；每一家的金鑰不能通用，請確認選對了。'));
   h.row(PROVIDER).dropdown?.choose('openai');
-  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 Google Gemini；每一家的金鑰不能通用，請確認選對了。'));
+  assert.ok(lines(h.row(KEY).descEl).includes('這把金鑰也設給了 Gemini；每一家的金鑰不能通用，請確認選對了。'));
   h.row(PROVIDER).dropdown?.choose('google');
   h.row(KEY).secret?.choose('family-gemini');
   assert.ok(!lines(h.row(KEY).descEl).some(line => hint.test(line)));

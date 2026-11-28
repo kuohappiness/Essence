@@ -5,4 +5,4 @@
 // node_modules，檢查就會讀到工作樹的套件、不是要 commit 的內容。套件被打包進 main.js，不另外載入。
 // tools/check-app-imports.ts 照 tools/dispatch.ts 的 PACKAGE_USERS 只放行這一個檔；改到套件時 Cards 也跑完整檢查。
 export { createAiClient, describeAiError, isAiError } from '../../../../../packages/ai-client/src/index.ts';
-export type { AiClient, AiErrorKind, FetchLike, ProviderSpec } from '../../../../../packages/ai-client/src/index.ts';
+export type { AiClient, AiErrorKind, FetchLike, GenerateRequest, GenerateResult, InputKind, ProgressEvent, ProviderSpec } from '../../../../../packages/ai-client/src/index.ts';

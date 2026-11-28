@@ -1,0 +1,4 @@
+#!/bin/sh
+# 提交前的檢查：金鑰、還沒填的空格、連到不存在的檔、git hook 的執行權限（docs/agents/quality.md〈檢查指令〉）。
+# 沒通過就修到通過，不用 --no-verify 跳過。
+exec node tools/check.mjs --staged

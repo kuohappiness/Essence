@@ -134,7 +134,7 @@ const wire = (path: string, text: string) => async (e: Env) => {
   await e.git('commit', '-q', '-m', 'wire');
 };
 
-/** 文件類（第 9 條）：pre-commit 只跑寫到它的測試，CI 升成 Cards 與共用工具完整。 */
+/** 文件類（第 10 條）：pre-commit 只跑寫到它的測試，CI 升成 Cards 與共用工具完整。 */
 const DOC_CI: Runs = { cards: 'full', tools: 'full' };
 
 const CASES: Case[] = [
@@ -276,6 +276,11 @@ const CASES: Case[] = [
   { name: '改舊位置的 tasks/x.md', change: edit('tasks/x.md'), preCommit: ALL, ci: ALL },
   { name: '改舊位置的 Claude Codex Discussion/x.md', change: edit('Claude Codex Discussion/x.md'), preCommit: ALL, ci: ALL },
   { name: `改 ${SKILL}`, change: edit(SKILL), preCommit: {}, ci: DOC_CI },
+  // 第 9 條：給新專案的模板（D-247）。裡面的 hook、CI 與程式是給新專案的，不是 Essence 的入口：不觸發任何軟體，CI 只跑共用工具。
+  ...['templates/project-starter/files/AGENTS.md', 'templates/project-starter/files/.githooks/pre-commit',
+    'templates/project-starter/files/.github/workflows/check.yml', 'templates/project-starter/files/dot-claude/settings.json',
+    'templates/project-starter/files/tools/check.mjs', 'templates/x.md']
+    .map((path): Case => ({ name: `改 ${path}`, change: edit(path), preCommit: {}, ci: { tools: 'full' } })),
   {
     name: `同一次改 ${C}src/core/files.ts、tools/check-docs.ts 與 ${SPEC}`,
     change: async e => { for (const path of [`${C}src/core/files.ts`, 'tools/check-docs.ts', SPEC]) await edit(path)(e); },
