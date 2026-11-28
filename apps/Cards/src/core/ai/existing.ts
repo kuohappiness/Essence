@@ -2,7 +2,7 @@ import { fieldStart, linesOf, listTree, parseDeck, readProperties } from '../dec
 import type { Deck, DeckProps, Item, Kind, Line, Prompt, Target } from '../deck/index.ts';
 import { planSources, SOURCE_WHY } from './existing-sources.ts';
 import type { Endpoint } from './existing-sources.ts';
-import { ALL_OR_NONE, leaks, WHICH_OF } from './check.ts';
+import { allOrNone, leaks, WHICH_OF } from './check.ts';
 import { encode, indentOf } from './move.ts';
 
 // 加進已有的學習目標（tasks/ai-cards-add.md §3-2）：框裡那一項的第一層子項目分成資料欄位、題目、其他，各自的完整範圍跟著走；
@@ -211,7 +211,7 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   if ((target.kind?.id === 'single' || addsOptions) && now && now.kind?.id !== 'single') return leave(EXISTING_WHY.singleLost);
   // 這次加的選項行有「以上皆是」「以上皆非」（§6，L2 第一輪 R5）：草稿的檢查之外，寫進筆記前再擋一次。
   const single = now?.kind?.id === 'single' ? now.kind.single : null;
-  if (single && addsOptions && single.options.some(option => ALL_OR_NONE.test(option))) return leave(EXISTING_WHY.singleAllNone);
+  if (single && addsOptions && allOrNone(single.options)) return leave(EXISTING_WHY.singleAllNone);
   // 筆記裡已經有選項行、這次只加題（§6、§7 的清單規則，L2 第一輪 R6）：草稿看不到筆記裡的選項行，「下列何者」與寫出答案在這裡擋。
   // 這次才變成單選的（只補選項行），筆記裡原本的題目也變成點選，一起查（L2 第二輪 3）；已經是單選的舊題是家長的，不重查。
   const checked = target.kind?.id === 'single' ? missing.flatMap(unit => unit.prompt ? [unit.prompt] : []) : now?.prompts ?? [];

@@ -52,6 +52,22 @@ void test('options-all-none（錯誤）：加進已有的框也擋（L2 第一�
   assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸')), []);
 });
 
+void test('options-all-none：局部加粗也擋，註解裡寫的不算（L2 第二輪 4）；本文、加進已有的框都一樣', () => {
+  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸;;沙岸;;以上**皆是**')), [['錯誤', 3, 'options-all-none']]);
+  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸;;沙岸;;以上皆**非**')), [['錯誤', 3, 'options-all-none']]);
+  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸;;沙岸;;斷層海岸 %%草稿曾寫以上皆是%%')), []);
+  const box = (...rest: string[]): string => draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...rest, ''].join('\n');
+  assert.deepEqual(found(box('>     - 選項：岩岸;;斷層海岸;;以上**皆是**')), [['錯誤', 9, 'options-all-none']]);
+  assert.deepEqual(found(box('>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：岩岸;;斷層海岸;;以上皆**非**')), [['錯誤', 9, 'options-all-none']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸 %%草稿曾寫以上皆是%%')), []);
+  // 整類（第 2 代）：兩種寫法的每一段加粗，本文與框都擋。
+  for (const phrase of ['以上皆是', '以上皆非']) for (let from = 0; from < 4; from++) for (let to = from + 1; to <= 4; to++) {
+    const option = `${phrase.slice(0, from)}**${phrase.slice(from, to)}**${phrase.slice(to)}`;
+    assert.deepEqual(found(draft(undefined, `    - 選項：岩岸;;沙岸;;${option}`)), [['錯誤', 3, 'options-all-none']], option);
+    assert.deepEqual(found(box(`>     - 選項：岩岸;;斷層海岸;;${option}`)), [['錯誤', 9, 'options-all-none']], option);
+  }
+});
+
 void test('which-of：有選項行的目標寫「下列」「以下何者」是錯誤；沒有選項行的照舊是提醒', () => {
   assert.deepEqual(found(draft('    - 下列何者是臺灣北部海岸的地形？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'which-of']]);
   assert.deepEqual(found(draft('    - 以下何者是臺灣北部海岸的地形？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'which-of']]);

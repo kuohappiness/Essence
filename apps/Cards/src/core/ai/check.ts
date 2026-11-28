@@ -262,7 +262,12 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
 }
 
 // ── 單選與配對（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，AI 的草稿算錯誤，退回重做；本文與候選框都跑，已有框在 parseBox。 ──
-export const ALL_OR_NONE = /以上皆是|以上皆非/;
+const ALL_OR_NONE = /以上皆是|以上皆非/;
+/**
+ * 讀成的選項有「以上皆是」「以上皆非」（§6）：照字鍵比對，局部加粗也算；註解解析時已經拿掉，不算（L2 第一輪 R5、第二輪 4）。
+ * 本文、候選框、加進已有的框與寫進筆記前（existing.ts）共用。
+ */
+export const allOrNone = (options: readonly string[]): boolean => options.some(option => ALL_OR_NONE.test(pickKey(option)));
 /**
  * 點選作答的題目寫出這一題自己的答案（§7 再試一次，2026-11-28）：孩子不用想就點得對。比對同比較卡（全半形、大小寫、粗體不分）；
  * 一個字的答案常是別的詞的一部分，不算。寫到同一組別的選項不算（洩漏只算這一題自己的答案）。
@@ -276,7 +281,7 @@ function checkSingle(deck: Deck, issue: Report): void {
   for (const p of deck.problems) if (p.code === 'options-invalid') issue(p.line + 1, '錯誤', p.code, p.message);
   for (const t of deck.targets) {
     const single = t.kind?.id === 'single' ? t.kind.single : undefined;
-    if (single?.options.some(option => ALL_OR_NONE.test(option))) issue(t.line + 1, '錯誤', 'options-all-none', ALL_NONE_WHY);
+    if (single && allOrNone(single.options)) issue(t.line + 1, '錯誤', 'options-all-none', ALL_NONE_WHY);
   }
 }
 
@@ -489,14 +494,14 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         checkImageLines(child, 'shared');
       }
     });
-    // 加進已有的框沒有跑 checkSingle（題目在筆記裡，框裡讀不成單選）：選項行自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5）。
-    if (where === 'existing' && children.some(child => OPTIONS_LINE.test(child.text) && ALL_OR_NONE.test(child.text))) issue(node.line, '錯誤', 'options-all-none', ALL_NONE_WHY);
     // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
-    // 解析器略過沒有題目的項目、不讀選項行（parseBox 報不到），選項行本身寫錯在這裡報（L2 第二輪 2）；答案在不在選項裡，寫進筆記前核對。
     if (!target.questions.length && !(where === 'existing' && optioned)) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
-    if (!target.questions.length && where === 'existing' && optioned) {
+    // 加進已有的框的選項行：寫錯的，有題目的由 parseBox 報；沒有題目的解析器略過，在這裡報（L2 第二輪 2，答案在不在選項裡寫進筆記前核對）。
+    // 框裡讀不成單選、沒有跑 checkSingle（題目在筆記裡）：讀成的選項自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5、第二輪 4）。
+    if (where === 'existing' && optioned) {
       const read = readOptionLines(children.filter(child => OPTIONS_LINE.test(child.text)).map((child, at) => ({ at, line: child.line, text: child.text, solid: !child.children.length && !child.cont.length })));
-      if ('reason' in read) issue(read.line, '錯誤', 'options-invalid', optionsInvalid(read.line, read.reason).message);
+      if ('reason' in read) { if (!target.questions.length) issue(read.line, '錯誤', 'options-invalid', optionsInvalid(read.line, read.reason).message); }
+      else if (allOrNone(read.options)) issue(node.line, '錯誤', 'options-all-none', ALL_NONE_WHY);
     }
     if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
     if (where !== 'existing' && !target.data['出處']) issue(node.line, '不符', 'no-source', '沒有出處（通用規則 13）');
