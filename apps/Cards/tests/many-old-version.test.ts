@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
-import { oldRun } from './helpers/old-version.ts';
+import { parseLine } from '../src/core/study/index.ts';
+import { oldRun, PARSE_LINE_SCRIPT } from './helpers/old-version.ts';
 import type { OldRun } from './helpers/old-version.ts';
 import { TOWNS } from './helpers/many.ts';
 
@@ -52,4 +53,25 @@ void test('新版、只有第 1 段、v0.6.0 讀同一份卡組：卡型與提�
   assert.deepEqual(prints(part), prints(nowRun));
   assert.deepEqual(prints(old), prints(nowRun));
   assert.deepEqual(old.targets.map(target => target.shared), nowRun.targets.map(target => target.shared));
+});
+
+void test('紀錄：v0.6.0 與只有第 1 段的 parseLine 讀 pick 是清單的行，每一行都是合法的作答（不用 need）；新版也一樣', async t => {
+  // §5〈紀錄〉的例子，加一行第一次按沒印象、一行 also 裡的 pick 是清單。
+  const lines = [
+    '{"t":"2026-12-10T19:00:00.000+08:00","lt":"lukang","r":"near","v":"3c4d5e6f","pick":["A","D"],"retry":"right"}',
+    '{"t":"2026-12-10T19:00:00.001+08:00","lt":"dajia0","r":"good","v":"7a8b9c0d","pick":["B"],"with":"2026-12-10T19:00:00.000+08:00"}',
+    '{"t":"2026-12-10T19:00:00.002+08:00","lt":"waipu0","r":"miss","v":"1e2f3a4b","pick":["C","D","A"],"retry":"wrong","with":"2026-12-10T19:00:00.000+08:00"}',
+    '{"t":"2026-12-10T19:00:00.003+08:00","lt":"mammal","r":"miss","v":"5a6b7c8d","pick":null}',
+    '{"t":"2026-12-10T19:00:00.004+08:00","lt":"qing00","r":"near","v":"9e0f1a2b","pick":["B"],"retry":"right","also":[{"v":"3c4d5e6f","r":"good","pick":["A","D"]}]}',
+  ];
+  const at = (t: string): number => Date.parse(t);
+  const want = [
+    { kind: 'review', t: '2026-12-10T19:00:00.000+08:00', at: at('2026-12-10T19:00:00.000+08:00'), offset: 480, typed: null, src: null, lt: 'lukang', r: 'near', v: '3c4d5e6f' },
+    { kind: 'review', t: '2026-12-10T19:00:00.001+08:00', at: at('2026-12-10T19:00:00.001+08:00'), offset: 480, typed: null, src: null, lt: 'dajia0', r: 'good', v: '7a8b9c0d', with: '2026-12-10T19:00:00.000+08:00' },
+    { kind: 'review', t: '2026-12-10T19:00:00.002+08:00', at: at('2026-12-10T19:00:00.002+08:00'), offset: 480, typed: null, src: null, lt: 'waipu0', r: 'miss', v: '1e2f3a4b', with: '2026-12-10T19:00:00.000+08:00' },
+    { kind: 'review', t: '2026-12-10T19:00:00.003+08:00', at: at('2026-12-10T19:00:00.003+08:00'), offset: 480, typed: null, src: null, lt: 'mammal', r: 'miss', v: '5a6b7c8d' },
+    { kind: 'review', t: '2026-12-10T19:00:00.004+08:00', at: at('2026-12-10T19:00:00.004+08:00'), offset: 480, typed: null, src: null, lt: 'qing00', r: 'near', v: '9e0f1a2b', also: ['3c4d5e6f'] },
+  ];
+  assert.deepEqual(lines.map(line => parseLine(line)), want);
+  for (const ref of ['v0.6.0', PART_ONE]) assert.deepEqual(await oldRun(t, ref, [lines], PARSE_LINE_SCRIPT), want, ref);
 });

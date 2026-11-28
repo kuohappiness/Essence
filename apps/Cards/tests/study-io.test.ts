@@ -150,6 +150,11 @@ const INVALID: [string, unknown][] = [
   ['undo 是空字串', { undo: '' }],
   ['undo 是空白', { undo: '  ' }],
   ['錯題補強不是 miss', { lt: 'a', r: 'good', src: 'mistake' }],
+  // 一列可以放好幾個的 pick（tasks/matching-many.md §5〈紀錄〉）：一個以上字串的清單；空的、有不是字串的、不是字串也不是清單的都不寫，also 裡也一樣。
+  ['pick 是空的清單', { lt: 'a', r: 'good', v: '12345678', pick: [] }],
+  ['pick 清單裡有數字', { lt: 'a', r: 'good', v: '12345678', pick: ['A', 17] }],
+  ['pick 是數字', { lt: 'a', r: 'good', v: '12345678', pick: 17 }],
+  ['also 的 pick 是空的清單', { lt: 'a', r: 'good', v: '12345678', pick: null, also: [{ v: 'x', r: 'good', pick: [] }] }],
   ['錯題補強的 lt 是空白', { lt: ' ', r: 'miss', src: 'mistake' }],
   ['cap 是 NaN', { set: 'cap', val: NaN }],
   ['cap 是無限大', { set: 'cap', val: Infinity }],
@@ -185,6 +190,7 @@ void test('合法的每一種都寫得出去，寫出來的字不變', async () 
   const cases: [NewEntry, string][] = [
     [{ lt: 'a', r: 'miss', v: '', typed: 'wrong', retry: 'not-needed', src: 'check' }, '{"lt":"a","r":"miss","v":"","typed":"wrong","retry":"not-needed","src":"check"}'],
     [{ lt: 'a', r: 'miss', src: 'mistake' }, '{"lt":"a","r":"miss","src":"mistake"}'],
+    [{ lt: 'a', r: 'near', v: '3c4d5e6f', pick: ['A', 'D'], retry: 'right', also: [{ v: 'x', r: 'good', pick: ['B'] }] }, '{"lt":"a","r":"near","v":"3c4d5e6f","pick":["A","D"],"retry":"right","also":[{"v":"x","r":"good","pick":["B"]}]}'],
     [{ undo: '2026-10-24T19:00:00.000+08:00' }, '{"undo":"2026-10-24T19:00:00.000+08:00"}'],
     [{ set: 'cap', val: 0 }, '{"set":"cap","val":0}'],
     [{ set: 'retention', val: 0.9 }, '{"set":"retention","val":0.9}'],

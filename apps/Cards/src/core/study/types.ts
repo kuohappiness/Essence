@@ -44,7 +44,8 @@ export type NewEntry =
   // typed：打字卡第 1 步的結果；retry：第 2 步（原形提示）的結果，第 1 步 wrong／skip 時一定寫，跳過第 2 步寫 not-needed
   // （D-121、D-115、syntax.md §5）。評分只看第 1 步；retry 只是證據，parseLine 不讀它。
   // pick、also、with：比較卡（tasks/question-type-seam.md §4）。pick 是對答案時那一格的字，第一次按「沒印象」是 null；also 是同一個目標的其他格。
-  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; cell?: number; pick?: string | null; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; also?: readonly PickCell[]; with?: string; src?: 'check' }
+  // 一列可以放好幾個的卡（tasks/matching-many.md §5〈紀錄〉）pick 是一個以上字串的清單，照孩子放的先後。
+  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; cell?: number; pick?: PickWords; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; also?: readonly PickCell[]; with?: string; src?: 'check' }
   | { lt: string; r: 'miss'; src: 'mistake' }
   | { undo: string }
   | { set: 'cap'; val: number }
@@ -58,8 +59,10 @@ export type NewEntry =
   // 考試範圍（syntax.md §5、tasks/exam-scope.md §2-5）：只記外掛自己的寫入。
   | { set: 'exam'; val: ExamLog };
 
+/** 對答案時那一格的字（syntax.md §5）：一格一個字的是字串，一列可以放好幾個的是清單；第一次按「沒印象」是 null。 */
+export type PickWords = string | readonly string[] | null;
 /** 比較卡同一個目標的另一格：意思和那一行最上層的同名欄位相同。 */
-export interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip'; cell?: number }
+export interface PickCell { v: string; r: Rating; pick: PickWords; retry?: 'right' | 'wrong' | 'skip'; cell?: number }
 
 export interface ExamLog {
   id: string;

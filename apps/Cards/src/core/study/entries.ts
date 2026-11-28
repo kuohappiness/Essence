@@ -56,8 +56,14 @@ function entryProblem(entry: NewEntry): string | null {
   if ('set' in entry) return changeProblem(entry);
   if (blank(entry.lt)) return 'lt 是空白';
   const rating: unknown = entry.r;
-  return entry.src === 'mistake' && rating !== 'miss' ? '錯題補強一定是 miss' : null;
+  if (entry.src === 'mistake') return rating !== 'miss' ? '錯題補強一定是 miss' : null;
+  if (!pickWords(entry.pick) || !(entry.also ?? []).every(cell => pickWords(cell.pick))) return 'pick 不是字串、一個以上字串的清單或 null';
+  return null;
 }
+
+/** pick 的契約（tasks/matching-many.md §5〈紀錄〉）：沒有、null、字串，或一個以上字串的清單；空的清單、清單裡有不是字串的都不行。 */
+const pickWords = (value: unknown): boolean => value === undefined || value === null || typeof value === 'string'
+  || (Array.isArray(value) && value.length > 0 && value.every(each => typeof each === 'string'));
 
 /**
  * 新寫入的一行（技術債「紀錄的時間跨啟動會撞」的 (a)）：值先符合那一種的契約，編碼後確認讀得回來；不合就丟錯，呼叫端不排進寫入。

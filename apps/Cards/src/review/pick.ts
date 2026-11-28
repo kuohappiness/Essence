@@ -1,19 +1,25 @@
 import { questionType } from '../core/study/index.ts';
 import type { Card, Rating } from '../core/study/index.ts';
 import type { Flow, ReviewLine } from './flow.ts';
+import { AFTER_FILL, ALL_RIGHT, changeable, NONE, RANK, SAME_KEY } from './pick-shared.ts';
+import { createPickMany } from './pick-many.ts';
 
 // 點選填空的作答流程（tasks/question-type-seam.md §6）：純程式，時間由 now 給。第一次的選擇與評分的對應（§4）只寫在這裡。
-
-/** 同一個字連點，這麼久之內不算（規畫〈畫面與防點錯〉）。 */
-const SAME_KEY = 300;
-/** 最後一次填字之後，這麼久之內的「對答案」不算：手順勢多按一下。 */
-const AFTER_FILL = 350;
+// 一列可以放好幾個的配對（tasks/matching-many.md §5）走 pick-many.ts，這裡只在入口分。
 
 type PickCellState = 'open' | 'filled' | 'skipped' | 'right' | 'retry' | 'near' | 'miss' | 'shown';
+/**
+ * 一列可以放好幾個的卡裡的一個字（tasks/matching-many.md §5〈接點〉）：placed 是放著的（作答、再選時點了拿掉）；right、near 是這一列對了，
+ * 字照列的顏色；結果裡沒對的列，在答案裡的是 kept、不在答案裡的是 struck（劃掉）、答案裡沒放的是 missed（漏了）；預覽是 shown。
+ */
+type PickChipState = 'placed' | 'right' | 'near' | 'kept' | 'struck' | 'missed' | 'shown';
+export interface PickChip { text: string; state: PickChipState }
 interface PickCellView {
-  /** 這一格畫面上的字；還沒填是空字串。retry 是剛才選錯的字（劃掉）。 */
+  /** 這一格畫面上的字；還沒填是空字串。retry 是剛才選錯的字（劃掉）。一列可以放好幾個的卡是放著的字用頓號接（看 chips）。 */
   text: string;
   state: PickCellState;
+  /** 一列可以放好幾個的卡才有：這一列的小塊，照畫面的先後；跳過、沒印象（再選時）是空的。 */
+  chips?: readonly PickChip[];
 }
 export interface PickView {
   stage: 'answer' | 'retry' | 'result';
@@ -61,15 +67,9 @@ interface Cell {
   held: number | null;
 }
 
-const RANK: Record<Rating, number> = { miss: 0, near: 1, good: 2, easy: 3 };
-const ALL_RIGHT: readonly Rating[] = ['good', 'easy'];
-const NONE: readonly Rating[] = [];
-
-/** 回看能改成的評分（§8 💡）：孩子自己選的才能改，程式判的不能改。要換做法只改這裡。 */
-const changeable = (allRight: boolean): readonly Rating[] => allRight ? ALL_RIGHT : NONE;
-
 /** 一張比較卡從作答開始。revealed：預覽時自動展開答案（D-161）：直接到結果階段，空格是答案，沒有對錯記號與結果。 */
 export function createPick(card: Card, options: { now: () => number; revealed?: boolean }): Flow {
+  if (card.group?.many) return createPickMany(card, options);
   const cells: Cell[] = card.blanks.map(blank => ({ lt: blank.lt, v: blank.prompt.fingerprint, answer: blank.answer ?? '', filled: null, skipped: false, first: null, status: 'open', held: null, ...(blank.cell === undefined ? {} : { cell: blank.cell }) }));
   const keys = card.group?.keys ?? [];
   /** 排序（全詩順序卡 D-187、D-204，句子排序）：放過的字鍵會變淡，點了是交換。 */

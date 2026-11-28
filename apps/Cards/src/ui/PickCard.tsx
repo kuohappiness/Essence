@@ -172,8 +172,9 @@ export const pickScreen: Screen = {
   },
   tap() {},
   enter(view, { act, commit }) {
-    const { pick } = partsOf(view);
-    if (pick.stage === 'answer') act({ kind: 'check' });
+    const { pick, group } = partsOf(view);
+    // 一列可以放好幾個的卡再選時也要按「對答案」（tasks/matching-many.md §5〈接點〉）。
+    if (pick.stage === 'answer' || (pick.stage === 'retry' && group.many)) act({ kind: 'check' });
     else if (pick.committable) commit();
   },
   stage: () => '',

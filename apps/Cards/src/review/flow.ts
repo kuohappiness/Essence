@@ -1,5 +1,5 @@
 import { questionType } from '../core/study/index.ts';
-import type { Card, PickCell, QuestionType, Rating } from '../core/study/index.ts';
+import type { Card, PickCell, PickWords, QuestionType, Rating } from '../core/study/index.ts';
 import { createFlip } from './flip.ts';
 import { createPick } from './pick.ts';
 import type { PickView } from './pick.ts';
@@ -18,8 +18,8 @@ export interface ReviewLine {
   retry?: 'right' | 'wrong' | 'skip' | 'not-needed';
   /** 全詩順序卡：這一行最上層是第幾格，從 1 算（D-204）。 */
   cell?: number;
-  /** 比較卡（tasks/question-type-seam.md §4）：對答案時那一格的字、同一個目標的其他格。with 由 Session 寫入時加。 */
-  pick?: string | null;
+  /** 比較卡（tasks/question-type-seam.md §4）：對答案時那一格的字（一列可以放好幾個的是清單）、同一個目標的其他格。with 由 Session 寫入時加。 */
+  pick?: PickWords;
   also?: readonly PickCell[];
   with?: string;
 }
@@ -39,7 +39,9 @@ interface FlowView {
 export type FlowAction =
   | { kind: 'reveal' } | { kind: 'input'; text: string } | { kind: 'submit' } | { kind: 'skip' }
   // 比較卡：點字鍵、點那一句、對答案（§6）。at 是第幾個字鍵（CardGroup.keys）：全詩順序卡的相同句子靠它分（L2 R1）。
-  | { kind: 'key'; key: string; at?: number } | { kind: 'row'; index: number } | { kind: 'check' };
+  | { kind: 'key'; key: string; at?: number } | { kind: 'row'; index: number } | { kind: 'check' }
+  // 一列可以放好幾個（tasks/matching-many.md §5）：拿掉第 index 列的第 at 個字。
+  | { kind: 'unpick'; index: number; at: number };
 
 /** 回看要的（D-084）。 */
 export interface LookBack {
