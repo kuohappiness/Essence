@@ -92,15 +92,22 @@ export function calloutHead(raw: string): { title: string; folded: boolean } | n
   return head ? { title: head[3], folded: head[2] === '-' } : null;
 }
 
-/** 還開著的清單裡，最外層的項目文字開始的欄；不在清單裡是無限大。空行、接續、清單項目裡的圍欄不結束清單。 */
-function openColumn(blocks: readonly Block[]): number {
-  let column = Infinity;
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const block = blocks[i];
-    if (block.kind === 'item') column = Math.min(column, block.contentCol);
-    else if (!(block.kind === 'blank' || block.kind === 'cont' || (block.kind === 'code' && block.col !== null))) break;
+/**
+ * 還開著的清單項目，由外到內各自的文字從第幾欄開始；不在清單裡是空的。空行、接續、清單項目裡的圍欄不結束清單。
+ * 照 treeOf 的堆疊算：新的項目、縮排的分隔線與圍欄結束比它深的項目，被結束的前一項不算（L2 第五輪）。
+ */
+function openItems(blocks: readonly Block[]): number[] {
+  const continues = (block: Block): boolean => block.kind === 'item' || block.kind === 'blank' || block.kind === 'cont' || (block.kind === 'code' && block.col !== null);
+  let start = blocks.length;
+  while (start > 0 && continues(blocks[start - 1])) start--;
+  const open: number[] = [];
+  for (const block of blocks.slice(start)) {
+    const col = block.kind === 'item' || block.kind === 'cont' || block.kind === 'code' ? block.col : undefined;
+    if (col === undefined || col === null) continue;
+    while (open.length && open[open.length - 1] > col) open.pop();
+    if (block.kind === 'item') open.push(block.contentCol);
   }
-  return column;
+  return open;
 }
 
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
@@ -128,11 +135,13 @@ export function blocksOf(lines: readonly Line[]): Block[] {
     if (heading) { blocks.push({ kind: 'heading', line: no, level: heading[1].length, text: heading[2] }); continue; }
     const line = expand(raw);
     // 分隔線（`---`、`***`、`- - -`）不是清單項目，同 listTree（CommonMark 4.1）：縮到還開著的某一項的文字底下，是那一項的接續（L2 第三輪 4）；
-    // 沒有縮到的自己一塊、清單結束，下一行另外判斷，例如篇名（L2 第四輪 1）。
+    // 沒有縮到的自己一塊、清單結束，下一行另外判斷，例如篇名（L2 第四輪 1）。比所屬的那一項多縮 4 欄以上的不是分隔線，照一般的一行（L2 第五輪）。
     if (/^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line.trim())) {
-      const col = indentOf(line);
-      blocks.push(col >= openColumn(blocks) ? { kind: 'cont', line: no, text: raw.trim(), col } : { kind: 'rule', line: no });
-      continue;
+      const col = indentOf(line), owner = findLast(openItems(blocks), contentCol => contentCol <= col);
+      if (col - (owner ?? 0) < 4) {
+        blocks.push(owner !== undefined ? { kind: 'cont', line: no, text: raw.trim(), col } : { kind: 'rule', line: no });
+        continue;
+      }
     }
     const item = /^( *)([-*+]|\d+[.)])( +|$)(.*)$/.exec(line);
     if (item) {
