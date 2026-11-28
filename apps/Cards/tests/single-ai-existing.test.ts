@@ -70,3 +70,10 @@ void test('加了有「以上皆是」「以上皆非」的選項行（L2 第一
   assert.equal(left(item('    - 選項：岩岸、沙岸、斷層海岸、以上皆是'), dest(Q1)), EXISTING_WHY.singleAllNone);
   assert.equal(left(item('    - 野柳在臺灣哪一種海岸？ :: 岩岸', '    - 選項：岩岸、沙岸、以上皆非'), dest(Q1)), EXISTING_WHY.singleAllNone);
 });
+
+void test('筆記裡已經是單選、這次只加題（L2 第一輪 R6）：題目寫「下列」「以下何者」，寫進筆記前擋', () => {
+  assert.equal(left(item('    - 下列何者是臺灣北部最多的海岸？ :: 岩岸'), dest(Q1, OPTIONS)), EXISTING_WHY.singleWhichOf);
+  assert.equal(left(item('    - 以下何者在北部最多？ :: 岩岸'), dest(Q1, OPTIONS)), EXISTING_WHY.singleWhichOf);
+  // 不是單選的目標照舊寫（草稿的提醒已經報過）。
+  assert.equal(planExisting(input(item('    - 下列何者是臺灣北部最多的海岸？ :: 岩岸'), dest(Q1))).kind, 'plan');
+});

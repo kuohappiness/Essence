@@ -263,6 +263,8 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
 
 // ── 單選與配對（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，AI 的草稿算錯誤，退回重做；本文與候選框都跑，已有框在 parseBox。 ──
 export const ALL_OR_NONE = /以上皆是|以上皆非/;
+/** 考卷式的問法（§6）：有選項行的目標是錯誤，沒有的是提醒。 */
+export const WHICH_OF = /下列|以下何者/;
 const ALL_NONE_WHY = '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案';
 function checkSingle(deck: Deck, issue: Report): void {
   for (const p of deck.problems) if (p.code === 'options-invalid') issue(p.line + 1, '錯誤', p.code, p.message);
@@ -436,7 +438,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     if (/哪一[^，,；;？?]*[，,；;][^？?]*就[^？?]*[？?]|哪一[^，,；;？?]*(較|多|少)[^，,；;？?]*[，,；;][^？?]*(比較|較)[^？?]*[？?]|(較|比較)(多|少)[^？?]*[，,；;][^？?]*哪一[^？?]*(比較|較)[^？?]*[？?]/.test(q.front)) issue(node.line, '提醒', 'leak-pattern', '「哪一個……，……就比較……？」常把答案寫進題目（通用規則 10）');
     // 「……？為什麼？」是一題理解題；其他一行問兩個問題的，要拆開（通用規則 8）。
     if ((q.front.match(/[？?]/g) ?? []).length >= 2 && !/[？?]\s*為什麼[？?]\s*$/.test(q.front)) issue(node.line, '提醒', 'two-questions', '一題問了兩件事（通用規則 8）');
-    if (optioned && /下列|以下何者/.test(q.front)) issue(node.line, '錯誤', 'which-of', '有選項行的目標不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答，選項只給孩子點選');
+    if (optioned && WHICH_OF.test(q.front)) issue(node.line, '錯誤', 'which-of', '有選項行的目標不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答，選項只給孩子點選');
     else if (q.front.includes('下列')) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
     if (/如上|上述|上圖|下圖/.test(q.front) && !images(q.front).length) issue(node.line, '提醒', 'context', '題目依賴上下文（通用規則 9）');
     return q;
