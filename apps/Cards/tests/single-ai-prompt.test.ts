@@ -6,7 +6,7 @@ import type { CardForm, DeepenInput, ExistingTarget } from '../src/core/ai/index
 import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
 import { applyTaskOptions, leanList } from '../tools/rule-test/tasks.ts';
 
-// 單選與配對送給 AI 的（tasks/matching-single-choice.md §6、§7）：已有目標的清單帶選項、社會勾了點選填空多送配對與單選。預期值手寫。
+// 單選與配對送給 AI 的（tasks/matching-single-choice.md §6、§7）：已有目標的清單帶選項；社會的配對規則第 1 段先不送，勾了點選填空也只送比較卡的。預期值手寫。
 const subject = (key: string) => RULE_SUBJECTS.find(each => each.key === key)!;
 const form = (over: Partial<CardForm> = {}): CardForm => ({ subject: 'social', term: '五上', unit: '2-1 臺灣的海岸', purpose: '準備段考', supplement: false, pick: true, adjust: '', material: '', ...over });
 const DECK = parseDeck([
