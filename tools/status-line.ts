@@ -1,12 +1,13 @@
 // 入口的狀態行（D-217 第 2 點）：`狀態：<狀態值>｜下一步：<一句>｜等誰：<值>`，結束時第二欄寫「完成：」。
 // 文件檢查（check-docs.ts）與產生狀態板的工具（roadmap-sync.ts）共用這裡的解析。寫法見 docs/agents/workflow.md〈入口的狀態行〉。
+import { LINK_TARGET } from './link-target.ts';
 
 /** 不帶參數的狀態值；另外還有 `已結案 → <D-ID 或連結>` 與 `暫停（<原因>）`。 */
 const STATES = ['規劃中', '討論中', '實作中', '待審', '待實機', '等觸發點', '已合併', '已結案'];
 const WHO = ['使用者', 'Claude', 'Codex', '實機'];
 const NONE = '—';
 /** 「已結案 →」後面的下一站：一個以上的 D-ID 或行內連結，用「、」接（L2 R9）。 */
-const STATION = String.raw`(?:D-\d+|\[[^\]]+\]\((?:<[^>]+>|[^)\s]+)\))`;
+const STATION = String.raw`(?:D-\d+|\[[^\]]+\]\((?:${LINK_TARGET})\))`;
 const NEXT = new RegExp(String.raw`^${STATION}(?:\s*、\s*${STATION})*$`);
 
 export interface Status {
@@ -46,7 +47,7 @@ export function parseStatus(line: string): { status: Status } | { error: string 
     if (arrow[1] !== '已結案') return { error: `箭頭只能接在「已結案」後面，現在是「${arrow[1]}」` };
     if (!NEXT.test(arrow[2])) return { error: '「已結案 →」後面接下一站：D-ID 或連結，好幾站用「、」接，備註寫在「完成：」' };
     // 下一站是 repo 裡的一站：外部連結報錯（L2 第二輪 N8）。
-    const hrefs = [...arrow[2].matchAll(/\]\((<[^>]+>|[^)\s]+)\)/g)].map(m => m[1].replace(/^<|>$/g, ''));
+    const hrefs = [...arrow[2].matchAll(new RegExp(String.raw`\]\((${LINK_TARGET})\)`, 'g'))].map(m => m[1].replace(/^<|>$/g, ''));
     if (hrefs.some(href => /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//'))) {
       return { error: '「已結案 →」的下一站要在 repo 裡：D-ID 或連到 repo 裡的文件，不連外部網址' };
     }

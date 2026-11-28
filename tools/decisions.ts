@@ -6,6 +6,7 @@
 // - 新的：條目裡寫一行「主題：…｜一句話：…」；狀態行用「｜」分段，「來自」「修改」「補充」「取代」開頭的段裡的 D-ID 是它的上游。
 //   舊決定的狀態行不再手改：工具從新決定反推它的後續見與已取代。
 import { fencedLines } from './fences.ts';
+import { LINK_TARGET } from './link-target.ts';
 
 /** 新寫法的第一條決定。合併工作流程上線的 PR 前，改成 origin/main 當時的最大號加一。 */
 export const BOUNDARY = 218;
@@ -95,7 +96,7 @@ function mask(text: string): string {
 }
 
 const DATE = /\b\d{4}-\d{2}-\d{2}(?:～(?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|\d{2}))?(?=｜|\s|$)/;
-const LINK = /\[[^\]]*\]\((<[^>]*>|[^)\s]*)(?:\s+"[^"]*")?\)/g;
+const LINK = new RegExp(String.raw`\[[^\]]*\]\(((?:${LINK_TARGET})?)(?:\s+"[^"]*")?\)`, 'g');
 const TOPIC_LINE = /^主題：(.+?)｜一句話：(.+)$/m;
 
 /** 狀態行的一段裡出現的 D-ID（文字或連結文字），補成三位數。 */

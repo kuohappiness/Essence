@@ -11,6 +11,7 @@ import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt from 'markdown-it';
 import { replaySides, replaying } from './git-state.ts';
+import { asTarget, LINK_TARGET } from './link-target.ts';
 import { parseStatus, type Status } from './status-line.ts';
 
 const ROADMAP = /^(?:apps\/[^/]+\/)?docs\/roadmap\.md$/;
@@ -43,7 +44,7 @@ export interface Source {
 const markdown = new MarkdownIt();
 const lf = (text: string) => text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
 const isExternal = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//');
-const INLINE_LINK = /\[([^\]]*)\]\((<[^>]*>|[^)\s]+)\)/g;
+const INLINE_LINK = new RegExp(String.raw`\[([^\]]*)\]\((${LINK_TARGET})\)`, 'g');
 const REFERENCE_LINK = /\[[^\]]*\]\[[^\]]*\]/;
 
 /** 台北時間的日期 YYYY-MM-DD。 */
@@ -124,7 +125,7 @@ function statusLineOf(text: string): string | undefined {
 }
 
 /**
- * 入口裡的文字搬進 roadmap：連結改成以 roadmap 為基準、只有錨點的接到入口檔、有空白的路徑用 <> 包；參照式連結報錯；| 跳脫。
+ * 入口裡的文字搬進 roadmap：連結改成以 roadmap 為基準、只有錨點的接到入口檔、有空白或不成對括號的路徑用 <> 包；參照式連結報錯；| 跳脫。
  * 路徑照原本的編碼改基準，不解開（%23 解開會變成錨點，L2 R4）；行內程式碼裡的連結照原樣。
  */
 export function moveText(text: string, entry: string, roadmap: string): { text: string } | { error: string } {
@@ -142,7 +143,7 @@ export function moveText(text: string, entry: string, roadmap: string): { text: 
     const anchor = hash < 0 ? '' : href.slice(hash);
     const target = path ? posix.normalize(posix.join(posix.dirname(here), path)) : here;
     const relative = posix.relative(base, target) + anchor;
-    moved += text.slice(last, link.index) + `[${label}](${/\s/.test(relative) ? `<${relative}>` : relative})`;
+    moved += text.slice(last, link.index) + `[${label}](${asTarget(relative)})`;
     last = link.index + whole.length;
   }
   moved += text.slice(last);
@@ -183,7 +184,7 @@ const doneCell = (work: string, status: Status, text: string, entryCell: string)
   const link = inlineLinks(entryCell).find(m => !isExternal(m[2].replace(/^<|>$/g, '')))!;
   return `**${work.replace(/^\*\*(.*)\*\*$/, '$1')}**：${text}（${status.state}，[入口](${link[2]})）`;
 };
-const DONE_CELL = /^\*\*(.+?)\*\*：(.+)（(已合併|已結案)，\[入口\]\((<[^>]+>|[^)\s]+)\)）$/;
+const DONE_CELL = new RegExp(String.raw`^\*\*(.+?)\*\*：(.+)（(已合併|已結案)，\[入口\]\((${LINK_TARGET})\)）$`);
 
 const column = (table: Table, name: string) => table.header.indexOf(name);
 

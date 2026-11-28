@@ -69,9 +69,9 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
   await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../secretlint.mjs', import.meta.url), 'utf8'));
   await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../../.secretlintrc.json', import.meta.url), 'utf8'));
-  // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製（文件檢查讀決策紀錄與狀態行的模組也是）；
+  // hook 的邏輯在 tools/hooks.ts，分派表與外掛之間的 import 檢查照真的複製（文件檢查讀決策紀錄、狀態行與切連結的模組也是）；
   // 兩份 skill 與 roadmap 的檢查換成替身（這裡沒有）。
-  for (const name of ['check-local-paths.ts', 'hooks.ts', 'deps-state.ts', 'git-state.ts', 'dispatch.ts', 'apps.ts', 'check-app-imports.ts', 'decisions.ts', 'fences.ts', 'status-line.ts']) {
+  for (const name of ['check-local-paths.ts', 'hooks.ts', 'deps-state.ts', 'git-state.ts', 'dispatch.ts', 'apps.ts', 'check-app-imports.ts', 'decisions.ts', 'fences.ts', 'status-line.ts', 'link-target.ts']) {
     await writeFile(join(root, 'tools', name), await readFile(new URL('../' + name, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts', 'roadmap-sync.ts']) await writeFile(join(root, 'tools', name), 'export {};\n');
@@ -254,7 +254,7 @@ void test('R2 合併進 main 前查同一個 head 的 push run：綠燈才放行
   const checker = await readFile(new URL('../check-docs.ts', import.meta.url), 'utf8');
   await writeFile(join(repo, 'tools/check-docs.ts'), checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];'));
   for (const path of ['tools/hooks.ts', 'tools/deps-state.ts', 'tools/git-state.ts', 'tools/dispatch.ts', 'tools/apps.ts', 'tools/secretlint.mjs', 'tools/check-local-paths.ts', 'tools/check-app-imports.ts',
-    'tools/decisions.ts', 'tools/fences.ts', 'tools/status-line.ts', '.secretlintrc.json']) {
+    'tools/decisions.ts', 'tools/fences.ts', 'tools/status-line.ts', 'tools/link-target.ts', '.secretlintrc.json']) {
     await writeFile(join(repo, path), await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
   }
   for (const name of ['check-skill-mirror.ts', 'roadmap-board.ts', 'roadmap-sync.ts']) await writeFile(join(repo, 'tools', name), 'export {};\n');
@@ -364,4 +364,4 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   });
   assert.equal((await run('git', ['rev-list', '--count', 'HEAD'], isolated)).stdout.trim(), '1');
 });
-
+
