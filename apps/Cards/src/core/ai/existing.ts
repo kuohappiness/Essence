@@ -212,10 +212,12 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   // 這次加的選項行有「以上皆是」「以上皆非」（§6，L2 第一輪 R5）：草稿的檢查之外，寫進筆記前再擋一次。
   const single = now?.kind?.id === 'single' ? now.kind.single : null;
   if (single && addsOptions && single.options.some(option => ALL_OR_NONE.test(option))) return leave(EXISTING_WHY.singleAllNone);
-  // 筆記裡已經有選項行、這次只加題（§6、§7 的清單規則，L2 第一輪 R6）：草稿看不到筆記裡的選項行，「下列何者」在這裡擋。
-  const added = missing.flatMap(unit => unit.prompt?.kind === 'qa' ? [unit.prompt] : []);
-  if (single && added.some(prompt => WHICH_OF.test(prompt.question))) return leave(EXISTING_WHY.singleWhichOf);
-  if (single && added.some(prompt => leaks(prompt.question, prompt.answer))) return leave(EXISTING_WHY.singleLeak);
+  // 筆記裡已經有選項行、這次只加題（§6、§7 的清單規則，L2 第一輪 R6）：草稿看不到筆記裡的選項行，「下列何者」與寫出答案在這裡擋。
+  // 這次才變成單選的（只補選項行），筆記裡原本的題目也變成點選，一起查（L2 第二輪 3）；已經是單選的舊題是家長的，不重查。
+  const checked = target.kind?.id === 'single' ? missing.flatMap(unit => unit.prompt ? [unit.prompt] : []) : now?.prompts ?? [];
+  const asked = checked.flatMap(prompt => prompt.kind === 'qa' ? [prompt] : []);
+  if (single && asked.some(prompt => WHICH_OF.test(prompt.question))) return leave(EXISTING_WHY.singleWhichOf);
+  if (single && asked.some(prompt => leaks(prompt.question, prompt.answer))) return leave(EXISTING_WHY.singleLeak);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 

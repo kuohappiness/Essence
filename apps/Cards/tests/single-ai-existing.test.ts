@@ -81,3 +81,22 @@ void test('筆記裡已經是單選、這次只加題（L2 第一輪 R6）：題
 void test('筆記裡已經是單選、這次加的題目寫出自己的答案：寫進筆記前擋', () => {
   assert.equal(left(item('    - 北部常見岩岸，是哪一種海岸？ :: 岩岸'), dest(Q1, OPTIONS)), EXISTING_WHY.singleLeak);
 });
+
+void test('只補選項行就把舊題變成單選（L2 第二輪 3）：筆記裡原本的題目寫「下列」或寫出自己的答案，寫進筆記前擋；已經是單選的舊題不重查', () => {
+  assert.equal(left(item(OPTIONS), dest('    - 下列何者是北部主要的海岸？ :: 岩岸')), EXISTING_WHY.singleWhichOf);
+  assert.equal(left(item(OPTIONS), dest('    - 北部常見岩岸，是哪種海岸？ :: 岩岸')), EXISTING_WHY.singleLeak);
+  // 原本的題目照規則寫：照常加。
+  assert.equal(kindOf(planned(item(OPTIONS), dest(Q1))), 'single');
+  // 家長手寫、已經是單選的目標，舊題寫了「下列」：這次加的題照規則寫就照常加，不因為舊題擋住。
+  assert.equal(kindOf(planned(item('    - 野柳的海岸是哪一種海岸？ :: 岩岸'), dest('    - 下列何者是北部主要的海岸？ :: 岩岸', OPTIONS))), 'single');
+  // 整類（第 2 代）：三種寫法 × 寫在筆記裡原本的題或這次加的題 × 這次才變成單選或已經是單選。
+  const GOOD = '    - 野柳的海岸是哪一種海岸？ :: 岩岸';
+  const bad = [['    - 下列何者是北部主要的海岸？ :: 岩岸', EXISTING_WHY.singleWhichOf], ['    - 以下何者在北部最多？ :: 岩岸', EXISTING_WHY.singleWhichOf], ['    - 北部常見岩岸，是哪種海岸？ :: 岩岸', EXISTING_WHY.singleLeak]];
+  for (const [question, why] of bad) {
+    assert.equal(left(item(OPTIONS), dest(question)), why, question);
+    assert.equal(left(item(GOOD, OPTIONS), dest(question)), why, question);
+    assert.equal(left(item(question, OPTIONS), dest(Q1)), why, question);
+    assert.equal(left(item(question), dest(Q1, OPTIONS)), why, question);
+    assert.equal(kindOf(planned(item(GOOD), dest(question, OPTIONS))), 'single', question);
+  }
+});
