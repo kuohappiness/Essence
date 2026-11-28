@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { check } from '../src/core/ai/index.ts';
+import { check, inspectReply, RULE_SUBJECTS } from '../src/core/ai/index.ts';
+import type { CardForm, ExistingNow, ExistingTarget } from '../src/core/ai/index.ts';
 
 // 單選與配對的 AI 草稿檢查（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，草稿算錯誤；本文、候選框、加進已有的框都擋。
 // 每個代碼一個會中、一個不會中的例子；預期值手算（行號從 1 算）。
@@ -49,4 +50,22 @@ void test('which-of：有選項行的目標寫「下列」「以下何者」是�
   assert.deepEqual(found(draft('    - 以下何者是臺灣北部海岸的地形？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'which-of']]);
   assert.deepEqual(found(draft('    - 下列何者是臺灣北部海岸的地形？ :: 岩岸')), [['提醒', 5, 'which-of']]);
   assert.deepEqual(found(draft('    - 以下何者是臺灣北部海岸的地形？ :: 岩岸')), []);
+});
+
+// 整份回覆照家長貼回的路走（inspectReply）：社會的三段，卡組段有一個新目標，加進已有的框是 existing 的那幾行。
+const FORM: CardForm = { subject: 'social', term: '五上', unit: '2-1 臺灣的海岸', purpose: '準備段考', supplement: false, pick: true, adjust: '', material: '' };
+const SOCIAL = RULE_SUBJECTS.find(each => each.key === 'social')!;
+const SENT: ExistingTarget[] = [{ id: 'q8z3ka', name: '能說出臺灣東部海岸的地形', source: '五上 2-1 p.43', path: 'Essence Cards/學業/五上/社會/2-1.md', first: '臺灣東部的海岸是哪一種海岸？ :: 斷層海岸' }];
+const here = (): ExistingNow => ({ kind: 'none' });
+const reply = (...existing: string[]): string => ['<<<全貌>>>', '## 知識塊', '', '- 海岸：四部各不同', '<<<架構>>>', '## 學習目標', '',
+  '- T01｜①｜能說出臺灣北部海岸的地形', '<<<卡組>>>', '## 2-1 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', OPTIONS, '',
+  '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...existing, '<<<完>>>', ''].join('\n');
+
+void test('加進已有的框只補一行選項行（L2 第一輪 R4）：草稿存得了；連題目都沒有、也沒有選項行的照舊擋', () => {
+  const only = inspectReply(reply('>     - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸'), FORM, SOCIAL, SENT, here);
+  assert.equal(only.ended, true);
+  assert.deepEqual(only.errors, []);
+  const empty = inspectReply(reply('>     - 出處：p.43'), FORM, SOCIAL, SENT, here);
+  assert.equal(empty.errors.length, 1);
+  assert.match(empty.errors[0].message, /縮排或清單符號/);
 });

@@ -479,7 +479,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         checkImageLines(child, 'shared');
       }
     });
-    if (!target.questions.length) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
+    // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
+    if (!target.questions.length && !(where === 'existing' && optioned)) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
     if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
     if (where !== 'existing' && !target.data['出處']) issue(node.line, '不符', 'no-source', '沒有出處（通用規則 13）');
     if (UNDERSTANDING.includes(target.data['類型'])) for (const q of target.questions.filter(each => each.kind === 'qa')) {
