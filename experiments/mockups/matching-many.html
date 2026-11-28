@@ -1,0 +1,304 @@
+<title>連連看配對卡</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 連連看（一列好幾個答案，D-252）的示意頁：配色與元件照 matching-card.html 與外掛的複習畫面（src/ui/tokens.css、PickCard.css）。
+   任務說明 apps/Cards/docs/tasks/matching-many.md §5〈作答〉〈再選一次〉〈結果〉、§6：放進去的字是一顆顆小塊、點了拿掉；
+   再選時不劃掉、只標這一列不對；結果劃掉錯的、補上漏的；字鍵排數照外掛的 singleColumns。 */
+:root{
+  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;
+  --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--bulb:#B8923A;--bulb-fill:#FBEFC4;
+  --ui:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei","Noto Sans TC",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--bulb:#D9B45A;--bulb-fill:#3A3320;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--bulb:#D9B45A;--bulb-fill:#3A3320;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.65;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+button:focus-visible{outline:2px solid var(--key);outline-offset:2px}
+.wrap{max-width:1000px;margin:0 auto;display:grid;gap:18px}
+h1{font-size:24px;line-height:1.3;margin:0;text-wrap:balance}
+.lead{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.layout{display:grid;gap:26px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:820px){.layout{grid-template-columns:minmax(0,375px) minmax(0,1fr)}.demo{position:sticky;top:16px}}
+.demo{display:grid;gap:10px;min-width:0;max-width:375px}
+.ctrl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ctrl button{appearance:none;border:1px solid var(--line);background:var(--page);border-radius:999px;padding:3px 12px;font-size:14px;cursor:pointer}
+.ctrl button[aria-pressed="true"]{border-color:var(--key);color:var(--key)}
+.ctrl-label{font-size:13px;color:var(--muted);width:100%}
+
+.phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;height:var(--phone-h,667px)}
+.scroll{flex:1;overflow-y:auto;padding:12px 8px 8px}
+.meta{margin:0 8px 10px;font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.new{padding:1px 7px;border-radius:6px;background:color-mix(in srgb,var(--muted) 16%,var(--page));color:var(--muted);font-size:12px;font-weight:600}
+.rows{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.rows.done{gap:14px}
+.row{display:grid;grid-template-columns:14px minmax(0,1fr);align-items:baseline;column-gap:6px;padding:5px 8px 7px;border-radius:10px;font-size:20px;line-height:1.55;cursor:pointer}
+.row.on{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.row.lock{cursor:default}
+.mark{font-size:14px;font-weight:700;text-align:center;color:var(--miss)}
+.mark.right{color:var(--good)}.mark.near{color:var(--near)}
+.txt{min-width:0}
+.q{margin:0;text-wrap:pretty}
+
+/* 一列好幾個的格子：不是一顆按鈕，是一個容器（§6）；裡面每個小塊是自己的按鈕。空的時候和第 1 段的空格一樣。 */
+.slot{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;vertical-align:baseline;min-width:1.9em;min-height:1.45em;max-width:100%;
+  margin:0 0 0 4px;padding:0 .1em 3px;border-bottom:2px solid var(--muted);line-height:1.3;cursor:pointer}
+.row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
+.row.lock .slot{cursor:default}
+.slot .ask{color:var(--muted)}
+.slot.right .ask,.slot.miss .ask{color:var(--miss)}
+.chip{appearance:none;display:inline-flex;align-items:center;height:1.55em;padding:0 .45em;border:1px solid var(--line);border-radius:7px;
+  background:color-mix(in srgb,var(--ink) 5%,var(--page));color:var(--ink);font-size:17px;line-height:1;white-space:nowrap;cursor:pointer}
+.chip:active{background:color-mix(in srgb,var(--ink) 11%,var(--page))}
+.row.lock .chip{cursor:default}
+.chip.right{color:var(--good);border-color:color-mix(in srgb,var(--good) 35%,var(--line));background:color-mix(in srgb,var(--good) 8%,var(--page))}
+.chip.near{color:var(--near);border-color:color-mix(in srgb,var(--near) 35%,var(--line));background:color-mix(in srgb,var(--near) 8%,var(--page))}
+.chip.kept{color:var(--ink)}
+.chip.struck{color:var(--miss);background:none;border-color:transparent;text-decoration:line-through;text-decoration-thickness:2px}
+.chip.missed{color:var(--miss);background:none;border:1.5px dashed var(--miss)}
+.chip.shown{color:var(--ink)}
+.back{grid-column:2;display:grid;gap:4px;margin-top:6px;font-size:16px;line-height:1.55}
+.anchor{display:flex;gap:6px}
+.bulb{flex:none;height:1.55em;display:grid;place-items:center;color:var(--bulb)}
+.bulb svg{width:18px;height:18px;fill:var(--bulb-fill)}
+.extra{font-size:15px;line-height:1.5;color:var(--muted)}
+
+.tray{background:var(--page);padding:10px 12px 12px;display:grid;gap:10px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.keys{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:8px}
+.key{appearance:none;height:60px;border:1px solid var(--line);border-radius:12px;background:none;font-size:17px;line-height:1.1;cursor:pointer;padding:0 2px;white-space:normal;overflow-wrap:anywhere}
+.key:active{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.acts{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.act{appearance:none;height:48px;border:1px solid var(--line);border-radius:12px;background:none;cursor:pointer;font-size:15px;font-weight:500}
+.act.skip{color:var(--muted)}
+.act.check{opacity:.4}.act.check.ready{opacity:1}
+.rates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+.notes{display:grid;gap:14px;max-width:62ch;min-width:0}
+.notes h2{font-size:17px;margin:8px 0 0}
+.notes p,.notes li{margin:0}
+.notes ul,.notes ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.notes .pick{border-left:3px solid var(--key);padding-left:10px}
+.notes a{color:var(--key)}
+.sample{display:inline-flex;align-items:center;height:1.5em;padding:0 .4em;border-radius:6px;font-size:14px;vertical-align:baseline}
+.sample.struck{color:var(--miss);text-decoration:line-through;text-decoration-thickness:2px}
+.sample.missed{color:var(--miss);border:1.5px dashed var(--miss)}
+@media (prefers-reduced-motion:reduce){.scroll{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>連連看配對卡</h1>
+    <p class="lead">一個地點一列，每一列可以放好幾個字，不告訴孩子有幾個（D-252）。點字鍵放進待答的那一列，再點一次或點那個小塊就拿掉，放好了按「對答案」。</p>
+  </header>
+  <div class="layout">
+    <div class="demo">
+      <div class="ctrl" id="views"><span class="ctrl-label">看哪一張</span></div>
+      <div class="ctrl" id="heights"><span class="ctrl-label">手機高度</span></div>
+      <div class="phone" id="phone">
+        <div class="scroll" id="scroll"></div>
+        <div class="tray" id="tray"></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h2>要你看的四件</h2>
+      <ol class="pick">
+        <li><b>一列放好幾個</b>（第 1 張）：放進去的字一顆一顆排在題目後面，格子跟著變長，放不下就換行。點小塊就拿掉。放了字之後停在同一列，因為不知道有幾個；要換列就點那一列。</li>
+        <li><b>再選一次</b>（第 2 張）：不對的列只在左邊打 <span style="color:var(--miss);font-weight:700">✕</span>，放的字都留著，看不出是多放還是漏放，也不說幾個。字鍵都能按，可以加字、拿掉任何一個字，改好了再按一次「對答案」。對的列鎖住。</li>
+        <li><b>結果</b>（第 3 張）：放錯的劃掉（<span class="sample struck">芋頭</span>），漏的補在後面、用虛線框（<span class="sample missed">鳳眼糕</span>）。左邊的勾照第 1 段：綠是第一次就對、橙是再選才對、紅是沒對。每一列底下接記憶錨點與詳解。</li>
+        <li><b>八個字鍵</b>（第 5 張）：其中一個五個字（三星上將梨），照外掛現在的算法排成三排（3＋3＋2）。七個字的詞會排到四排，字鍵區變高、題目區變矮。</li>
+      </ol>
+      <h2>其他照第 1 段做的</h2>
+      <ul>
+        <li><b>空的列</b>和第 1 段的空格一樣，看不出要放幾個。</li>
+        <li><b>字鍵用過不淡掉</b>：同一個字可以放進好幾列（牛舌餅在宜蘭和鹿港都有）。</li>
+        <li><b>沒印象</b>：這一列清空、打一個 ？，跳到下一個空的列。有空的列時按「對答案」會跳到那一列，不判。</li>
+        <li><b>判分</b>：一列要剛好放對（不多、不少）才算對；第一次就對是記住了，再選才對是差一點，再選也不對或按沒印象是沒印象。全對才有「記住了／太簡單」，有錯是程式判的，只有「下一張」。</li>
+        <li><b>多選題</b>（第 4 張）：一組只有一個目標時，就是一題多選，用同一套。</li>
+      </ul>
+      <h2>怎麼看</h2>
+      <ul>
+        <li>第 1、2、4、5 張都可以真的點；第 3 張是示範：宜蘭第一次漏了鴨賞、再選補上（差一點），鹿港再選也不對，大甲第一次就對。</li>
+        <li>題目、記憶錨點與詳解是示範用、自己寫的，不是課本的字。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const BULB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/></svg>';
+const TOWNS = [
+  { q: '宜蘭的名產有哪些？', a: ['三星蔥', '鴨賞', '牛舌餅'], anchor: '宜蘭記成「蔥、鴨、餅」。', extra: '三星蔥種在蘭陽溪邊，水乾淨、天氣涼。' },
+  { q: '鹿港的名產有哪些？', a: ['牛舌餅', '鳳眼糕'], anchor: '鹿港是老港口，傳統糕餅多。', extra: '鳳眼糕用糯米粉做，形狀像鳳凰的眼睛。' },
+  { q: '大甲的名產有哪些？', a: ['芋頭'], anchor: '大甲溪邊的沙地適合種芋頭。', extra: '溪水帶來的土鬆、排水好，芋頭長得大。' },
+];
+const TOWNS8 = [
+  { ...TOWNS[0], a: ['三星蔥', '鴨賞', '牛舌餅', '三星上將梨'] },
+  { ...TOWNS[1], a: ['牛舌餅', '鳳眼糕', '蝦猴酥'] },
+  { ...TOWNS[2], a: ['芋頭', '奶油酥餅'] },
+];
+const CARDS = {
+  play: { label: '1 作答中', crumb: '社會 › 四下 › 家鄉的特產', options: ['三星蔥', '鴨賞', '牛舌餅', '鳳眼糕', '芋頭'], rows: TOWNS,
+    // 宜蘭那一列放了三個，停在同一列
+    start: st => { st.rows[0].placed = ['三星蔥', '牛舌餅', '鳳眼糕']; } },
+  retry: { label: '2 再選一次', crumb: '社會 › 四下 › 家鄉的特產', options: ['三星蔥', '鴨賞', '牛舌餅', '鳳眼糕', '芋頭'], rows: TOWNS,
+    // 宜蘭漏了鴨賞、鹿港多放了芋頭，畫面看不出是哪一種；大甲對了
+    start: st => { st.rows[0].placed = ['三星蔥', '牛舌餅']; st.rows[1].placed = ['牛舌餅', '芋頭', '鳳眼糕']; st.rows[2].placed = ['芋頭']; grade(); } },
+  result: { label: '3 結果', crumb: '社會 › 四下 › 家鄉的特產', options: ['三星蔥', '鴨賞', '牛舌餅', '鳳眼糕', '芋頭'], rows: TOWNS,
+    start: st => {
+      st.rows[0].placed = ['三星蔥', '牛舌餅']; st.rows[1].placed = ['牛舌餅', '芋頭']; st.rows[2].placed = ['芋頭']; grade();
+      st.rows[0].placed = ['三星蔥', '牛舌餅', '鴨賞']; check();
+    } },
+  multi: { label: '4 多選題', crumb: '自然 › 四上 › 動物的分類', options: ['鯨魚', '蝙蝠', '企鵝', '鯊魚', '海豚'],
+    rows: [{ q: '下面哪些是哺乳類？', a: ['鯨魚', '蝙蝠', '海豚'], anchor: '哺乳類用乳汁餵小孩：住在海裡的、會飛的都有。', extra: '企鵝是鳥類，鯊魚是魚類。' }] },
+  eight: { label: '5 八個字鍵', crumb: '社會 › 四下 › 家鄉的特產', options: ['三星蔥', '鴨賞', '牛舌餅', '三星上將梨', '鳳眼糕', '蝦猴酥', '芋頭', '奶油酥餅'], rows: TOWNS8 },
+};
+const HEIGHTS = { 667: '667（小手機）', 812: '812' };
+let which = 'play', height = '667', st;
+
+function seededShuffle(list, seed) {
+  let s = seed; const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (a.every((t, i) => t === list[i])) a.push(a.shift());
+  return a;
+}
+function reset() {
+  const c = CARDS[which];
+  st = { stage: 'answer', cursor: 0, rows: c.rows.map(r => ({ answer: r.a, placed: [], skipped: false, first: null, status: 'open', retry: null })), keys: seededShuffle(c.options, c.options.length * 7 + 3) };
+  c.start?.(st);
+  render();
+}
+// 一列放了什麼：作答時至少一個字或記成跳過才不是空的。
+const empty = r => r.placed.length === 0 && !r.skipped;
+const same = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+const open = r => r.status === 'retry' && r.retry === null; // 再選時還沒定案的不對的列
+function nextEmpty(from) { const n = st.rows.length; for (let k = 1; k <= n; k++) { const i = (from + k) % n; if (empty(st.rows[i])) return i; } return null; }
+function nextOpen(from) { const n = st.rows.length; for (let k = 1; k <= n; k++) { const i = (from + k) % n; if (open(st.rows[i])) return i; } return null; }
+function movable(i) { const r = st.rows[i]; return st.stage === 'answer' || (st.stage === 'retry' && open(r)); }
+
+function key(text) {
+  if (st.stage === 'result' || st.cursor === null) return;
+  const r = st.rows[st.cursor];
+  if (r.skipped) { r.skipped = false; r.placed = [text]; }
+  else if (r.placed.includes(text)) r.placed = r.placed.filter(x => x !== text);
+  else r.placed.push(text);
+  render(true);
+}
+function chip(i, at) {
+  if (!movable(i)) return;
+  st.rows[i].placed.splice(at, 1);
+  st.cursor = i;
+  render(true);
+}
+function skip() {
+  if (st.stage === 'result' || st.cursor === null) return;
+  const r = st.rows[st.cursor];
+  if (st.stage === 'answer') { r.placed = []; r.skipped = true; st.cursor = nextEmpty(st.cursor); }
+  else {
+    // 再選時按沒印象：這一列定案，結果照第一次放的
+    r.retry = 'skip'; r.status = 'miss'; r.placed = [...r.first];
+    st.cursor = nextOpen(st.cursor);
+    if (st.cursor === null) st.stage = 'result';
+  }
+  render(true);
+}
+function grade() {
+  for (const r of st.rows) { r.first = r.skipped ? null : [...r.placed]; r.status = r.skipped ? 'miss' : same(r.placed, r.answer) ? 'right' : 'retry'; }
+  const i = st.rows.findIndex(open);
+  if (i >= 0) { st.stage = 'retry'; st.cursor = i; } else { st.stage = 'result'; st.cursor = null; }
+}
+function check() {
+  if (st.stage === 'answer') {
+    const gap = st.rows.findIndex(empty);
+    if (gap >= 0) { st.cursor = gap; render(true); return; }
+    grade(); render(true); return;
+  }
+  if (st.stage !== 'retry') return;
+  const gap = st.rows.findIndex(r => open(r) && r.placed.length === 0);
+  if (gap >= 0) { st.cursor = gap; render(true); return; }
+  for (const r of st.rows) if (open(r)) { const ok = same(r.placed, r.answer); r.retry = ok ? 'right' : 'wrong'; r.status = ok ? 'near' : 'miss'; }
+  st.stage = 'result'; st.cursor = null; render(true);
+}
+function row(i) { if (st.stage === 'result' || !movable(i)) return; st.cursor = i; render(); }
+
+const MARK = { right: '✓', near: '✓', miss: '✕', retry: '✕' };
+const esc = s => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function chipHtml(text, cls, i, at, label) {
+  return `<button type="button" class="chip${cls ? ' ' + cls : ''}" data-row="${i}" data-at="${at}"${label ? ` aria-label="${label}"` : ''}>${esc(text)}</button>`;
+}
+function slotHtml(r, i) {
+  let inner = '';
+  if (st.stage === 'result') {
+    // 結果：最後一次放的字；在答案裡的照常（照這一列的顏色），不在的劃掉；答案裡沒放的補上、標成漏了
+    const last = r.first === null ? [] : r.placed;
+    const tone = r.status === 'right' ? 'right' : r.status === 'near' ? 'near' : 'kept';
+    inner = last.map((t, at) => r.answer.includes(t) ? chipHtml(t, tone, i, at) : chipHtml(t, 'struck', i, at, `放錯了：${t}`)).join('')
+      + r.answer.filter(t => !last.includes(t)).map((t, at) => chipHtml(t, 'missed', i, last.length + at, `漏了：${t}`)).join('');
+  } else if (r.status === 'right') inner = r.placed.map((t, at) => chipHtml(t, 'right', i, at)).join('');
+  else if (r.status === 'miss' || r.skipped) inner = '<span class="ask">？</span>';
+  else inner = r.placed.map((t, at) => chipHtml(t, '', i, at, `拿掉${t}`)).join('');
+  return `<span class="slot" data-row="${i}" role="group" aria-label="第 ${i + 1} 列">${inner}</span>`;
+}
+// 字鍵幾個一排：照外掛的 singleColumns（src/ui/PickCard.tsx），用同一套估法，不量字
+const TRAY = 351, KEY_GAP = 8, KEY_INSIDE = 6;
+const textWidth = (t, size) => [...t].reduce((sum, ch) => sum + (/[⺀-￯]/u.test(ch) ? size : size * 0.6), 0);
+function columns(keys) {
+  const words = keys.some(k => [...k].length > 1), size = words ? 17 : 31, n = keys.length;
+  let cols = !words ? (n <= 6 ? n : Math.ceil(n / 2)) : n <= 4 ? n : n <= 6 ? 3 : 4;
+  const longest = Math.max(...keys.map(k => textWidth(k, size)));
+  while (cols > 2 && (TRAY - KEY_GAP * (cols - 1)) / cols - KEY_INSIDE < longest) cols--;
+  return Math.ceil(n / Math.ceil(n / cols));
+}
+function render(follow) {
+  const c = CARDS[which];
+  let rows = '';
+  st.rows.forEach((r, i) => {
+    const t = c.rows[i];
+    const mark = st.stage !== 'answer' && MARK[r.status] ? MARK[r.status] : '';
+    const back = st.stage === 'result' ? `<div class="back"><div class="anchor"><span class="bulb" role="img" aria-label="記憶提示">${BULB}</span><span>${t.anchor}</span></div><div class="extra">${t.extra}</div></div>` : '';
+    rows += `<li class="row${i === st.cursor ? ' on' : ''}${movable(i) && st.stage !== 'result' ? '' : ' lock'}" data-row="${i}"><span class="mark ${r.status}">${mark}</span><div class="txt"><p class="q">${t.q}${slotHtml(r, i)}</p></div>${back}</li>`;
+  });
+  const scroll = document.getElementById('scroll');
+  scroll.innerHTML = `<div class="meta"><span class="new">新</span><span>${c.crumb}</span></div><ul class="rows${st.stage === 'result' ? ' done' : ''}">${rows}</ul>`;
+  if (follow && st.cursor !== null) scroll.querySelector(`.row[data-row="${st.cursor}"]`)?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  if (!follow) scroll.scrollTop = 0;
+  const tray = document.getElementById('tray');
+  if (st.stage === 'result') {
+    const all = st.rows.every(r => r.status === 'right');
+    tray.innerHTML = all ? '<div class="rates"><button type="button" class="act">記住了</button><button type="button" class="act">太簡單</button></div>' : '<button type="button" class="act" style="width:100%">下一張</button>';
+    tray.querySelectorAll('button').forEach(b => b.onclick = () => reset());
+  } else {
+    const ready = st.stage === 'answer' ? !st.rows.some(empty) : !st.rows.some(r => open(r) && r.placed.length === 0);
+    tray.innerHTML = `<div class="keys" style="--cols:${columns(st.keys)}">${st.keys.map(k => `<button type="button" class="key" data-key="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+      <div class="acts"><button type="button" class="act skip">沒印象</button><button type="button" class="act check${ready ? ' ready' : ''}">對答案</button></div>`;
+    tray.querySelectorAll('.key').forEach(b => b.onclick = () => key(b.dataset.key));
+    tray.querySelector('.skip').onclick = skip;
+    tray.querySelector('.check').onclick = check;
+  }
+  scroll.querySelectorAll('.row').forEach(el => el.onclick = () => row(+el.dataset.row));
+  scroll.querySelectorAll('.chip').forEach(el => el.onclick = e => { e.stopPropagation(); chip(+el.dataset.row, +el.dataset.at); });
+}
+function buttons(id, entries, set) {
+  for (const [value, label] of Object.entries(entries)) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.dataset.value = value;
+    b.onclick = () => { set(value); sync(); reset(); };
+    document.getElementById(id).append(b);
+  }
+}
+buttons('views', Object.fromEntries(Object.entries(CARDS).map(([k, v]) => [k, v.label])), v => which = v);
+buttons('heights', HEIGHTS, v => height = v);
+function sync() {
+  for (const [id, value] of [['views', which], ['heights', height]])
+    document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.value === value)));
+  document.getElementById('phone').style.setProperty('--phone-h', height + 'px');
+}
+const params = new URLSearchParams(location.search);
+if (CARDS[params.get('view')]) which = params.get('view');
+if (HEIGHTS[params.get('h')]) height = params.get('h');
+sync(); reset();
+</script>
