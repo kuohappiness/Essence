@@ -52,6 +52,15 @@ void test('存著的工作：`提示 v6` 之前沒有選項這一欄也讀得回
 void test('比較測試工具的精簡清單：重組這一行時選項接在最後，不丟', () => {
   const existing: ExistingTarget[] = [{ id: 'aaaaa2', name: '能說出臺灣北部海岸的地形', source: '五上 2-1 p.42', path: 'a.md', first: 'Q :: 岩岸', options: '岩岸、沙岸、斷層海岸' }];
   assert.deepEqual(leanList(existing), ['  - aaaaa2 能說出臺灣北部海岸的地形｜五上 2-1｜Q :: 岩岸｜這個目標的選項：岩岸、沙岸、斷層海岸']);
+  // L2 第一輪 R8：名稱結尾像變化的單選目標，照一個目標一行，選項不丟；同一個字的變化照舊併成一行。
+  const english: ExistingTarget[] = [
+    { id: 'bbbbb2', name: '能分辨形容詞的 比較級', source: 'L3 p.40', path: 'b.md', first: '比 tall 多一級的形式叫什麼？ :: 比較級', options: '原級、比較級、最高級' },
+    { id: 'ccccc2', name: 'tall 比較級', source: 'L3 p.40', path: 'b.md', first: 'tall 的比較級？ :: taller' },
+  ];
+  assert.deepEqual(leanList(english), [
+    '  - bbbbb2 能分辨形容詞的 比較級｜L3 p.40｜比 tall 多一級的形式叫什麼？ :: 比較級｜這個目標的選項：原級、比較級、最高級',
+    '  - tall｜比較級 ccccc2｜第一題：tall 的比較級？ :: taller｜L3 p.40',
+  ]);
 });
 
 void test('§7 社會勾了點選填空：多送配對與單選的子項目與縮排的例子；沒勾、別科不送；比較測試「點選填空說明：不送」時整段不見', () => {
