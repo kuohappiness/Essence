@@ -66,10 +66,12 @@ export const skipFor = (skip: { ids: string[]; at: number } | undefined, deckIds
 
 /** 提醒一區的一行（§4-2、§4-3）：等待貼回、待審核、可以加深。name 是篇名（D-189 第 3 點：檔名）。 */
 export interface DeepenRow { path: string; kind: 'writing' | 'waiting' | 'pending' | 'ready'; text: string }
-export function deepenRow(path: string, name: string, state: { waiting: boolean; writing?: boolean; pending: boolean; remind: RemindResult | null }): DeepenRow | null {
+/** 等待的那一份是直接製作的（tasks/ai-direct.md §9，第 3 批 L2 R1）：沒有複製過，字照它現在的情況寫。 */
+const DIRECT_WAITING = { sent: '加深已經直接送出，還沒收到回覆', failed: '加深直接製作沒有成功，還沒處理', received: '加深直接製作收到回覆了，還沒寫進卡組' } as const;
+export function deepenRow(path: string, name: string, state: { waiting: boolean; writing?: boolean; direct?: keyof typeof DIRECT_WAITING; pending: boolean; remind: RemindResult | null }): DeepenRow | null {
   // 正在寫進卡組（L2 R9）：不能取消，等寫完。
   if (state.waiting && state.writing) return { path, kind: 'writing', text: `${name}：加深正在寫進卡組` };
-  if (state.waiting) return { path, kind: 'waiting', text: `${name}：加深的提示已複製，等你貼回` };
+  if (state.waiting) return { path, kind: 'waiting', text: `${name}：${state.direct ? DIRECT_WAITING[state.direct] : '加深的提示已複製，等你貼回'}` };
   if (state.pending) return { path, kind: 'pending', text: `${name}：上一次加深的結果還沒審完` };
   const remind = state.remind;
   if (!remind?.show) return null;

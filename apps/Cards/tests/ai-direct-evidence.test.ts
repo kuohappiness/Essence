@@ -138,7 +138,7 @@ void test('§7 工作的 charged 不是 true 或 false：整份 api 當讀不懂
   assert.ok(failed.kind === 'failed');
   const api = directJob(failed.job);
   assert.ok(api);
-  assert.equal(directJob({ ...failed.job, api: { ...api, charged: 'yes' } as unknown as DirectJob }), null);
+  assert.equal(directJob({ ...failed.job, api: { ...api, charged: 'yes' } }), null);
   assert.notEqual(directJob({ ...failed.job, api: { ...api, charged: true } }), null);
   const without: DirectJob = { ...api };
   delete without.charged;

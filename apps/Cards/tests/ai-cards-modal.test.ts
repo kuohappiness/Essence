@@ -1,5 +1,5 @@
 // 製卡視窗的直接製作（tasks/ai-direct.md §4～§6、src/obsidian/ai-cards-modal.ts）：用共用的 obsidian 替身開真的視窗，接真的製卡流程與假的 fetch。
-// 替身不是 Obsidian 實機：FakeEl 在這個檔補上視窗用到的 DOM 方法（每個測試檔是自己的 Node 程序，補的只活在這裡）。畫面的樣子在 Windows 實機看。
+// 替身不是 Obsidian 實機：視窗用到的 DOM 方法由 helpers/modal-dom.ts 補上。畫面的樣子在 Windows 實機看。
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import type { MockReply } from '../../../packages/ai-client/src/testing.ts';
 import { directJob } from '../src/core/ai/index.ts';
-import { createObsidianStub, FakeEl } from './helpers/obsidian.ts';
-import { form, lesson, load, ok, propsOf, reply, unauthorized } from './helpers/ai-direct.ts';
+import { createObsidianStub } from './helpers/obsidian.ts';
+import { all, button, sleep, textarea, texts } from './helpers/modal-dom.ts';
+import type { El } from './helpers/modal-dom.ts';
+import { form, lesson, load, ok, propsOf, reply, sent, unauthorized } from './helpers/ai-direct.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({
@@ -16,42 +18,6 @@ const code = (await build({
   bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false, external: ['obsidian'],
 })).outputFiles[0].text;
 
-interface El extends FakeEl {
-  cls: string; type?: string; placeholder?: string; value: string; checked?: boolean; files?: File[];
-  listeners?: Map<string, ((event: unknown) => void)[]>;
-  fire(type: string, event?: unknown): void;
-}
-const proto = FakeEl.prototype as unknown as Record<string, unknown>;
-proto.createEl = function (this: El, tag: string, options?: { text?: string; cls?: string; type?: string; placeholder?: string; attr?: Record<string, string> }): El {
-  const el = new FakeEl(tag, options) as El;
-  el.cls = options?.cls ?? '';
-  el.type = options?.type;
-  el.placeholder = options?.placeholder ?? options?.attr?.placeholder;
-  el.value = '';
-  this.children.push(el);
-  return el;
-};
-proto.addEventListener = function (this: El, type: string, callback: (event: unknown) => void) { (this.listeners ??= new Map()).set(type, [...this.listeners.get(type) ?? [], callback]); };
-proto.fire = function (this: El, type: string, event: unknown = {}) { for (const callback of this.listeners?.get(type) ?? []) callback(event); };
-proto.click = function (this: El) { if (!this.disabled) this.fire('click'); };
-proto.hide = function (this: El) { this.hidden = true; };
-proto.show = function (this: El) { this.hidden = false; };
-proto.toggleClass = function () {};
-proto.querySelector = function (this: El, selector: string): El | null {
-  const want = selector.replace(/^\./, '');
-  for (const child of this.children as El[]) {
-    if (child.cls.split(' ').includes(want)) return child;
-    const found = (child as unknown as { querySelector(selector: string): El | null }).querySelector(selector);
-    if (found) return found;
-  }
-  return null;
-};
-
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-const all = (el: FakeEl): El[] => [el as El, ...el.children.flatMap(all)];
-const texts = (el: FakeEl): string[] => all(el).map(each => each.text).filter(Boolean);
-const button = (el: FakeEl, label: string): El | undefined => all(el).find(each => each.tag === 'button' && !each.hidden && each.text === label);
-const textarea = (el: FakeEl): El | undefined => all(el).find(each => each.tag === 'textarea');
 const pdf = (name = '英文 L3.pdf'): File => new File([new Uint8Array(lesson.data)], name);
 
 interface Modal { contentEl: El; close(): void; isOpen: boolean }
@@ -119,6 +85,45 @@ void test('L2 R1 重開之後「接著看」，第一次存被擋下再「回上
   assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
   assert.equal(textarea(modal.contentEl)?.value, reply);
   assert.equal(directJob(made.cards.jobs()[0])?.state, 'received');
+});
+
+for (const [label, value] of [['整個清空', ''], ['只剩空格', '   '], ['只剩換行', '\n\n'], ['只剩全形空白', '\u3000']] as const) {
+  void test(`加深第 3 批 L2 R7、S2 收到的回覆把框${label}、關掉再開「接著看」：框裡是收到的那一段`, async t => {
+    const { openModal } = await open(t, [ok(reply)]);
+    const modal = openModal();
+    await sendFromForm(modal);
+    const box = textarea(modal.contentEl);
+    assert.ok(box);
+    box.value = value;
+    box.fire('input');
+    modal.close();
+    const again = openModal();
+    button(again.contentEl, '接著看')?.click();
+    await sleep(10);
+    assert.ok(isReceivedScreen(again), texts(again.contentEl).join('|'));
+    assert.equal(textarea(again.contentEl)?.value, reply);
+  });
+}
+
+void test('加深第 3 批實機第 4 點（第二輪 S3）製卡視窗同一個檔選兩次（檔名不同也算）：只加一次、寫一句說明，送出的請求只帶一份', async t => {
+  const { made, openModal } = await open(t, [ok(reply)]);
+  const modal = openModal();
+  const unit = all(modal.contentEl).find(each => each.tag === 'input' && (each.placeholder ?? '').includes('編號 名稱'));
+  assert.ok(unit);
+  unit.value = form.unit;
+  unit.fire('input');
+  const file = all(modal.contentEl).find(each => each.tag === 'input' && each.type === 'file');
+  assert.ok(file);
+  file.files = [pdf(), pdf('英文 L3 (1).pdf')];
+  file.fire('change');
+  await sleep(20);
+  assert.equal(all(modal.contentEl).filter(each => each.tag === 'li').length, 1);
+  assert.ok(texts(modal.contentEl).some(each => each.includes('已經加過了')), texts(modal.contentEl).join('|'));
+  button(modal.contentEl, '直接製作')?.click();
+  await sleep(60);
+  assert.ok(isReceivedScreen(modal), texts(modal.contentEl).join('|'));
+  assert.equal(made.fetch.requests.length, 1);
+  assert.deepEqual(sent(made.fetch.requests[0].body).files, ['application/pdf'], '請求只帶一份 PDF');
 });
 
 void test('L2 R2、R4 收到的回覆檢查擋住，按「改用複製貼上」：框是空的；關掉重開是「接著貼回」，貼別處的回覆存成複製貼上的快照', async t => {
