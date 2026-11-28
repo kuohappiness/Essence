@@ -190,7 +190,7 @@ export async function renderReview(props: ReviewProps): Promise<ReviewUi> {
     },
     click(host) {
       // target 是點到的空白處（不是按鈕裡面的字）：卡片空白處的點擊才會翻面。
-      (host.props.onClick as (e: unknown) => void)({ target: { closest: () => null }, currentTarget: {}, detail: 0 });
+      (host.props.onClick as (e: unknown) => void)({ target: { closest: () => null }, currentTarget: {}, detail: 0, stopPropagation: () => {} });
       flush();
     },
     async settle() {

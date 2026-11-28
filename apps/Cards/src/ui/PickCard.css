@@ -80,3 +80,16 @@
 .ec-single-back .ec-ex-item + .ec-ex-item { margin-top: 0; }
 .ec-single-back .ec-ex-item:not(.is-anchor) { font-size: 15px; line-height: 1.5; color: var(--ec-muted); }
 .ec-single-back .ec-markdown p { margin: 0; }
+/* 一列可以放好幾個（tasks/matching-many.md §6、experiments/mockups/matching-many.html）：格子是容器，放進去的字一顆一顆排，放不下就換行；
+   空的和一格一個字的空格一樣。再選時字都留著（不劃掉）；結果裡沒對的列，放錯的劃掉、漏的用虛線框補在後面。 */
+.ec-app .ec-pick-slot.is-many { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; min-height: 1.45em; padding: 0 .1em 3px; text-align: left; }
+.ec-pick-slot.is-many .ec-pick-ask { color: var(--ec-muted); }
+.ec-pick-slot.is-many[data-state="miss"] .ec-pick-ask { color: var(--ec-miss); }
+.ec-app .ec-pick-chip, .ec-app .ec-pick-chip:hover, .ec-app .ec-pick-chip:focus { appearance: none; display: inline-flex; align-items: center; width: auto; height: 1.55em; min-width: 0; margin: 0; padding: 0 .45em; border: 1px solid var(--ec-line); border-radius: 7px; background: color-mix(in srgb, var(--ec-ink) 5%, var(--ec-page)); box-shadow: none; color: var(--ec-ink); font: inherit; font-size: 17px; line-height: 1; white-space: nowrap; cursor: default; }
+.ec-app button.ec-pick-chip { cursor: pointer; touch-action: manipulation; }
+.ec-app button.ec-pick-chip:active { background: color-mix(in srgb, var(--ec-ink) 11%, var(--ec-page)); }
+.ec-app button.ec-pick-chip:focus-visible { outline: 2px solid var(--ec-key); outline-offset: 2px; }
+.ec-app .ec-pick-chip[data-state="right"] { color: var(--ec-good); border-color: color-mix(in srgb, var(--ec-good) 35%, var(--ec-line)); background: color-mix(in srgb, var(--ec-good) 8%, var(--ec-page)); }
+.ec-app .ec-pick-chip[data-state="near"] { color: var(--ec-near); border-color: color-mix(in srgb, var(--ec-near) 35%, var(--ec-line)); background: color-mix(in srgb, var(--ec-near) 8%, var(--ec-page)); }
+.ec-app .ec-pick-chip[data-state="struck"] { color: var(--ec-miss); background: none; border-color: transparent; text-decoration: line-through; text-decoration-thickness: 2px; }
+.ec-app .ec-pick-chip[data-state="missed"] { color: var(--ec-miss); background: none; border: 1.5px dashed var(--ec-miss); }

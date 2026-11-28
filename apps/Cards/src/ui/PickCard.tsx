@@ -55,7 +55,18 @@ function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.E
   const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>{back(text)}</div>;
   // 單選與配對（tasks/matching-single-choice.md §5）：卡上不放標題（D-179）；對答案後每一列底下接那個目標的記憶錨點與那一題的詳解，沒有整組的對照。
   const single = group.single === true;
-  return <article className={'ec-card ec-pick' + (single ? ' is-single' : '')} lang="zh-Hant">
+  const many = group.many === true;
+  /** 一格的內容：一格一個字的卡是一顆按鈕；一列可以放好幾個的卡（tasks/matching-many.md §6）是容器，裡面每個小塊是自己的按鈕（能改的列才能點）。 */
+  const slotOf = (cell: PickView['cells'][number], index: number, movable: boolean): React.JSX.Element => {
+    if (!many) return <button type="button" className="ec-pick-slot" data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}>{cell.state === 'retry' ? <s>{cell.text}</s> : cell.text || '　'}</button>;
+    const chips = cell.chips ?? [];
+    return <span className="ec-pick-slot is-many" data-state={cell.state} data-index={index} role="group" aria-label={`第 ${String(index + 1)} 列`}>
+      {chips.length === 0 ? <span className="ec-pick-ask">{cell.text || '　'}</span> : chips.map((chip, at) => movable && chip.state === 'placed'
+        ? <button key={`${chip.text}-${String(at)}`} type="button" className="ec-pick-chip" data-state={chip.state} aria-label={`拿掉${chip.text}`} onClick={event => { event.stopPropagation(); act({ kind: 'unpick', index, at }); }}>{chip.text}</button>
+        : <span key={`${chip.text}-${String(at)}`} className="ec-pick-chip" data-state={chip.state} {...(chip.state === 'struck' ? { 'aria-label': `放錯了：${chip.text}` } : chip.state === 'missed' ? { 'aria-label': `漏了：${chip.text}` } : {})}>{chip.text}</span>)}
+    </span>;
+  };
+  return <article className={'ec-card ec-pick' + (single ? ' is-single' : '') + (many ? ' is-many' : '')} lang="zh-Hant">
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span>{view.crumb}</span></div>
     {!single && <p className="ec-pick-title">{group.choice ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>}
     <ul className="ec-pick-rows">{card.blanks.map((blank, index) => {
@@ -66,7 +77,7 @@ function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.E
         <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
         <div className="ec-pick-text">
           <Markdown app={app} text={single ? singleQuestion(blank) : questionOf(blank.prompt)} sourcePath={card.deck} mode="pick"
-            slotNode={<button type="button" className="ec-pick-slot" data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}>{cell.state === 'retry' ? <s>{cell.text}</s> : cell.text || '　'}</button>}
+            slotNode={slotOf(cell, index, movable)}
             onReady={index === 0 ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />
         </div>
         {extras.length > 0 && <div className="ec-single-back ec-answer">{extras.map((extra, at) => {
@@ -128,7 +139,8 @@ function singleColumns(keys: readonly string[], words: boolean): number {
 /** 字鍵與兩個動作（§7）：手指最常停的地方，字鍵在上，動作在下，中間留空，連點才不會誤按「對答案」。 */
 function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Element {
   const { pick, group } = partsOf(view);
-  const retrying = pick.stage === 'retry';
+  // 一列可以放好幾個的卡再選時要再按一次「對答案」（tasks/matching-many.md §5），按鈕照作答時的樣子。
+  const retrying = pick.stage === 'retry' && group.many !== true;
   const cursor = pick.cursor;
   // 用滑鼠或手指點完，焦點回到畫面：Space、Enter 才是「對答案」，不是再按一次這個字鍵。Tab 過來用鍵盤按的（detail 是 0）留在原處。
   const after = (event: React.MouseEvent): void => { if (event.detail > 0) focusApp(); };
