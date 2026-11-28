@@ -27,7 +27,7 @@
 
 ### 第 0 步：模板的檔案是第一個 commit
 
-空的 repo：模板的檔案是第一個 commit，在保護規則設好之前直接推上 `main`，讓 CI 先跑過一次、`gate` 這個檢查名稱出現在 GitHub 上（第 2 步要選它）。之後從第二個改動開始都走 PR。
+空的 repo：模板的檔案是第一個 commit，在保護規則設好之前直接推上 `main`，讓 CI 先跑過一次、`gate` 這個檢查名稱出現在 GitHub 上（第 2 步要選它）。八個問題的答案和模板的檔案放在同一個 commit，不另開 PR。之後從第二個改動開始都走 PR。
 
 先跑 `git config core.hooksPath .githooks`，提交前的檢查才會跑：git 預設讀 `.git/hooks`，不會自己用 repo 裡的 `.githooks/`；雲端由 `.claude/hooks/cloud-setup.mjs` 設，使用者的電腦與其他新的 clone 要自己跑這一行（跑一次就好），跑完 `git config core.hooksPath` 會印 `.githooks`。
 
@@ -75,7 +75,7 @@
 
 ## 核對與收尾
 
-三步做完，請使用者開一個新的討論串，由那個 session 核對下面幾件，結果寫進 `D-001.md`：
+三步做完，請使用者開一個新的討論串，由那個 session 核對下面幾件，結果寫進 `D-001.md` 新加的一節〈核對結果〉（每件一行：通過、沒通過與原因）。那一節不要連到 `SETUP.md`：它最後會被刪掉，連過去的連結會讓刪檔的 PR 被自己的檢查擋下。
 
 1. 開場訊息有「core.hooksPath 已設為 .githooks」。
 2. 試跑 `git push --force`（不用真的有東西可推），被擋下，訊息寫「不使用 force push」。

@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import MarkdownIt, { type Token } from 'markdown-it';
 import GithubSlugger from 'github-slugger';
 import { BOUNDARY, DecisionsError, parseDecisions } from './decisions.ts';
+import { LINK_TARGET } from './link-target.ts';
 import { looksNew, parseStatus } from './status-line.ts';
 
 export const ROADMAP = 'docs/roadmap.md';
@@ -347,7 +348,7 @@ interface Target { file: string; anchor: string }
 interface Arrow { file: string; line: number; station?: string; to?: Target }
 
 const ARROW_START = /^→\s*\[/;
-const ARROW = /^→\s*\[[^\]]*\]\((<[^>]*>|[^)\s]+)\)（(\d{4})-(\d{2})-(\d{2})）$/;
+const ARROW = new RegExp(String.raw`^→\s*\[[^\]]*\]\((${LINK_TARGET})\)（(\d{4})-(\d{2})-(\d{2})）$`);
 
 const realDate = (y: string, m: string, d: string) => {
   const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
@@ -437,7 +438,7 @@ function fromLinks(doc: Doc, range: [number, number]): { line: number; to: Targe
   return out;
 }
 
-const INLINE_LINK = /\[[^\]]*\]\((<[^>]*>|[^)\s]+)(?:\s+"[^"]*")?\)/g;
+const INLINE_LINK = new RegExp(String.raw`\[[^\]]*\]\((${LINK_TARGET})(?:\s+"[^"]*")?\)`, 'g');
 
 const firstH2 = (doc: Doc): [number, number] => {
   const at = doc.tokens.findIndex(token => token.type === 'heading_open' && token.tag === 'h2');
@@ -465,7 +466,7 @@ function checkStations(docs: Map<string, Doc>): Problem[] {
     const { index } = statusLine(doc);
     const parsed = index === undefined ? undefined : parseStatus(doc.lines[index]);
     if (!parsed || 'error' in parsed || parsed.status.state !== '已結案') continue;
-    for (const [id] of parsed.status.label.replace(/\[[^\]]*\]\([^)]*\)/g, '').matchAll(/D-\d+/g)) {
+    for (const [id] of parsed.status.label.replace(new RegExp(String.raw`\[[^\]]*\]\((?:${LINK_TARGET})\)`, 'g'), '').matchAll(/D-\d+/g)) {
       if (!decisions!.byId.has(id)) problems.push({ file: doc.file, line: index! + 1, target: '狀態：', reason: `${id} 不在決策紀錄裡：「已結案 →」的下一站要是存在的決定` });
     }
   }
