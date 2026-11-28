@@ -262,12 +262,13 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
 }
 
 // ── 單選與配對（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，AI 的草稿算錯誤，退回重做；本文與候選框都跑，已有框在 parseBox。 ──
-const ALL_OR_NONE = /以上皆是|以上皆非/;
+export const ALL_OR_NONE = /以上皆是|以上皆非/;
+const ALL_NONE_WHY = '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案';
 function checkSingle(deck: Deck, issue: Report): void {
   for (const p of deck.problems) if (p.code === 'options-invalid') issue(p.line + 1, '錯誤', p.code, p.message);
   for (const t of deck.targets) {
     const single = t.kind?.id === 'single' ? t.kind.single : undefined;
-    if (single?.options.some(option => ALL_OR_NONE.test(option))) issue(t.line + 1, '錯誤', 'options-all-none', '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案');
+    if (single?.options.some(option => ALL_OR_NONE.test(option))) issue(t.line + 1, '錯誤', 'options-all-none', ALL_NONE_WHY);
   }
 }
 
@@ -479,6 +480,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         checkImageLines(child, 'shared');
       }
     });
+    // 加進已有的框沒有跑 checkSingle（題目在筆記裡，框裡讀不成單選）：選項行自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5）。
+    if (where === 'existing' && children.some(child => OPTIONS_LINE.test(child.text) && ALL_OR_NONE.test(child.text))) issue(node.line, '錯誤', 'options-all-none', ALL_NONE_WHY);
     // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
     if (!target.questions.length && !(where === 'existing' && optioned)) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
     if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);

@@ -65,3 +65,8 @@ void test('已經是別的卡型的目標加上選項行：不寫（卡型照舊
   assert.equal(kindOf(group()), 'group');
   assert.equal(left(groupItem('    - 選項：岩、沿、炎'), group()), EXISTING_WHY.singleLost);
 });
+
+void test('加了有「以上皆是」「以上皆非」的選項行（L2 第一輪 R5）：草稿之外，寫進筆記前也擋', () => {
+  assert.equal(left(item('    - 選項：岩岸、沙岸、斷層海岸、以上皆是'), dest(Q1)), EXISTING_WHY.singleAllNone);
+  assert.equal(left(item('    - 野柳在臺灣哪一種海岸？ :: 岩岸', '    - 選項：岩岸、沙岸、以上皆非'), dest(Q1)), EXISTING_WHY.singleAllNone);
+});
