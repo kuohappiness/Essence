@@ -2,8 +2,6 @@
 
 這份說明不複製進新專案。依據：[D-247](../../docs/decisions.md#d-247-新專案的初始架構分起步包與成長包防線第-0-天就帶)、[D-216](../../docs/decisions.md#d-216-給其他專案的初始架構essence-裡的一包檔案用前先看是不是最新)；規格與驗收在[任務說明](../../docs/tasks/project-starter-template.md)。
 
-> 初稿（第 1 批）：〈怎麼複製〉的指令還沒實測，整理的日期與 commit 收尾時填（任務說明〈8〉第 4 批）。
-
 ## 裡面有什麼
 
 | 資料夾 | 是什麼 | 怎麼用 |
@@ -15,27 +13,42 @@
 
 ## 用前先看是不是最新
 
-這包不持續維護（D-216）。整理自 Essence 的 commit 【收尾時填】（【收尾時填】）。它對應這些流程文件：
+這包不持續維護（D-216）。整理自 Essence 的 commit 65448dc5（2026-11-28）。它對應這些流程文件：
 
 `AGENTS.md`、`docs/agents/workflow.md`、`docs/agents/quality.md`、`.claude/`、`.githooks/`、`tools/in-flight.ts`、`.github/workflows/check.yml`
 
 用前在 Essence 跑一次，看整理之後這些檔有沒有改過：
 
 ```sh
-git log <整理時的 commit>.. -- AGENTS.md docs/agents/workflow.md docs/agents/quality.md .claude .githooks tools/in-flight.ts .github/workflows/check.yml
+git log 65448dc5.. -- AGENTS.md docs/agents/workflow.md docs/agents/quality.md .claude .githooks tools/in-flight.ts .github/workflows/check.yml
 ```
 
 有改，而且改的是新專案也用得到的做法，先更新這包再複製。
 
 ## 怎麼複製
 
-（第 4 批實測後寫上本機與雲端各一種指令。）
+兩種都在雲端（Linux）與使用者的電腦（Windows 11、Git Bash）實測過（2026-11-28）。在新 repo 的根目錄跑：
+
+```sh
+# 方法 A：degit（要能跑 npx）。--force 是因為資料夾裡已經有 .git
+npx -y degit kuohappiness/Essence/templates/project-starter/files . --force
+```
+
+```sh
+# 方法 B：只取模板那個資料夾（不用 npx）。在新 repo 的上一層跑，<新 repo> 換成資料夾名
+git clone --depth 1 --filter=blob:none --sparse https://github.com/kuohappiness/Essence.git essence-src
+git -C essence-src sparse-checkout set templates/project-starter/files
+cp -a essence-src/templates/project-starter/files/. <新 repo>/
+rm -rf essence-src
+```
+
+Windows 上兩種方法複製後，`git add` 進去的 `.githooks/pre-commit` 都是 `100644`（Windows 的 git 不記執行權限），所以下面第 3 步一定要做：不做的話在 Windows 上 hook 照樣會跑，但推上去之後在 Mac、Linux 與雲端的 clone 裡不會跑。Linux 上複製後已經是 `100755`。
 
 步驟：
 
 1. 把 `files/` 底下的所有檔（含 `.` 開頭的）複製到新 repo 的根目錄。
 2. `dot-claude/` 改名成 `.claude/`。
-3. 確認 `.githooks/` 底下的檔在 git 裡是可執行的模式（`git ls-files -s .githooks` 每一行開頭是 `100755`）；不是就 `git update-index --chmod=+x .githooks/*`。
+3. `git add` 之後，確認 `.githooks/` 底下的檔在 git 裡是可執行的模式（`git ls-files -s .githooks` 每一行開頭是 `100755`）；不是就 `git update-index --chmod=+x -- .githooks/pre-commit`。
 4. 跑 `git config core.hooksPath .githooks`：git 預設不用 repo 裡的 `.githooks/`，沒設的話提交前的檢查不會跑（雲端由 `cloud-setup.mjs` 設）。
 5. 已經有內容的 repo：不覆蓋既有的檔，逐檔比對後併入。
 
