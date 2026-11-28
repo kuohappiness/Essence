@@ -1,5 +1,5 @@
 import type { Prompt } from '../deck/index.ts';
-import { cardOf, choiceCardOf, pickCardOf } from './compose.ts';
+import { cardOf, choiceCardOf, pickCardOf, singleCardKey, singleCardOf } from './compose.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { shownWith } from './shown.ts';
@@ -89,6 +89,29 @@ function pickCard(item: QueueItem, slot: Slot, scope: readonly QueueItem[], toda
   return pickCardOf({ deck: item.deck, isNew: slot.memory === null && !any.has(item.lt), early }, [mateOf(item.lt), ...others.map(other => mateOf(other.lt))], deckTargets);
 }
 
+/**
+ * 選中的目標是單選時的卡（tasks/matching-single-choice.md §4）：今天的份裡同一張的目標（singleCardKey）併成一張，不看範圍：
+ * 選中的今天還沒答過就整組（連沒到期的、今天答對的也併）；答過了是重來，照比較卡只併答錯、到時間的（joins）。
+ */
+function singleCard(item: QueueItem, slot: Slot, today: Today, input: TodayInput, answers: Answers, early: boolean): Card {
+  const { valid, any } = answers;
+  const mateOf = (lt: string): PickMate => { const each = slotOf(today, lt); return { lt, target: each.target, shown: shownWith(each.seen, valid.get(lt) ?? []) }; };
+  const entry = input.decks.find(each => each.path === item.deck);
+  const deckTargets = entry ? entry.whole ?? entry.deck.targets : [slot.target];
+  const key = singleCardKey(slot.target, deckTargets);
+  const again = valid.has(item.lt);
+  const seen = new Set([item.lt]);
+  const others = [...today.share, ...today.more].filter(other => {
+    if (seen.has(other.lt) || other.deck !== item.deck) return false;
+    seen.add(other.lt);
+    const each = slotOf(today, other.lt);
+    if (each.target.kind?.id !== 'single' || singleCardKey(each.target, deckTargets) !== key) return false;
+    const entries = valid.get(other.lt);
+    return !again || joins(entries, early, () => againAt(each, entries ?? []) <= input.now);
+  });
+  return singleCardOf({ deck: item.deck, isNew: slot.memory === null && !any.has(item.lt), early }, [mateOf(item.lt), ...others.map(other => mateOf(other.lt))]);
+}
+
 export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if (input.offset !== today.offset || dayOf(input.now, input.offset) !== today.day) return { kind: 'stale' };
   if ('targets' in pick && 'since' in pick) return practiceNext(input, pick.targets, pick.since);
@@ -131,7 +154,8 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   switch (slot.target.kind?.id) {
     case 'group': return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, early) };
     case 'polyphone': return { kind: 'card', card: choiceCardOf({ lt: item.lt, deck: item.deck, target: slot.target, isNew: slot.memory === null && !any.has(item.lt), early }, shownWith(slot.seen, valid.get(item.lt) ?? [])) };
-    case 'order': case 'typing': case 'couplet': case 'single': case undefined: break;
+    case 'single': return { kind: 'card', card: singleCard(item, slot, today, input, answers, early) };
+    case 'order': case 'typing': case 'couplet': case undefined: break;
     default: { const never: never = slot.target.kind; return never; }
   }
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);

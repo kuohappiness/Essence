@@ -242,6 +242,11 @@ export interface CardGroup {
    * rest 是記憶錨點裡對不到讀音的行，照原本的順序接在對照後面。
    */
   choice?: { rest: readonly string[] };
+  /**
+   * 單選與配對才有（tasks/matching-single-choice.md §5）：這時 title 是空的、畫面不印；members 是選中的目標的選項，keys 是打散的選項；
+   * rows 是空的，每一列的記憶錨點與詳解從那一格自己的目標與題目拿。
+   */
+  single?: true;
 }
 
 export interface Card {

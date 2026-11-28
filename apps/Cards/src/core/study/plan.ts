@@ -1,4 +1,5 @@
 import type { Target } from '../deck/index.ts';
+import { singleCardKey } from './compose.ts';
 import { findDuplicateIds } from './duplicates.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { addShown } from './shown.ts';
@@ -191,6 +192,18 @@ export function planToday(input: TodayInput): Today {
   const sorted = [...candidates.values()].filter(c => shows(c) && !dropped.has(c.id));
   sorted.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || compareInLane(a, b) || compareText(a.id, b.id));
   const ordered = newGroupsTogether(sorted);
+  // 配對整組出（tasks/matching-single-choice.md §4〈配對〉）：同一張的單選有一個今天要出，其他沒到期的也跟著出（followers），照筆記順序。
+  const shown = new Set(ordered);
+  const followers = new Map<string, Candidate[]>();
+  for (const c of candidates.values()) {
+    const key = shown.has(c) || dropped.has(c.id) ? null : groupKey(c);
+    if (key === null || !key.startsWith(SINGLE)) continue;
+    const list = followers.get(key);
+    if (list) list.push(c);
+    else followers.set(key, [c]);
+  }
+  const shownIn = new Map<string, number>();
+  for (const c of ordered) { const key = groupKey(c); if (key?.startsWith(SINGLE)) shownIn.set(key, (shownIn.get(key) ?? 0) + 1); }
 
   const seconds = secondsBySubject(reviews, dayStart(day - 30, offset), start, subjectOf);
   const budget = settings.capMinutes * 60;
@@ -198,27 +211,46 @@ export function planToday(input: TodayInput): Today {
   const slots = new Map<string, Slot>();
   let used = 0;
   // 同一組的比較卡是一張（tasks/question-type-seam.md §5-4）：第一個決定放哪裡、占時間；後面同組的跟著它，不占時間。放好之後秒數平均分。
+  // 單選與配對（tasks/matching-single-choice.md §4〈估時〉）：第一個決定放哪裡，占今天要出的那幾格的時間；跟著出的沒到期目標不占，
+  // 每一格照自己的秒數算進那一張（不平均分）。
   const cards = new Map<string, { list: QueueItem[]; items: QueueItem[] }>();
-  for (const c of ordered) {
+  const place = (c: Candidate, list: QueueItem[] | null): { item: QueueItem; list: QueueItem[] } => {
     const subject = c.entry.deck.props.subject;
     const item: QueueItem = { lt: c.id, deck: c.entry.path, subject, lane: c.lane, seconds: seconds.get(subject) ?? DEFAULT_SECONDS };
-    const key = groupKey(c);
-    const card = key === null ? undefined : cards.get(key);
+    const cost = item.seconds * (shownIn.get(groupKey(c) ?? '') ?? 1);
     // 第一個放不下的和它後面的全部進 more，不跳過去找小的。
-    const list = card?.list ?? (more.length === 0 && used + item.seconds <= budget ? share : more);
-    if (!card && list === share) used += item.seconds;
-    list.push(item);
-    if (card) card.items.push(item);
-    else if (key !== null) cards.set(key, { list, items: [item] });
+    const chosen = list ?? (more.length === 0 && used + cost <= budget ? share : more);
+    if (!list && chosen === share) used += cost;
+    chosen.push(item);
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map() as Shown });
+    return { item, list: chosen };
+  };
+  for (const c of ordered) {
+    const key = groupKey(c);
+    const card = key === null ? undefined : cards.get(key);
+    const { item, list } = place(c, card?.list ?? null);
+    if (card) card.items.push(item);
+    else if (key !== null) {
+      cards.set(key, { list, items: [item] });
+      for (const each of followers.get(key) ?? []) place(each, list);
+    }
   }
-  for (const { items } of cards.values()) for (const item of items) item.seconds /= items.length;
+  for (const [key, { items }] of cards) if (!key.startsWith(SINGLE)) for (const item of items) item.seconds /= items.length;
   return { day, offset, share, more, slots };
 }
 
-/** 比較卡的組的身分（§3）：同一篇、key 相同。 */
-const groupKey = (c: Candidate): string | null => c.target.kind?.id === 'group' ? c.entry.path + '\0' + c.target.kind.group.key : null;
+/** 單選的組鍵開頭：和比較卡的組分開（§4〈新的排在一起與估時〉）。 */
+const SINGLE = 'single\0';
+/**
+ * 併成一張的組的身分：比較卡是同一篇、key 相同（§3）；單選是同一篇、同一張（singleCardKey，tasks/matching-single-choice.md §4），
+ * 前面加卡型，選項剛好和比較卡的括號一樣也不併。
+ */
+function groupKey(c: Candidate): string | null {
+  if (c.target.kind?.id === 'group') return c.entry.path + '\0' + c.target.kind.group.key;
+  const key = c.target.kind?.id === 'single' ? singleCardKey(c.target, c.entry.whole ?? c.entry.deck.targets) : null;
+  return key === null ? null : SINGLE + c.entry.path + '\0' + key;
+}
 
 /** 排好順序後，新的目標碰到同組的第一個時，同組其他新的目標緊接在它後面（§5-4）。 */
 function newGroupsTogether(sorted: readonly Candidate[]): Candidate[] {

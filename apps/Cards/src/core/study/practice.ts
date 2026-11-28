@@ -1,5 +1,5 @@
 import type { Target } from '../deck/index.ts';
-import { cardOf, choiceCardOf, pickCardOf } from './compose.ts';
+import { cardOf, choiceCardOf, pickCardOf, singleCardKey, singleCardOf } from './compose.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { compareText, firstAtOrAfter, retentionOf } from './plan.ts';
 import { choosePrompt, joins, wrong } from './session.ts';
@@ -208,25 +208,35 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const priorOf = (id: string): ReviewEntry[] => before.filter(entry => entry.lt === id && entry.src !== 'mistake');
   const prior = priorOf(item.id);
   const seen = shownWith(new Map(), prior);
+  // 併卡的目標（比較卡、單選）：出題歷史是本輪以前加上這一輪；答錯的到時間了才併（joins）。
+  const mateOf = (each: Item): PickMate => ({ lt: each.id, target: each.target, shown: shownWith(shownWith(new Map(), priorOf(each.id)), valid.get(each.id) ?? []) });
+  const dueBy = (each: Item): boolean => {
+    const memory = latest.get(each.id);
+    return !memory || dueAt(memory, retentionOf(input, each.entry, each.target)) <= input.now;
+  };
+  const early = !ready.length && !fresh.length;
   // 照卡型選組卡的方式（題型模組任務說明 §1-4）。
   switch (item.target.kind?.id) {
     case 'group': {
-      // 同一組的目標照今天的份的規則併（tasks/question-type-seam.md §5-1）；出題歷史是本輪以前加上這一輪。
+      // 同一組的目標照今天的份的規則併（tasks/question-type-seam.md §5-1）。
       const key = item.target.kind.group.key;
-      const mateOf = (each: Item): PickMate => ({ lt: each.id, target: each.target, shown: shownWith(shownWith(new Map(), priorOf(each.id)), valid.get(each.id) ?? []) });
-      const dueBy = (each: Item): boolean => {
-        const memory = latest.get(each.id);
-        return !memory || dueAt(memory, retentionOf(input, each.entry, each.target)) <= input.now;
-      };
-      const early = !ready.length && !fresh.length;
       const others = items.filter(other => other !== item && other.path === item.path && (other.target.kind?.id === 'group' ? other.target.kind.group.key : undefined) === key
         && joins(valid.get(other.id), early, () => dueBy(other)));
       return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.whole ?? item.entry.deck.targets) };
     }
+    // 單選與配對（tasks/matching-single-choice.md §4）：這一輪裡同一張的目標整組出；這一輪答過了是重來，只併答錯、到時間的。
+    case 'single': {
+      const deckTargets = item.entry.whole ?? item.entry.deck.targets;
+      const key = singleCardKey(item.target, deckTargets);
+      const again = valid.has(item.id);
+      const others = items.filter(other => other !== item && other.path === item.path && other.target.kind?.id === 'single' && singleCardKey(other.target, deckTargets) === key
+        && (!again || joins(valid.get(other.id), early, () => dueBy(other))));
+      return { kind: 'card', card: singleCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)]) };
+    }
     // 多音字（tasks/polyphone-pick.md §3）：出題歷史是本輪以前加上這一輪，和今天的份同一種組法。
     case 'polyphone':
-      return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early: !ready.length && !fresh.length }, shownWith(seen, valid.get(item.id) ?? [])) };
-    case 'order': case 'typing': case 'couplet': case 'single': case undefined: break;
+      return { kind: 'card', card: choiceCardOf({ lt: item.id, deck: item.path, target: item.target, isNew: !memories.has(item.id) && !any.has(item.id), early }, shownWith(seen, valid.get(item.id) ?? [])) };
+    case 'order': case 'typing': case 'couplet': case undefined: break;
     default: { const never: never = item.target.kind; return never; }
   }
   const slot: Slot = {

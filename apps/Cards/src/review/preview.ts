@@ -1,5 +1,5 @@
 import type { Deck, Target } from '../core/deck/index.ts';
-import { cardOf, choicePreviewCards, pickPreviewCards } from '../core/study/index.ts';
+import { cardOf, choicePreviewCards, pickPreviewCards, singlePreviewCards } from '../core/study/index.ts';
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
 import { isEnglish } from './english.ts';
@@ -36,7 +36,9 @@ function cardsOf(path: string, targets: readonly Target[]): Card[] {
         return pickPreviewCards(path, ok.filter(each => each.kind?.id === 'group' && each.kind.group.key === key), targets);
       }
       case 'polyphone': return choicePreviewCards(path, target);
-      case 'order': case 'typing': case 'couplet': case 'single': case undefined: return plain();
+      // 單選與配對（tasks/matching-single-choice.md §4）：預覽不併，每一題一張，家長看得到每一題。
+      case 'single': return singlePreviewCards(path, target);
+      case 'order': case 'typing': case 'couplet': case undefined: return plain();
       default: { const never: never = target.kind; return never; }
     }
   });
