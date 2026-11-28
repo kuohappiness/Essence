@@ -3,7 +3,7 @@ import type { App, Plugin } from 'obsidian';
 import { directJob, freeName, groupHints, issueText, PURPOSES, UNENDED_HINT } from '../core/ai/index.ts';
 import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
 import { usageLine } from '../core/connect/index.ts';
-import type { DirectFailure, Material, ProgressEvent } from '../core/connect/index.ts';
+import type { DirectFailure, DirectProgress, Material } from '../core/connect/index.ts';
 import { inspectionKey, PICK_NOTE, SERVICES } from './ai-cards.ts';
 import type { AiCards, DirectOutcome, Outcome } from './ai-cards.ts';
 import { ago, askCancel, DIRECT_TEXT, materialField, sendingView } from './direct-ui.ts';
@@ -274,7 +274,7 @@ class AiCardsModal extends Modal {
    * 送出中（§4 第 4 步）：等了多久、收到多少字；1 分鐘還沒有字時補一句；一直可以取消。
    * work 送出並交回結果；送出前就擋下時回傳原因（畫面回第一步），其他情況由這裡畫下一步，回傳 null。
    */
-  private async sendNow(label: string, work: (progress: (event: ProgressEvent) => void) => Promise<DirectOutcome>): Promise<string | null> {
+  private async sendNow(label: string, work: (progress: (event: DirectProgress) => void) => Promise<DirectOutcome>): Promise<string | null> {
     const el = this.reset();
     const view = sendingView(el, label, () => this.host.now(), () => { this.host.cards()?.cancel(); });
     this.view = view;

@@ -1,6 +1,6 @@
 import { sha256OfBytes } from '../core/ai/index.ts';
 import { materialType } from '../core/connect/index.ts';
-import type { Material, ProgressEvent } from '../core/connect/index.ts';
+import type { DirectProgress, Material } from '../core/connect/index.ts';
 
 // 直接製作的畫面零件（tasks/ai-direct.md §4～§6、§9）：製卡與加深的視窗共用。這裡只畫，送出、重送與存檔在各自的流程。
 
@@ -14,6 +14,8 @@ export const DIRECT_TEXT = {
   receiving: (chars: number, time: string) => `已收到 ${chars.toLocaleString('en-US')} 字（已經 ${time}）`,
   slowStart: '有些 AI 要想 2～3 分鐘才開始回答。',
   retrying: (seconds: number, attempt: number) => `AI 那邊忙或連不上，${String(seconds)} 秒後再送一次（第 ${String(attempt)} 次）。`,
+  /** 碰到一次回覆的上限，程式自動接著要（ai-direct-continue.md）：接著要的那一次另外計費。 */
+  continuing: (part: number) => `回答太長，一次寫不完；正在接著要第 ${String(part)} 段（這一段另外計費）。`,
   askCancel: '要取消這一次嗎？如果 AI 已經開始做，這一次可能仍會計費。',
   reselect: '教材檔不會存下來，重開過 Obsidian 之後要重新選一次，才能用同一份提示重送。',
   resendKept: '用上一次選的教材檔、同一份提示重送；照設定頁現在的服務與模型送出。',
@@ -80,13 +82,14 @@ export function materialField(cell: HTMLElement, materials: Material[], note: st
 }
 
 /**
- * 送出中的畫面（§4 第 4 步）：等了多久、收到多少字；1 分鐘還沒有字時補一句；一直可以取消。
+ * 送出中的畫面（§4 第 4 步）：等了多久、收到多少字；1 分鐘還沒有字時補一句；接著要時寫第幾段；一直可以取消。
  * 回傳收進度的 progress、停計時器的 stop，與「要取消這一次嗎？」那一列的位置 ask（畫在按鈕上面）。
  */
-export function sendingView(el: HTMLElement, label: string, now: () => number, cancel: () => void): { ask: HTMLElement; progress: (event: ProgressEvent) => void; stop: () => void } {
+export function sendingView(el: HTMLElement, label: string, now: () => number, cancel: () => void): { ask: HTMLElement; progress: (event: DirectProgress) => void; stop: () => void } {
   const status = el.createEl('p', { text: `${label}：${DIRECT_TEXT.thinking(elapsed(0))}` });
   const slow = el.createEl('p', { cls: 'essence-cards-issue-note' });
   const retry = el.createEl('p', { cls: 'essence-cards-issue-note' });
+  const more = el.createEl('p', { cls: 'essence-cards-issue-note' });
   const ask = el.createDiv();
   el.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: '取消' }).addEventListener('click', cancel);
   const started = now();
@@ -102,6 +105,7 @@ export function sendingView(el: HTMLElement, label: string, now: () => number, c
     progress: event => {
       if (event.type === 'text') { chars = event.totalChars; retry.setText(''); draw(); }
       else if (event.type === 'retrying') retry.setText(DIRECT_TEXT.retrying(Math.round(event.delayMs / 1000), event.attempt));
+      else if (event.type === 'continuing') more.setText(DIRECT_TEXT.continuing(event.part));
     },
     stop: () => { if (timer !== null) { window.clearInterval(timer); timer = null; } },
   };

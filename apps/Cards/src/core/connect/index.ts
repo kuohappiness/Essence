@@ -3,5 +3,5 @@ export { createAiClient, describeAiError, isAiError } from './client.ts';
 export { cardsClient, keyOf, modelChoices, modelOf, providerChoices, providerName, readConnection, REASONING_CHOICES, sharedWith, testConnection, withSecret } from './connection.ts';
 export type { Connection, KeyLookup } from './connection.ts';
 export { directRequest, evidenceOf, failureLog, materialProblem, materialType, providerProblem, sendDirect, sendingLine, sentFiles, usageLine } from './direct.ts';
-export type { DirectFailure, DirectLog, Material } from './direct.ts';
-export type { AiClient, ProgressEvent, ProviderSpec } from './client.ts';
+export type { DirectFailure, DirectLog, DirectProgress, Material } from './direct.ts';
+export type { AiClient, ProviderSpec } from './client.ts';

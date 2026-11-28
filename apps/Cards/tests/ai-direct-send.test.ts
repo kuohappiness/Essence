@@ -52,12 +52,12 @@ void test('§4 這一家收不收得下：模型不收 PDF 或照片、超過頁
   assert.match(providerProblem(provider('openai'), 'gpt-5.6-terra', [pdf(30, 'a.pdf', 52_428_801)], 20_000) ?? '', /最多約 52 MB/);
 });
 
-void test('§4 送出的請求：教材在提示前面、提示一字不改；PDF 帶代稱的檔名與頁數；推理等級「照服務的預設」不送；輸出上限 32,000', () => {
+void test('§4 送出的請求：教材在提示前面、提示一字不改；PDF 帶代稱的檔名與頁數；推理等級「照服務的預設」不送；不寫輸出上限（照套件目錄的模型，tasks/ai-direct-continue.md）', () => {
   const prompt = '# 通用\n\n# 英文\n\n任務段';
   const materials = [pdf(12), photo('p41.png'), pdf(null, '小明 英文 L4.pdf')];
   const request = directRequest({ connection: google, provider: provider('google'), apiKey: FAKE_KEY, prompt, materials });
   assert.equal(request.model, 'gemini-3.8-flash');
-  assert.equal(request.maxOutputTokens, 32_000);
+  assert.equal('maxOutputTokens' in request, false);
   assert.equal('reasoning' in request, false);
   assert.deepEqual(request.endpoint, { provider: 'google' });
   const content = request.input[0].content;
@@ -124,9 +124,10 @@ void test('§4 送出成功：拿回整段、用量與模型；請求裡有教�
 });
 
 void test('§6 收到了但沒有正常結束：截斷、被擋、空的各一句，都帶著收到的那一份', async () => {
+  // 還沒寫完一行就截斷：沒有可以接著要的（接著要的例子在 tests/ai-direct-continue.test.ts）。
   const cut = await send(geminiEvents('國二上英文 L3 單字', 'MAX_TOKENS')).result;
   assert.ok(!cut.ok);
-  assert.deepEqual([cut.failure.kind, cut.failure.text, cut.failure.next], ['length', '回答太長被截斷了。', '切成小一點的檔再送。']);
+  assert.deepEqual([cut.failure.kind, cut.failure.text, cut.failure.next], ['length', 'AI 還沒寫出內容，就用完了一次回覆的上限（多半是想太久）。', '到設定頁把推理等級調低一級再送，或切成小一點的檔。']);
   assert.equal(cut.result?.text, '國二上英文 L3 單字');
   const filtered = await send(geminiEvents('一半', 'SAFETY')).result;
   assert.ok(!filtered.ok);
