@@ -202,8 +202,14 @@ export function planToday(input: TodayInput): Today {
     if (list) list.push(c);
     else followers.set(key, [c]);
   }
-  const shownIn = new Map<string, number>();
-  for (const c of ordered) { const key = groupKey(c); if (key?.startsWith(SINGLE)) shownIn.set(key, (shownIn.get(key) ?? 0) + 1); }
+  // 今天要出的格數：切開的每一張（有沒有要出的），和整組（同一篇、同一組選項，切開的幾張合起來，占時間照這個算，L2 第二輪 1）。
+  const shownIn = new Set<string>(), wholeShown = new Map<string, number>();
+  for (const c of ordered) {
+    const key = groupKey(c), whole = wholeOf(key);
+    if (key === null || whole === null) continue;
+    shownIn.add(key);
+    wholeShown.set(whole, (wholeShown.get(whole) ?? 0) + 1);
+  }
 
   const seconds = secondsBySubject(reviews, dayStart(day - 30, offset), start, subjectOf);
   const budget = settings.capMinutes * 60;
@@ -217,7 +223,7 @@ export function planToday(input: TodayInput): Today {
   const place = (c: Candidate, list: QueueItem[] | null): { item: QueueItem; list: QueueItem[] } => {
     const subject = c.entry.deck.props.subject;
     const item: QueueItem = { lt: c.id, deck: c.entry.path, subject, lane: c.lane, seconds: seconds.get(subject) ?? DEFAULT_SECONDS };
-    const cost = item.seconds * (shownIn.get(groupKey(c) ?? '') ?? 1);
+    const cost = item.seconds * (wholeShown.get(wholeOf(groupKey(c)) ?? '') ?? 1);
     // 第一個放不下的和它後面的全部進 more，不跳過去找小的。
     const chosen = list ?? (more.length === 0 && used + cost <= budget ? share : more);
     if (!list && chosen === share) used += cost;
@@ -226,20 +232,20 @@ export function planToday(input: TodayInput): Today {
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map() as Shown });
     return { item, list: chosen };
   };
-  // 切成好幾張的組（§4〈上限〉）：有一格要出就整組出，同一組其他張沒有要出的，整張跟在第一張後面（L2 第一輪 R3）；有要出的那幾張等輪到自己時再放。
-  const pulled = new Set<string>();
+  // 切成好幾張的組（§4〈上限〉）：有一格要出就整組出，整組放進同一份，第一張決定放哪裡（L2 第二輪 1）；同一組其他張沒有要出的，
+  // 整張跟在第一張後面（L2 第一輪 R3）；有要出的那幾張輪到自己時放進同一份。
+  const wholes = new Map<string, QueueItem[]>();
   for (const c of ordered) {
-    const key = groupKey(c);
+    const key = groupKey(c), whole = wholeOf(key);
     const card = key === null ? undefined : cards.get(key);
-    const { item, list } = place(c, card?.list ?? null);
+    const { item, list } = place(c, card?.list ?? (whole === null ? null : wholes.get(whole) ?? null));
     if (card) card.items.push(item);
     else if (key !== null) {
       cards.set(key, { list, items: [item] });
       for (const each of followers.get(key) ?? []) place(each, list);
-      const whole = key.startsWith(SINGLE) ? key.slice(0, key.lastIndexOf('\0')) : null;
-      if (whole === null || pulled.has(whole)) continue;
-      pulled.add(whole);
-      for (const [other, rest] of followers) if (other !== key && !shownIn.has(other) && other.slice(0, other.lastIndexOf('\0')) === whole) for (const each of rest) place(each, list);
+      if (whole === null || wholes.has(whole)) continue;
+      wholes.set(whole, list);
+      for (const [other, rest] of followers) if (other !== key && !shownIn.has(other) && wholeOf(other) === whole) for (const each of rest) place(each, list);
     }
   }
   for (const [key, { items }] of cards) if (!key.startsWith(SINGLE)) for (const item of items) item.seconds /= items.length;
@@ -248,6 +254,10 @@ export function planToday(input: TodayInput): Today {
 
 /** 單選的組鍵開頭：和比較卡的組分開（§4〈新的排在一起與估時〉）。 */
 const SINGLE = 'single\0';
+/** 單選的整組（同一篇、同一組選項，切開的幾張合起來）：組鍵去掉最後的第幾張；比較卡與其他卡型沒有。 */
+function wholeOf(key: string | null): string | null {
+  return key?.startsWith(SINGLE) ? key.slice(0, key.lastIndexOf('\0')) : null;
+}
 /**
  * 併成一張的組的身分：比較卡是同一篇、key 相同（§3）；單選是同一篇、同一張（singleCardKey，tasks/matching-single-choice.md §4），
  * 前面加卡型，選項剛好和比較卡的括號一樣也不併。

@@ -127,6 +127,22 @@ void test('配對：7 個目標只有第一張有要出的（L2 第一輪 R3）�
   assert.deepEqual(plan([seven], first, at('10-24'), 0.25).today.share.map(item => item.lt).sort(), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000']);
 });
 
+void test('配對：切成兩張、兩張都有要出的（L2 第二輪 1），整組放進同一份、照整組的格數占時間，不被每天的上限拆開', () => {
+  const seven = deckOf(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((x, i) => target(`${x}${x}${x}000`, `能認出第 ${String(i + 1)} 個`, `第 ${String(i + 1)} 題是哪一部？`, COAST[i % 4])).join(''));
+  const all = ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000'];
+  // 7 個都是新的，一格 15 秒，整組 105 秒：上限 90 秒放不下整組，整組進「再複習一些」（第一張放得下也不先放）；105 秒剛好放下整組。
+  const tight = plan([seven], [], at('10-24'), 1.5).today;
+  assert.deepEqual([tight.share.map(item => item.lt), tight.more.map(item => item.lt).sort()], [[], all]);
+  const fits = plan([seven], [], at('10-24'), 1.75).today;
+  assert.deepEqual([fits.share.map(item => item.lt).sort(), fits.more], [all, []]);
+  // 第一張 4 格要出、1 格跟著出，第二張 1 格要出、1 格跟著出：前面 16 個一般目標占 240 秒，上限 300 秒放不下整組 5 格（75 秒），整組一起進「再複習一些」。
+  const plain = deckOf(Array.from({ length: 16 }, (_, i) => `- 能說出第 ${String(i + 1)} 個 ^p${String(i).padStart(5, '0')}\n    - 第 ${String(i + 1)} 個？ :: 答${String(i + 1)}\n`).join(''), 'Essence Cards/社會/一般.md');
+  const notDue = ['eee000', 'ggg000'].map(lt => good(at('10-23'), lt, v(seven, lt)));
+  const mixed = plan([plain, seven], notDue, at('10-24'), 5).today;
+  assert.equal(mixed.share.length, 16);
+  assert.deepEqual(mixed.more.map(item => item.lt).sort(), all);
+});
+
 void test('配對：今天答過一次之後，答錯的那幾格到時間只出那幾格，不再整組', () => {
   const t0 = Date.parse(at('10-24'));
   const when = (seconds: number): string => new Date(t0 + seconds * 1000 + 8 * 3600_000).toISOString().slice(0, 23) + '+08:00';
