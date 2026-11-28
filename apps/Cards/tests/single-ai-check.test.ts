@@ -10,7 +10,7 @@ const CODES = ['options-invalid', 'options-all-none', 'which-of', 'shared-label'
 const found = (text: string): Found[] => check(text, { subject: '社會' }).issues
   .filter(each => CODES.includes(each.code))
   .map(each => [each.level, each.line, each.code]);
-const OPTIONS = '    - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸';
+const OPTIONS = '    - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸';
 /** 一份稿：小標題（第 1 行）、名稱（第 3 行）、出處（第 4 行）、題目（第 5 行）、其餘從第 6 行起。 */
 const draft = (question = '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', ...rest: string[]): string =>
   ['## 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42', question, ...rest].join('\n') + '\n';
@@ -19,37 +19,37 @@ void test('照規則寫的單選：沒有任何發現；選項行不報「不是
   assert.deepEqual(found(draft(undefined, OPTIONS)), []);
   assert.deepEqual(found(draft(undefined, OPTIONS, '    - 例子：野柳')), [['提醒', 7, 'shared-label']]);
   // 半形冒號不是選項行：照原本的題型出，也照報不是資料欄位。
-  assert.deepEqual(found(draft(undefined, '    - 選項:岩岸、沙岸、斷層海岸')), [['提醒', 6, 'shared-label'], ['錯誤', 6, 'options-invalid']]);
+  assert.deepEqual(found(draft(undefined, '    - 選項:岩岸;;沙岸;;斷層海岸')), [['提醒', 6, 'shared-label'], ['錯誤', 6, 'options-invalid']]);
 });
 
 void test('options-invalid（錯誤）：選項讀不成、答案不在選項裡、寫在資料那一行或縮在出處底下', () => {
-  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸、沙岸')), [['錯誤', 6, 'options-invalid']]);
+  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸;;沙岸')), [['錯誤', 6, 'options-invalid']]);
   assert.deepEqual(found(draft('    - 臺灣北部的海岸是哪一種海岸？ :: 岬灣', OPTIONS)), [['錯誤', 6, 'options-invalid']]);
   assert.deepEqual(found(draft(undefined, OPTIONS, OPTIONS)), [['錯誤', 7, 'options-invalid']]);
-  assert.deepEqual(found(['## 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42｜選項：岩岸、沙岸、斷層海岸', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', ''].join('\n')), [['錯誤', 4, 'options-invalid']]);
-  assert.deepEqual(found(['## 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42', '        - 選項：岩岸、沙岸、斷層海岸', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', ''].join('\n')), [['錯誤', 5, 'options-invalid']]);
+  assert.deepEqual(found(['## 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42｜選項：岩岸;;沙岸;;斷層海岸', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', ''].join('\n')), [['錯誤', 4, 'options-invalid']]);
+  assert.deepEqual(found(['## 臺灣的海岸', '', '- 能說出臺灣北部海岸的地形', '    - 出處：p.42', '        - 選項：岩岸;;沙岸;;斷層海岸', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', ''].join('\n')), [['錯誤', 5, 'options-invalid']]);
 });
 
 void test('options-invalid（錯誤）：候選框與加進已有的框也擋，同一行只報一次', () => {
   // 本文第 1～6 行，第 7 行空行，框從第 8 行起：名稱第 9 行，選項行在候選框第 13 行、加進已有的框第 12 行。
-  const candidate = draft(undefined, OPTIONS) + ['', '> [!note]- 候選卡片', '> - 能說出臺灣東部海岸的地形', '>     - 理由：x', '>     - 出處：p.42', '>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：斷層海岸、岩岸', ''].join('\n');
+  const candidate = draft(undefined, OPTIONS) + ['', '> [!note]- 候選卡片', '> - 能說出臺灣東部海岸的地形', '>     - 理由：x', '>     - 出處：p.42', '>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：斷層海岸;;岩岸', ''].join('\n');
   assert.deepEqual(found(candidate), [['錯誤', 13, 'options-invalid']]);
-  const existing = draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', '>     - 出處：p.43', '>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：斷層海岸、岩岸', ''].join('\n');
+  const existing = draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', '>     - 出處：p.43', '>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：斷層海岸;;岩岸', ''].join('\n');
   assert.deepEqual(found(existing), [['錯誤', 12, 'options-invalid']]);
   // 寫對的加進已有：不報。
-  assert.deepEqual(found(existing.replace('選項：斷層海岸、岩岸', '選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸')), []);
+  assert.deepEqual(found(existing.replace('選項：斷層海岸;;岩岸', '選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸')), []);
 });
 
 void test('options-all-none（錯誤）：選項有「以上皆是」「以上皆非」', () => {
-  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸、沙岸、以上皆非')), [['錯誤', 3, 'options-all-none']]);
-  assert.deepEqual(found(draft('    - 野柳是哪一種海岸？ :: 以上皆是', '    - 選項：岩岸、沙岸、以上皆是')), [['錯誤', 3, 'options-all-none']]);
+  assert.deepEqual(found(draft(undefined, '    - 選項：岩岸;;沙岸;;以上皆非')), [['錯誤', 3, 'options-all-none']]);
+  assert.deepEqual(found(draft('    - 野柳是哪一種海岸？ :: 以上皆是', '    - 選項：岩岸;;沙岸;;以上皆是')), [['錯誤', 3, 'options-all-none']]);
 });
 
 void test('options-all-none（錯誤）：加進已有的框也擋（L2 第一輪 R5），報在名稱那一行；只補選項行的也一樣', () => {
   const box = (...rest: string[]): string => draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...rest, ''].join('\n');
-  assert.deepEqual(found(box('>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：岩岸、斷層海岸、以上皆是')), [['錯誤', 9, 'options-all-none']]);
-  assert.deepEqual(found(box('>     - 選項：岩岸、斷層海岸、以上皆非')), [['錯誤', 9, 'options-all-none']]);
-  assert.deepEqual(found(box('>     - 選項：岩岸、沙岸、斷層海岸')), []);
+  assert.deepEqual(found(box('>     - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸', '>     - 選項：岩岸;;斷層海岸;;以上皆是')), [['錯誤', 9, 'options-all-none']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;斷層海岸;;以上皆非')), [['錯誤', 9, 'options-all-none']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸')), []);
 });
 
 void test('which-of：有選項行的目標寫「下列」「以下何者」是錯誤；沒有選項行的照舊是提醒', () => {
@@ -69,7 +69,7 @@ const reply = (...existing: string[]): string => ['<<<全貌>>>', '## 知識塊'
   '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...existing, '<<<完>>>', ''].join('\n');
 
 void test('加進已有的框只補一行選項行（L2 第一輪 R4）：草稿存得了；連題目都沒有、也沒有選項行的照舊擋', () => {
-  const only = inspectReply(reply('>     - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸'), FORM, SOCIAL, SENT, here);
+  const only = inspectReply(reply('>     - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸'), FORM, SOCIAL, SENT, here);
   assert.equal(only.ended, true);
   assert.deepEqual(only.errors, []);
   const empty = inspectReply(reply('>     - 出處：p.43'), FORM, SOCIAL, SENT, here);
@@ -82,5 +82,5 @@ void test('single-leak（錯誤）：有選項行的題目寫出這一題自己�
   assert.deepEqual(found(draft('    - 臺灣北部常見**岩岸**，是哪一種海岸？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'single-leak']]);
   assert.deepEqual(found(draft('    - 不像東部的斷層海岸，北部是哪一種海岸？ :: 岩岸', OPTIONS)), []);
   assert.deepEqual(found(draft('    - 臺灣北部常見岩岸，是哪一種海岸？ :: 岩岸')), []);
-  assert.deepEqual(found(draft('    - 東北角在臺灣哪一部？ :: 東', '    - 選項：東、西、南、北')), []);
+  assert.deepEqual(found(draft('    - 東北角在臺灣哪一部？ :: 東', '    - 選項：東;;西;;南;;北')), []);
 });

@@ -33,7 +33,7 @@ export interface CardForm {
 
 /**
  * 學生已有的一個學習目標（§2）：送出時在哪一篇（之後轉成連結時核對，§5）。first 是送出的第一題（tasks/ai-cards-add.md §5 第 1 點，`提示 v3`）；
- * 沒有題目、或 `提示 v3` 之前存的工作沒有這一欄。options 是單選目標的選項，用頓號接（tasks/matching-single-choice.md §6，`提示 v6`）；
+ * 沒有題目、或 `提示 v3` 之前存的工作沒有這一欄。options 是單選目標的選項，用 `;;` 接（tasks/matching-single-choice.md §6，`提示 v6`）；
  * 不是單選、或 `提示 v6` 之前存的工作沒有這一欄。
  */
 export interface ExistingTarget { id: string; name: string; source: string; path: string; first?: string; options?: string }
@@ -44,8 +44,8 @@ export function firstLine(prompt: DeckPrompt): string {
   const flat = (text: string): string => image(text).split('\n').map(line => line.trim()).filter(Boolean).join('／');
   return prompt.kind === 'qa' ? `${flat(prompt.question)} :: ${flat(prompt.answer)}` : flat(prompt.text);
 }
-/** 單選目標的選項（tasks/matching-single-choice.md §6）：頓號接起來；不是單選的是 undefined。製卡與加深的清單共用。 */
-export const optionsOf = (target: Target): string | undefined => target.kind?.id === 'single' ? target.kind.single.options.join('、') : undefined;
+/** 單選目標的選項（tasks/matching-single-choice.md §6）：照選項行的寫法用 `;;` 接起來；不是單選的是 undefined。製卡與加深的清單共用。 */
+export const optionsOf = (target: Target): string | undefined => target.kind?.id === 'single' ? target.kind.single.options.join(';;') : undefined;
 /** 清單那一行最後接的選項：不以「選項」開頭，免得 AI 照抄成接在出處那一行的寫法。 */
 export const optionsSuffix = (options: string | undefined): string => options === undefined ? '' : `｜這個目標的選項：${options}`;
 /** 清單上有選項的目標怎麼加題（§6、§7）：只在清單上有這種目標時送。製卡與加深共用，寫在「另外」底下。 */
@@ -179,7 +179,7 @@ const SOCIAL_SINGLE: readonly string[] = [
   '    - 用在：要練的是把一個例子或描述歸到固定的幾類，或一組對應容易互相記混，而且題目自己就能回答。出處要指得到教材的分類或對照表、習作用選或連的那一題，或架構段寫的邊界；指不到就不加選項行。',
   '    - 不用在：「下列何者」「哪一個不是」、是非、只有兩項的配對、彼此不相干的一組、定義、原因、語詞解釋、計算。',
   '    - 選項只從教材來：固定的類別、同一組其他目標的答案、架構段「邊界」寫的錯答；不自己編，湊不出兩個錯的選項就不加選項行。3～5 個；類別本來有 4、5 個就全列。',
-  '    - 選項行自己一行，寫在題目後面、和題目同一層，用頓號隔開、冒號用全形；不接在出處那一行，也不縮在出處或題目底下。',
+  '    - 選項行自己一行，寫在題目後面、和題目同一層，冒號用全形；選項之間用兩個半形分號（;;）隔開，選項裡可以有頓號、逗號、一個分號。不接在出處那一行，也不縮在出處或題目底下。',
   '    - 同一組的每個目標寫完全相同的選項行（同樣的字、同樣的順序），一組 3～5 個目標；判斷是哪一類的，類別有幾個就寫幾個目標。一組裡有學生已有的目標，那幾個也用「加進已有的學習目標」加同一行選項行，整組才併得成配對。',
   '    - 題目寫教材給這一類、而同一組其他類沒有的特徵。寫完試填每個選項：別的選項都要被題目裡的一個特徵排除，只剩一個說得通。',
   '    - 例子（只示範結構，正式出題照教材）：',
@@ -188,11 +188,11 @@ const SOCIAL_SINGLE: readonly string[] = [
   '      - 能說出臺灣北部海岸的地形',
   '          - 出處：<頁碼>',
   '          - 臺灣北部的海岸是哪一種海岸？ :: 岩岸',
-  '          - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸',
+  '          - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸',
   '      - 能說出臺灣東部海岸的地形',
   '          - 出處：<頁碼>',
   '          - 臺灣東部的海岸是哪一種海岸？ :: 斷層海岸',
-  '          - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸',
+  '          - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸',
   '      ```',
   '',
 ];

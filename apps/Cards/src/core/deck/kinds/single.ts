@@ -13,7 +13,7 @@ export interface SingleReading {
   problems: { line: number; level: 'hint'; code: ProblemCode; message: string }[];
 }
 
-const HOW = '選項行寫成「- 選項：北部、東部、西部、南部」，自己一行，寫在學習目標底下、和題目同一層';
+const HOW = '選項行寫成「- 選項：北部;;東部;;西部;;南部」，自己一行，寫在學習目標底下、和題目同一層';
 
 /** 選項有問題時的提示（§3〈認不成〉）：照原本的題型出。 */
 export const optionsInvalid = (line: number, reason: string): SingleReading['problems'][number] =>
@@ -29,12 +29,16 @@ const FORBIDDEN = /[`$[\]<>_|]|==|::/;
 /** 選項以欄位或標籤的名稱加冒號開頭：像是接上了別的欄位。六個欄位照 parse.ts 的 fieldStart，加上記憶錨點與選項。 */
 const LABEL_START = /^(?:出處|類型|重要性|狀態|備註|錯題補強|記憶錨點|選項)\s*:/;
 
-/** 切選項（§2〈切法與比對〉）：有頓號只照頓號切，沒有才照逗號（全半形）；只用空白隔開的切不開。空的丟掉，比對鍵重複的只留第一個。 */
+/**
+ * 選項之間的分隔（D-250）：連打兩個以上的分號，全形半形都算（`;;`、`；；`、`;；`）；只有這一種。
+ * 一個分號、頓號、逗號都是選項裡的字，不切（中文的描述常有一個分號）。
+ */
+const SEPARATOR = /[;；]{2,}/;
+/** 切選項（§2〈切法與比對〉）：只照 `;;` 切，沒有的切不開。空的丟掉，比對鍵重複的只留第一個。 */
 function splitOptions(body: string): string[] | null {
-  const separator = body.includes('、') ? /、/ : /[,，]/.test(body) ? /[,，]/ : null;
-  if (!separator) return null;
+  if (!SEPARATOR.test(body)) return null;
   const first = new Map<string, string>();
-  for (const item of body.split(separator).map(each => each.trim())) {
+  for (const item of body.split(SEPARATOR).map(each => each.trim())) {
     const key = pickKey(item);
     if (key && !first.has(key)) first.set(key, item);
   }
@@ -46,7 +50,7 @@ function readOptions(text: string): string[] | string {
   const body = withoutComments(text.slice('選項：'.length)).replace(BLOCK_ID, '');
   if (body.includes('%%')) return '選項行裡的 %% 註解沒有結尾';
   const options = splitOptions(body);
-  if (!options) return '選項要用頓號隔開';
+  if (!options) return '選項之間要用兩個分號（;;）隔開';
   if (options.some(option => FORBIDDEN.test(foldWidth(option)))) return '選項裡不能有連結、程式碼、公式、HTML、==、::、底線或｜';
   // 粗體的名稱（`**出處**：`）也算（L2 第一輪 R7）：比對鍵不分粗體，名稱的檢查也一樣。
   if (options.some(option => LABEL_START.test(foldWidth(option).replace(/\*\*/g, '').trim()))) return '選項不能以「出處：」「記憶錨點：」這類名稱加冒號開頭';
@@ -68,13 +72,15 @@ export function readSingle(target: Target, lines: readonly OptionLine[], stacked
   if (!line.solid) return fail('選項行要一行寫完：不寫成子清單、不換行接續');
   const options = readOptions(line.text);
   if (typeof options === 'string') return fail(options);
+  // 答案裡有 ;;：一題寫了好幾個答案，說 ;; 只用來隔開選項。
+  const how = (answer: string): string => SEPARATOR.test(answer) ? '（;; 只用來隔開選項，一題只有一個答案）' : '';
   const optionKeys = options.map(pickKey);
   const answers: number[] = [];
   for (const prompt of target.prompts) {
     if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || stacked.has(prompt.line)) return fail('題目要全部是問答題（::），答案寫在同一行');
     if (countBlanks(prompt.question) > 1) return fail('題目最多一個空格（＿＿）');
     const answer = optionKeys.indexOf(pickKey(prompt.answer));
-    if (answer < 0) return fail(`答案「${prompt.answer}」不在選項裡`);
+    if (answer < 0) return fail(`答案「${prompt.answer}」不在選項裡${how(prompt.answer)}`);
     answers.push(answer);
   }
   return { single: { options, optionKeys, key: JSON.stringify([...optionKeys].sort()), answers, at: line.at }, problems: [] };

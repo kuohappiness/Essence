@@ -22,16 +22,16 @@ const DECK = `---
 - 能從景觀描述認出西部的海岸 ^aaa111
     - 出處：p.42
     - 海岸平直，有沙灘和潟湖，是臺灣哪一部的海岸？ :: 西部
-    - 選項：北部、東部、西部、南部
+    - 選項：北部;;東部;;西部;;南部
 - 能從景觀描述認出東部的海岸 ^bbb222
     - 山緊靠著海，海岸陡直，是臺灣哪一部的海岸？ :: **東部**
     - 臺灣哪一部的海岸有斷層？ :: 東部
         - 詳解：中央山脈緊靠海邊
     - 記憶錨點：東部山靠海
-    - 選項：北部、東部、西部、南部 %%AI 的備註%%
+    - 選項：北部;;東部;;西部;;南部 %%AI 的備註%%
 - 能說出臺灣北部海岸的地形 ^ccc333
     - 臺灣北部的海岸主要是哪一種海岸？ :: 岩岸
-    - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸 ^ddd444
+    - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸 ^ddd444
 `;
 const SCRIPT = `
 import { parseDeck } from './src/core/deck/index.ts';
@@ -61,9 +61,9 @@ void test('v0.6.0 讀單選：照一般的問答、選項行是補充、沒有�
   const old = await oldRun(t, [DECK]) as OldRun;
   assert.deepEqual(old.targets.map(target => [target.id, target.ok, target.kind]), [['aaa111', true, null], ['bbb222', true, null], ['ccc333', true, null]]);
   assert.deepEqual(old.targets.map(target => target.shared), [
-    ['選項：北部、東部、西部、南部'],
-    ['記憶錨點：東部山靠海', '選項：北部、東部、西部、南部 %%AI 的備註%%'],
-    ['選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸 ^ddd444'],
+    ['選項：北部;;東部;;西部;;南部'],
+    ['記憶錨點：東部山靠海', '選項：北部;;東部;;西部;;南部 %%AI 的備註%%'],
+    ['選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸 ^ddd444'],
   ]);
   assert.deepEqual(old.targets.map(target => target.prompts), now.targets.map(target => target.prompts.map(prompt => [prompt.kind, prompt.fingerprint])));
   assert.deepEqual(now.targets.map(target => target.shared), old.targets.map(target => target.shared));
@@ -76,10 +76,10 @@ void test('選項行的 %% 註解裡有 ::、==（L2 第一輪 R1）：和其他
 ---
 - 能說出臺灣北部海岸的地形 ^aaa111
     - 臺灣北部的海岸主要是哪一種海岸？ :: 岩岸
-    - 選項：岩岸、沙岸、斷層海岸 %%例：甲 :: 乙%%
+    - 選項：岩岸;;沙岸;;斷層海岸 %%例：甲 :: 乙%%
 - 能說出臺灣西部海岸的地形 ^bbb222
     - 臺灣西部的海岸主要是哪一種海岸？ :: 沙岸
-    - 選項：岩岸、沙岸、斷層海岸 %%例：==沙岸==%%
+    - 選項：岩岸;;沙岸;;斷層海岸 %%例：==沙岸==%%
 `;
   const now = parseDeck(deck);
   assert.deepEqual(now.targets.map(target => [target.kind?.id ?? null, target.prompts.map(prompt => prompt.kind)]), [[null, ['qa', 'qa']], [null, ['qa', 'cloze']]]);

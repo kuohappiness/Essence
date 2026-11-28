@@ -8,7 +8,7 @@ import { createPreview } from '../src/review/index.ts';
 // 單選與配對的組卡（tasks/matching-single-choice.md §4、〈驗收〉組卡）：預期值手寫，不用同樣的算法再算一次。
 const P = 'Essence Cards/社會/海岸.md';
 const COAST = ['北部', '東部', '西部', '南部'];
-const OPTIONS = '    - 選項：北部、東部、西部、南部';
+const OPTIONS = '    - 選項：北部;;東部;;西部;;南部';
 const target = (id: string, name: string, question: string, answer: string, options = OPTIONS): string =>
   `- ${name} ^${id}\n    - ${question} :: ${answer}\n${options}\n`;
 const COASTS = target('west00', '能認出西部的海岸', '海岸平直，有沙灘和潟湖，是哪一部的海岸？', '西部')
@@ -81,7 +81,7 @@ void test('配對：只有一個到期，整組一張 4 格', () => {
 
 void test('配對：寫法、順序不同的同一組照樣併，答案換成選中的目標的寫法', () => {
   const mixed = deckOf(target('west00', '能認出西部的海岸', '海岸平直，是哪一部的海岸？', '西部')
-    + target('east00', '能認出東部的海岸', '山緊靠著海，是哪一部的海岸？', '**東部**', '    - 選項：南部、**東部**、西部、北部'));
+    + target('east00', '能認出東部的海岸', '山緊靠著海，是哪一部的海岸？', '**東部**', '    - 選項：南部;;**東部**;;西部;;北部'));
   const { today, data } = plan([mixed], [], at('10-24'));
   const c = next(today, data);
   assert.equal(c.lt, 'west00');
@@ -90,16 +90,16 @@ void test('配對：寫法、順序不同的同一組照樣併，答案換成選
 });
 
 void test('配對：不同組、不同篇、比較卡的組不併', () => {
-  const kinds = deckOf(COASTS + target('rock00', '能說出北部海岸的地形', '北部的海岸是哪一種？', '岩岸', '    - 選項：岩岸、沙岸、斷層海岸')
+  const kinds = deckOf(COASTS + target('rock00', '能說出北部海岸的地形', '北部的海岸是哪一種？', '岩岸', '    - 選項：岩岸;;沙岸;;斷層海岸')
     + '- 寨（寨、塞、寒） 相似字 ^zhai00\n    - 山＿＿ :: 寨\n- 塞（寨、塞、寒） 相似字 ^sai000\n    - 大＿＿車 :: 塞\n'
-    + target('han000', '能分辨寒', '「＿＿冷」要填哪個字？', '寒', '    - 選項：寨、塞、寒'));
+    + target('han000', '能分辨寒', '「＿＿冷」要填哪個字？', '寒', '    - 選項：寨;;塞;;寒'));
   const twin = deckOf(COASTS.replaceAll('00\n', '01\n').replaceAll('0\n', '1\n'), 'Essence Cards/社會/另一篇.md');
   const { today, data } = plan([kinds, twin], [], at('10-24'));
   assert.deepEqual(ids(next(today, data, { deck: P })), ALL);
   const rock = next(today, { ...data }, { targets: ['rock00'] });
   assert.deepEqual(ids(rock), ['rock00']);
   // 單選的選項剛好和比較卡的括號一樣：比較卡不併它，它也不併比較卡。
-  assert.equal(parseDeck(`---\n科目: 社會\n---\n${target('han000', '能分辨寒', '「＿＿冷」要填哪個字？', '寒', '    - 選項：寨、塞、寒')}`).targets[0].kind?.id, 'single');
+  assert.equal(parseDeck(`---\n科目: 社會\n---\n${target('han000', '能分辨寒', '「＿＿冷」要填哪個字？', '寒', '    - 選項：寨;;塞;;寒')}`).targets[0].kind?.id, 'single');
   assert.deepEqual(ids(next(today, data, { targets: ['zhai00', 'sai000', 'han000'] })), ['sai000', 'zhai00']);
   assert.deepEqual(ids(next(today, data, { targets: ['han000'] })), ['han000']);
   assert.deepEqual(ids(next(today, data, { deck: 'Essence Cards/社會/另一篇.md' })), ['east01', 'north1', 'south1', 'west01']);

@@ -12,7 +12,7 @@ import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
 // 單選與配對的作答、紀錄與畫面（tasks/matching-single-choice.md §5、〈驗收〉）：計分與紀錄沿用點選填空；預期值手寫。
 const P = 'Essence Cards/社會/海岸.md';
 const PHONE = 'Essence Cards/紀錄/2026-10 iPhone-test.jsonl';
-const OPTIONS = '    - 選項：北部、東部、西部、南部';
+const OPTIONS = '    - 選項：北部;;東部;;西部;;南部';
 const COASTS = `---
 科目: 社會
 ---
@@ -121,7 +121,7 @@ void test('沒到期的格各記一行；目標和選項一樣多時最後一格
 });
 
 void test('兩列同一個答案：兩個目標各一行；寫法不同的同一組照選中的寫法判得對', async t => {
-  const text = `---\n科目: 社會\n---\n- 能認出西部的海岸 ^west00\n    - 海岸平直的是哪一部？ :: 西部\n${OPTIONS}\n- 能認出西部的平原 ^west01\n    - 嘉南平原在哪一部？ :: **西部**\n    - 選項：南部、**西部**、東部、北部\n`;
+  const text = `---\n科目: 社會\n---\n- 能認出西部的海岸 ^west00\n    - 海岸平直的是哪一部？ :: 西部\n${OPTIONS}\n- 能認出西部的平原 ^west01\n    - 嘉南平原在哪一部？ :: **西部**\n    - 選項：南部;;**西部**;;東部;;北部\n`;
   const h = await setup(t, { [P]: text });
   const s = await h.open({ subject: '社會' });
   assert.deepEqual(view(s).card.blanks.map(blank => blank.answer), ['西部', '西部']);
@@ -165,7 +165,7 @@ void test('畫面：對答案後每列接自己的記憶錨點、詳解與其他
 });
 
 void test('字鍵：最長的選項放不下一行時一排少放一個、排得平均（4 個排成 2＋2）', async t => {
-  const text = `---\n科目: 社會\n---\n- 能說出北部海岸的地形 ^rock00\n    - 北部的海岸是哪一種？ :: 岩岸\n    - 選項：岩岸、沙岸、斷層海岸、珊瑚礁海岸\n`;
+  const text = `---\n科目: 社會\n---\n- 能說出北部海岸的地形 ^rock00\n    - 北部的海岸是哪一種？ :: 岩岸\n    - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸\n`;
   const h = await setup(t, { [P]: text });
   const ui = await show(t, await h.open({ subject: '社會' }));
   assert.equal(ui.find('ec-pick-keys')[0].props.style?.['--ec-pick-columns' as keyof object], '2');
