@@ -1,6 +1,6 @@
 # 重整候選的製卡規則（比較測試用）
 
-狀態：實作中｜下一步：三層 v0.5（核心 v0.5、英文 v0.4）請 Fable 查核、使用者看過，再照[驗證卡片評估機制](<../../Claude Codex Discussion/2026-11-27-validate-evaluation.md>) §8-6 和英文現行的規則比｜等誰：Claude、使用者
+狀態：實作中｜下一步：三層 v0.5（核心 v0.5、英文 v0.4，Fable 查過、使用者看過）用英文 U3 照[驗證卡片評估機制](<../../Claude Codex Discussion/2026-11-27-validate-evaluation.md>) §8-6 和英文現行的規則比｜等誰：Claude、使用者
 
 來自：[D-228](../../../../../docs/decisions.md#d-228-製卡規則重整成核心任務模組科目模組先用比較測試判斷)
 
