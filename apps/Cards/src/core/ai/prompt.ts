@@ -9,7 +9,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 提示的組成（tasks/ai-cards-mvp.md §3）：規則組的每一份 → 任務段，照順序、中間空一行接起來；每一部分與整份提示各算 SHA-256。
 
 /** §3 的任務段與附加說明的版號：改字就加一（§1〈提示模板的版本〉）。 */
-const PROMPT_VERSION = '提示 v5'; // v5：點選填空的規則加相似詞（tasks/polyphone-pick.md §2）
+const PROMPT_VERSION = '提示 v6'; // v6：已有目標帶選項（tasks/matching-single-choice.md §6）
 export const PURPOSES = ['準備段考', '準備小考', '平常複習'] as const;
 export type Purpose = (typeof PURPOSES)[number];
 
@@ -33,15 +33,27 @@ export interface CardForm {
 
 /**
  * 學生已有的一個學習目標（§2）：送出時在哪一篇（之後轉成連結時核對，§5）。first 是送出的第一題（tasks/ai-cards-add.md §5 第 1 點，`提示 v3`）；
- * 沒有題目、或 `提示 v3` 之前存的工作沒有這一欄。
+ * 沒有題目、或 `提示 v3` 之前存的工作沒有這一欄。options 是單選目標的選項，用 `;;` 接（tasks/matching-single-choice.md §6，`提示 v6`）；
+ * 不是單選、或 `提示 v6` 之前存的工作沒有這一欄。
  */
-export interface ExistingTarget { id: string; name: string; source: string; path: string; first?: string }
+export interface ExistingTarget { id: string; name: string; source: string; path: string; first?: string; options?: string }
 
 /** 第一題的一行：問答寫 `題目 :: 答案`、填空整行；多行答案用「／」接；圖寫「［圖］」。 */
 export function firstLine(prompt: DeckPrompt): string {
   const image = (text: string): string => text.replace(/!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)/g, '［圖］');
   const flat = (text: string): string => image(text).split('\n').map(line => line.trim()).filter(Boolean).join('／');
   return prompt.kind === 'qa' ? `${flat(prompt.question)} :: ${flat(prompt.answer)}` : flat(prompt.text);
+}
+/**
+ * 單選目標的選項（tasks/matching-single-choice.md §6）：照選項行的寫法用 `;;` 接起來，兩邊留一格空白，選項頭尾剛好有一個分號的
+ * 重讀時才不黏進分隔（D-250，L2 第二輪 6）；不是單選的是 undefined。製卡與加深的清單共用。
+ */
+export const optionsOf = (target: Target): string | undefined => target.kind?.id === 'single' ? target.kind.single.options.join(' ;; ') : undefined;
+/** 清單那一行最後接的選項：不以「選項」開頭，免得 AI 照抄成接在出處那一行的寫法。 */
+export const optionsSuffix = (options: string | undefined): string => options === undefined ? '' : `｜這個目標的選項：${options}`;
+/** 清單上有選項的目標怎麼加題（§6、§7）：只在清單上有這種目標時送。製卡與加深共用，寫在「另外」底下。 */
+export function optionsRule(has: boolean): string[] {
+  return has ? ['- 清單上寫了「這個目標的選項」的學習目標：那是清單的格式，不是選項行的寫法。加題到這種目標時不寫選項行，答案用那一組裡的字，一字不差。'] : [];
 }
 /** 送出的一部分：名稱、版號、全文與它的 SHA-256。 */
 export interface SentPart { name: string; version: string; text: string; sha256: string }
@@ -81,8 +93,8 @@ export function titlePrefix(form: Pick<CardForm, 'term' | 'unit'>, subject: Pick
 export function existingTargets(decks: readonly { path: string; deck: Deck }[], subject: string | null, term: string, skip: ReadonlySet<string> = new Set()): ExistingTarget[] {
   return existingDecks(decks, subject, term).flatMap(({ path, deck: { props, targets } }) => usable(targets, skip).map(t => {
     const where = [props.term, props.unit?.code, t.fields.sources.join('、')].filter(Boolean).join(' ');
-    const first = t.prompts.at(0);
-    return { id: t.id!, name: t.name, source: where, path, ...first ? { first: firstLine(first) } : {} };
+    const first = t.prompts.at(0), options = optionsOf(t);
+    return { id: t.id!, name: t.name, source: where, path, ...first ? { first: firstLine(first) } : {}, ...options === undefined ? {} : { options } };
   }));
 }
 
@@ -158,7 +170,10 @@ export function wordsLine(words: readonly string[] | null): string[] {
   return [`- 孩子已有的英文單字（只用來挑記憶錨點的連結，不用來判斷加題）：${words.length ? words.join('、') : '無'}`];
 }
 
-/** 點選填空的規則（D-210 第 1 點、tasks/ai-cards-materials.md §3）：製卡與加深共用，寫在「另外」底下。 */
+/**
+ * 點選填空的規則（D-210 第 1 點、tasks/ai-cards-materials.md §3）：製卡與加深共用，寫在「另外」底下。
+ * 社會的配對與單選（tasks/matching-single-choice.md §7）第 1 段先不送：§7 再試一次停損成立，規則改好、再試過才加回這裡。
+ */
 export function pickRules(pick: boolean | undefined): string[] {
   if (pick !== true) {
     return [
@@ -190,13 +205,14 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
     `- 家長調整：${form.adjust.trim() || '無'}`,
     `- 教材：${form.material.trim() ? `附件（${form.material.trim()}）` : '附件的課本頁面'}`,
     existing.length ? '- 學生已有的學習目標：' : '- 學生已有的學習目標：無',
-    ...existing.map(each => `  - ${each.id} ${each.name}｜${each.source}${each.first === undefined ? '' : `｜第一題：${each.first}`}`),
+    ...existing.map(each => `  - ${each.id} ${each.name}｜${each.source}${each.first === undefined ? '' : `｜第一題：${each.first}`}${optionsSuffix(each.options)}`),
     ...wordsLine(words),
     '',
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
     ...pickRules(form.pick),
+    ...optionsRule(existing.some(each => each.options !== undefined)),
     ...existing.length ? existingRules(subject.r3) : [],
     ...prefix === null ? [] : [`- 一課分成幾篇時，篇名照 \`${prefix} <篇名>\` 寫${subject.subject === '英文' ? `，例如 \`${prefix} 單字\`` : ''}，單獨一行、前面不加 \`#\`。`],
     '- 不要寫學習目標 ID 與屬性區，程式會加。',

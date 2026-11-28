@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, choiceProblems, choiceStem, outsideSource, parseDeck, pickKey, splitSourceItems } from '../deck/index.ts';
+import { blanksIn, choiceProblems, choiceStem, outsideSource, parseDeck, pickKey, readOptionLines, splitSourceItems, withoutComments } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -36,12 +36,15 @@ function findLast<T>(list: readonly T[], match: (item: T) => boolean): T | undef
 /** 一行文字切成的區塊：標題、引言框、程式碼、清單項目、接續行、段落、空行。line 從 1 算。 */
 type Block =
   | { kind: 'blank'; line: number }
+  /** 分隔線（`---`、`***`、`- - -`）沒有縮到清單項目的文字底下：自己一塊，清單到這裡結束（L2 第四輪 1）。 */
+  | { kind: 'rule'; line: number }
   /** col：清單項目裡的圍欄開在第幾欄；不在清單裡是 null。 */
   | { kind: 'code'; line: number; col: number | null }
   | { kind: 'callout'; line: number; body: Line[] }
   | { kind: 'heading'; line: number; level: number; text: string }
   | { kind: 'item'; line: number; col: number; contentCol: number; marker: string; text: string }
-  | { kind: 'cont' | 'para'; line: number; text: string };
+  /** col：分隔線的縮排，接在文字開始的位置不超過它的那一項後面（同 listTree）；一般的接續行沒有，接在最近的一項。 */
+  | { kind: 'cont' | 'para'; line: number; text: string; col?: number };
 type Item = Extract<Block, { kind: 'item' }>;
 type Cont = Extract<Block, { kind: 'cont' | 'para' }>;
 interface TreeNode extends Item { children: TreeNode[]; cont: Cont[] }
@@ -89,6 +92,24 @@ export function calloutHead(raw: string): { title: string; folded: boolean } | n
   return head ? { title: head[3], folded: head[2] === '-' } : null;
 }
 
+/**
+ * 還開著的清單項目，由外到內各自的文字從第幾欄開始；不在清單裡是空的。空行、接續、清單項目裡的圍欄不結束清單。
+ * 照 treeOf 的堆疊算：新的項目、縮排的分隔線與圍欄結束比它深的項目，被結束的前一項不算（L2 第五輪）。
+ */
+function openItems(blocks: readonly Block[]): number[] {
+  const continues = (block: Block): boolean => block.kind === 'item' || block.kind === 'blank' || block.kind === 'cont' || (block.kind === 'code' && block.col !== null);
+  let start = blocks.length;
+  while (start > 0 && continues(blocks[start - 1])) start--;
+  const open: number[] = [];
+  for (const block of blocks.slice(start)) {
+    const col = block.kind === 'item' || block.kind === 'cont' || block.kind === 'code' ? block.col : undefined;
+    if (col === undefined || col === null) continue;
+    while (open.length && open[open.length - 1] > col) open.pop();
+    if (block.kind === 'item') open.push(block.contentCol);
+  }
+  return open;
+}
+
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
@@ -112,7 +133,17 @@ export function blocksOf(lines: readonly Line[]): Block[] {
     if (!raw.trim()) { blocks.push({ kind: 'blank', line: no }); continue; }
     const heading = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(raw);
     if (heading) { blocks.push({ kind: 'heading', line: no, level: heading[1].length, text: heading[2] }); continue; }
-    const line = expand(raw), item = /^( *)([-*+]|\d+[.)])( +|$)(.*)$/.exec(line);
+    const line = expand(raw);
+    // 分隔線（`---`、`***`、`- - -`）不是清單項目，同 listTree（CommonMark 4.1）：縮到還開著的某一項的文字底下，是那一項的接續（L2 第三輪 4）；
+    // 沒有縮到的自己一塊、清單結束，下一行另外判斷，例如篇名（L2 第四輪 1）。比所屬的那一項多縮 4 欄以上的不是分隔線，照一般的一行（L2 第五輪）。
+    if (/^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line.trim())) {
+      const col = indentOf(line), owner = findLast(openItems(blocks), contentCol => contentCol <= col);
+      if (col - (owner ?? 0) < 4) {
+        blocks.push(owner !== undefined ? { kind: 'cont', line: no, text: raw.trim(), col } : { kind: 'rule', line: no });
+        continue;
+      }
+    }
+    const item = /^( *)([-*+]|\d+[.)])( +|$)(.*)$/.exec(line);
     if (item) {
       const gap = item[3].length >= 1 && item[3].length <= 4 ? item[3].length : 1;
       blocks.push({ kind: 'item', line: no, col: item[1].length, contentCol: item[1].length + item[2].length + gap, marker: item[2], text: item[4].trimEnd() });
@@ -136,7 +167,11 @@ function treeOf(blocks: readonly Block[]): TreeNode[] {
       const node: TreeNode = { ...block, children: [], cont: [] };
       (stack.length ? stack[stack.length - 1].children : roots).push(node);
       stack.push(node);
-    } else if (block.kind === 'cont') { if (stack.length) stack[stack.length - 1].cont.push(block); }
+    } else if (block.kind === 'cont') {
+      // 分隔線只接在縮排夠的那一項，比它深的項目結束；一項都不夠時清單結束（同 listTree，L2 第三輪 4）。
+      if (block.col !== undefined) while (stack.length && stack[stack.length - 1].contentCol > block.col) stack.pop();
+      if (stack.length) stack[stack.length - 1].cont.push(block);
+    }
     // 清單項目裡的圍欄只結束比它深的項目，後面的題目仍屬於同一個目標（R4-3，同 listTree）。
     else if (block.kind === 'code' && block.col !== null) { while (stack.length && stack[stack.length - 1].contentCol > block.col) stack.pop(); }
     else if (block.kind !== 'blank') stack.length = 0;
@@ -148,6 +183,8 @@ function treeOf(blocks: readonly Block[]): TreeNode[] {
 // 認不認得出是 parseDeck 的結果（解析與檢查共用一份，產品照它出題）；這裡決定等級，再加上製卡規則量得到的幾條。
 const PICK_ENDING = /[\s）)](相似字|相似詞|比較)$/; // 結尾整段是這三個詞才算（§3〈結尾〉，相似詞見 tasks/polyphone-pick.md §2）：「質量比較」「這兩個字的比較」不算
 const PICK_ANCHOR = /^記憶錨點\s*[：:]/;
+/** 單選的選項行（syntax §2，D-249）：目標底下、和題目同一層，以全形的「選項：」開頭。 */
+const OPTIONS_LINE = /^選項：/;
 const foldPick = (s: string): string => s.replace(/\*\*|==/g, '').replace(/[！-～]/g, c => String.fromCodePoint(c.codePointAt(0)! - 0xFEE0)).replace(/[\s　]+/g, ' ').trim().toLowerCase();
 /** 整個答案出現在題目裡：英文看詞界（lend 在 blend 不算），片語要整段；中文要整個詞，單一漢字照預設〈相似字〉出現就算（喵喵叫）。 */
 function answerShown(question: string, answer: string): boolean {
@@ -259,6 +296,32 @@ function checkPick(text: string, deck: Deck, issue: Report, subject?: string): v
   }
 }
 
+// ── 單選與配對（tasks/matching-single-choice.md §6）：解析器只提示、照原本的題型出的，AI 的草稿算錯誤，退回重做；本文與候選框都跑，已有框在 parseBox。 ──
+const ALL_OR_NONE = /以上皆是|以上皆非/;
+/**
+ * 讀成的選項有「以上皆是」「以上皆非」（§6）：照字鍵比對，局部加粗也算；註解解析時已經拿掉，不算（L2 第一輪 R5、第二輪 4）。
+ * 本文、候選框、加進已有的框與寫進筆記前（existing.ts）共用。
+ */
+export const allOrNone = (options: readonly string[]): boolean => options.some(option => ALL_OR_NONE.test(pickKey(option)));
+/**
+ * 點選作答的題目寫出這一題自己的答案（§7 再試一次，2026-11-28）：孩子不用想就點得對。比對同比較卡（全半形、大小寫、粗體不分）；
+ * 一個字的答案常是別的詞的一部分，不算。寫到同一組別的選項不算（洩漏只算這一題自己的答案）。`%%` 註解孩子看不到，不算（L2 第二輪 5）。
+ */
+export const leaks = (question: string, answer: string): boolean => { const key = pickKey(answer); return [...key].length > 1 && pickKey(withoutComments(question)).includes(key); };
+const SINGLE_LEAK_WHY = '題目寫出了這一題自己的答案，孩子不用想就點得對：題目改寫這一類自己的特徵或例子';
+/** 考卷式的問法（§6）：有選項行的目標是錯誤，沒有的是提醒。 */
+const WHICH_OF = /下列|以下何者/;
+/** 題幹用了考卷式的問法：只看孩子看得到的字，`%%` 註解裡的不算（同 leaks，L2 第三輪 3）。草稿與寫進筆記前共用。 */
+export const asksWhichOf = (question: string): boolean => WHICH_OF.test(withoutComments(question));
+const ALL_NONE_WHY = '選項不寫「以上皆是」「以上皆非」：每個選項都是教材裡的一類或一個答案';
+function checkSingle(deck: Deck, issue: Report): void {
+  for (const p of deck.problems) if (p.code === 'options-invalid') issue(p.line + 1, '錯誤', p.code, p.message);
+  for (const t of deck.targets) {
+    const single = t.kind?.id === 'single' ? t.kind.single : undefined;
+    if (single && allOrNone(single.options)) issue(t.line + 1, '錯誤', 'options-all-none', ALL_NONE_WHY);
+  }
+}
+
 /**
  * 英文的文法、變化與排序（tasks/english-typed-order.md §5）：只在英文的草稿。解析照翻面出、只提示的，AI 的草稿算錯誤，退回重做：
  * 文法與變化的題目要是問答題、題幹恰好一個 ＿＿（好幾個答案字數不同也收，D-237）；結尾是排序、不是全詩的，每一題都是兩格以上的填空。
@@ -367,7 +430,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
       if (!m) { issue(node.line, '不符', 'data-segment', `資料裡的「${segment.trim()}」不是「欄位：值」`); continue; }
       const [, name, colon, value] = m;
       if (colon === ':') issue(node.line, '不符', 'half-colon', `「${name}:」用了半形冒號；AI 寫全形「：」（§0）`);
-      if (!FIELDS.includes(name)) { issue(node.line, '不符', 'field-unknown', `「${name}」不是資料欄位，程式只認 6 個（§2-4）`); continue; }
+      // 選項接在資料那一行的，解析器報 options-invalid、說要怎麼改（§6，L2 第三輪 4），這裡不另報不認得的欄位。
+      if (!FIELDS.includes(name)) { if (!/^(?:\*\*)?選項(?:\*\*)?$/.test(name)) issue(node.line, '不符', 'field-unknown', `「${name}」不是資料欄位，程式只認 6 個（§2-4）`); continue; }
       if (target.data[name] !== undefined) issue(node.line, '提醒', 'field-twice', `「${name}」寫了兩次（§2-4）`);
       target.data[name] = value;
       const types = TYPES[subject];
@@ -388,7 +452,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     for (const child of node.children ?? []) checkImageLines(child, where === 'answer' ? 'support' : where);
   }
 
-  function analyzeQuestion(node: TreeNode): Question {
+  /** optioned：題目所屬的目標有選項行（§6：「下列何者」對這種目標是錯誤）。 */
+  function analyzeQuestion(node: TreeNode, optioned: boolean): Question {
     const masked = mask(node.text), at = masked.indexOf('::');
     let q: Question;
     if (at >= 0) {
@@ -422,7 +487,9 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     if (/哪一[^，,；;？?]*[，,；;][^？?]*就[^？?]*[？?]|哪一[^，,；;？?]*(較|多|少)[^，,；;？?]*[，,；;][^？?]*(比較|較)[^？?]*[？?]|(較|比較)(多|少)[^？?]*[，,；;][^？?]*哪一[^？?]*(比較|較)[^？?]*[？?]/.test(q.front)) issue(node.line, '提醒', 'leak-pattern', '「哪一個……，……就比較……？」常把答案寫進題目（通用規則 10）');
     // 「……？為什麼？」是一題理解題；其他一行問兩個問題的，要拆開（通用規則 8）。
     if ((q.front.match(/[？?]/g) ?? []).length >= 2 && !/[？?]\s*為什麼[？?]\s*$/.test(q.front)) issue(node.line, '提醒', 'two-questions', '一題問了兩件事（通用規則 8）');
-    if (q.front.includes('下列')) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
+    if (optioned && leaks(q.front, q.back)) issue(node.line, '錯誤', 'single-leak', SINGLE_LEAK_WHY);
+    if (optioned && asksWhichOf(q.front)) issue(node.line, '錯誤', 'which-of', '有選項行的目標不寫「下列」「以下何者」：題目寫這一類的特徵或例子，自己就能回答，選項只給孩子點選');
+    else if (withoutComments(q.front).includes('下列')) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
     if (/如上|上述|上圖|下圖/.test(q.front) && !images(q.front).length) issue(node.line, '提醒', 'context', '題目依賴上下文（通用規則 9）');
     return q;
   }
@@ -449,21 +516,33 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     else if (where !== 'existing' && !target.name.startsWith('能') && !pickNames.has(node.line)) issue(node.line, '不符', 'target-name', '學業的學習目標名稱寫成「能……」（§2-3）');
     for (const c of node.cont) issue(c.line, '提醒', 'continuation', '這一行沒有清單符號，會接在上一項的文字後面');
     let dataLines = 0;
+    const optioned = children.some(child => OPTIONS_LINE.test(child.text));
     children.forEach((child, index) => {
       for (const c of child.cont) issue(c.line, '提醒', 'continuation', '這一行沒有清單符號，會接在上一項的文字後面');
       const kind = classify(child.text);
-      if (kind === 'question') target.questions.push(analyzeQuestion(child));
+      if (kind === 'question') target.questions.push(analyzeQuestion(child, optioned));
       else if (kind === 'data') {
         if (index !== 0 || ++dataLines > 1) issue(child.line, '不符', 'data-position', 'AI 把資料寫成一行，緊接在學習目標下面（§2-4）');
         parseData(child, target);
       } else {
         target.shared.push(child);
         const name = /^([^\s：:]{1,6})[：:]/.exec(child.text)?.[1];
-        if (name && !['記憶錨點', '例句'].includes(name)) issue(child.line, '提醒', 'shared-label', `「${name}：」不是資料欄位，會當成每一題共用的背面補充（§2-4）`);
+        // 選項行（§6）不是資料欄位，也不是共用的背面補充；寫錯的由解析器的 options-invalid 報。
+        if (name && !['記憶錨點', '例句'].includes(name) && !OPTIONS_LINE.test(child.text)) issue(child.line, '提醒', 'shared-label', `「${name}：」不是資料欄位，會當成每一題共用的背面補充（§2-4）`);
         checkImageLines(child, 'shared');
       }
     });
-    if (!target.questions.length) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
+    // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
+    // 選項行寫錯的（半形冒號、粗體、接在資料那一行）也是只補選項行：報選項行哪裡錯（parseBox），不報沒有題目（L2 第三輪 4）。
+    // 只看解析器的結果：認成選項行，或對這一項報了選項行寫錯；補充裡剛好有「選項：」的照報（L2 第四輪 2）。
+    const onlyOptions = where === 'existing' && (optioned || boxProblems.some(p => p.code === 'options-invalid' && p.target === node.line));
+    if (!target.questions.length && !onlyOptions) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
+    // 加進已有的框的選項行讀不讀得成，由解析器報（parseBox，題目在不在框裡都是，L2 第二輪 2、第三輪 4）。
+    // 框裡讀不成單選、沒有跑 checkSingle（題目在筆記裡）：讀成的選項自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5、第二輪 4）。
+    if (where === 'existing' && optioned) {
+      const read = readOptionLines(children.filter(child => OPTIONS_LINE.test(child.text)).map((child, at) => ({ at, line: child.line, text: child.text, solid: !child.children.length && !child.cont.length })));
+      if (!('reason' in read) && allOrNone(read.options)) issue(node.line, '錯誤', 'options-all-none', ALL_NONE_WHY);
+    }
     if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
     if (where !== 'existing' && !target.data['出處']) issue(node.line, '不符', 'no-source', '沒有出處（通用規則 13）');
     if (UNDERSTANDING.includes(target.data['類型'])) for (const q of target.questions.filter(each => each.kind === 'qa')) {
@@ -478,12 +557,12 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   // 最上層的區塊依序走一遍，順便檢查順序：備註 → 學習目標 → 加進已有 → 候選。
   const blocks = blocksOf(all.slice(start));
   /**
-   * 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行與另一種排法的提示（行號已換回 text 的行）。本文的直接看 deck.problems。
-   * 同一行已經報過錯誤的不重複（最後一段），所以候選框的另一種排法在 checkPick 報過就不再報。
+   * 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行、另一種排法與選項行的提示（行號已換回 text 的行）。本文的直接看 deck.problems。
+   * 同一行已經報過錯誤的不重複（最後一段），所以候選框的另一種排法、選項行在 checkPick、checkSingle 報過就不再報。
    */
-  const boxProblems: { line: number; code: string; message: string }[] = [];
-  const parseBox = (inner: readonly Line[]): void => {
-    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject }).problems) if (p.level === 'error' || ORDER_ALT.has(p.code)) boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
+  const boxProblems: { line: number; code: string; message: string; target: number | null }[] = [];
+  const parseBox = (inner: readonly Line[], bare = false): void => {
+    for (const p of parseDeck(inner.map(l => l.raw).join('\n'), { subject, bare }).problems) if (p.level === 'error' || ORDER_ALT.has(p.code) || p.code === 'options-invalid') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message, target: p.targetLine === null ? null : inner[p.targetLine].no });
   };
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
@@ -504,7 +583,8 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         if (!roots.length) issue(block.line, '不符', 'note-empty', '沒有備註時整段省略');
       } else if (title === '加進已有的學習目標') {
         order.push({ kind: 'existing', line: block.line });
-        parseBox(inner);
+        // 只補選項行、沒有題目的項目，選項行照加入時的讀法報（bare，L2 第三輪 4）。
+        parseBox(inner, true);
         // 已有框加的題目也會出題：英文的規則一樣擋（tasks/sentence-order-alternatives.md §6、Fable S6），行號換回 text 的行。
         if (subject === '英文') checkEnglish(parseDeck(inner.map(l => l.raw).join('\n'), { subject }), (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); });
         for (const node of roots) {
@@ -521,6 +601,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         const boxDeck = parseDeck(boxText, { subject });
         const boxIssue: Report = (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); };
         checkPick(boxText, boxDeck, boxIssue, subject);
+        checkSingle(boxDeck, boxIssue);
         // 候選裡的比較卡、多音字也一樣：名稱不用寫成「能……」，多音字不算三題上限。
         for (const t of boxDeck.targets) {
           const no = inner[t.line].no;
@@ -574,6 +655,7 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const understanding = targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${String(understanding)}/${String(n)}，少於三分之一（自然預設規則 1）`);
   checkPick(text, deck, issue, subject);
+  checkSingle(deck, issue);
   if (subject === '英文') checkEnglish(deck, issue);
   // 正式解析器判成 error 的目標（ok: false）複習時不會出：一律算錯誤，不靠這裡各讀各的（L2-3，例如中翻英的答案不是單行英文）。同一行這裡已經報過的不重複。
   const reported = new Set(issues.filter(each => each.level === '錯誤').map(each => each.line));

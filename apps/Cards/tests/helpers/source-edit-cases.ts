@@ -45,6 +45,10 @@ export const EDIT_CASES: EditCase[] = [
   { name: '沒有出處欄位：在第一個子項目前面加一行', text: HEAD + T, action: add('p.44', true), want: HEAD + '- 目標 ^abc123\n    - 出處：p.44\n    - Q :: A\n' },
   { name: '沒有出處欄位、加的是連結：新的一行也分行', text: HEAD + T, action: add('[[筆記#標題]]', true), want: HEAD + '- 目標 ^abc123\n    - 出處：\n        - [[筆記#標題]]\n    - Q :: A\n' },
   { name: '直接寫成題目的目標沒有子項目：加在它底下', text: HEAD + '- Q :: A\n', action: add('p.44', true), want: HEAD + '- Q :: A\n    - 出處：p.44\n' },
+  // 單選的選項行（tasks/matching-single-choice.md §2〈格式查核要回答〉）：普通的子項目，照現在的寫回；縮在出處底下的當成出處的一段，新的出處接在它後面，選項行原樣留著。
+  { name: '單選：沒有出處欄位，加在第一個子項目前面，選項行不動', text: HEAD + T + '    - 選項：A;;B;;C\n', action: add('p.44', true), want: HEAD + '- 目標 ^abc123\n    - 出處：p.44\n    - Q :: A\n    - 選項：A;;B;;C\n' },
+  { name: '單選：出處在選項行前面，寫進那一欄', text: field('p.44') + '    - 選項：A;;B;;C\n', action: add('p.46', true), want: field('p.44、p.46') + '    - 選項：A;;B;;C\n' },
+  { name: '單選：選項行縮在出處底下（寫錯的位置），當成出處的一段', text: field('p.44') + '        - 選項：A;;B;;C\n', action: add('p.46', true), want: field('p.44') + '        - 選項：A;;B;;C\n        - p.46\n' },
 
   // ── 分行 ──
   { name: '有連結就分行', text: field('p.44'), action: add('[[筆記#標題]]', true), want: split('p.44', '[[筆記#標題]]') },

@@ -304,7 +304,7 @@ void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案�
 
 // syntax §2-3 的比較卡範例（任務說明 §11）：經過這裡的 parseDeck，也跟著進 deckCases 的往返與冪等。
 void test('syntax §2-3 的比較卡範例：三個字都是比較卡，沒有問題', () => {
-  const part = syntax.slice(syntax.indexOf('#### 比較卡'), syntax.indexOf('### 2-4'));
+  const part = syntax.slice(syntax.indexOf('#### 比較卡'), syntax.indexOf('#### 單選與配對'));
   const [text, ...rest] = indentedFences(part, 'markdown');
   assert.deepEqual(rest, []);
   const deck = parseDeck(text);
@@ -314,6 +314,19 @@ void test('syntax §2-3 的比較卡範例：三個字都是比較卡，沒有�
     ['寨', members, '相似字', 2, true],
     ['塞', members, '相似字', 2, true],
     ['寒', members, '相似字', 2, true],
+  ]);
+});
+// syntax §2-3 的單選與配對範例（tasks/matching-single-choice.md §9）：一樣經過這裡的 parseDeck，跟著進往返與冪等。
+void test('syntax §2-3 的單選與配對範例：兩個都是單選、同一組選項，沒有問題', () => {
+  const part = syntax.slice(syntax.indexOf('#### 單選與配對'), syntax.indexOf('### 2-4'));
+  const [text, ...rest] = indentedFences(part, 'markdown');
+  assert.deepEqual(rest, []);
+  const deck = parseDeck(text);
+  assert.deepEqual(deck.problems, []);
+  const options = ['岩岸', '沙岸', '斷層海岸', '珊瑚礁海岸'];
+  assert.deepEqual(deck.targets.map(t => [t.name, t.kind?.id === 'single' ? [t.kind.single.options, t.kind.single.answers] : null, t.ok]), [
+    ['能說出臺灣北部海岸的地形', [options, [0]], true],
+    ['能說出臺灣西部海岸的地形', [options, [1]], true],
   ]);
 });
 for (const [name, answer, typed, fingerprint, problems] of [

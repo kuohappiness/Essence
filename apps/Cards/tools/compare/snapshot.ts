@@ -18,9 +18,10 @@ interface TargetSnap {
 }
 /**
  * 卡型摘要：新版讀 Target.kind，舊版從六個卡型欄位推（adapter.ts 的 kindSnap），先對成同一個形狀再比，題型模組搬動前後才比得到同一個東西。
- * id 是 group、polyphone、order、typing、couplet；style 是排序的 poem、sentence，文法與變化的 grammar、inflection，其他是 null。
- * items：比較卡、多音字是 [[字], 組員或讀音]；全詩、接句是 [每一句]；句子排序是每一題的詞塊；文法與變化是 [[提示], [配對的英翻中的鍵]]（沒有是空的）。
- * marks：多音字是 [每一題的答案位置]；句子排序是每一題每一格是不是句首；變化有配對時是 [[只配同一個意思]]；其他是空的。各段分開放，不接成字串。
+ * id 是 group、polyphone、order、typing、couplet、single；style 是排序的 poem、sentence，文法與變化的 grammar、inflection，其他是 null。
+ * items：比較卡、多音字是 [[字], 組員或讀音]；全詩、接句是 [每一句]；句子排序是每一題的詞塊；文法與變化是 [[提示], [配對的英翻中的鍵]]（沒有是空的）；
+ * 單選是 [選項]。
+ * marks：多音字、單選是 [每一題的答案位置]；句子排序是每一題每一格是不是句首；變化有配對時是 [[只配同一個意思]]；其他是空的。各段分開放，不接成字串。
  */
 export interface KindSnap { id: string; style: string | null; items: string[][]; marks: (number | boolean)[][] }
 interface Problem { line: number; level: string; code: string }

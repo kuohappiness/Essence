@@ -37,9 +37,11 @@ export function leanList(targets: readonly ExistingTarget[]): string[] {
   type Row = { word: string; unit: string; items: { kind: string; id: string; first: string | undefined }[] } | { other: string };
   const rows: Row[] = [], byWord = new Map<string, Extract<Row, { word: string }>>();
   for (const target of targets) {
-    const match = WORD_NAME.exec(target.name);
+    // 有選項的目標（單選）不併進變化的那一行，選項才不丟（L2 第一輪 R8：英文手寫的 `能分辨形容詞的 比較級` 帶選項行也是單選）。
+    const match = target.options === undefined ? WORD_NAME.exec(target.name) : null;
     if (!match) {
-      rows.push({ other: `  - ${target.id} ${target.name}｜${unitOf(target.source)}${target.first ? `｜${target.first}` : ''}` });
+      // 單選的選項照外掛的清單接在最後（tasks/matching-single-choice.md §6），重組時不丟。
+      rows.push({ other: `  - ${target.id} ${target.name}｜${unitOf(target.source)}${target.first ? `｜${target.first}` : ''}${target.options === undefined ? '' : `｜這個目標的選項：${target.options}`}` });
       continue;
     }
     let row = byWord.get(match[1]);

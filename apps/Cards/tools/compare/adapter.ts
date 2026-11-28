@@ -140,6 +140,12 @@ const kindItems = {
       items: [hint === null ? [] : [hint], pair ? [text(pair.key, name + '.pair.key')] : []], marks: pair ? [[yesNo(pair.exact, name + '.pair.exact')]] : [] };
   },
   couplet: (value: unknown, name: string): KindSnap => ({ id: 'couplet', style: null, items: [strings(fields(value, name).lines, name + '.lines')], marks: [] }),
+  // 單選與配對（tasks/matching-single-choice.md §8）：只有新版有，舊版的這種目標是 null（一般的問答）。
+  single: (value: unknown, name: string): KindSnap => {
+    const single = fields(value, name);
+    return { id: 'single', style: null, items: [strings(single.options, name + '.options')],
+      marks: [array<unknown>(single.answers, name + '.answers').map(at => integer(at, name + '.answers'))] };
+  },
 };
 
 /**
@@ -162,6 +168,7 @@ function kindSnap(target: TargetLike): KindSnap | null {
       }
       case 'typing': return kindItems.typing(kind.typing, 'target.kind.typing', 'style');
       case 'couplet': return kindItems.couplet(kind.couplet, 'target.kind.couplet');
+      case 'single': return kindItems.single(kind.single, 'target.kind.single');
       default: throw wrongType('target.kind.id');
     }
   }

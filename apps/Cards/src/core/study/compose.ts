@@ -1,4 +1,4 @@
-import type { Choice, PickGroup, PoemOrder, Prompt, SentenceOrder, Target } from '../deck/index.ts';
+import type { Choice, PickGroup, PoemOrder, Prompt, SentenceOrder, Single, Target } from '../deck/index.ts';
 import type { Blank, Card, CardGroup, Shown } from './types.ts';
 
 // 題型接點的第二個（D-181）：這張卡是哪一種題型、有哪幾格。其他三個在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
@@ -23,7 +23,7 @@ export function cardOf(fields: Omit<Card, 'typed' | 'blanks'>, times = 0): Card 
   // 照卡型分（題型模組任務說明 §1-4）：排序再照樣子；比較卡、多音字由 pickCardOf、choiceCardOf 組，走到這裡照一格出。
   switch (kind.id) {
     case 'order': return kind.order.style === 'poem' ? orderCardOf(fields, kind.order, times) : sentenceCardOf(fields, kind.order, times);
-    case 'group': case 'polyphone': case 'typing': case 'couplet': return plain();
+    case 'group': case 'polyphone': case 'typing': case 'couplet': case 'single': return plain();
     default: { const never: never = kind; return never; }
   }
 }
@@ -184,6 +184,60 @@ export function choicePreviewCards(deck: string, target: Target): Card[] {
     .filter(prompt => !first.blanks.some(blank => blank.prompt === prompt))
     .map(prompt => choiceAssembled(fields, choice, [choiceCell(fields.lt, target, choice, prompt)]));
   return [first, ...rest];
+}
+
+// ── 單選與配對（tasks/matching-single-choice.md §4、§5）：一個目標一格，同一篇同一組選項的目標併成一張；純計算，同一張卡重來不變。 ──
+
+const singleOf = (target: Target): Single | undefined => target.kind?.id === 'single' ? target.kind.single : undefined;
+
+/**
+ * 單選的目標併成哪一張（§4〈配對〉〈上限〉）：同一篇、同一組選項（single.key）的目標是一張，幾個都不切（使用者 2026-11-28，D-249 整組作答）；
+ * 回傳那一張的鍵，不是單選或沒有 ID 是 null。同一篇由呼叫的一方比。
+ */
+export function singleCardKey(target: Target): string | null {
+  const single = singleOf(target);
+  return single && target.id !== null ? single.key : null;
+}
+
+/** 一格：答案換成選中的目標寫的字（照比對鍵對上，§5），同一組兩個目標寫法或順序不同時，對錯照字串全等也判得對。 */
+function singleCell(chosen: Single, mate: PickMate, prompt: Prompt): Blank {
+  const own = singleOf(mate.target);
+  const key = own?.optionKeys[own.answers[mate.target.prompts.indexOf(prompt)] ?? -1];
+  const answer = key === undefined ? undefined : chosen.options[chosen.optionKeys.indexOf(key)];
+  if (answer === undefined) throw TypeError('單選的答案不在這一組的選項裡：' + mate.target.name);
+  return { lt: mate.lt, target: mate.target, prompt, answer };
+}
+
+/** 格子定了之後的一張：打散格子與字鍵（字鍵三個以上時順序一定和寫的不同，同比較卡）；lt、target、prompt 是選中的目標那一格。 */
+function singleAssembled(fields: { deck: string; isNew: boolean; early: boolean }, chosen: PickMate, single: Single, cells: readonly Blank[]): Card {
+  const random = seeded(seedOf(cells));
+  const blanks = shuffled(cells, random);
+  const keys = shuffled(single.options, random);
+  if (keys.length >= 3 && keys.every((key, i) => key === single.options[i])) keys.push(keys.shift() as string);
+  const first = blanks.find(each => each.target === chosen.target) ?? blanks[0];
+  return { lt: chosen.lt, deck: fields.deck, target: chosen.target, prompt: first.prompt, isNew: fields.isNew, typed: false, early: fields.early, blanks,
+    group: { title: '', members: single.options, keys, rows: [], single: true } };
+}
+
+/**
+ * 一張單選或配對的卡（§4、§5）：mates[0] 是選中的目標，其他是要併的同一張的目標（呼叫的一方照 singleCardKey 找、照今天答過沒有決定整組或只出答錯的）。
+ * 每個目標一格，題目照出題歷史輪替（第一次出基本題，之後出最久沒出的，同比較卡）；格子照筆記順序排好再打散，範圍怎麼排都是同一張卡。
+ */
+export function singleCardOf(fields: { deck: string; isNew: boolean; early: boolean }, mates: readonly PickMate[]): Card {
+  const chosen = mates[0];
+  const single = singleOf(chosen.target);
+  if (!single) throw TypeError('不是單選：' + chosen.target.name);
+  const cells = [...mates].sort((a, b) => a.target.line - b.target.line).map(mate => singleCell(single, mate, rotation(mate.target, mate.shown)[0]));
+  return singleAssembled(fields, chosen, single, cells);
+}
+
+/** 預覽（§4〈哪裡併〉）：不併，這個目標每一題（指紋不同的）一張、一格，字鍵照樣是這一組的選項。 */
+export function singlePreviewCards(deck: string, target: Target): Card[] {
+  const single = singleOf(target);
+  if (!single) throw TypeError('不是單選：' + target.name);
+  const mate: PickMate = { lt: target.id ?? '', target, shown: new Map() as Shown };
+  const fields = { deck, isNew: false, early: false };
+  return rotation(target, mate.shown).map(prompt => singleAssembled(fields, mate, single, [singleCell(single, mate, prompt)]));
 }
 
 /**

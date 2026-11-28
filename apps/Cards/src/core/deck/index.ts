@@ -1,6 +1,8 @@
 export { fieldStart, frontmatterLines, parseDeck, readProperties } from './parse.ts';
 export { blanksIn, choiceProblems, choiceStem, movingTails, needsOf, otherSentences, pickKey, pickWord, shownTails } from './question-types.ts';
 export { markNeed } from './need.ts';
+export { readOptionLines } from './kinds/single.ts';
+export { withoutComments } from './kinds/shared.ts';
 export { baseForm, learnedWord, typedHint } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';
 export { setTargetId, blockIds } from './ids.ts';
@@ -13,6 +15,6 @@ export { folderIssues, folderLabel, guardedMoves, misplacedFolders, presentFolde
 export type { FolderIssue } from './folders.ts';
 export { chapterAlias, codeKey, headingKey, hasOutside, isOutside, outsideSource, readSourceParts, readTerm, sourceLabel, sourceLinks, splitSource, splitSourceItems, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceProblem, SourceScope } from './sources.ts';
-export type { Choice, Couplet, Deck, DeckProps, Kind, PickGroup, PoemOrder, PropertyIssue, SentenceAlt, SentenceCells, SentenceOrder, Typing, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
+export type { Choice, Couplet, Deck, DeckProps, Kind, PickGroup, PoemOrder, PropertyIssue, SentenceAlt, SentenceCells, SentenceOrder, Single, Typing, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
 export { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuestion, verifySourceEdit } from './source-edit.ts';
 export type { FieldFix, FieldFixAction, SourceEditAction, SourceEditInput, SourceEditPlan, SourceEditResult, TextChange } from './source-edit.ts';

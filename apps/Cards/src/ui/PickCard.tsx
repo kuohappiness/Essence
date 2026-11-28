@@ -1,5 +1,6 @@
-import { anchorParts, questionOf, RATING_LABELS } from '../review/index.ts';
+import { anchorParts, extraLabel, questionOf, RATING_LABELS, singleExtras, singleQuestion } from '../review/index.ts';
 import type { CardView, PickView } from '../review/index.ts';
+import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
 import { Rates, type BodyProps, type BottomProps, type Screen } from './screen.tsx';
 
@@ -46,30 +47,43 @@ function compareOrder(rows: readonly Row[], tested: readonly (string | null | un
   return [...new Set([...first, ...rows])];
 }
 
-/** 比較卡與多音字（題型 pick）：一題一列，每列一格。排序（題型 order）的畫面在 OrderCard.tsx。 */
+/** 比較卡、多音字、單選與配對（題型 pick）：一題一列，每列一格。排序（題型 order）的畫面在 OrderCard.tsx。 */
 function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
   const { card } = view;
   const { pick, group } = partsOf(view);
-  const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>
-    <Markdown app={app} text={text} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />
-  </div>;
-  return <article className="ec-card ec-pick" lang="zh-Hant">
+  const back = (text: string): React.JSX.Element => <Markdown app={app} text={text} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />;
+  const note = (text: string, key: number, className: string): React.JSX.Element => <div key={key} className={className}>{back(text)}</div>;
+  // 單選與配對（tasks/matching-single-choice.md §5）：卡上不放標題（D-179）；對答案後每一列底下接那個目標的記憶錨點與那一題的詳解，沒有整組的對照。
+  const single = group.single === true;
+  return <article className={'ec-card ec-pick' + (single ? ' is-single' : '')} lang="zh-Hant">
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span>{view.crumb}</span></div>
-    <p className="ec-pick-title">{group.choice ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>
+    {!single && <p className="ec-pick-title">{group.choice ? group.title : group.title ? `${group.title}：${group.members.join('、')}` : group.members.join('、')}</p>}
     <ul className="ec-pick-rows">{card.blanks.map((blank, index) => {
       const cell = pick.cells[index];
       const movable = pick.stage === 'answer' || (pick.stage === 'retry' && cell.state === 'retry');
+      const extras = single && pick.stage === 'result' ? singleExtras(blank) : [];
       return <li key={blank.prompt.fingerprint + String(index)} className={'ec-pick-row' + (index === pick.cursor ? ' is-on' : '') + (movable ? '' : ' is-locked')} onClick={() => { act({ kind: 'row', index }); }}>
         <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
         <div className="ec-pick-text">
-          <Markdown app={app} text={questionOf(blank.prompt)} sourcePath={card.deck} mode="pick"
+          <Markdown app={app} text={single ? singleQuestion(blank) : questionOf(blank.prompt)} sourcePath={card.deck} mode="pick"
             slotNode={<button type="button" className="ec-pick-slot" data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}>{cell.state === 'retry' ? <s>{cell.text}</s> : cell.text || '　'}</button>}
             onReady={index === 0 ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />
         </div>
+        {extras.length > 0 && <div className="ec-single-back ec-answer">{extras.map((extra, at) => {
+          const { label, body } = extraLabel(extra);
+          if (label === '記憶錨點') return <div key={at} className="ec-ex-item is-anchor">
+            <span className="ec-bulb" role="img" aria-label="記憶提示"><Icon type="bulb" /></span>
+            <div className="ec-ex-body"><div className="ec-ex-row">{back(body)}</div></div>
+          </div>;
+          return <div key={at} className="ec-ex-item">
+            {label && <div className="ec-ex-label">{label}：</div>}
+            <div className="ec-ex-row">{back(body)}</div>
+          </div>;
+        })}</div>}
       </li>;
     })}</ul>
     {/* 對照（D-203）：上下排、不標結果；這次考到的照句子的順序排前面 */}
-    {pick.stage === 'result' && <div className="ec-pick-compare ec-answer">{compareOrder(group.rows, card.blanks.map(blank => blank.answer)).map(row => {
+    {pick.stage === 'result' && !single && <div className="ec-pick-compare ec-answer">{compareOrder(group.rows, card.blanks.map(blank => blank.answer)).map(row => {
       const parts = row.anchor === null ? null : anchorParts(row.anchor);
       return <div key={row.member} className="ec-cmp">
         <span className="ec-cmp-ch">{row.member}</span>
@@ -94,6 +108,23 @@ function keyColumns(count: number, words: boolean): number {
   return count <= 6 ? 3 : 4;
 }
 
+/** 字鍵那一排在 375 寬的手機上的寬度（左右各留 12px）、字鍵之間的空隙、字鍵左右的留白與框線。 */
+const TRAY = 351, KEY_GAP = 8, KEY_INSIDE = 6;
+/** 一個選項排成一行要多寬（px）：全形字與中日韓文字一個字一個字寬，其他字約六成。只用來估要不要少放一個。 */
+const textWidth = (text: string, size: number): number => [...text].reduce((sum, char) => sum + (/[\u2E80-\uFFEF]/u.test(char) ? size : size * 0.6), 0);
+
+/**
+ * 單選與配對的字鍵幾個一排（tasks/matching-single-choice.md §5〈畫面〉）：先照 keyColumns；最長的選項在一格裡放不下一行時一排少放一個，
+ * 最少 2 個，排數一樣時排得平均（4 個排成 2＋2，不排 3＋1），字才不從詞的中間折斷。照 375 寬的手機估，寬的螢幕字鍵只是比較寬。比較卡照舊。
+ */
+function singleColumns(keys: readonly string[], words: boolean): number {
+  const size = words ? 17 : 31;
+  const longest = Math.max(...keys.map(key => textWidth(key, size)));
+  let columns = keyColumns(keys.length, words);
+  while (columns > 2 && (TRAY - KEY_GAP * (columns - 1)) / columns - KEY_INSIDE < longest) columns--;
+  return Math.ceil(keys.length / Math.ceil(keys.length / columns));
+}
+
 /** 字鍵與兩個動作（§7）：手指最常停的地方，字鍵在上，動作在下，中間留空，連點才不會誤按「對答案」。 */
 function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Element {
   const { pick, group } = partsOf(view);
@@ -105,7 +136,7 @@ function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Elemen
   const lines = group.order !== undefined && !group.order.starts;
   const words = !lines && group.keys.some(key => [...key].length > 1);
   return <div className="ec-pick-tray">
-    <div className={'ec-pick-keys' + (lines ? ' is-lines' : words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(lines ? 2 : keyColumns(group.keys.length, words)) } as React.CSSProperties}>
+    <div className={'ec-pick-keys' + (lines ? ' is-lines' : words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(lines ? 2 : group.single ? singleColumns(group.keys, words) : keyColumns(group.keys.length, words)) } as React.CSSProperties}>
       {group.keys.map((key, index) => <button key={group.order ? index : key} type="button" className={'ec-pick-key' + (pick.used[index] ? ' is-used' : '')} disabled={animating || key === pick.spent} onClick={event => {
         const target = cursor;
         act({ kind: 'key', key, at: index });

@@ -28,3 +28,12 @@ void test('pick（多音字）：從筆記的文字經過解析、組卡、作�
   assert.equal(questionType(view(s).card), 'pick');
   assert.equal(view(s).card.blanks.length, 2);
 });
+
+// 單選與配對（tasks/matching-single-choice.md §4）也是點選填空，選項寫在目標底下的一行：同一組的目標併成一張，另走一條組卡的路，所以另外測一次。
+void test('pick（單選與配對）：從筆記的文字經過解析、組卡、作答流程，出來就是點選填空，同一組併成一張', async t => {
+  const options = '    - 選項：北部;;東部;;西部\n';
+  const h = await setup(t, { [DECK]: `---\n科目: 國語\n---\n- 能認出西部的海岸 ^aaa111\n    - 海岸平直的是哪一部？ :: 西部\n${options}- 能認出東部的海岸 ^bbb222\n    - 山靠海的是哪一部？ :: 東部\n${options}` });
+  const s = await h.open({ subject: '國語' });
+  assert.equal(questionType(view(s).card), 'pick');
+  assert.equal(view(s).card.blanks.length, 2);
+});

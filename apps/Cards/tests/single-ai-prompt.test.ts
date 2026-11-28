@@ -1,0 +1,92 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parseDeck } from '../src/core/deck/index.ts';
+import { deepenTargets, deepenTask, existingTargets, readJobs, RULE_SUBJECTS, sha256Hex, taskSection } from '../src/core/ai/index.ts';
+import type { CardForm, DeepenInput, ExistingTarget } from '../src/core/ai/index.ts';
+import { PLUGIN_TASK } from '../tools/rule-test/config.ts';
+import { applyTaskOptions, leanList } from '../tools/rule-test/tasks.ts';
+
+// 單選與配對送給 AI 的（tasks/matching-single-choice.md §6、§7）：已有目標的清單帶選項；社會的配對規則第 1 段先不送，勾了點選填空也只送比較卡的。預期值手寫。
+const subject = (key: string) => RULE_SUBJECTS.find(each => each.key === key)!;
+const form = (over: Partial<CardForm> = {}): CardForm => ({ subject: 'social', term: '五上', unit: '2-1 臺灣的海岸', purpose: '準備段考', supplement: false, pick: true, adjust: '', material: '', ...over });
+const DECK = parseDeck([
+  '---', '年級學期: 五上', '科目: 社會', '單元: 2-1 臺灣的海岸', '狀態: 啟用', '---',
+  '- 能說出臺灣北部海岸的地形 ^aaaaa2', '    - 出處：p.42', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸', '    - 選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸',
+  '- 能說出臺灣的四個海岸 ^bbbbb2', '    - 出處：p.42', '    - 臺灣的海岸分成哪幾部？ :: 北部、東部、西部、南部', '',
+].join('\n'));
+const RULE = '- 清單上寫了「這個目標的選項」的學習目標：那是清單的格式，不是選項行的寫法。加題到這種目標時不寫選項行，答案用那一組裡的字，一字不差。';
+const SOCIAL_HEAD = '  - 社會另外有兩種點選，是短規則「沒有選項」的例外，只用在這兩種：';
+
+void test('製卡的已有目標：單選的那一行接「這個目標的選項」，不以「選項」開頭；清單上有才送加題的說明', () => {
+  const existing = existingTargets([{ path: 'a.md', deck: DECK }], '社會', '五上');
+  assert.deepEqual(existing.map(each => each.options), ['岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸', undefined]);
+  assert.ok(!('options' in existing[1]));
+  const lines = taskSection(form({ pick: false }), subject('social'), existing).split('\n');
+  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜五上 2-1 p.42｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸'));
+  assert.ok(lines.includes('  - bbbbb2 能說出臺灣的四個海岸｜五上 2-1 p.42｜第一題：臺灣的海岸分成哪幾部？ :: 北部、東部、西部、南部'));
+  assert.ok(lines.includes(RULE));
+  assert.ok(!taskSection(form({ pick: false }), subject('social'), existing.slice(1)).includes(RULE));
+});
+
+void test('加深的目標：單選的那一行接「這個目標的選項」；清單上有才送加題的說明', () => {
+  const targets = deepenTargets(DECK, new Map());
+  assert.deepEqual(targets.map(each => each.options), ['岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸', undefined]);
+  const input: DeepenInput = { form: { term: '五上', unit: '2-1 臺灣的海岸', purpose: '平常複習', adjust: '', material: '' }, subject: { subject: '社會', r3: true }, targets, siblings: [], map: null, gone: [], words: null };
+  const lines = deepenTask(input).split('\n');
+  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜還沒記穩｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸'));
+  assert.ok(lines.includes(RULE));
+  assert.ok(!deepenTask({ ...input, targets: targets.slice(1) }).includes(RULE));
+});
+
+void test('清單上的選項照 D-250 重讀得回來（L2 第二輪 6）：選項頭尾剛好有一個分號的，不黏進分隔', () => {
+  const edge = (options: string): string => ['---', '年級學期: 五上', '科目: 社會', '單元: 2-1 臺灣的海岸', '狀態: 啟用', '---',
+    '- 能說出臺灣北部海岸的地形 ^aaaaa2', '    - 出處：p.42', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸；', `    - 選項：${options}`, ''].join('\n');
+  const deck = parseDeck(edge('岩岸； ;; 沙灘、沙洲 ;; ；岬角、海灣'));
+  assert.equal(deck.targets[0].kind?.id, 'single');
+  const sent = [existingTargets([{ path: 'a.md', deck }], '社會', '五上')[0].options, deepenTargets(deck, new Map())[0].options];
+  for (const options of sent) {
+    assert.ok(options !== undefined);
+    const again = parseDeck(edge(options)).targets[0];
+    assert.equal(again.kind?.id, 'single', options);
+    assert.deepEqual(again.kind?.id === 'single' ? again.kind.single.options : [], ['岩岸；', '沙灘、沙洲', '；岬角、海灣']);
+  }
+});
+
+void test('存著的工作：`提示 v6` 之前沒有選項這一欄也讀得回來；有的要是文字', () => {
+  const job = (id: string, existing: unknown[]) => ({
+    id, copiedAt: 'x', copiedMs: 0, form: form(), subject: { key: 'social', label: '社會（國小）', subject: '社會', r3: true },
+    parts: [{ name: '任務段', version: '提示 v5', text: 't', sha256: sha256Hex('t') }], promptSha: 'p', existing, save: null,
+  });
+  const old = { id: 'aaaaa2', name: '能甲', source: '五上 2-1', path: 'a.md', first: 'Q :: A' };
+  const read = readJobs([job('old', [old]), job('new', [{ ...old, options: '甲;;乙;;丙' }]), job('bad', [{ ...old, options: 3 }])], 0);
+  assert.deepEqual(read.jobs.map(each => each.id), ['old', 'new']);
+  assert.equal(read.broken, 1);
+});
+
+void test('比較測試工具的精簡清單：重組這一行時選項接在最後，不丟', () => {
+  const existing: ExistingTarget[] = [{ id: 'aaaaa2', name: '能說出臺灣北部海岸的地形', source: '五上 2-1 p.42', path: 'a.md', first: 'Q :: 岩岸', options: '岩岸;;沙岸;;斷層海岸' }];
+  assert.deepEqual(leanList(existing), ['  - aaaaa2 能說出臺灣北部海岸的地形｜五上 2-1｜Q :: 岩岸｜這個目標的選項：岩岸;;沙岸;;斷層海岸']);
+  // L2 第一輪 R8：名稱結尾像變化的單選目標，照一個目標一行，選項不丟；同一個字的變化照舊併成一行。
+  const english: ExistingTarget[] = [
+    { id: 'bbbbb2', name: '能分辨形容詞的 比較級', source: 'L3 p.40', path: 'b.md', first: '比 tall 多一級的形式叫什麼？ :: 比較級', options: '原級;;比較級;;最高級' },
+    { id: 'ccccc2', name: 'tall 比較級', source: 'L3 p.40', path: 'b.md', first: 'tall 的比較級？ :: taller' },
+  ];
+  assert.deepEqual(leanList(english), [
+    '  - bbbbb2 能分辨形容詞的 比較級｜L3 p.40｜比 tall 多一級的形式叫什麼？ :: 比較級｜這個目標的選項：原級;;比較級;;最高級',
+    '  - tall｜比較級 ccccc2｜第一題：tall 的比較級？ :: taller｜L3 p.40',
+  ]);
+});
+
+void test('§7 社會的配對與單選第 1 段先不送（再試一次停損成立）：勾了點選填空也只送比較卡的規則，製卡與加深都一樣', () => {
+  const on = taskSection(form(), subject('social'), []);
+  assert.ok(on.includes('- 家長勾了點選填空：'));
+  assert.ok(!on.includes(SOCIAL_HEAD) && !on.includes('選項：'), on);
+  const deepen: DeepenInput = { form: { term: '五上', unit: '2-1', purpose: '平常複習', adjust: '', material: '', pick: true }, subject: { subject: '社會', r3: true }, targets: [], siblings: [], map: null, gone: [], words: null };
+  assert.ok(!deepenTask(deepen).includes(SOCIAL_HEAD));
+  // 和國語勾了點選填空的那一段一字不差：沒有照科目多送的。
+  const pickPart = (text: string): string => text.slice(text.indexOf('- 家長勾了點選填空：'), text.indexOf('\n- ', text.indexOf('- 家長勾了點選填空：') + 1));
+  assert.equal(pickPart(on), pickPart(taskSection(form({ subject: 'chinese' }), subject('chinese'), [])));
+  // 比較測試「點選填空說明：不送」時整段不見。
+  const cut = applyTaskOptions(on, { ...PLUGIN_TASK, pickRules: false }, { subject: subject('social'), existing: [] });
+  assert.ok(!cut.includes('家長勾了點選填空'), cut);
+});

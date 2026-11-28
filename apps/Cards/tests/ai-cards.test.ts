@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDeck } from '../src/core/deck/index.ts';
-import { activationCounts, buildPrompt, existingTargets, groupHints, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
+import { linesOf, listTree, parseDeck } from '../src/core/deck/index.ts';
+import { activationCounts, buildPrompt, check, existingTargets, groupHints, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
 import type { CardForm, EmbeddedRule, ExistingNow, ExistingTarget, RuleSubject } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-mvp.md §3、§4、§5 的核心（不寫檔的部分）。只用自編的內容。
@@ -22,7 +22,7 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
   assert.equal(a.text, b.text);
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.sha256, sha256Hex(a.text));
-  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v5']);
+  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v6']);
   assert.equal(a.text, ['# 通用', '# 英文', a.parts[2].text].join('\n\n'));
   assert.equal(a.parts[2].text, [
     '## 這一次的任務',
@@ -221,6 +221,54 @@ void test('§4 拆篇：沒有篇名行是一篇（檔名照 D-081）；兩篇�
   assert.match(errorsOf('國二上英文 L3 單字\n\n國二上英文 L3 文法\n\n- 能說出一\n    - 一？ :: 一\n<<<完>>>').join('\n'), /1 「國二上英文 L3 單字」沒有任何學習目標/);
   const onlyCandidates = '國二上英文 L3 單字\n\n- borrow 英翻中\n    - borrow :: 借入\n\n國二上英文 L3 補充\n\n> [!note]- 候選卡片\n> - lend 英翻中\n>     - 理由：課本沒有\n>     - lend :: 借出\n<<<完>>>';
   assert.match(errorsOf(onlyCandidates).join('\n'), /6 「國二上英文 L3 補充」沒有任何學習目標/);
+});
+
+void test('§4 拆篇：篇與篇之間的分隔線（L2 第四輪 1）：頂格的分隔線結束清單，下一行的篇名照認；整類：五種分隔線 × 前後有沒有空行', () => {
+  const lines = ENGLISH.split('\n'), at = lines.indexOf('國二上英文 L3 文法');
+  for (const rule of ['---', '***', '- - -', '___', '* * *']) for (const around of [['', rule], [rule], ['', rule, ''], [rule, '']]) {
+    const reply = [...lines.slice(0, at - 1), ...around, ...lines.slice(at)].join('\n');
+    const read = inspectEnglish(reply);
+    assert.deepEqual([read.errors, read.pieces.map(piece => [piece.name, piece.targets])], [[], [['國二上英文 L3 單字', 1], ['國二上英文 L3 文法', 1]]], JSON.stringify(around));
+  }
+  // 分隔線後面少了清單符號的題目不會悄悄接在上一項：和沒有分隔線時一樣是多出的段落（不符），列在檢查結果裡。
+  const lost = [...lines.slice(0, at - 1), '', '---', '這個字是什麼意思？ :: 借入', '', ...lines.slice(at)];
+  const no = lost.indexOf('這個字是什麼意思？ :: 借入') + 1;
+  assert.ok(check(lost.join('\n'), { subject: '英文' }).issues.some(each => each.level === '不符' && each.code === 'para' && each.line === no), String(no));
+});
+
+void test('§4 拆篇：分隔線只歸還開著的項目（L2 第五輪）：前一項被後面的項目結束了就不算；整類和筆記的讀法（listTree）一致', () => {
+  const tail = ['國二上英文 L3 文法', '', '- 能用 be going to 說未來的計畫', '    - 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to', '<<<完>>>'];
+  const draft = (g1: number, g2: number, fence: boolean, blank: boolean, rule: string): string[] => {
+    const under = ' '.repeat(1 + g2);
+    return [
+      '國二上英文 L3 單字', '',
+      `-${' '.repeat(g1)}borrow 英翻中`, `${' '.repeat(1 + g1)}- borrow :: 借入`,
+      `-${' '.repeat(g2)}lend 英翻中`, `${under}- lend :: 借出`,
+      ...(fence ? [`${under}\`\`\``, `${under}x`, `${under}\`\`\``] : []),
+      ...(blank ? [''] : []), rule, ...tail,
+    ];
+  };
+  // 第五輪的例子：lend 的文字從第 4 欄開始，縮 2 欄的分隔線已經在它外面；borrow 被 lend 結束了，不算還開著。項目裡的圍欄之後也一樣。
+  for (const fence of [false, true]) {
+    const read = inspectEnglish(draft(1, 3, fence, true, '  ---').join('\n'));
+    assert.deepEqual([read.errors, read.pieces.map(piece => [piece.name, piece.targets])], [[], [['國二上英文 L3 單字', 2], ['國二上英文 L3 文法', 1]]], String(fence));
+  }
+  // 整類：清單符號後面空 1～4 格 × 有沒有圍欄 × 前面有沒有空行 × 分隔線縮 0～7 欄。沒有擋下來的，下一行的篇名照不照認，和筆記怎麼讀（篇名那一行在不在某一項裡）一致：
+  // 不會沒有錯誤就把兩篇存成一篇，或把項目裡的一行當成篇名。
+  for (const g1 of [1, 2, 3, 4]) for (const g2 of [1, 2, 3, 4]) for (const fence of [false, true]) for (const blank of [false, true]) for (let k = 0; k < 8; k++) {
+    const lines = draft(g1, g2, fence, blank, ' '.repeat(k) + '---'), title = lines.indexOf(tail[0]);
+    const inItem = listTree(linesOf(lines.join('\n')), 0).some(item => item.line < title && item.end > title);
+    const read = inspectEnglish(lines.join('\n'));
+    if (read.errors.length === 0) assert.equal(read.pieces.length, inItem ? 1 : 2, JSON.stringify({ g1, g2, fence, blank, k }));
+  }
+  // 項目裡先有標題或備註框、再接分隔線：草稿在下一行的篇名拆開（listTree 會把篇名留在項目裡）。拆開之後每一篇各自寫成一個檔、各自重讀，
+  // 目標照樣各在自己那一篇；不拆的話第二篇的目標會寫進第一篇的檔，篇名藏在項目裡。
+  for (const inside of [['  ## 補充'], ['  > [!note] 給家長的備註', '  > 課本 p.40'], ['  > [!note] 給家長的備註', '  > 課本 p.40', '']]) {
+    const lines = ['國二上英文 L3 單字', '', '- borrow 英翻中', '    - borrow :: 借入', ...inside, '  ---', ...tail];
+    const read = inspectEnglish(lines.join('\n'));
+    assert.deepEqual([read.errors, read.pieces.map(piece => [piece.name, piece.targets])], [[], [['國二上英文 L3 單字', 1], ['國二上英文 L3 文法', 1]]], inside.join('|'));
+    for (const piece of read.pieces) assert.equal(parseDeck(piece.lines.map(line => lines[line]).join('\n')).targets.length, piece.targets, piece.name);
+  }
 });
 
 void test('§4 拆篇：篇名字串在答案的接續行、引言框、程式碼裡不拆；第一篇前的備註框併入、候選框擋；檔名不能用的字換成全形', () => {

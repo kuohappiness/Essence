@@ -21,6 +21,7 @@ function kindOf(target: Target): string {
     case 'order': return kind.order.style + '-order';
     case 'couplet': return 'couplet';
     case 'typing': return 'typing-' + kind.typing.style;
+    case 'single': return 'single';
   }
 }
 
@@ -128,6 +129,23 @@ void test('卡型分類表：多音字的句子（字後面接（＿＿））認
   }
 });
 
+// 單選（tasks/matching-single-choice.md §3）：選項行是目標底下的另一行，上面的表每一格都沒有它，所以那些格不變；有選項行時各科一樣，
+// 表裡已經是別的卡型的名稱帶選項行照那一種，多一個 options-invalid。
+void test('卡型分類表：一般問答加選項行認成單選，各科一樣；別的卡型的名稱帶選項行照那一種，提示', () => {
+  for (const subject of ['國語', '社會', '英文']) {
+    const read = (name: string, question: string, options = '甲;;乙;;丙'): string => {
+      const deck = parseDeck(`---\n科目: ${subject}\n---\n- ${name}\n    - ${question}\n    - 選項：${options}\n`);
+      return [kindOf(deck.targets[0]), ...deck.problems.map(problem => problem.code)].join(' ');
+    };
+    assert.equal(read('能說明擴散', '一般的問題？ :: 乙'), 'single', subject);
+    assert.equal(read('能說明擴散', '題幹有一個＿＿空格。 :: 乙'), 'single', subject);
+    assert.equal(read('能說明擴散', '題幹 ==乙== 結尾。'), 'flip options-invalid', subject);
+    assert.equal(read('borrow 英翻中', 'borrow :: 乙'), 'en-zh options-invalid', subject);
+    assert.equal(read('寨（寨、塞） 相似字', '題幹有一個＿＿空格。 :: 寨'), 'group options-invalid', subject);
+    assert.equal(read('go 過去式', 'go 的過去式 :: went', 'went;;gone;;goed'), subject === '英文' ? 'typing-inflection options-invalid' : 'single', subject);
+  }
+});
+
 void test('卡型分類表：最上層直接寫的題目一律照翻面，不看結尾與形狀', () => {
   for (const subject of ['國語', '英文']) {
     for (const line of ['題幹有一個＿＿空格。 :: 寨', '==人閒桂花落==，==夜靜春山空==。', 'borrow :: 借入', '借入 :: borrow']) {
@@ -149,6 +167,7 @@ const KIND_SAMPLES: readonly { kind: string; type: string; subject: string; text
   { kind: 'typing-inflection', type: 'typed', subject: '英文', text: '- go 過去式 ^aaa111\n    - Yesterday I ＿＿ to school.（去） :: went\n' },
   { kind: 'group', type: 'pick', subject: '國語', text: '- 寨（寨、塞） 相似字 ^aaa111\n    - 山＿＿ :: 寨\n- 塞（寨、塞） 相似字 ^bbb222\n    - 大＿＿車 :: 塞\n' },
   { kind: 'choice', type: 'pick', subject: '國語', text: '- 長（ㄓㄤˇ、ㄔㄤˊ） 讀音 ^aaa111\n    - 他長（＿＿）得比哥哥高。 :: ㄓㄤˇ\n    - 這條路很長（＿＿）。 :: ㄔㄤˊ\n' },
+  { kind: 'single', type: 'pick', subject: '社會', text: '- 能認出西部的海岸 ^aaa111\n    - 海岸平直，是哪一部的海岸？ :: 西部\n    - 選項：北部;;東部;;西部;;南部\n' },
   { kind: 'poem-order', type: 'order', subject: '國語', text: '## 鳥鳴澗\n\n- 鳥鳴澗 全詩 排序 ^aaa111\n    - ==人閒桂花落==，==夜靜春山空==。\n' },
   { kind: 'sentence-order', type: 'order', subject: '英文', text: '- 間接問句 排序 ^aaa111\n    - 我不知道他住在哪裡。I don\'t know ==where== ==he== ==lives==.\n' },
 ];
@@ -164,8 +183,8 @@ for (const { kind, type, subject, text } of KIND_SAMPLES) {
 }
 
 // 題型對得上（題型模組任務說明 §1-7，Fable G2 b）：卡型決定題型，questionType 只看卡片自己（compose.ts），兩邊在這裡對齊。
-// 比較卡、多音字是點選，排序是排序（A2，§1-8）；其他卡型和沒有卡型的照這張卡打不打字（null）。多一種卡型時這張表編譯不過，要寫它是哪一種題型。
-const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null };
+// 比較卡、多音字、單選是點選，排序是排序（A2，§1-8）；其他卡型和沒有卡型的照這張卡打不打字（null）。多一種卡型時這張表編譯不過，要寫它是哪一種題型。
+const TYPE_OF: Record<NonNullable<Target['kind']>['id'], QuestionType | null> = { group: 'pick', polyphone: 'pick', order: 'order', typing: null, couplet: null, single: 'pick' };
 void test('題型對得上：卡型範例的每一張卡，questionType 和卡型一致', async t => {
   for (const { kind, subject, text } of KIND_SAMPLES) {
     const h = await setup(t, { [`Essence Cards/${subject}/範例.md`]: `---\n科目: ${subject}\n---\n${text}` });

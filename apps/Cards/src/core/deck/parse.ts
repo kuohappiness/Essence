@@ -5,13 +5,20 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { expandTabs, linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { ALT_LIKE, altMentions, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import { ALT_LIKE, altMentions, bareOptionProblems, hasOptionSeparator, optionsTaken, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import type { OptionLine } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 /** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
 export const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
 /** 背面補充「記憶錨點：」（和 review/extras.ts 的 extraLabel 一樣只認全形冒號）；1 是寫在同一行的內容。 */
 const ANCHOR_LABEL = /^記憶錨點：([\s\S]*)$/;
+/** 單選的選項行（tasks/matching-single-choice.md §2）：只認全形冒號、緊接「選項」。 */
+const OPTIONS_LABEL = /^選項：/;
+/** 像選項行的寫法（§3〈寫法不對、放錯位置〉）：冒號全半形、前面可以有空白，前後可以有粗體。 */
+const OPTIONS_LIKE = /^\s*(?:\*\*)?\s*選項\s*(?:\*\*)?\s*[：:]/;
+/** 選項行寫在最上層時的提示（L2 第一輪 R7、第二輪 7）。 */
+const ROOT_OPTIONS = '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項';
 /** 同一行接別的欄位的分隔：`｜`，或半形的 `|` 後面接欄位名稱加冒號（D-170 第 12 點）；給 tracedSplit 用，連結裡的不算。 */
 export const FIELD_SEPARATOR = /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/;
 const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', statusRead: 'missing', categories: [], isTranscript: false, need: null, issues: [] });
@@ -134,10 +141,13 @@ function textSpan(node: Item, from: number, to: number): Span | null {
  * `subject` 是屬性沒寫科目時用的科目（AI 草稿還沒有屬性時，tasks/english-typed-order.md §1-1）；屬性寫了照屬性。
  */
 export function parseDeck(text: string, options: { layout: true; subject?: string | null }): Deck & { layout: Map<number, TargetLayout> };
-export function parseDeck(text: string, options: { subject?: string | null }): Deck;
+/**
+ * bare：加進已有的框（AI 的草稿，src/core/ai/check.ts）。只補選項行、沒有題目的項目不是目標，但選項行的提示照報（L2 第三輪 4）；卡組本身不給。
+ */
+export function parseDeck(text: string, options: { subject?: string | null; bare?: boolean }): Deck;
 // 沒給選項的寫在最後：ReturnType<typeof parseDeck> 取最後一個。
 export function parseDeck(text: string): Deck;
-export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null }): Deck & { layout?: Map<number, TargetLayout> } {
+export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null; bare?: boolean }): Deck & { layout?: Map<number, TargetLayout> } {
   const lines = linesOf(text);
   const { props, start, problems } = readProperties(lines);
   const targets: Target[] = [];
@@ -146,6 +156,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
   if (props.isTranscript) return result();
   // 文法、變化與句子排序只在英文的卡組（§1-1）：結尾的詞別科也會用。
   const english = (props.subject ?? options?.subject ?? null)?.trim() === '英文';
+  const bare = options?.bare === true;
   const seenIds = new Set<string>();
   for (const root of listTree(lines, start)) {
     const head = stripId(root.text);
@@ -221,7 +232,9 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
           const at = (from: number, to: number): Span | null => { const range = piece.range(from, to); return range && textSpan(node, range.from, range.to); };
           const group = (index: number): Span | null => { const found = masked?.indices?.[index]; return found ? at(found[0], found[1]) : null; };
           if (!['出處', '類型', '重要性', '狀態', '備註', '錯題補強'].includes(key)) {
-            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', at(piece.masked.length - piece.masked.trimStart().length, piece.masked.trimEnd().length) ?? undefined);
+            const columns = at(piece.masked.length - piece.masked.trimStart().length, piece.masked.trimEnd().length) ?? undefined;
+            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', columns);
+            if (OPTIONS_LIKE.test(segment)) addProblem(node, 'options-invalid', '選項行要自己一行，寫在學習目標底下、和題目同一層，不接在資料欄位那一行；這一段已忽略', 'hint', columns);
             continue;
           }
           const name = masked?.[1] === key ? group(1) : null, colon = masked?.[1] === key ? group(2) : null;
@@ -333,6 +346,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
         const question = body.slice(0, colon).trim();
         let answer = body.slice(colon + 2).trim();
         const multiline = !answer;
+        if (multiline) stacked.add(node.line);
         if (multiline) answer = children.map(child => markdown(child)).filter(Boolean).join('\n');
         const extras = multiline ? [] : children.map(child => markdown(child));
         if (!multiline) placeAlternatives(children);
@@ -365,26 +379,55 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       return null;
     };
     const promptNotes = new Map<Prompt, string[]>();
+    /** 答案寫在下一層的題目（多行答案）的行號：只寫一個子項目時答案沒有換行，單選照寫法不認（L2 第一輪 R2）。 */
+    const stacked = new Set<number>();
     let notes: string[] | null = null;
+    /** 目標底下、和題目同一層的選項行（§3）：單選在 readKind 認。 */
+    const options: OptionLine[] = [];
     if (implicit) target.prompts.push(prompt(root));
     else for (const child of root.children) {
       if (fieldStart.test(child.text)) continue;
       const syntax = questionSyntax(stripId(child.text).text);
       if (syntax.colon >= 0 || syntax.blanks.length) target.prompts.push(prompt(child));
-      else target.shared.push(markdown(child));
+      else {
+        if (OPTIONS_LABEL.test(child.text)) options.push({ at: target.shared.length, line: child.line, text: child.text, solid: !child.text.includes('\n') && !child.children.length });
+        target.shared.push(markdown(child));
+      }
       const anchor: RegExpExecArray | null = notes === null ? ANCHOR_LABEL.exec(child.text) : null;
       if (anchor) notes = [anchor[1].trim(), ...child.children.map(each => markdown(each).trim())].filter(Boolean);
     }
+    // 選項寫錯、放錯位置（§3〈寫法不對、放錯位置〉）：照現在的讀法，只提示。目標底下那一行全形的「選項：」由 readKind 認；多行答案的行、記憶錨點的子項目不看。
+    const isPrompt = (node: Item): boolean => { const { colon, blanks } = questionSyntax(stripId(node.text).text); return colon >= 0 || blanks.length > 0; };
+    const answerBelow = (node: Item): boolean => { const body = stripId(node.text).text, { colon } = questionSyntax(body); return colon >= 0 && !body.slice(colon + 2).trim(); };
+    const optionsAt = (node: Item, depth: number): void => {
+      const own = depth === 1 && !implicit;
+      if (OPTIONS_LIKE.test(node.text) && !(own && OPTIONS_LABEL.test(node.text) && !isPrompt(node))) {
+        addProblem(node, 'options-invalid', !own ? '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項'
+          : isPrompt(node) ? '選項裡不能有 ==、::；這一行現在讀成題目'
+          : /^\s*\*\*/.test(node.text) ? '「選項」不要粗體；這一行現在是背面的補充'
+          : '「選項」後面直接接全形冒號（選項：）；這一行現在是背面的補充');
+      }
+      if (ANCHOR_LABEL.test(node.text) || (own && answerBelow(node))) return;
+      for (const child of node.children) optionsAt(child, depth + 1);
+    };
     if (!target.prompts.length) {
-      // 一般筆記不是目標，不回報它的欄位提示。
-      for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
+      // 一般筆記不是目標，不回報它的欄位提示。加進已有的框只補選項行的項目（bare，tasks/matching-single-choice.md §6）例外：題目在筆記裡，
+      // 選項行的提示照報，草稿和加入時用同一套讀法（L2 第二輪 2、第三輪 4）；答案在不在選項裡，加入時核對。
+      for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) if (!bare || problems[i].code !== 'options-invalid') problems.splice(i, 1);
+      if (bare) {
+        for (const { line, level, code, message } of bareOptionProblems(options)) problems.push({ line, targetLine: root.line, level, code, message });
+        for (const child of root.children) optionsAt(child, 1);
+      }
+      // 只有選項行、少縮一層寫到最上層的（L2 第二輪 7）：不是目標，但還是提示放錯位置（下面寫在最上層的那一條）。
+      // 要有 `;;` 才算：「- 選項：搭火車、搭公車」這種一般的清單不提示（L2 第三輪 5）。
+      if (OPTIONS_LIKE.test(root.text) && hasOptionSeparator(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
       continue;
     }
     // 認卡型的題目階段（題型模組任務說明 §1-3）：比較卡、多音字、排序、接句照順序，讀成或有提示就停；文法與變化在名稱階段認了，不走這裡。
     // 多音字（tasks/polyphone-pick.md §1-2）：比較卡先認，認不成又沒有提示時才看；兩種的提示一個目標只有一種。
-    const pick = typing ? null : readKind(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? [], english);
-    if (pick?.kind) target.kind = pick.kind;
-    for (const { line, level, code, message } of pick?.problems ?? []) {
+    const pick = typing ? { kind: null, problems: optionsTaken(options, 'typing') } : readKind(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? [], english, options, stacked);
+    if (pick.kind) target.kind = pick.kind;
+    for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;
     }
@@ -409,6 +452,9 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       for (const child of node.children) misplaced(child, depth + 1);
     };
     misplaced(root, 0);
+    // 寫在最上層的（L2 第一輪 R7）：是一個目標的名稱或隱式題，不是選項行。
+    if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
+    if (!implicit || !answerBelow(root)) for (const child of root.children) optionsAt(child, implicit ? 2 : 1);
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
       seenIds.add(target.id);
