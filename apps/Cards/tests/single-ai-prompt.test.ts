@@ -19,10 +19,10 @@ const SOCIAL_HEAD = '  - 社會另外有兩種點選，是短規則「沒有選�
 
 void test('製卡的已有目標：單選的那一行接「這個目標的選項」，不以「選項」開頭；清單上有才送加題的說明', () => {
   const existing = existingTargets([{ path: 'a.md', deck: DECK }], '社會', '五上');
-  assert.deepEqual(existing.map(each => each.options), ['岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸', undefined]);
+  assert.deepEqual(existing.map(each => each.options), ['岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸', undefined]);
   assert.ok(!('options' in existing[1]));
   const lines = taskSection(form({ pick: false }), subject('social'), existing).split('\n');
-  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜五上 2-1 p.42｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸'));
+  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜五上 2-1 p.42｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸'));
   assert.ok(lines.includes('  - bbbbb2 能說出臺灣的四個海岸｜五上 2-1 p.42｜第一題：臺灣的海岸分成哪幾部？ :: 北部、東部、西部、南部'));
   assert.ok(lines.includes(RULE));
   assert.ok(!taskSection(form({ pick: false }), subject('social'), existing.slice(1)).includes(RULE));
@@ -30,12 +30,26 @@ void test('製卡的已有目標：單選的那一行接「這個目標的選項
 
 void test('加深的目標：單選的那一行接「這個目標的選項」；清單上有才送加題的說明', () => {
   const targets = deepenTargets(DECK, new Map());
-  assert.deepEqual(targets.map(each => each.options), ['岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸', undefined]);
+  assert.deepEqual(targets.map(each => each.options), ['岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸', undefined]);
   const input: DeepenInput = { form: { term: '五上', unit: '2-1 臺灣的海岸', purpose: '平常複習', adjust: '', material: '' }, subject: { subject: '社會', r3: true }, targets, siblings: [], map: null, gone: [], words: null };
   const lines = deepenTask(input).split('\n');
-  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜還沒記穩｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸;;沙岸;;斷層海岸;;珊瑚礁海岸'));
+  assert.ok(lines.includes('  - aaaaa2 能說出臺灣北部海岸的地形｜還沒記穩｜第一題：臺灣北部的海岸是哪一種海岸？ :: 岩岸｜這個目標的選項：岩岸 ;; 沙岸 ;; 斷層海岸 ;; 珊瑚礁海岸'));
   assert.ok(lines.includes(RULE));
   assert.ok(!deepenTask({ ...input, targets: targets.slice(1) }).includes(RULE));
+});
+
+void test('清單上的選項照 D-250 重讀得回來（L2 第二輪 6）：選項頭尾剛好有一個分號的，不黏進分隔', () => {
+  const edge = (options: string): string => ['---', '年級學期: 五上', '科目: 社會', '單元: 2-1 臺灣的海岸', '狀態: 啟用', '---',
+    '- 能說出臺灣北部海岸的地形 ^aaaaa2', '    - 出處：p.42', '    - 臺灣北部的海岸是哪一種海岸？ :: 岩岸；', `    - 選項：${options}`, ''].join('\n');
+  const deck = parseDeck(edge('岩岸； ;; 沙灘、沙洲 ;; ；岬角、海灣'));
+  assert.equal(deck.targets[0].kind?.id, 'single');
+  const sent = [existingTargets([{ path: 'a.md', deck }], '社會', '五上')[0].options, deepenTargets(deck, new Map())[0].options];
+  for (const options of sent) {
+    assert.ok(options !== undefined);
+    const again = parseDeck(edge(options)).targets[0];
+    assert.equal(again.kind?.id, 'single', options);
+    assert.deepEqual(again.kind?.id === 'single' ? again.kind.single.options : [], ['岩岸；', '沙灘、沙洲', '；岬角、海灣']);
+  }
 });
 
 void test('存著的工作：`提示 v6` 之前沒有選項這一欄也讀得回來；有的要是文字', () => {

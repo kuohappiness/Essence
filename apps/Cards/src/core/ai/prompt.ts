@@ -44,8 +44,11 @@ export function firstLine(prompt: DeckPrompt): string {
   const flat = (text: string): string => image(text).split('\n').map(line => line.trim()).filter(Boolean).join('／');
   return prompt.kind === 'qa' ? `${flat(prompt.question)} :: ${flat(prompt.answer)}` : flat(prompt.text);
 }
-/** 單選目標的選項（tasks/matching-single-choice.md §6）：照選項行的寫法用 `;;` 接起來；不是單選的是 undefined。製卡與加深的清單共用。 */
-export const optionsOf = (target: Target): string | undefined => target.kind?.id === 'single' ? target.kind.single.options.join(';;') : undefined;
+/**
+ * 單選目標的選項（tasks/matching-single-choice.md §6）：照選項行的寫法用 `;;` 接起來，兩邊留一格空白，選項頭尾剛好有一個分號的
+ * 重讀時才不黏進分隔（D-250，L2 第二輪 6）；不是單選的是 undefined。製卡與加深的清單共用。
+ */
+export const optionsOf = (target: Target): string | undefined => target.kind?.id === 'single' ? target.kind.single.options.join(' ;; ') : undefined;
 /** 清單那一行最後接的選項：不以「選項」開頭，免得 AI 照抄成接在出處那一行的寫法。 */
 export const optionsSuffix = (options: string | undefined): string => options === undefined ? '' : `｜這個目標的選項：${options}`;
 /** 清單上有選項的目標怎麼加題（§6、§7）：只在清單上有這種目標時送。製卡與加深共用，寫在「另外」底下。 */
