@@ -3,7 +3,7 @@ import { readPick } from './kinds/group.ts';
 import { readChoice } from './kinds/polyphone.ts';
 import { readOrder, readSentence } from './kinds/order.ts';
 import { readCouplet } from './kinds/couplet.ts';
-import { optionsInvalid, readSingle } from './kinds/single.ts';
+import { optionsInvalid, readOptionLines, readSingle } from './kinds/single.ts';
 import type { PickReading } from './kinds/group.ts';
 import type { OptionLine } from './kinds/single.ts';
 import type { Deck, Kind, KindId, Target } from './types.ts';
@@ -40,6 +40,16 @@ export function readKind(target: Target, notes: readonly string[], promptNotes: 
 }
 
 /** 單選以前的四種，照原本的先後。 */
+/**
+ * 加進已有的框只補選項行、沒有題目的項目（題目在筆記裡，tasks/matching-single-choice.md §6，L2 第二輪 2、第三輪 4）：
+ * 選項行本身讀不成的提示，和 readKind 認單選時同一套讀法。答案在不在選項裡，加入時核對。
+ */
+export function bareOptionProblems(options: readonly OptionLine[]): KindReading['problems'] {
+  if (!options.length) return [];
+  const read = readOptionLines(options);
+  return 'reason' in read ? [optionsInvalid(read.line, read.reason)] : [];
+}
+
 function readEarlier(target: Target, notes: readonly string[], promptNotes: readonly string[], english: boolean): KindReading {
   const pick = readPick(target);
   if (pick.group) return { kind: { id: 'group', group: pick.group }, problems: [] };

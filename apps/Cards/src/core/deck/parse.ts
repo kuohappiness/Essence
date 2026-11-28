@@ -5,7 +5,7 @@ import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './so
 import type { TracedPiece } from './sources.ts';
 import { expandTabs, linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { ALT_LIKE, altMentions, optionsTaken, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
+import { ALT_LIKE, altMentions, bareOptionProblems, optionsTaken, pairWordOf, readKind, readTyping, typedAnswer } from './question-types.ts';
 import type { OptionLine } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
@@ -141,10 +141,13 @@ function textSpan(node: Item, from: number, to: number): Span | null {
  * `subject` 是屬性沒寫科目時用的科目（AI 草稿還沒有屬性時，tasks/english-typed-order.md §1-1）；屬性寫了照屬性。
  */
 export function parseDeck(text: string, options: { layout: true; subject?: string | null }): Deck & { layout: Map<number, TargetLayout> };
-export function parseDeck(text: string, options: { subject?: string | null }): Deck;
+/**
+ * bare：加進已有的框（AI 的草稿，src/core/ai/check.ts）。只補選項行、沒有題目的項目不是目標，但選項行的提示照報（L2 第三輪 4）；卡組本身不給。
+ */
+export function parseDeck(text: string, options: { subject?: string | null; bare?: boolean }): Deck;
 // 沒給選項的寫在最後：ReturnType<typeof parseDeck> 取最後一個。
 export function parseDeck(text: string): Deck;
-export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null }): Deck & { layout?: Map<number, TargetLayout> } {
+export function parseDeck(text: string, options?: { layout?: boolean; subject?: string | null; bare?: boolean }): Deck & { layout?: Map<number, TargetLayout> } {
   const lines = linesOf(text);
   const { props, start, problems } = readProperties(lines);
   const targets: Target[] = [];
@@ -153,6 +156,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
   if (props.isTranscript) return result();
   // 文法、變化與句子排序只在英文的卡組（§1-1）：結尾的詞別科也會用。
   const english = (props.subject ?? options?.subject ?? null)?.trim() === '英文';
+  const bare = options?.bare === true;
   const seenIds = new Set<string>();
   for (const root of listTree(lines, start)) {
     const head = stripId(root.text);
@@ -392,9 +396,28 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       const anchor: RegExpExecArray | null = notes === null ? ANCHOR_LABEL.exec(child.text) : null;
       if (anchor) notes = [anchor[1].trim(), ...child.children.map(each => markdown(each).trim())].filter(Boolean);
     }
+    // 選項寫錯、放錯位置（§3〈寫法不對、放錯位置〉）：照現在的讀法，只提示。目標底下那一行全形的「選項：」由 readKind 認；多行答案的行、記憶錨點的子項目不看。
+    const isPrompt = (node: Item): boolean => { const { colon, blanks } = questionSyntax(stripId(node.text).text); return colon >= 0 || blanks.length > 0; };
+    const answerBelow = (node: Item): boolean => { const body = stripId(node.text).text, { colon } = questionSyntax(body); return colon >= 0 && !body.slice(colon + 2).trim(); };
+    const optionsAt = (node: Item, depth: number): void => {
+      const own = depth === 1 && !implicit;
+      if (OPTIONS_LIKE.test(node.text) && !(own && OPTIONS_LABEL.test(node.text) && !isPrompt(node))) {
+        addProblem(node, 'options-invalid', !own ? '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項'
+          : isPrompt(node) ? '選項裡不能有 ==、::；這一行現在讀成題目'
+          : /^\s*\*\*/.test(node.text) ? '「選項」不要粗體；這一行現在是背面的補充'
+          : '「選項」後面直接接全形冒號（選項：）；這一行現在是背面的補充');
+      }
+      if (ANCHOR_LABEL.test(node.text) || (own && answerBelow(node))) return;
+      for (const child of node.children) optionsAt(child, depth + 1);
+    };
     if (!target.prompts.length) {
-      // 一般筆記不是目標，不回報它的欄位提示。
-      for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
+      // 一般筆記不是目標，不回報它的欄位提示。加進已有的框只補選項行的項目（bare，tasks/matching-single-choice.md §6）例外：題目在筆記裡，
+      // 選項行的提示照報，草稿和加入時用同一套讀法（L2 第二輪 2、第三輪 4）；答案在不在選項裡，加入時核對。
+      for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) if (!bare || problems[i].code !== 'options-invalid') problems.splice(i, 1);
+      if (bare) {
+        for (const { line, level, code, message } of bareOptionProblems(options)) problems.push({ line, targetLine: root.line, level, code, message });
+        for (const child of root.children) optionsAt(child, 1);
+      }
       // 只有選項行、少縮一層寫到最上層的（L2 第二輪 7）：不是目標，但還是提示放錯位置（下面寫在最上層的那一條）。
       if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
       continue;
@@ -428,20 +451,6 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       for (const child of node.children) misplaced(child, depth + 1);
     };
     misplaced(root, 0);
-    // 選項寫錯、放錯位置（§3〈寫法不對、放錯位置〉）：照現在的讀法，只提示。目標底下那一行全形的「選項：」由 readKind 認；多行答案的行、記憶錨點的子項目不看。
-    const isPrompt = (node: Item): boolean => { const { colon, blanks } = questionSyntax(stripId(node.text).text); return colon >= 0 || blanks.length > 0; };
-    const answerBelow = (node: Item): boolean => { const body = stripId(node.text).text, { colon } = questionSyntax(body); return colon >= 0 && !body.slice(colon + 2).trim(); };
-    const optionsAt = (node: Item, depth: number): void => {
-      const own = depth === 1 && !implicit;
-      if (OPTIONS_LIKE.test(node.text) && !(own && OPTIONS_LABEL.test(node.text) && !isPrompt(node))) {
-        addProblem(node, 'options-invalid', !own ? '選項行要自己一行，寫在學習目標底下、和題目同一層；寫在這裡照原本的讀法，不算選項'
-          : isPrompt(node) ? '選項裡不能有 ==、::；這一行現在讀成題目'
-          : /^\s*\*\*/.test(node.text) ? '「選項」不要粗體；這一行現在是背面的補充'
-          : '「選項」後面直接接全形冒號（選項：）；這一行現在是背面的補充');
-      }
-      if (ANCHOR_LABEL.test(node.text) || (own && answerBelow(node))) return;
-      for (const child of node.children) optionsAt(child, depth + 1);
-    };
     // 寫在最上層的（L2 第一輪 R7）：是一個目標的名稱或隱式題，不是選項行。
     if (OPTIONS_LIKE.test(root.text)) addProblem(root, 'options-invalid', ROOT_OPTIONS);
     if (!implicit || !answerBelow(root)) for (const child of root.children) optionsAt(child, implicit ? 2 : 1);

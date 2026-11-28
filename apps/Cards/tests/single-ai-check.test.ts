@@ -130,3 +130,24 @@ void test('題幹的檢查只看孩子看得到的字（L2 第二輪 5、第三�
     assert.deepEqual(found(candidate(question(`%%${words}%%`))), [], words);
   }
 });
+
+void test('加進已有的框只補選項行（L2 第三輪 4）：讀法和加入時一樣，分隔線不是選項行的接續；寫錯的報選項行哪裡錯，不報沒有題目', () => {
+  const box = (...rest: string[]): string => draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...rest, ''].join('\n');
+  const all = (text: string): Found[] => check(text, { subject: '社會' }).issues.filter(each => each.level === '錯誤' || each.level === '不符').map(each => [each.level, each.line, each.code]);
+  for (const rule of ['> ---', '> ***', '> - - -']) assert.deepEqual(all(box('>     - 選項：岩岸;;沙岸;;斷層海岸', rule)), [], rule);
+  // 縮在選項行底下的才是接續。
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸', '>       ---')), [['錯誤', 10, 'options-invalid']]);
+  const wrong = (line: string): { found: Found[]; message: string } => {
+    const issues = check(box(line), { subject: '社會' }).issues.filter(each => each.level === '錯誤' || each.level === '不符');
+    return { found: issues.map(each => [each.level, each.line, each.code]), message: issues.map(each => each.msg).join('｜') };
+  };
+  const half = wrong('>     - 選項:岩岸;;沙岸;;斷層海岸');
+  assert.deepEqual(half.found, [['錯誤', 10, 'options-invalid']]);
+  assert.match(half.message, /全形冒號/);
+  const bold = wrong('>     - **選項**：岩岸;;沙岸;;斷層海岸');
+  assert.deepEqual(bold.found, [['錯誤', 10, 'options-invalid']]);
+  assert.match(bold.message, /不要粗體/);
+  const field = wrong('>     - 出處：p.43｜選項：岩岸;;沙岸;;斷層海岸');
+  assert.deepEqual(field.found, [['錯誤', 10, 'options-invalid']]);
+  assert.match(field.message, /不接在資料欄位那一行/);
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EXISTING_WHY, planExisting } from '../src/core/ai/index.ts';
+import { check, EXISTING_WHY, introBoxes, planExisting } from '../src/core/ai/index.ts';
 import type { ExistingInput } from '../src/core/ai/index.ts';
 import { parseDeck } from '../src/core/deck/index.ts';
 
@@ -121,5 +121,36 @@ void test('題幹的檢查只看孩子看得到的字（L2 第二輪 5、第三�
     assert.equal(kindOf(planned(item(OPTIONS), dest(question(`%%${words}%%`)))), 'single', words);
     assert.equal(left(item(question(words)), dest(Q1, OPTIONS)), why, words);
     assert.equal(kindOf(planned(item(question(`%%${words}%%`)), dest(Q1, OPTIONS))), 'single', words);
+  }
+});
+
+void test('加進已有的框只補選項行（L2 第二輪 2、第三輪 4）：草稿和加入時讀法一樣；整類：五種選項行 × 後面接的分隔線、接續、子項目', () => {
+  const body = ['## 臺灣的海岸', '', '- 能說出臺灣南部海岸的地形', '    - 出處：p.42', '    - 臺灣南部的海岸是哪一種海岸？ :: 沙岸', '    - 選項：岩岸;;沙岸;;斷層海岸', ''].join('\n');
+  // 本文第 1～6 行、第 7 行空行；框從第 8 行起，名稱第 9 行、選項行第 10 行。
+  const reply = (...lines: string[]): string => body + '\n' + ['> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣北部海岸的地形', ...lines.map(line => (line ? '> ' + line : '>'))].join('\n') + '\n';
+  const drafted = (text: string): string[] => check(text, { subject: '社會' }).issues.filter(each => each.level === '錯誤' || each.level === '不符').map(each => `${each.code}@${String(each.line)}`);
+  const added = (text: string): string => {
+    const plan = planExisting(input(introBoxes(text)[0].items[0].original, dest(Q1)));
+    return plan.kind === 'leave' ? plan.why : plan.kind === 'plan' && plan.text !== null ? kindOf(plan.text) ?? 'none' : 'same';
+  };
+  // 選項行還是一行寫完的（手算，CommonMark）：頂格的分隔線自己一塊；縮到名稱的文字底下的接在名稱後面（加入時留在框裡，原因是名稱底下有接續）。
+  const intact = [[], ['---'], ['***'], ['- - -'], ['* * *'], ['___'], ['', '---'], ['  ---'], ['    - 例子：野柳']];
+  // 變成選項行的接續或子項目的：縮到選項的文字底下、沒有清單符號的段落接續（頂格或縮兩格）、子項目。
+  const broken = [['      ---'], ['        ---'], ['', '      ---'], ['接續'], ['  接續'], ['      接續'], ['', '      接續'], ['        - 子項目']];
+  for (const rest of intact) {
+    assert.deepEqual(drafted(reply(OPTIONS, ...rest)), [], rest.join('/'));
+    assert.equal(added(reply(OPTIONS, ...rest)), rest[0] === '  ---' ? EXISTING_WHY.rootText : 'single', rest.join('/'));
+  }
+  for (const rest of broken) {
+    assert.deepEqual(drafted(reply(OPTIONS, ...rest)), ['options-invalid@10'], rest.join('/'));
+    assert.equal(added(reply(OPTIONS, ...rest)), EXISTING_WHY.singleLost, rest.join('/'));
+  }
+  // 寫錯的選項行：草稿報選項行哪裡錯、不報沒有題目；加入時不會變成單選。
+  for (const wrong of ['    - 選項:岩岸;;沙岸;;斷層海岸', '    - **選項**：岩岸;;沙岸;;斷層海岸', '    - 選項：岩岸;;沙岸', '    - 出處：p.43｜選項：岩岸;;沙岸;;斷層海岸']) {
+    for (const rest of [...intact, ...broken]) {
+      const found = drafted(reply(wrong, ...rest));
+      assert.ok(found.includes('options-invalid@10') && !found.some(each => each.startsWith('no-question')), `${wrong} ${rest.join('/')} ${found.join()}`);
+      assert.notEqual(added(reply(wrong, ...rest)), 'single', `${wrong} ${rest.join('/')}`);
+    }
   }
 });
