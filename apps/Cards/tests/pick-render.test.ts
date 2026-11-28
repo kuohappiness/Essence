@@ -55,3 +55,13 @@ void test('只有空格旁邊是英文才在英文前換行（D-145）', () => {
   assert.equal(place('<p>水管＿＿住了。</p>').breaks, 0);
   assert.equal(place('<p>今年 3 ＿＿ 月。</p>').breaks, 0);
 });
+
+// 單選與配對（tasks/matching-single-choice.md §5）：題幹沒有空格時畫面在最後補 ＿＿，走同一條路；問號前面的字不和空格包在一起，空格放不下時自己換行。
+void test('題目最後補的空格：在問號後面，不和前面的字包在一起，找得到', () => {
+  at('<p>海岸平直，有沙灘和潟湖，是臺灣哪一部的海岸？＿＿</p>', '海岸平直，有沙灘和潟湖，是臺灣哪一部的海岸？', '');
+  const container = document.createElement('div');
+  container.innerHTML = '<p>是哪一部的海岸？＿＿</p>';
+  postProcess(container, { mode: 'pick', lines: 1, english: false });
+  // 包住空格的那一段只有空格自己（比對文字，不比 DOM 節點：斷言失敗時印出整個節點會用光記憶體）。
+  assert.equal(container.querySelector('.ec-glue')?.textContent ?? '', '');
+});
