@@ -134,7 +134,9 @@ function isForm(value: unknown): value is CardForm {
     && typeof value.supplement === 'boolean' && (value.pick === undefined || typeof value.pick === 'boolean') && isString(value.adjust) && isString(value.material);
 }
 function isExisting(value: unknown): value is ExistingTarget {
-  return isObject(value) && isString(value.id) && isString(value.name) && isString(value.source) && isString(value.path) && (value.first === undefined || isString(value.first));
+  // options 是 `提示 v6` 才有的（tasks/matching-single-choice.md §6）：之前存的工作沒有這一欄也讀得回來。
+  return isObject(value) && isString(value.id) && isString(value.name) && isString(value.source) && isString(value.path) && (value.first === undefined || isString(value.first))
+    && (value.options === undefined || isString(value.options));
 }
 function isDeck(value: unknown): value is SavedDeck {
   return isObject(value) && isString(value.path) && isString(value.base) && isString(value.text) && isString(value.sha256) && strings(value.ids)

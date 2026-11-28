@@ -63,7 +63,7 @@ void test('§1-3 英文的已有單字接在已有目標後面；沒有寫無；
   assert.ok(!taskSection(form({ subject: 'science' }), subject('science'), []).includes('英文單字'));
 });
 
-void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或沒勾的規則；提示 v5', () => {
+void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或沒勾的規則；提示 v6', () => {
   const on = lines(taskSection(form(), subject('science'), []));
   assert.equal(on[on.indexOf('- 允許 AI 補充：否') + 1], '- 點選填空：要');
   assert.ok(on.includes('- 家長勾了點選填空：容易混淆的一組字、詞或觀念（說得出這一課容易錯在哪），寫成點選填空的比較：'));
@@ -79,7 +79,7 @@ void test('§2-2、§3 點選填空：任務資料一行，「另外」寫勾或
   // 規則在「另外」底下，不在任務資料裡。
   assert.ok(on.indexOf('另外：') < on.findIndex(line => line.startsWith('- 家長勾了')));
   const prompt = buildPrompt(form(), subject('english'), [], [], ['go']);
-  assert.equal(prompt.parts.at(-1)!.version, '提示 v5');
+  assert.equal(prompt.parts.at(-1)!.version, '提示 v6');
   assert.ok(prompt.text.includes('：go'));
 });
 

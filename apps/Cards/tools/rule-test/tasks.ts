@@ -39,7 +39,8 @@ export function leanList(targets: readonly ExistingTarget[]): string[] {
   for (const target of targets) {
     const match = WORD_NAME.exec(target.name);
     if (!match) {
-      rows.push({ other: `  - ${target.id} ${target.name}｜${unitOf(target.source)}${target.first ? `｜${target.first}` : ''}` });
+      // 單選的選項照外掛的清單接在最後（tasks/matching-single-choice.md §6），重組時不丟。
+      rows.push({ other: `  - ${target.id} ${target.name}｜${unitOf(target.source)}${target.first ? `｜${target.first}` : ''}${target.options === undefined ? '' : `｜這個目標的選項：${target.options}`}` });
       continue;
     }
     let row = byWord.get(match[1]);

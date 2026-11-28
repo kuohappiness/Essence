@@ -1,17 +1,17 @@
 import type { Mastery } from '../study/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { codeKey, termKey } from '../deck/index.ts';
-import { firstLine, pickLine, pickRules, sha256Hex, studentOf, wordsLine } from './prompt.ts';
+import { firstLine, optionsOf, optionsRule, optionsSuffix, pickLine, pickRules, sha256Hex, studentOf, wordsLine } from './prompt.ts';
 import type { CardForm, Prompt, SentPart } from './prompt.ts';
 import type { EmbeddedRule, RuleSubject } from './rules.ts';
 
 // 加深的任務段（tasks/ai-cards-deepen.md §2-2）：版號 `加深 v2`（第 3 批加點選填空與英文單字，D-210），和製卡的 `提示 v3` 分開記。規則組照這一篇的科目送（同最小版）。
 
 /** 任務段的版號：改字就加一。 */
-const DEEPEN_VERSION = '加深 v3'; // v3：點選填空的規則加相似詞（tasks/polyphone-pick.md §2）
+const DEEPEN_VERSION = '加深 v4'; // v4：目標帶選項、社會的點選填空加配對與單選（tasks/matching-single-choice.md §6、§7）
 
-/** 這一篇的一個學習目標：ID、名稱、記穩了的判斷（§2-1）與第一題（寫法同 `提示 v3`）。 */
-interface DeepenTarget { id: string; name: string; mastery: Mastery; first?: string }
+/** 這一篇的一個學習目標：ID、名稱、記穩了的判斷（§2-1）、第一題（寫法同 `提示 v3`）與單選的選項（同 `提示 v6`）。 */
+interface DeepenTarget { id: string; name: string; mastery: Mastery; first?: string; options?: string }
 
 export interface DeepenInput {
   form: Pick<CardForm, 'term' | 'unit' | 'purpose' | 'adjust' | 'material' | 'pick'>;
@@ -31,8 +31,8 @@ export interface DeepenInput {
 export function deepenTargets(deck: Deck, mastery: ReadonlyMap<string, Mastery>): DeepenTarget[] {
   const seen = new Set<string>();
   return deck.targets.filter(t => t.id !== null && t.ok && !seen.has(t.id) && seen.add(t.id)).map(t => {
-    const first = t.prompts.at(0);
-    return { id: t.id!, name: t.name, mastery: mastery.get(t.id!) ?? 'unknown', ...first ? { first: firstLine(first) } : {} };
+    const first = t.prompts.at(0), options = optionsOf(t);
+    return { id: t.id!, name: t.name, mastery: mastery.get(t.id!) ?? 'unknown', ...first ? { first: firstLine(first) } : {}, ...options === undefined ? {} : { options } };
   });
 }
 
@@ -84,7 +84,7 @@ export function deepenTask(input: DeepenInput): string {
     `- 家長調整：${form.adjust.trim() || '無'}`,
     `- 教材：${form.material.trim() ? `附件（${form.material.trim()}）` : '附件的課本頁面'}`,
     '- 這一篇的學習目標（`ID 名稱｜記穩了／常錯／還沒記穩｜第一題`）：',
-    ...input.targets.map(each => `  - ${each.id} ${each.name}｜${LABEL[each.mastery]}${each.first === undefined ? '' : `｜第一題：${each.first}`}`),
+    ...input.targets.map(each => `  - ${each.id} ${each.name}｜${LABEL[each.mastery]}${each.first === undefined ? '' : `｜第一題：${each.first}`}${optionsSuffix(each.options)}`),
     input.siblings.length ? '- 同單元的其他篇（只用來避免重複，不要加題到這些目標，也不要把新的學習目標放到那一篇）：' : '- 同單元的其他篇：無',
     ...input.siblings.map(each => `  - ${each.id} ${each.name}`),
     input.gone.length ? '- 以前出過、現在不在這一篇（家長沒採用、刪掉或搬走），不要再出：' : '- 以前出過、現在不在這一篇的：無',
@@ -98,7 +98,8 @@ export function deepenTask(input: DeepenInput): string {
     '另外：',
     '',
     '- 教材在附件。附件沒有圖檔可以連，**不要寫 `![[…]]`**；要提到課本的圖，在出處寫圖號（例如 `p.42、圖 2`）。',
-    ...pickRules(form.pick),
+    ...pickRules(form.pick, subject.subject),
+    ...optionsRule(input.targets.some(each => each.options !== undefined)),
     '- 提到已有的學習目標一律用上面清單的 ID，不要自己編；不要寫新的學習目標 ID 與屬性區，程式會加。',
     ...subject.r3 ? ['- 照規則交三段，標記照抄（`<<<全貌>>>`、`<<<架構>>>`、`<<<卡組>>>`）；卡組段沒有新的內容時可以只寫給家長的備註。'] : [],
     '- 回覆的最後單獨一行寫 `<<<完>>>`。',

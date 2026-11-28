@@ -22,7 +22,7 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
   assert.equal(a.text, b.text);
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.sha256, sha256Hex(a.text));
-  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v5']);
+  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v6']);
   assert.equal(a.text, ['# 通用', '# 英文', a.parts[2].text].join('\n\n'));
   assert.equal(a.parts[2].text, [
     '## 這一次的任務',
