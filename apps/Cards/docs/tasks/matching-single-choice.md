@@ -1,6 +1,6 @@
 # 配對與單選做進每天複習（D-233 第 4 點，給 Claude）
 
-狀態：實作中｜下一步：第 1 段的程式寫完、Windows 與兩個正式 vault 看過（〈結果〉），L2 第二輪；社會的規則先不送（§7，等使用者在決定卡確認），合併等使用者｜等誰：Codex
+狀態：實作中｜下一步：第 1 段的程式寫完、Windows 與兩個正式 vault 看過（〈結果〉），L2 第三輪只審第二輪的修正；社會的規則先不送（§7，等使用者在決定卡確認），合併等使用者｜等誰：Codex
 
 來自：[D-233](../../../../docs/decisions.md#d-233-題型照形式分各科與題庫共用配對單選也進每天複習) 第 4 點、[配對與單選討論稿](<../Claude Codex Discussion/2026-11-25-matching-single-choice.md>)（〈請使用者決定〉三題，使用者 2026-11-25 都選了；〈照建議做的〉兩邊一致）
 
@@ -700,7 +700,7 @@ Fable 5.2 xhigh，2026-11-25，核對 `6b2b2999` 的處理。結論：19 項裡 
 - 比較工具：`v0.6.0` 對現在，沒有選項行的卡組零差異；有選項行的卡型、題型與格數看得到不同（[tests/single-compare.test.ts](../../tests/single-compare.test.ts)）。
 - 比較測試工具（§7）：凍結的資料夾只核對自己的鎖，不受影響；合併後新開的一輪，外掛來源與檔案來源的任務段都用 HEAD 的 `taskSection`（`tools/rule-test/prompts.ts`），清單上有單選目標時才會不同（社會的規則第 1 段先不送，§7）。
 
-L2 第一輪（2026-11-28）的十項照[審查紀錄〈Claude 回應〉](<../Claude Codex Discussion/2026-11-28-matching-single-choice-l2.md#claude-回應第一輪>)處理；§7 再試一次之後加了「題目寫出這一題自己的答案」的錯誤（§6），選項之間改成 `;;`（D-250，§2）。
+L2 第一輪（2026-11-28）的十項照[審查紀錄〈Claude 回應〉](<../Claude Codex Discussion/2026-11-28-matching-single-choice-l2.md#claude-回應第一輪>)處理，第二輪的九項照[〈Claude 回應（第二輪）〉](<../Claude Codex Discussion/2026-11-28-matching-single-choice-l2.md#claude-回應第二輪>)處理（切開的組整組放進同一份，§4〈估時〉）；§7 再試一次之後加了「題目寫出這一題自己的答案」的錯誤（§6），選項之間改成 `;;`（D-250，§2）。
 
 合併前的三件（2026-11-28，使用者的電腦）：Windows 版 Obsidian 的畫面正常；兩個正式 vault 的備份跑 `compare-versions`（`main` 對這個分支）零差異（§8）；§7 改過的規則再試一次，停損成立（[試作的〈再試一次〉](../../../../experiments/2026-11-matching-trial/README.md#再試一次2026-11-28第-1-段)），社會的規則怎麼處理等使用者選。
 
