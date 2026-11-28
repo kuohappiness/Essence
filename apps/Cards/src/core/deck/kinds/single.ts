@@ -67,11 +67,9 @@ export function readSingle(target: Target, lines: readonly OptionLine[], stacked
   if (!lines.length) return { single: null, problems: [] };
   const fail = (reason: string, line = lines[0].line): SingleReading => ({ single: null, problems: [optionsInvalid(line, reason)] });
   if (target.direction !== null) return fail('有方向的目標（英翻中、中翻英）不認選項行');
-  if (lines.length > 1) return fail(`選項行只能有一行，這個目標有 ${lines.length} 行`, lines[1].line);
-  const [line] = lines;
-  if (!line.solid) return fail('選項行要一行寫完：不寫成子清單、不換行接續');
-  const options = readOptions(line.text);
-  if (typeof options === 'string') return fail(options);
+  const read = readOptionLines(lines);
+  if ('reason' in read) return fail(read.reason, read.line);
+  const { options, at } = read;
   // 答案裡有 ;;：一題寫了好幾個答案，說 ;; 只用來隔開選項。
   const how = (answer: string): string => SEPARATOR.test(answer) ? '（;; 只用來隔開選項，一題只有一個答案）' : '';
   const optionKeys = options.map(pickKey);
@@ -83,5 +81,17 @@ export function readSingle(target: Target, lines: readonly OptionLine[], stacked
     if (answer < 0) return fail(`答案「${prompt.answer}」不在選項裡${how(prompt.answer)}`);
     answers.push(answer);
   }
-  return { single: { options, optionKeys, key: JSON.stringify([...optionKeys].sort()), answers, at: line.at }, problems: [] };
+  return { single: { options, optionKeys, key: JSON.stringify([...optionKeys].sort()), answers, at }, problems: [] };
+}
+
+/**
+ * 選項行本身（§3 第 2、3 條）：剛好一行、一行寫完、選項讀得出 3 個以上；讀不成時回傳原因與報在哪一行。
+ * 不看題目，加進已有的框只補選項行時也用（題目在筆記裡，L2 第二輪 2）。lines 至少一行。
+ */
+export function readOptionLines(lines: readonly OptionLine[]): { options: string[]; at: number } | { reason: string; line: number } {
+  if (lines.length > 1) return { reason: `選項行只能有一行，這個目標有 ${lines.length} 行`, line: lines[1].line };
+  const [line] = lines;
+  if (!line.solid) return { reason: '選項行要一行寫完：不寫成子清單、不換行接續', line: line.line };
+  const options = readOptions(line.text);
+  return typeof options === 'string' ? { reason: options, line: line.line } : { options, at: line.at };
 }

@@ -2,7 +2,7 @@
 // §2-2 兩條規則、§2-3 名稱與 ID、§2-4 資料欄位、§2-5 出處、§2-6 題目、§2-9 草稿格式，加上製卡規則裡程式量得到的上限。
 // 分三級：錯誤＝程式會跳過那個學習目標或連結壞掉（§2-10）；不符＝程式讀得懂，但違反語法或製卡規則；提醒＝啟發式，要人看。
 // 只讀文字，不改任何東西。
-import { blanksIn, choiceProblems, choiceStem, outsideSource, parseDeck, pickKey, splitSourceItems } from '../deck/index.ts';
+import { blanksIn, choiceProblems, choiceStem, optionsInvalid, outsideSource, parseDeck, pickKey, readOptionLines, splitSourceItems } from '../deck/index.ts';
 import type { Deck, Target as DeckTarget } from '../deck/index.ts';
 import { languageStats } from './language.ts';
 
@@ -492,7 +492,12 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
     // 加進已有的框沒有跑 checkSingle（題目在筆記裡，框裡讀不成單選）：選項行自己看「以上皆是」，報在名稱那一行（L2 第一輪 R5）。
     if (where === 'existing' && children.some(child => OPTIONS_LINE.test(child.text) && ALL_OR_NONE.test(child.text))) issue(node.line, '錯誤', 'options-all-none', ALL_NONE_WHY);
     // 加進已有的目標只補一行選項行（tasks/matching-single-choice.md §6，L2 第一輪 R4）：題目在筆記裡，這一項沒有新題也是完整的。
+    // 解析器略過沒有題目的項目、不讀選項行（parseBox 報不到），選項行本身寫錯在這裡報（L2 第二輪 2）；答案在不在選項裡，寫進筆記前核對。
     if (!target.questions.length && !(where === 'existing' && optioned)) issue(node.line, '不符', 'no-question', '學習目標底下沒有題目，程式會當成一般筆記（§2-2）');
+    if (!target.questions.length && where === 'existing' && optioned) {
+      const read = readOptionLines(children.filter(child => OPTIONS_LINE.test(child.text)).map((child, at) => ({ at, line: child.line, text: child.text, solid: !child.children.length && !child.cont.length })));
+      if ('reason' in read) issue(read.line, '錯誤', 'options-invalid', optionsInvalid(read.line, read.reason).message);
+    }
     if (where !== 'existing' && target.questions.length > 3 && !choiceLines.has(node.line)) issue(node.line, '不符', 'too-many-questions', `${String(target.questions.length)} 題；初次製卡基本題之外最多 2 題（通用規則 6）`);
     if (where !== 'existing' && !target.data['出處']) issue(node.line, '不符', 'no-source', '沒有出處（通用規則 13）');
     if (UNDERSTANDING.includes(target.data['類型'])) for (const q of target.questions.filter(each => each.kind === 'qa')) {

@@ -1,6 +1,7 @@
 export { fieldStart, frontmatterLines, parseDeck, readProperties } from './parse.ts';
 export { blanksIn, choiceProblems, choiceStem, movingTails, needsOf, otherSentences, pickKey, pickWord, shownTails } from './question-types.ts';
 export { markNeed } from './need.ts';
+export { optionsInvalid, readOptionLines } from './kinds/single.ts';
 export { baseForm, learnedWord, typedHint } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';
 export { setTargetId, blockIds } from './ids.ts';

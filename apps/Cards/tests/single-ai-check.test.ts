@@ -77,6 +77,22 @@ void test('加進已有的框只補一行選項行（L2 第一輪 R4）：草稿
   assert.match(empty.errors[0].message, /縮排或清單符號/);
 });
 
+void test('加進已有的框只補選項行時，選項行本身寫錯也在草稿擋（L2 第二輪 2）：空的、沒有 ;;、不到 3 個、兩行', () => {
+  const box = (...rest: string[]): string => draft(undefined, OPTIONS) + ['', '> [!note] 加進已有的學習目標', '> - q8z3ka 能說出臺灣東部海岸的地形', ...rest, ''].join('\n');
+  // 本文第 1～6 行，第 7 行空行，框從第 8 行起：名稱第 9 行，選項行從第 10 行起。
+  assert.deepEqual(found(box('>     - 選項：')), [['錯誤', 10, 'options-invalid']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸、沙岸、斷層海岸')), [['錯誤', 10, 'options-invalid']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸')), [['錯誤', 10, 'options-invalid']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸', '>     - 選項：岩岸;;沙岸;;斷層海岸')), [['錯誤', 11, 'options-invalid']]);
+  assert.deepEqual(found(box('>     - 選項：岩岸;;沙岸;;斷層海岸')), []);
+  // 整份回覆照家長貼回的路走：存不了草稿。
+  for (const line of ['>     - 選項：', '>     - 選項：岩岸、沙岸、斷層海岸', '>     - 選項：岩岸;;沙岸']) {
+    const bad = inspectReply(reply(line), FORM, SOCIAL, SENT, here);
+    assert.equal(bad.errors.length, 1, line);
+    assert.match(bad.errors[0].message, /選項/, line);
+  }
+});
+
 void test('single-leak（錯誤）：有選項行的題目寫出這一題自己的答案；寫到別的選項、一個字的答案、沒有選項行的不算', () => {
   assert.deepEqual(found(draft('    - 臺灣北部常見岩岸，是哪一種海岸？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'single-leak']]);
   assert.deepEqual(found(draft('    - 臺灣北部常見**岩岸**，是哪一種海岸？ :: 岩岸', OPTIONS)), [['錯誤', 5, 'single-leak']]);
