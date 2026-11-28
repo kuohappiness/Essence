@@ -22,6 +22,7 @@ export const EXISTING_WHY = {
   qaConflict: (deck: string): string => `「${deck}」已經有同一個問題、答案不一樣：可能是改過的答案，也可能這題本來就有好幾個答案（例如舉一種會導電的金屬）。請打開對照；要加就改寫題目或手動貼上`,
   verify: '加過去會改到別的內容，請手動搬',
   choiceLost: '加過去之後這個多音字不能再用點選填空：有一句不是多音字句，或和別句在畫面上是同一句（只差粗體、底線數或註解也算）。請改好再手動貼上',
+  singleLost: '加過去之後這個目標不能點選作答：答案不在這個目標的選項裡、題目不是一行的問答題，或選項行寫錯。請改好再手動貼上',
   sources: SOURCE_WHY,
   // §3-1、§4：目的地這一篇的狀況（state 判斷）。
   targetBroken: '原本的學習目標寫法有問題，請先改好',
@@ -34,6 +35,10 @@ export const EXISTING_WHY = {
   failed: (path: string): string => `「${deckName(path)}」暫時存不進去，請稍後再按一次`,
   notNow: '這次沒有加入，請照上面的說明再按一次',
 } as const;
+
+/** 選項行（syntax §2，D-249）：目標底下、和題目同一層，以全形的「選項：」開頭；LIST_MARK 是原文那一行（去掉縮排）的清單符號。 */
+const OPTIONS_LINE = /^選項：/;
+const LIST_MARK = /^(?:[-*+]|\d+[.)])\s+/;
 
 /** 一個要搬的單位：題目（連同它的完整範圍）或其他（記憶錨點這類共用補充、第一層圖片）。lines 是原文的行，key 是比對用的正規化。 */
 interface Unit { kind: 'prompt' | 'other'; lines: string[]; base: number; key: string; prompt: Prompt | null }
@@ -196,6 +201,10 @@ export function planExisting(input: ExistingInput): ExistingPlan {
   // 或句子不是純文字）就不寫，同一批的、和原本的句子都算。原本就照翻面出的（家長手改的）照一般的核對。
   const now = after.targets[deck.targets.indexOf(target)] as Target | undefined;
   if (target.kind?.id === 'polyphone' && now && now.kind?.id !== 'polyphone') return leave(EXISTING_WHY.choiceLost);
+  // 單選（tasks/matching-single-choice.md §6）：原本是單選、或這次加了選項行，加過去之後不再認成單選（加的題目答案不在選項裡、不是一行的問答題，
+  // 或選項行寫錯）就不寫。
+  const addsOptions = missing.some(unit => unit.kind === 'other' && OPTIONS_LINE.test(unit.lines[0].trim().replace(LIST_MARK, '')));
+  if ((target.kind?.id === 'single' || addsOptions) && now && now.kind?.id !== 'single') return leave(EXISTING_WHY.singleLost);
   return verify(deck, after, target, [lines[root.line].raw, ...block], remarks, mistakes, subject) ? { kind: 'plan', text } : leave(EXISTING_WHY.verify);
 }
 
@@ -274,15 +283,17 @@ function verify(before: Deck, after: Deck, target: Target, block: readonly strin
   if (before.targets.length !== after.targets.length) return false;
   if (content(before.targets.filter((_, i) => i !== index)) !== content(after.targets.filter((_, i) => i !== index))) return false;
   const now = after.targets[index];
-  // 卡型不變（比較卡的組、全詩、句子排序、接句、多音字、打字）：照 kindShape 比。
-  const { prompts: p0, shared: s0, fields: f0, kind: t0, ...rest0 } = target;
-  const { prompts: p1, shared: s1, fields: f1, kind: t1, ...rest1 } = now;
-  if (content(rest0) !== content(rest1) || kindShape(t0) !== kindShape(t1)) return false;
   // 預期新增的題目與補充：目的地的名稱那一行接上實際插入的那幾行，單獨讀。
   // 最後補一題假的題目：只加補充（沒有題目）時解析器才會回傳目標；假的那一題不算。
   const alone = parseDeck([...block, '    - 甲 :: 乙'].join('\n') + '\n', { subject }).targets[0] as Target | undefined;
   if (!alone) return false;
   const expectPrompts = alone.prompts.slice(0, -1), expectShared = alone.shared;
+  // 卡型不變（比較卡的組、全詩、句子排序、接句、多音字、打字、單選）：照 kindShape 比。只多允許一種改變（§6）：沒有卡型的目標
+  // 加上剛好一行選項行、加完認成單選（新的寫法問題照最後一段擋）。
+  const { prompts: p0, shared: s0, fields: f0, kind: t0, ...rest0 } = target;
+  const { prompts: p1, shared: s1, fields: f1, kind: t1, ...rest1 } = now;
+  const becomesSingle = t0 === undefined && t1?.id === 'single' && expectShared.filter(each => OPTIONS_LINE.test(each)).length === 1;
+  if (content(rest0) !== content(rest1) || (kindShape(t0) !== kindShape(t1) && !becomesSingle)) return false;
   if (!grows(p0.map(without), p1.map(without), expectPrompts.map(without))) return false;
   if (!grows(s0, s1, expectShared)) return false;
   const { sources: _a, remarks: r0, mistakes: m0, ...k0 } = f0, { sources: _b, remarks: r1, mistakes: m1, ...k1 } = f1;

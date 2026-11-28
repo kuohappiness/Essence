@@ -33,6 +33,9 @@ const EXISTING_INPUTS: readonly { original: string; text: string; unit: string }
   { original: [LINK, '    - 雞蛋為什麼浮起來？ :: 鹽水的**密度變大**'].join('\n'), text: existingHead('2-1 密度') + [NAME, '\t- 密度怎麼算？ :: 質量除以體積', ''].join('\n'), unit: '2-1 密度' },
   { original: [LINK, '    - 備註：容易和重量搞混', '    - 記憶錨點：重的沉', '        - 輕的浮'].join('\n'), text: (existingHead('2-1 密度') + [NAME, '    - 類型：計算', '    - 密度怎麼算？ :: 質量除以體積', ''].join('\n')).replaceAll('\n', '\r\n'), unit: '2-1 密度' },
   { original: [LINK, '    - 夏天的昆蟲 ::', '        - 蚱蜢', '        - ![[蚱蜢.png]]'].join('\n'), text: existingHead('2-1 密度') + [NAME, '    - 密度怎麼算？ :: 質量除以體積'].join('\n'), unit: '2-3 熱' },
+  // 單選（tasks/matching-single-choice.md §6）：舊的翻面目標加選項行、已經是單選的目標加題。
+  { original: [LINK, '    - 選項：質量除以體積、體積除以質量、質量乘以體積'].join('\n'), text: existingHead('2-1 密度') + [NAME, '    - 密度怎麼算？ :: 質量除以體積', ''].join('\n'), unit: '2-1 密度' },
+  { original: [LINK, '    - 單位體積的質量怎麼算？ :: 質量除以體積'].join('\n'), text: existingHead('2-1 密度') + [NAME, '    - 密度怎麼算？ :: 質量除以體積', '    - 選項：質量除以體積、體積除以質量、質量乘以體積', ''].join('\n'), unit: '2-1 密度' },
 ];
 
 const one = (): string => box(cand('能乙', 'bbbbb2', 'Q :: B'));
