@@ -218,9 +218,11 @@ export function planToday(input: TodayInput): Today {
   const place = (c: Candidate, list: QueueItem[] | null): { item: QueueItem; list: QueueItem[] } => {
     const subject = c.entry.deck.props.subject;
     const item: QueueItem = { lt: c.id, deck: c.entry.path, subject, lane: c.lane, seconds: seconds.get(subject) ?? DEFAULT_SECONDS };
-    const cost = item.seconds * (shownIn.get(groupKey(c) ?? '') ?? 1);
-    // 第一個放不下的和它後面的全部進 more，不跳過去找小的。
-    const chosen = list ?? (more.length === 0 && used + cost <= budget ? share : more);
+    const cells = shownIn.get(groupKey(c) ?? '');
+    const cost = item.seconds * (cells ?? 1);
+    // 第一個放不下的和它後面的全部進 more，不跳過去找小的。一張配對（好幾格）自己就超過上限、今天的份還空著時照放，
+    // 不然孩子整天開始不了（L2 第三輪 1）；其他卡一張只算一格，支援的上限（最少 5 分鐘）放得下。
+    const chosen = list ?? (more.length === 0 && (used + cost <= budget || (cells !== undefined && share.length === 0)) ? share : more);
     if (!list && chosen === share) used += cost;
     chosen.push(item);
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
