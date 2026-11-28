@@ -226,6 +226,8 @@ export function planToday(input: TodayInput): Today {
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map() as Shown });
     return { item, list: chosen };
   };
+  // 切成好幾張的組（§4〈上限〉）：有一格要出就整組出，同一組其他張沒有要出的，整張跟在第一張後面（L2 第一輪 R3）；有要出的那幾張等輪到自己時再放。
+  const pulled = new Set<string>();
   for (const c of ordered) {
     const key = groupKey(c);
     const card = key === null ? undefined : cards.get(key);
@@ -234,6 +236,10 @@ export function planToday(input: TodayInput): Today {
     else if (key !== null) {
       cards.set(key, { list, items: [item] });
       for (const each of followers.get(key) ?? []) place(each, list);
+      const whole = key.startsWith(SINGLE) ? key.slice(0, key.lastIndexOf('\0')) : null;
+      if (whole === null || pulled.has(whole)) continue;
+      pulled.add(whole);
+      for (const [other, rest] of followers) if (other !== key && !shownIn.has(other) && other.slice(0, other.lastIndexOf('\0')) === whole) for (const each of rest) place(each, list);
     }
   }
   for (const [key, { items }] of cards) if (!key.startsWith(SINGLE)) for (const item of items) item.seconds /= items.length;

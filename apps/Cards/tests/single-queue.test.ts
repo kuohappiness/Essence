@@ -114,6 +114,19 @@ void test('配對：同一組 7 個目標照筆記順序切成 5、2 兩張，�
   assert.equal(first.blanks.length, 5);
 });
 
+void test('配對：7 個目標只有第一張有要出的（L2 第一輪 R3），第二張沒到期的兩格也跟著出、自己一張；都不占時間', () => {
+  const seven = deckOf(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((x, i) => target(`${x}${x}${x}000`, `能認出第 ${String(i + 1)} 個`, `第 ${String(i + 1)} 題是哪一部？`, COAST[i % 4])).join(''));
+  const later = ['bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000'].map(lt => good(at('10-23'), lt, v(seven, lt)));
+  const { today, data } = plan([seven], later, at('10-24'), 0.25);
+  assert.deepEqual(today.share.map(item => item.lt), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000']);
+  assert.deepEqual(today.more, []);
+  assert.deepEqual(ids(next(today, data)), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000']);
+  assert.deepEqual(ids(next(today, data, { targets: ['fff000'] })), ['fff000', 'ggg000']);
+  // 反過來，只有第二張有要出的：第一張也整張跟著出。
+  const first = ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000'].map(lt => good(at('10-23'), lt, v(seven, lt)));
+  assert.deepEqual(plan([seven], first, at('10-24'), 0.25).today.share.map(item => item.lt).sort(), ['aaa000', 'bbb000', 'ccc000', 'ddd000', 'eee000', 'fff000', 'ggg000']);
+});
+
 void test('配對：今天答過一次之後，答錯的那幾格到時間只出那幾格，不再整組', () => {
   const t0 = Date.parse(at('10-24'));
   const when = (seconds: number): string => new Date(t0 + seconds * 1000 + 8 * 3600_000).toISOString().slice(0, 23) + '+08:00';
