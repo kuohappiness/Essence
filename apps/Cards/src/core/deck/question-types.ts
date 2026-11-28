@@ -32,10 +32,10 @@ export const optionsTaken = (lines: readonly OptionLine[], kind: KindId | null):
  * 文法與變化（typing）在名稱階段就認了，認成的目標不走這裡。notes 是目標底下的記憶錨點，promptNotes 是第一題底下的；
  * options 是目標底下的選項行（tasks/matching-single-choice.md §3），前面的讀成卡型或有提示時，有選項行就加一個 options-invalid。
  */
-export function readKind(target: Target, notes: readonly string[], promptNotes: readonly string[], english: boolean, options: readonly OptionLine[] = []): KindReading {
+export function readKind(target: Target, notes: readonly string[], promptNotes: readonly string[], english: boolean, options: readonly OptionLine[] = [], stacked: ReadonlySet<number> = new Set()): KindReading {
   const read = readEarlier(target, notes, promptNotes, english);
   if (read.kind || read.problems.length) return { kind: read.kind, problems: [...read.problems, ...optionsTaken(options, read.kind?.id ?? null)] };
-  const single = readSingle(target, options);
+  const single = readSingle(target, options, stacked);
   return { kind: single.single ? { id: 'single', single: single.single } : null, problems: single.problems };
 }
 

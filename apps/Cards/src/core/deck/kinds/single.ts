@@ -56,8 +56,9 @@ function readOptions(text: string): string[] | string {
 /**
  * 這個目標是不是單選（§3〈認成單選的條件〉）：沒有方向、剛好一行選項行、選項讀得出 3 個以上、每一題都是答案在選項裡的問答題。
  * 沒有選項行時不提示；有選項行但讀不成時提示 options-invalid，照原本的題型出。呼叫的一方先認別的卡型，認成或有提示時不來這裡。
+ * stacked 是答案寫在下一層的題目的行號（parse.ts 收）：只寫一個子項目時答案沒有換行，照寫法仍是多行答案（L2 第一輪 R2）。
  */
-export function readSingle(target: Target, lines: readonly OptionLine[]): SingleReading {
+export function readSingle(target: Target, lines: readonly OptionLine[], stacked: ReadonlySet<number> = new Set()): SingleReading {
   if (!lines.length) return { single: null, problems: [] };
   const fail = (reason: string, line = lines[0].line): SingleReading => ({ single: null, problems: [optionsInvalid(line, reason)] });
   if (target.direction !== null) return fail('有方向的目標（英翻中、中翻英）不認選項行');
@@ -69,7 +70,7 @@ export function readSingle(target: Target, lines: readonly OptionLine[]): Single
   const optionKeys = options.map(pickKey);
   const answers: number[] = [];
   for (const prompt of target.prompts) {
-    if (prompt.kind !== 'qa' || prompt.answer.includes('\n')) return fail('題目要全部是問答題（::），答案寫在同一行');
+    if (prompt.kind !== 'qa' || prompt.answer.includes('\n') || stacked.has(prompt.line)) return fail('題目要全部是問答題（::），答案寫在同一行');
     if (countBlanks(prompt.question) > 1) return fail('題目最多一個空格（＿＿）');
     const answer = optionKeys.indexOf(pickKey(prompt.answer));
     if (answer < 0) return fail(`答案「${prompt.answer}」不在選項裡`);

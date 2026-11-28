@@ -340,6 +340,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
         const question = body.slice(0, colon).trim();
         let answer = body.slice(colon + 2).trim();
         const multiline = !answer;
+        if (multiline) stacked.add(node.line);
         if (multiline) answer = children.map(child => markdown(child)).filter(Boolean).join('\n');
         const extras = multiline ? [] : children.map(child => markdown(child));
         if (!multiline) placeAlternatives(children);
@@ -372,6 +373,8 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
       return null;
     };
     const promptNotes = new Map<Prompt, string[]>();
+    /** 答案寫在下一層的題目（多行答案）的行號：只寫一個子項目時答案沒有換行，單選照寫法不認（L2 第一輪 R2）。 */
+    const stacked = new Set<number>();
     let notes: string[] | null = null;
     /** 目標底下、和題目同一層的選項行（§3）：單選在 readKind 認。 */
     const options: OptionLine[] = [];
@@ -394,7 +397,7 @@ export function parseDeck(text: string, options?: { layout?: boolean; subject?: 
     }
     // 認卡型的題目階段（題型模組任務說明 §1-3）：比較卡、多音字、排序、接句照順序，讀成或有提示就停；文法與變化在名稱階段認了，不走這裡。
     // 多音字（tasks/polyphone-pick.md §1-2）：比較卡先認，認不成又沒有提示時才看；兩種的提示一個目標只有一種。
-    const pick = typing ? { kind: null, problems: optionsTaken(options, 'typing') } : readKind(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? [], english, options);
+    const pick = typing ? { kind: null, problems: optionsTaken(options, 'typing') } : readKind(target, notes ?? [], promptNotes.get(target.prompts[0]) ?? [], english, options, stacked);
     if (pick.kind) target.kind = pick.kind;
     for (const { line, level, code, message } of pick.problems) {
       problems.push({ line, targetLine: root.line, level, code, message });
